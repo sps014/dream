@@ -405,10 +405,13 @@ fn lsp_diagnostics(diagnostics: &[analysis::DiagnosticOut]) -> Vec<Diagnostic> {
             range: map_range(d.range),
             severity: Some(match d.severity {
                 "warning" => DiagnosticSeverity::WARNING,
+                "hint" => DiagnosticSeverity::HINT,
                 _ => DiagnosticSeverity::ERROR,
             }),
             message: d.message.clone(),
             code: d.code.map(|c| NumberOrString::String(c.to_string())),
+            tags: (d.code == Some(analysis::INACTIVE_CODE))
+                .then(|| vec![tower_lsp::lsp_types::DiagnosticTag::UNNECESSARY]),
             ..Default::default()
         })
         .collect()

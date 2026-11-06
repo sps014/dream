@@ -62,8 +62,15 @@ impl<'a, 'b> Parser<'a, 'b> {
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
             let iter = self.current_token_index;
+            let gate = self.parse_cfg_gate();
+            if self.cfg_gate_dangles(&gate) {
+                continue;
+            }
             let method_attributes = self.parse_attributes();
-            methods.push(self.parse_interface_method(method_attributes)?);
+            let method = self.parse_interface_method(method_attributes)?;
+            if self.keep_cfg_item(gate) {
+                methods.push(method);
+            }
             self.ensure_progress(iter);
         }
 
@@ -293,6 +300,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
             let iter = self.current_token_index;
+            let gate = self.parse_cfg_gate();
+            if self.cfg_gate_dangles(&gate) {
+                continue;
+            }
+            let methods_before = methods.len();
             let field_attributes = self.parse_attributes();
             let is_accessor = self.current_token().kind == TokenKind::IdentifierToken
                 && crate::nodes::function::AccessorKind::from_keyword(&self.current_token().text)
@@ -316,6 +328,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Some(cur.position),
                 );
                 self.next_token();
+            }
+            if !self.keep_cfg_item(gate) {
+                methods.truncate(methods_before);
             }
             self.ensure_progress(iter);
         }

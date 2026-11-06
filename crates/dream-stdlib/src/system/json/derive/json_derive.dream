@@ -87,8 +87,9 @@ internal fun json_derive(ctx: GenContext): void {
     }
 }
 
-// How `from_json` builds `d`: through a constructor whose parameters are the fields in declaration
-// order (the implicit one when none is declared), else a zero-argument constructor and stores.
+// How `from_json` builds `d`. A constructor whose parameters are the fields in declaration order
+// is called directly. A declared zero-argument constructor, or none at all (the language's
+// implicit zero-argument constructor), is followed by a store per field.
 fun construction(borrow d: GenDecl): Construction {
     let declared = false;
     let empty = false;
@@ -114,10 +115,7 @@ fun construction(borrow d: GenDecl): Construction {
             }
         }
     }
-    if !declared {
-        return Construction.Fieldwise;
-    }
-    if empty {
+    if !declared || empty {
         return Construction.Assign;
     }
     return Construction.Impossible;

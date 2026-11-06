@@ -59,10 +59,7 @@ fun json_nullable(): void {
     let no_addr: Option<c118_Address> = Option.None;
     let p2 = c118_Profile("Bob", no_name, no_addr, 20);
     let t2 = Json.serialize(p2);
-    Assert.eq(
-        (t2).to_string(),
-        "{\"name\":\"Bob\",\"nickname\":null,\"address\":null,\"age\":20}"
-    );
+    Assert.eq((t2).to_string(), "{\"name\":\"Bob\",\"nickname\":null,\"address\":null,\"age\":20}");
     let b2 = Json.deserialize<c118_Profile>(t2).unwrap_or(p2);
     Assert.eq((b2.nickname ?? "<none>").to_string(), "<none>");
     Assert.eq((b2.address.is_none()).to_string(), "true");

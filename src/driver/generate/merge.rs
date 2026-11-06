@@ -27,7 +27,7 @@ pub fn merge_generated_file<'a>(
         .insert(path.to_string(), generator.to_string());
     let mut local = DiagnosticBag::new(Some(path.to_string()));
     let lexer = dream_syntax::lexer::Lexer::new(text);
-    let mut parser = dream_syntax::parser::Parser::new(lexer, arena, &mut local);
+    let mut parser = dream_syntax::parser::Parser::new(lexer, arena, &mut local).with_cfg(acc.cfg);
     let parsed = parser.parse();
     diagnostics.extend(&local);
     let ast = parsed?;

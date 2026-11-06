@@ -9,6 +9,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         while self.current_token().kind == TokenKind::AtToken {
             let at = self.match_token(TokenKind::AtToken);
             let mut name = self.match_token(TokenKind::IdentifierToken);
+            if name.text == crate::conditional::CFG_ATTRIBUTE {
+                self.report_misplaced_cfg(at.position);
+                continue;
+            }
             // A doc comment preceding the declaration attaches to the `@` token (the first token of
             // the declaration). Thread it onto the attribute name so tooling can recover it even
             // when the attribute is parsed before the `fun`/`class` keyword.

@@ -282,5 +282,8 @@ fun c112_deserialize_loop(iters: int): int {
 @test
 @timeout(180000)
 fun json_deserialize_borrow_loop(): void {
-    Assert.eq(c112_serialize_loop(500) + c112_deserialize_loop(500) + c112_serialize_loop(500), 199000);
+    Assert.eq(
+        c112_serialize_loop(500) + c112_deserialize_loop(500) + c112_serialize_loop(500),
+        199000
+    );
 }

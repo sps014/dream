@@ -1,0 +1,22 @@
+import system;
+
+@cfg(Target.Freebsd)
+fun unknown_target(): void {}
+
+@cfg(Os.Linux)
+fun wrong_namespace(): void {}
+
+@cfg(Target.Linux Target.Wasm)
+fun missing_operator(): void {}
+
+@cfg(Target.Linux)
+@cfg(Target.Debug)
+fun two_conditions(): void {}
+
+@inline
+@cfg(Target.Linux)
+fun cfg_after_attribute(): void {}
+
+fun main(): void {
+    @cfg(Target.Debug)
+}

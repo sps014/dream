@@ -438,6 +438,7 @@ fn fingerprint(
     put(&req.target.triple.to_string());
     put(&req.target.ptr_size.to_string());
     put(&req.target.ptr_align.to_string());
+    put(&acc.cfg.key());
     for plan in &plans {
         put(&plan.key);
         for id in &plan.generators {

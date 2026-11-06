@@ -115,6 +115,11 @@ impl<'a, 'b> Parser<'a, 'b> {
                 && self.current_token().kind != TokenKind::EndOfFileToken
             {
                 let iter = self.current_token_index;
+                let gate = self.parse_cfg_gate();
+                if self.cfg_gate_dangles(&gate) {
+                    continue;
+                }
+                let lengths = (fields.len(), methods.len());
                 let field_attributes = self.parse_attributes();
 
                 // Classify the member by looking past any leading `public`/`static`/`async`: a
@@ -210,6 +215,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                         type_token: field_type_token,
                         field_type: parsed_type,
                     });
+                }
+                if !self.keep_cfg_item(gate) {
+                    fields.truncate(lengths.0);
+                    methods.truncate(lengths.1);
                 }
                 self.ensure_progress(iter);
             }

@@ -1,0 +1,39 @@
+import system.testing;
+import system;
+
+fun rs_greeting(name: string): string {
+    return $"""
+        {{
+          "name": "{name}",
+          "braces": "{{}}"
+        }}
+        """;
+}
+
+@test
+fun raw_string_literals(): void {
+    Assert.eq("""C:\temp\new "quoted" """, "C:\\temp\\new \"quoted\" ");
+    Assert.eq(""""a """ inside"""", "a \"\"\" inside");
+
+    let block = """
+        first line
+          indented "line"
+        \n stays literal
+
+        last line
+        """;
+    Assert.eq(block, "first line\n  indented \"line\"\n\\n stays literal\n\nlast line");
+
+    let flush = """
+    no indent
+    """;
+    Assert.eq(flush, "no indent");
+}
+
+@test
+fun interpolated_raw_string_literals(): void {
+    let count = 3;
+    Assert.eq($"""{count} items in C:\data""", "3 items in C:\\data");
+    Assert.eq($"""{{literal}} and {count + 1}""", "{literal} and 4");
+    Assert.eq(rs_greeting("Ada"), "{\n  \"name\": \"Ada\",\n  \"braces\": \"{}\"\n}");
+}

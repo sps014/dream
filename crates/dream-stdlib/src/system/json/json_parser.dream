@@ -6,12 +6,15 @@ internal class JsonParser {
     text: string;
     pos: int;
     invalid: bool;
+    public options: JsonOptions;
 
-    /// Creates a `JsonParser` with `text`, `pos`.
-    public constructor(text: string, pos: int) {
+    /// Creates a `JsonParser` reading `text` from `pos`; `options` decides how generated readers
+    /// match property names to fields.
+    public constructor(text: string, pos: int, options: JsonOptions) {
         this.text = text;
         this.pos = pos;
         this.invalid = false;
+        this.options = options;
     }
 
     fun len(): int {
@@ -125,7 +128,12 @@ internal class JsonParser {
     }
 
     /// Reads a JSON string and advances the cursor; malformed input marks parsing as failed.
+    /// Returns an empty string without consuming input when the next token is not a string.
     public fun parse_string(): string {
+        this.skip_ws();
+        if (this.pos >= this.len()) || (this.b() != 34) {
+            return "";
+        }
         this.pos = this.pos + 1; // opening quote
         // Parsed strings must own their payload; retaining a slice would expose input mutations.
         let first = this.pos;
@@ -561,7 +569,16 @@ internal class JsonParser {
         return sign * value;
     }
 
-    // True when the next object key is `key` (no escapes). Consumes the key and the following colon.
+    // True when the next object key names the declared field `declared` under `options.naming`.
+    public fun match_field(borrow declared: string): bool {
+        if this.options.naming == JsonNaming.Identity {
+            return this.match_key(declared);
+        }
+        return this.match_key(Json.field_name(declared, this.options));
+    }
+
+    // True when the next object key is `key` (no escapes), compared without ASCII case under
+    // `options.ignore_case`. Consumes the key and the following colon.
     public fun match_key(borrow key: string): bool {
         this.skip_ws();
         let saved = this.pos;
@@ -570,10 +587,7 @@ internal class JsonParser {
         }
         this.pos = this.pos + 1;
         let kn = key.length;
-        if (this.pos + kn > this.len())
-            || !this.text.span(this.pos, this.pos + kn)
-            .equals(key) || key.span()
-            .contains('\\') {
+        if (this.pos + kn > this.len()) || key.span().contains('\\') || !this.key_equals(key) {
             this.pos = saved;
             return false;
         }
@@ -590,6 +604,28 @@ internal class JsonParser {
         }
         this.pos = saved;
         return false;
+    }
+
+    fun key_equals(borrow key: string): bool {
+        if this.options.ignore_case == false {
+            return this.text.span(this.pos, this.pos + key.length).equals(key);
+        }
+        let i = 0;
+        while i < key.length {
+            let x = this.b_at(this.pos + i);
+            let y = ((int)key.char_at(i));
+            if (x >= 65) && (x <= 90) {
+                x = x + 32;
+            }
+            if (y >= 65) && (y <= 90) {
+                y = y + 32;
+            }
+            if x != y {
+                return false;
+            }
+            i = i + 1;
+        }
+        return true;
     }
 
     /// Advances past the next JSON value without retaining it.

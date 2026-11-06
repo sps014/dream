@@ -241,6 +241,7 @@ fn codegen_is_deterministic_full_corpus() {
             let file = dream::driver::test::discover_tests_in_source(
                 &case.source().to_string_lossy(),
                 &text,
+                dream_abi::target::TargetSpec::wasm32().cfg_symbols(true),
             )
             .unwrap();
             for test in &file.tests {

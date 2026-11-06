@@ -222,6 +222,37 @@ fn attributes_keep_decl_spacing() {
 }
 
 #[test]
+fn cfg_conditions_and_statement_groups_keep_their_shape() {
+    let input = "@cfg(!Target.Windows&&(Target.Linux||Target.Macos)) fun f():void{@cfg(Target.Debug){log();}@cfg(Target.Wasm) run();}";
+    let out = format(input);
+    assert!(
+        out.contains("@cfg(!Target.Windows && (Target.Linux || Target.Macos))\nfun f(): void {"),
+        "got:\n{}",
+        out
+    );
+    assert!(
+        out.contains("    @cfg(Target.Debug) {\n        log();\n    }"),
+        "got:\n{}",
+        out
+    );
+    assert!(out.contains("    @cfg(Target.Wasm)\n    run();"), "got:\n{}", out);
+    assert_idempotent(input);
+}
+
+#[test]
+fn raw_strings_are_preserved_verbatim() {
+    let input = "fun f():string{return \"\"\"\n    a \"quoted\" \\path\n      {x}\n    \"\"\";}";
+    let out = format(input);
+    assert!(
+        out.contains("\"\"\"\n    a \"quoted\" \\path\n      {x}\n    \"\"\""),
+        "got:\n{}",
+        out
+    );
+    assert_idempotent(input);
+    assert_idempotent("fun f():string{return $\"\"\"{a}{{b}}\"\"\";}");
+}
+
+#[test]
 fn parameter_attributes_with_arguments_stay_apart_from_the_parameter() {
     let out = format(
         "fun f(@readonly @coop_shape(16, 32) a: int, @location(0) p: int, q: int): int { return (int)q; }",

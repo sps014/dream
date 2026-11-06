@@ -170,7 +170,7 @@ import system;
 import system.audio;
 
 fun main(): void {
-    let samples = Array.alloc<float>(2048);
+    let samples = [0.0f; 2048];
     for (let i = 0; i < samples.length; i = i + 1) {
         samples[i] = (float)Math.sin(6.283185307179586d * 440.0d * (double)i / 48000.0d);
     }

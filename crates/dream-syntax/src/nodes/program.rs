@@ -201,6 +201,8 @@ pub struct ProgramNode<'a> {
     pub extends: Vec<ExtendNode<'a>>,
     /// Top-level `let`/`const` variables declared outside any class or function.
     pub globals: Vec<GlobalVariableNode<'a>>,
+    /// Source ranges of items whose `@cfg` condition was false for this build, in source order.
+    pub inactive_spans: Vec<dream_text::text_span::TextSpan>,
 }
 
 impl<'a> ProgramNode<'a> {
@@ -225,6 +227,7 @@ impl<'a> ProgramNode<'a> {
             enums,
             extends,
             globals,
+            inactive_spans: Vec::new(),
         }
     }
 }

@@ -198,6 +198,12 @@ impl SymbolTable {
 
         match self.parent.as_ref().and_then(Weak::upgrade) {
             Some(parent) => parent.borrow().get_symbol(name),
+            None if name.text == dream_syntax::conditional::TARGET_NAMESPACE => {
+                Err(SymbolError::new(format!(
+                    "'{}' is only valid inside '@cfg(...)'; to compile code for one target, put '@cfg({}.<name>)' on the declaration, member, or statement",
+                    name.text, name.text
+                )))
+            }
             None => Err(SymbolError::new(format!(
                 "variable {} does not exist at: {}",
                 name.text,

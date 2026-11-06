@@ -3,10 +3,10 @@ import system.testing;
 import system.json;
 
 // --- tuple_json: tuple fields serialize as JSON arrays and round-trip. ---
-
 @json
 class iso_TupleRow {
     public pair: (int, string);
+
     public constructor(pair: (int, string)) {
         this.pair = pair;
     }
@@ -24,7 +24,6 @@ fun iso_tuple_json(): void {
 
 // --- json_scalar_defaults: missing or mistyped scalar fields decode to zero values, and
 // malformed or mistyped documents are rejected. ---
-
 let iso_scalar_destroyed: int = 0;
 
 @json
@@ -74,14 +73,14 @@ fun iso_check_scalar_defaults(value: iso_ScalarDefaults): void {
 @test
 fun iso_json_scalar_defaults(): void {
     iso_scalar_destroyed = 0;
-    iso_check_scalar_defaults(iso_ScalarDefaults.from_json(JsonValue.null()));
+    iso_check_scalar_defaults(Json.from_value<iso_ScalarDefaults>(JsonValue.null()));
     Assert.eq(iso_scalar_destroyed, 1);
-    iso_check_scalar_defaults(iso_ScalarDefaults.from_json(JsonValue.dict()));
+    iso_check_scalar_defaults(Json.from_value<iso_ScalarDefaults>(JsonValue.dict()));
     Assert.eq(iso_scalar_destroyed, 2);
     let wrong = Json.deserialize<JsonValue>(
         "{\"text\":1,\"number\":true,\"enabled\":\"x\",\"precise\":{}}"
     ).unwrap_or(JsonValue.null());
-    iso_check_scalar_defaults(iso_ScalarDefaults.from_json(wrong));
+    iso_check_scalar_defaults(Json.from_value<iso_ScalarDefaults>(wrong));
     Assert.eq(iso_scalar_destroyed, 3);
     Assert.is_true(Json.deserialize<iso_ScalarDefaults>("{").is_err());
     Assert.eq(iso_scalar_destroyed, 4);

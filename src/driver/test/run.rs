@@ -46,8 +46,27 @@ pub fn run_tests(
     if project.files.is_empty() {
         return Err(format!("no .dream test files under '{}'", path.display()));
     }
-    let plan = RunnerPlan::discover(&project, opts.filter.as_deref(), &opts.selected_tests)?;
-    if plan.tests.is_empty() && !plan.unparsed {
+    let hosts = if opts.hosts.is_empty() {
+        project.hosts.clone()
+    } else {
+        opts.hosts.clone()
+    };
+    let mut plans = Vec::with_capacity(hosts.len());
+    for &host in &hosts {
+        let cfg = crate::driver::target::resolve(host == TestHost::Node, None)?
+            .spec()
+            .cfg_symbols(opts.release);
+        plans.push(RunnerPlan::discover(
+            &project,
+            opts.filter.as_deref(),
+            &opts.selected_tests,
+            cfg,
+        )?);
+    }
+    if plans
+        .iter()
+        .all(|plan| plan.tests.is_empty() && !plan.unparsed)
+    {
         return Err(format!(
             "'{}': no @test functions{}",
             path.display(),
@@ -57,22 +76,17 @@ pub fn run_tests(
                 .unwrap_or_default()
         ));
     }
-    let hosts = if opts.hosts.is_empty() {
-        project.hosts.clone()
-    } else {
-        opts.hosts.clone()
-    };
     let ui = Ui::new();
-    let request = BuildRequest {
-        config,
-        project: &project,
-        plan: &plan,
-        release: opts.release,
-        debug_info: opts.debug_info,
-        optimize: opts.optimize,
-    };
     let mut reports = Vec::new();
-    for host in hosts {
+    for (host, plan) in hosts.into_iter().zip(&plans) {
+        let request = BuildRequest {
+            config,
+            project: &project,
+            plan,
+            release: opts.release,
+            debug_info: opts.debug_info,
+            optimize: opts.optimize,
+        };
         ui.step(
             "Testing",
             &format!(

@@ -1,0 +1,16 @@
+module system.json;
+
+/// How `@json` field names are spelled as JSON property names. A field with `@property_name`
+/// keeps the name it gives, and map keys and `JsonValue` keys are never renamed.
+public enum JsonNaming {
+    /// The field name as declared: `user_id` stays `user_id`.
+    Identity,
+    /// Lower camel case: `user_id` becomes `userId`.
+    CamelCase,
+    /// Upper camel case: `user_id` becomes `UserId`.
+    PascalCase,
+    /// Lowercase words joined by `-`: `user_id` becomes `user-id`.
+    KebabCase,
+    /// Lowercase words joined by `_`: `userId` becomes `user_id`.
+    SnakeCase,
+}

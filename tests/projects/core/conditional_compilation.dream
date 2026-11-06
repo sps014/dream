@@ -1,0 +1,89 @@
+import system.testing;
+import system;
+
+@cfg(Target.Native)
+fun cc_platform(): string {
+    return "native";
+}
+
+@cfg(Target.Wasm)
+fun cc_platform(): string {
+    return "wasm";
+}
+
+@cfg(Target.Windows)
+fun cc_bad_on_windows_only(): int {
+    return "never type-checked elsewhere";
+}
+
+@cfg(!Target.Windows)
+fun cc_bad_on_windows_only(): int {
+    return 1;
+}
+
+class CcSettings {
+    public name: string;
+
+    @cfg(Target.Debug)
+    public trace: bool;
+
+    public constructor(name: string) {
+        this.name = name;
+        @cfg(Target.Debug)
+        this.trace = true;
+    }
+
+    @cfg(Target.Debug)
+    public fun mode(): string {
+        return "debug";
+    }
+
+    @cfg(Target.Release)
+    public fun mode(): string {
+        return "release";
+    }
+}
+
+enum CcBackend {
+    Cpu,
+    @cfg(Target.Native)
+    Threads,
+    @cfg(Target.Wasm)
+    Worker,
+}
+
+@test
+fun cfg_selects_one_declaration_per_target(): void {
+    let native = cc_platform() == "native";
+    let wasm = cc_platform() == "wasm";
+    Assert.is_true(native != wasm);
+    Assert.eq(cc_bad_on_windows_only(), 1);
+
+    let settings = CcSettings("app");
+    let mode = settings.mode();
+    Assert.is_true(mode == "debug" || mode == "release");
+    @cfg(Target.Debug)
+    Assert.is_true(settings.trace);
+}
+
+@test
+fun cfg_gates_statements_and_variants(): void {
+    let hits = 0;
+    @cfg(Target.Native || Target.Wasm) {
+        hits += 1;
+        hits += 1;
+    }
+
+    @cfg(Target.Native && Target.Wasm)
+    hits += 100;
+    @cfg(!(Target.Debug && Target.Release))
+    hits += 1;
+    Assert.eq(hits, 3);
+
+    @cfg(Target.Native)
+    Assert.eq(CcBackend.Threads.to_string(), "Threads");
+    @cfg(Target.Wasm)
+    Assert.eq(CcBackend.Worker.to_string(), "Worker");
+    @cfg(Target.Browser || Target.Wasi)
+    Assert.eq(cc_platform(), "wasm");
+}

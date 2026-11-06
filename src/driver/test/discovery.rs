@@ -2,6 +2,7 @@
 
 use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
+use dream_syntax::conditional::CfgSymbols;
 use dream_syntax::lexer::Lexer;
 use dream_syntax::parser::Parser;
 
@@ -20,13 +21,17 @@ pub struct DiscoveredFile {
     pub declares_main: bool,
 }
 
-/// Parse `source` and return every top-level `@test` function (declaration order). Does not
-/// type-check — shape is validated later during the runner compile.
-pub fn discover_tests_in_source(path: &str, source: &str) -> Result<DiscoveredFile, String> {
+/// Parse `source` and return every top-level `@test` function (declaration order) that `cfg`
+/// keeps. Does not type-check — shape is validated later during the runner compile.
+pub fn discover_tests_in_source(
+    path: &str,
+    source: &str,
+    cfg: CfgSymbols,
+) -> Result<DiscoveredFile, String> {
     let arena = Bump::new();
     let mut diagnostics = DiagnosticBag::new(Some(path.to_string()));
     let lexer = Lexer::new(source.to_string());
-    let mut parser = Parser::new(lexer, &arena, &mut diagnostics);
+    let mut parser = Parser::new(lexer, &arena, &mut diagnostics).with_cfg(cfg);
     let program = parser
         .parse()
         .map_err(|_| format!("failed to parse '{}'", path))?;
@@ -69,7 +74,8 @@ mod tests {
     fn finds_tests_timeouts_and_main() {
         let found = discover_tests_in_source(
             "t.dream",
-            "import system.testing;\n@test\nfun a(): void {}\n@test\n@timeout(2500)\nfun b(): void {}\nfun helper(): void {}\nfun main(): void {}\n",
+            "import system.testing;\n@test\nfun a(): void {}\n@test\n@timeout(2500)\nfun b(): void {}\n@cfg(Target.Wasm && Target.Native)\n@test\nfun never(): void {}\nfun helper(): void {}\nfun main(): void {}\n",
+            CfgSymbols::host_debug(),
         )
         .unwrap();
         assert_eq!(

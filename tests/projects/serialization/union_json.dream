@@ -49,10 +49,7 @@ fun union_json(): void {
     );
 
     let l = c276_Shape.Located(c276_Point(1, 2));
-    Assert.eq(
-        (Json.serialize(l)).to_string(),
-        "{\"type\":\"Located\",\"_0\":{\"x\":1,\"y\":2}}"
-    );
+    Assert.eq((Json.serialize(l)).to_string(), "{\"type\":\"Located\",\"_0\":{\"x\":1,\"y\":2}}");
     Assert.eq(
         (Json.deserialize<c276_Shape>(Json.serialize(l)).unwrap_or(c276_Shape.Empty).to_string())
             .to_string(),

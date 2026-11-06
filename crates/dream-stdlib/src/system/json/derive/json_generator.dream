@@ -184,7 +184,7 @@ internal static class JsonGenerator {
             return jexpr;
         }
         if JsonGenerator.name_in(json_names, elem_type) {
-            return elem_type + ".from_json(" + jexpr + ")";
+            return elem_type + ".from_json(" + jexpr + ", __options)";
         }
         return "";
     }
@@ -264,17 +264,38 @@ internal static class JsonGenerator {
             return true;
         }
         if JsonGenerator.name_in(json_names, elem_type) {
-            cb.line(access + ".write_json(" + sb + ");");
+            cb.line(access + ".write_json(" + sb + ", __options);");
             return true;
         }
         return false;
     }
 
     // Emits `if (!__first) ','; __first = false; "key":` into an object-writing CodeBuilder.
-    static fun write_object_key(borrow cb: CodeBuilder, json_key: string): void {
+    // A `@property_name` key is written verbatim; a declared name is spelled by `options.naming`.
+    static fun write_object_key(borrow cb: CodeBuilder, borrow field: JsonFieldSpec): void {
         cb.line("if __first == false { sb.append_char(','); }");
         cb.line("__first = false;");
-        cb.line("sb.append(\"\\\"" + json_key + "\\\":\");");
+        if field.property_name.length > 0 {
+            cb.line("sb.append(\"\\\"" + field.property_name + "\\\":\");");
+        } else {
+            cb.line("Json.write_key(sb, \"" + field.name + "\", __options);");
+        }
+    }
+
+    // Expression reading the property for `field` from the object `v` as `Option<JsonValue>`.
+    static fun lookup(borrow field: JsonFieldSpec): string {
+        if field.property_name.length > 0 {
+            return "Json.get_key(v, \"" + field.property_name + "\", __options)";
+        }
+        return "Json.get_field(v, \"" + field.name + "\", __options)";
+    }
+
+    // Condition consuming the parser's next key when it names `field`.
+    static fun match_call(borrow field: JsonFieldSpec): string {
+        if field.property_name.length > 0 {
+            return "p.match_key(\"" + field.property_name + "\")";
+        }
+        return "p.match_field(\"" + field.name + "\")";
     }
 
     static fun array_write_stmts(
@@ -857,7 +878,7 @@ internal static class JsonGenerator {
         if JsonGenerator.name_in(json_names, elem_type) {
             return elem_type + ".from_json_parser(p)";
         }
-        return elem_type + ".from_json(p.parse_value())";
+        return elem_type + ".from_json(p.parse_value(), __options)";
     }
 
     static fun emit_parser_array(
@@ -918,12 +939,12 @@ internal static class JsonGenerator {
                 let def = JsonGenerator.ignore_default(ftype, field.option_inner);
                 if def.length == 0 {
                     if field.is_type_param {
-                        def = "Json.from_value<" + ftype + ">(JsonValue.null())";
+                        def = "Json.from_value<" + ftype + ">(JsonValue.null(), __options)";
                     } else if (ftype.ends_with("[]")) {
                         let elem = ftype.substring(0, ftype.length - 2);
                         def = "Buffer.alloc<" + elem + ">(0)";
                     } else if (JsonGenerator.name_in(json_names, ftype)) {
-                        def = ftype + ".from_json(JsonValue.null())";
+                        def = ftype + ".from_json(JsonValue.null(), __options)";
                     } else if (field.map_value_inner.length > 0) {
                         def = field.map_ctor + "<string, " + field.map_value_inner + ">()";
                     } else if (field.seq_kind == CollectionKind.List) {
@@ -931,7 +952,7 @@ internal static class JsonGenerator {
                     } else if (field.seq_kind == CollectionKind.Set) {
                         def = "Set<" + field.seq_elem_inner + ">()";
                     } else {
-                        def = ftype + ".from_json(JsonValue.null())";
+                        def = ftype + ".from_json(JsonValue.null(), __options)";
                     }
                 }
                 body.line("let __p_" + fname + ": " + ftype + " = " + def + ";");
@@ -962,16 +983,15 @@ internal static class JsonGenerator {
             let field = t.fields[fi];
             let fname = field.name;
             let ftype = field.type_name;
-            let json_key = field.json_key();
             if field.json_ignore {
                 fi = fi + 1;
                 continue;
             }
             if first_if {
-                body.line("if (p.match_key(\"" + json_key + "\")) {");
+                body.line("if (" + JsonGenerator.match_call(field) + ") {");
                 first_if = false;
             } else {
-                body.line("} else if (p.match_key(\"" + json_key + "\")) {");
+                body.line("} else if (" + JsonGenerator.match_call(field) + ") {");
             }
             body.indent();
             if field.option_inner.length > 0 {
@@ -1040,7 +1060,10 @@ internal static class JsonGenerator {
                 );
                 body.line("__p_" + fname + " = __tup_" + fname + ";");
             } else if (field.is_type_param) {
-                body.line("__p_" + fname + " = Json.from_value<" + ftype + ">(p.parse_value());");
+                body.line(
+                    "__p_"
+                        + fname + " = Json.from_value<" + ftype + ">(p.parse_value(), __options);"
+                );
             } else if (field.seq_kind == CollectionKind.List) {
                 let elem = field.seq_elem_inner;
                 let read = JsonGenerator.parser_scalar(elem, json_names);
@@ -1097,11 +1120,12 @@ internal static class JsonGenerator {
         let out = CodeBuilder();
         out.line("public static fun from_json_parser(borrow p: JsonParser): " + self_ty + " {");
         out.indent();
+        out.line("let __options = p.options;");
         JsonGenerator.append_block(out, body.to_string());
         out.dedent();
         out.line("}");
         out.line(
-            "public static fun from_json_parser_text(borrow text: string): Result<"
+            "public static fun from_json_parser_text(borrow text: string, borrow __options: JsonOptions): Result<"
                 + self_ty + ", ParseError> {"
         );
         out.indent();
@@ -1110,7 +1134,7 @@ internal static class JsonGenerator {
         out.line("return Result.Err(ParseError.invalid(\"empty JSON input\"));");
         out.dedent();
         out.line("}");
-        out.line("let p = JsonParser(text, 0);");
+        out.line("let p = JsonParser(text, 0, __options);");
         out.line("let v = " + self_ty + ".from_json_parser(p);");
         out.line("if p.failed() {");
         out.indent();
@@ -1205,7 +1229,11 @@ internal static class JsonGenerator {
                     to_cb.line("None => { __o[\"" + json_key + "\"] = JsonValue.null(); }");
                     to_cb.dedent();
                     to_cb.line("}");
-                    JsonGenerator.write_object_key(write_cb, json_key);
+                    write_cb.line(
+                        "if this." + fname + ".is_some() || __options.nulls == JsonNull.Include {"
+                    );
+                    write_cb.indent();
+                    JsonGenerator.write_object_key(write_cb, field);
                     write_cb.line("switch (this." + fname + ") {");
                     write_cb.indent();
                     write_cb.line("Some(__v_" + fname + ") => {");
@@ -1233,10 +1261,13 @@ internal static class JsonGenerator {
                     write_cb.line("None => { Json.write_null(sb); }");
                     write_cb.dedent();
                     write_cb.line("}");
+                    write_cb.dedent();
+                    write_cb.line("}");
                     from_cb.line("let __" + fname + ": Option<" + base + "> = Option.None;");
                     from_cb.line(
                         "let __src_"
-                            + fname + " = v.get(\"" + json_key + "\").unwrap_or(JsonValue.null());"
+                            + fname
+                            + " = " + JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null());"
                     );
                     from_cb.line("if __src_" + fname + ".is_null() == false {");
                     from_cb.indent();
@@ -1292,7 +1323,11 @@ internal static class JsonGenerator {
                 to_cb.line("None => { __o[\"" + json_key + "\"] = JsonValue.null(); }");
                 to_cb.dedent();
                 to_cb.line("}");
-                JsonGenerator.write_object_key(write_cb, json_key);
+                write_cb.line(
+                    "if this." + fname + ".is_some() || __options.nulls == JsonNull.Include {"
+                );
+                write_cb.indent();
+                JsonGenerator.write_object_key(write_cb, field);
                 write_cb.line("switch (this." + fname + ") {");
                 write_cb.indent();
                 write_cb.line("Some(__v_" + fname + ") => {");
@@ -1320,9 +1355,13 @@ internal static class JsonGenerator {
                 write_cb.line("None => { Json.write_null(sb); }");
                 write_cb.dedent();
                 write_cb.line("}");
+                write_cb.dedent();
+                write_cb.line("}");
                 from_cb.line("let __" + fname + ": Option<" + base + "> = Option.None;");
                 from_cb.line(
-                    "let __src_" + fname + " = v.get(\"" + json_key + "\").unwrap_or(JsonValue.null());"
+                    "let __src_"
+                        + fname
+                        + " = " + JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null());"
                 );
                 from_cb.line("if __src_" + fname + ".is_null() == false {");
                 from_cb.indent();
@@ -1360,7 +1399,7 @@ internal static class JsonGenerator {
                     );
                 }
                 to_cb.line("__o[\"" + json_key + "\"] = __map_" + fname + ";");
-                JsonGenerator.write_object_key(write_cb, json_key);
+                JsonGenerator.write_object_key(write_cb, field);
                 if JsonGenerator.map_write_stmts(
                     write_cb,
                     value_type,
@@ -1383,7 +1422,7 @@ internal static class JsonGenerator {
                     from_cb,
                     value_type,
                     map_ctor,
-                    "v.get(\"" + json_key + "\").unwrap_or(JsonValue.null())",
+                    JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null())",
                     "__" + fname,
                     "__msrc_" + fname,
                     "__mkeys_" + fname,
@@ -1430,7 +1469,7 @@ internal static class JsonGenerator {
                     );
                 }
                 to_cb.line("__o[\"" + json_key + "\"] = __arr_" + fname + ";");
-                JsonGenerator.write_object_key(write_cb, json_key);
+                JsonGenerator.write_object_key(write_cb, field);
                 if JsonGenerator.list_write_stmts(
                     write_cb,
                     elem,
@@ -1453,7 +1492,7 @@ internal static class JsonGenerator {
                 if JsonGenerator.list_from_stmts(
                     from_cb,
                     elem,
-                    "v.get(\"" + json_key + "\").unwrap_or(JsonValue.null())",
+                    JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null())",
                     "__" + fname,
                     "__i_" + fname,
                     "__src_" + fname,
@@ -1497,7 +1536,7 @@ internal static class JsonGenerator {
                     );
                 }
                 to_cb.line("__o[\"" + json_key + "\"] = __arr_" + fname + ";");
-                JsonGenerator.write_object_key(write_cb, json_key);
+                JsonGenerator.write_object_key(write_cb, field);
                 if JsonGenerator.set_write_stmts(
                     write_cb,
                     elem,
@@ -1519,7 +1558,7 @@ internal static class JsonGenerator {
                 if JsonGenerator.set_from_stmts(
                     from_cb,
                     elem,
-                    "v.get(\"" + json_key + "\").unwrap_or(JsonValue.null())",
+                    JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null())",
                     "__" + fname,
                     "__i_" + fname,
                     "__src_" + fname,
@@ -1563,7 +1602,7 @@ internal static class JsonGenerator {
                     );
                 }
                 to_cb.line("__o[\"" + json_key + "\"] = __arr_" + fname + ";");
-                JsonGenerator.write_object_key(write_cb, json_key);
+                JsonGenerator.write_object_key(write_cb, field);
                 if JsonGenerator.array_write_stmts(
                     write_cb,
                     elem,
@@ -1585,7 +1624,7 @@ internal static class JsonGenerator {
                 if JsonGenerator.array_from_stmts(
                     from_cb,
                     elem,
-                    "v.get(\"" + json_key + "\").unwrap_or(JsonValue.null())",
+                    JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null())",
                     "__" + fname,
                     "__i_" + fname,
                     "__src_" + fname,
@@ -1627,7 +1666,7 @@ internal static class JsonGenerator {
                     );
                 }
                 to_cb.line("__o[\"" + json_key + "\"] = __arr_" + fname + ";");
-                JsonGenerator.write_object_key(write_cb, json_key);
+                JsonGenerator.write_object_key(write_cb, field);
                 if JsonGenerator.tuple_write_stmts(write_cb, ftype, "this." + fname, json_names)
                     == false {
                     return JsonGenOutput.failure_at(
@@ -1644,7 +1683,7 @@ internal static class JsonGenerator {
                 if JsonGenerator.tuple_from_stmts(
                     from_cb,
                     ftype,
-                    "v.get(\"" + json_key + "\").unwrap_or(JsonValue.null())",
+                    JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null())",
                     "__" + fname,
                     "__src_" + fname,
                     json_names
@@ -1672,13 +1711,15 @@ internal static class JsonGenerator {
                         + "\"] = Json.parse(Json.serialize(this."
                         + fname + ")).unwrap_or(JsonValue.null());"
                 );
-                JsonGenerator.write_object_key(write_cb, json_key);
-                write_cb.line("sb.append(Json.serialize(this." + fname + "));");
+                JsonGenerator.write_object_key(write_cb, field);
+                write_cb.line("sb.append(Json.serialize(this." + fname + ", __options));");
                 first_field = JsonGenerator.comma_append(
                     from_sb,
                     first_field,
                     "Json.from_value<"
-                        + ftype + ">(v.get(\"" + json_key + "\").unwrap_or(JsonValue.null()))"
+                        + ftype
+                        + ">("
+                        + JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null()), __options)"
                 );
                 fi = fi + 1;
                 continue;
@@ -1687,7 +1728,7 @@ internal static class JsonGenerator {
             let to_e = JsonGenerator.json_to_expr(ftype, "this." + fname, json_names);
             let from_e = JsonGenerator.json_from_expr(
                 ftype,
-                "v.get(\"" + json_key + "\").unwrap_or(JsonValue.null())",
+                JsonGenerator.lookup(field) + ".unwrap_or(JsonValue.null())",
                 json_names
             );
             if to_e.length == 0 || from_e.length == 0 {
@@ -1703,7 +1744,7 @@ internal static class JsonGenerator {
                 );
             }
             to_cb.line("__o[\"" + json_key + "\"] = " + to_e + ";");
-            JsonGenerator.write_object_key(write_cb, json_key);
+            JsonGenerator.write_object_key(write_cb, field);
             if JsonGenerator.json_write_stmts(write_cb, ftype, "this." + fname, "sb", json_names)
                 == false {
                 return JsonGenOutput.failure_at(
@@ -1731,9 +1772,9 @@ internal static class JsonGenerator {
                 let value = "__json_" + fname;
                 let converted = JsonGenerator.json_from_expr(ftype, value, json_names);
                 // Missing scalar fields need only their scalar default, not an owned null node.
-                from_e = "(switch (v.get(\""
-                    + json_key
-                    + "\")) { Some("
+                from_e = "(switch ("
+                    + JsonGenerator.lookup(field)
+                    + ") { Some("
                     + value
                     + ") => "
                     + converted + ", None => " + JsonGenerator.ignore_default(ftype, "") + " })";
@@ -1756,12 +1797,17 @@ internal static class JsonGenerator {
         JsonGenerator.append_block(cb, to_cb.to_string());
         cb.dedent();
         cb.line("}");
-        cb.line("public fun write_json(borrow sb: StringBuilder): void {");
+        cb.line(
+            "public fun write_json(borrow sb: StringBuilder, borrow __options: JsonOptions): void {"
+        );
         cb.indent();
         JsonGenerator.append_block(cb, write_cb.to_string());
         cb.dedent();
         cb.line("}");
-        cb.line("public static fun from_json(v: JsonValue): " + self_ty + " {");
+        cb.line(
+            "public static fun from_json(v: JsonValue, borrow __options: JsonOptions): "
+                + self_ty + " {"
+        );
         cb.indent();
         JsonGenerator.append_block(cb, from_cb.to_string());
         cb.dedent();
@@ -1869,8 +1915,8 @@ internal static class JsonGenerator {
                             + fname + ")).unwrap_or(JsonValue.null());"
                     );
                     write_cb.line("sb.append_char(',');");
-                    write_cb.line("sb.append(\"\\\"" + fname + "\\\":\");");
-                    write_cb.line("sb.append(Json.serialize(" + fname + "));");
+                    write_cb.line("Json.write_key(sb, \"" + fname + "\", __options);");
+                    write_cb.line("sb.append(Json.serialize(" + fname + ", __options));");
                 } else if (ftype.ends_with("[]")) {
                     let elem = ftype.substring(0, ftype.length - 2);
                     if JsonGenerator.array_to_stmts(
@@ -1896,7 +1942,7 @@ internal static class JsonGenerator {
                     }
                     to_cb.line("__o[\"" + fname + "\"] = __arr_" + vname + "_" + fname + ";");
                     write_cb.line("sb.append_char(',');");
-                    write_cb.line("sb.append(\"\\\"" + fname + "\\\":\");");
+                    write_cb.line("Json.write_key(sb, \"" + fname + "\", __options);");
                     if JsonGenerator.array_write_stmts(
                         write_cb,
                         elem,
@@ -1940,7 +1986,7 @@ internal static class JsonGenerator {
                     }
                     to_cb.line("__o[\"" + fname + "\"] = __arr_" + vname + "_" + fname + ";");
                     write_cb.line("sb.append_char(',');");
-                    write_cb.line("sb.append(\"\\\"" + fname + "\\\":\");");
+                    write_cb.line("Json.write_key(sb, \"" + fname + "\", __options);");
                     if JsonGenerator.tuple_write_stmts(write_cb, ftype, fname, json_names) == false {
                         return JsonGenOutput.failure_at(
                             "@json union '"
@@ -1973,7 +2019,7 @@ internal static class JsonGenerator {
                     }
                     to_cb.line("__o[\"" + fname + "\"] = " + expr + ";");
                     write_cb.line("sb.append_char(',');");
-                    write_cb.line("sb.append(\"\\\"" + fname + "\\\":\");");
+                    write_cb.line("Json.write_key(sb, \"" + fname + "\", __options);");
                     if JsonGenerator.json_write_stmts(write_cb, ftype, fname, "sb", json_names)
                         == false {
                         return JsonGenOutput.failure_at(
@@ -2008,12 +2054,13 @@ internal static class JsonGenerator {
                     }
                     first_arg = JsonGenerator.comma_append(args_sb, first_arg, def);
                 } else {
-                    let jexpr = "v.get(\"" + fname + "\").unwrap_or(JsonValue.null())";
+                    let jexpr = "Json.get_field(v, \""
+                        + fname + "\", __options).unwrap_or(JsonValue.null())";
                     if field.is_type_param {
                         first_arg = JsonGenerator.comma_append(
                             args_sb,
                             first_arg,
-                            "Json.from_value<" + ftype + ">(" + jexpr + ")"
+                            "Json.from_value<" + ftype + ">(" + jexpr + ", __options)"
                         );
                     } else if (ftype.ends_with("[]")) {
                         let elem = ftype.substring(0, ftype.length - 2);
@@ -2125,7 +2172,8 @@ internal static class JsonGenerator {
                 let field = first.fields[fi];
                 let fname = field.name;
                 let ftype = field.type_name;
-                let jexpr = "v.get(\"" + fname + "\").unwrap_or(JsonValue.null())";
+                let jexpr = "Json.get_field(v, \""
+                    + fname + "\", __options).unwrap_or(JsonValue.null())";
                 if field.json_ignore {
                     let def = JsonGenerator.ignore_default(ftype, field.option_inner);
                     first_arg = JsonGenerator.comma_append(fallback_args_sb, first_arg, def);
@@ -2133,7 +2181,7 @@ internal static class JsonGenerator {
                     first_arg = JsonGenerator.comma_append(
                         fallback_args_sb,
                         first_arg,
-                        "Json.from_value<" + ftype + ">(" + jexpr + ")"
+                        "Json.from_value<" + ftype + ">(" + jexpr + ", __options)"
                     );
                 } else if (ftype.ends_with("[]")) {
                     let elem = ftype.substring(0, ftype.length - 2);
@@ -2204,12 +2252,17 @@ internal static class JsonGenerator {
         JsonGenerator.append_block(cb, to_cb.to_string());
         cb.dedent();
         cb.line("}");
-        cb.line("public fun write_json(borrow sb: StringBuilder): void {");
+        cb.line(
+            "public fun write_json(borrow sb: StringBuilder, borrow __options: JsonOptions): void {"
+        );
         cb.indent();
         JsonGenerator.append_block(cb, write_cb.to_string());
         cb.dedent();
         cb.line("}");
-        cb.line("public static fun from_json(v: JsonValue): " + self_ty + " {");
+        cb.line(
+            "public static fun from_json(v: JsonValue, borrow __options: JsonOptions): "
+                + self_ty + " {"
+        );
         cb.indent();
         JsonGenerator.append_block(cb, from_cb.to_string());
         cb.dedent();
@@ -2223,7 +2276,9 @@ internal static class JsonGenerator {
             "public static fun __json_check_variant(v: JsonValue): Result<JsonValue, ParseError> {"
         );
         cb.indent();
-        cb.line("let __t = v.get(\"type\").unwrap_or(JsonValue.null()).as_string().unwrap_or(\"\");");
+        cb.line(
+            "let __t = v.get(\"type\").unwrap_or(JsonValue.null()).as_string().unwrap_or(\"\");"
+        );
         if known_sb.is_empty() == false {
             cb.line("if " + known_sb.build() + " {");
             cb.indent();
@@ -2449,13 +2504,18 @@ internal static class JsonGenerator {
         cb.line("}");
         cb.line(
             "public static fun "
-                + write_name + "(xs: " + spec.self_ty + ", sb: StringBuilder): void {"
+                + write_name
+                + "(xs: "
+                + spec.self_ty + ", sb: StringBuilder, borrow __options: JsonOptions): void {"
         );
         cb.indent();
         JsonGenerator.append_block(cb, write_cb.to_string());
         cb.dedent();
         cb.line("}");
-        cb.line("public static fun " + de_name + "(v: JsonValue): " + spec.self_ty + " {");
+        cb.line(
+            "public static fun "
+                + de_name + "(v: JsonValue, borrow __options: JsonOptions): " + spec.self_ty + " {"
+        );
         cb.indent();
         JsonGenerator.append_block(cb, from_cb.to_string());
         cb.dedent();

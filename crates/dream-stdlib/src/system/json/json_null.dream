@@ -1,0 +1,9 @@
+module system.json;
+
+/// What `Json.serialize` writes for an `Option` field of a `@json` type that holds `None`.
+public enum JsonNull {
+    /// Write the property with the value `null`.
+    Include,
+    /// Leave the property out of the object.
+    Omit,
+}

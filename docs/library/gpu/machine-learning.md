@@ -57,8 +57,8 @@ async fun run(): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
 
     let n = 256;
-    let xs = Array.alloc<float>(n);
-    let ys = Array.alloc<float>(n);
+    let xs = [0.0f; n];
+    let ys = [0.0f; n];
     for (let i = 0; i < n; i = i + 1) {
         xs[i] = (float)i / (float)n;
         ys[i] = 3.0f * xs[i];

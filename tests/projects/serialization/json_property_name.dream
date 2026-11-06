@@ -137,17 +137,20 @@ class c11d_User {
 fun json_pretty(): void {
     let u = c11d_User("Ada", 36, c11d_Address("London", "NW1"), ["dev", "math"]);
     Assert.eq(
-        Json.serialize_pretty(u.to_json(), 2),
+        Json.serialize(u, JsonOptions(indent: 2)),
         "{\n  \"name\": \"Ada\",\n  \"age\": 36,\n  \"address\": {\n    \"city\": \"London\",\n    \"zip\": \"NW1\"\n  },\n  \"tags\": [\n    \"dev\",\n    \"math\"\n  ]\n}"
     );
 
     let v = Json.deserialize<JsonValue>("{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}")
         .unwrap_or(JsonValue.null());
     Assert.eq(
-        Json.serialize_pretty(v, 4),
+        Json.serialize(v, JsonOptions(indent: 4)),
         "{\n    \"a\": [\n        1,\n        2\n    ],\n    \"b\": {\n        \"c\": true\n    },\n    \"d\": []\n}"
     );
 
     // indent 0 falls back to compact output.
-    Assert.eq(Json.serialize_pretty(v, 0), "{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}");
+    Assert.eq(
+        Json.serialize(v, JsonOptions(indent: 0)),
+        "{\"a\":[1,2],\"b\":{\"c\":true},\"d\":[]}"
+    );
 }

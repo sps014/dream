@@ -175,6 +175,8 @@ pub(super) fn ends_operand(kind: TokenKind) -> bool {
             | TokenKind::NumberToken
             | TokenKind::StringToken
             | TokenKind::InterpolatedStringToken
+            | TokenKind::RawStringToken
+            | TokenKind::InterpolatedRawStringToken
             | TokenKind::CharToken
             | TokenKind::CloseParenthesisToken
             | TokenKind::CloseBracketToken
@@ -262,6 +264,8 @@ pub(super) fn needs_space(before_prev: Option<TokenKind>, prev: TokenKind, cur: 
             | TokenKind::BooleanToken
             | TokenKind::StringToken
             | TokenKind::InterpolatedStringToken
+            | TokenKind::RawStringToken
+            | TokenKind::InterpolatedRawStringToken
             | TokenKind::CharToken
             | TokenKind::NumberToken
             | TokenKind::CurlyCloseBracketToken

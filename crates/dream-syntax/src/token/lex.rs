@@ -30,6 +30,78 @@ pub fn lex_number(lex: &mut Lexer<TokenKind>) -> Result<(), ()> {
     }
 }
 
+/// `"""` already matched. Extra opening quotes widen the fence, and the token ends at the first
+/// run of at least that many quotes. An unterminated literal runs to end of input so the parser
+/// can report it once.
+///
+/// `Result<(), ()>` is the logos callback contract for a unit token that can fail.
+#[allow(clippy::result_unit_err)]
+pub fn lex_raw_string(lex: &mut Lexer<TokenKind>) -> Result<(), ()> {
+    lex_raw(lex, false);
+    Ok(())
+}
+
+/// `$"""` already matched. Like [`lex_raw_string`], but a fence inside a `{...}` hole does not
+/// close the literal.
+///
+/// `Result<(), ()>` is the logos callback contract for a unit token that can fail.
+#[allow(clippy::result_unit_err)]
+pub fn lex_interpolated_raw_string(lex: &mut Lexer<TokenKind>) -> Result<(), ()> {
+    lex_raw(lex, true);
+    Ok(())
+}
+
+fn lex_raw(lex: &mut Lexer<TokenKind>, interpolated: bool) {
+    let rest = lex.remainder().as_bytes();
+    let extra = rest.iter().take_while(|&&b| b == b'"').count();
+    let fence = 3 + extra;
+    let mut i = extra;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    while i < rest.len() {
+        let c = rest[i];
+        if depth > 0 {
+            if in_string {
+                if escaped {
+                    escaped = false;
+                } else if c == b'\\' {
+                    escaped = true;
+                } else if c == b'"' {
+                    in_string = false;
+                }
+            } else {
+                match c {
+                    b'"' => in_string = true,
+                    b'{' => depth += 1,
+                    b'}' => depth -= 1,
+                    _ => {}
+                }
+            }
+            i += 1;
+            continue;
+        }
+        if c == b'"' {
+            let run = rest[i..].iter().take_while(|&&b| b == b'"').count();
+            if run >= fence {
+                lex.bump(i + run);
+                return;
+            }
+            i += run;
+            continue;
+        }
+        if interpolated && c == b'{' {
+            if rest.get(i + 1) == Some(&b'{') {
+                i += 2;
+                continue;
+            }
+            depth = 1;
+        }
+        i += 1;
+    }
+    lex.bump(rest.len());
+}
+
 /// `$"` already matched. Scan until the closing `"` at interpolation depth 0, skipping quotes
 /// that sit inside `{...}` holes (so `$"x is {"hi"}"` is one token).
 ///

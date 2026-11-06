@@ -27,6 +27,18 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/json/json_parser.dream"),
         ),
         (
+            "<std>/system/json/json_naming.dream",
+            include_str!("../system/json/json_naming.dream"),
+        ),
+        (
+            "<std>/system/json/json_null.dream",
+            include_str!("../system/json/json_null.dream"),
+        ),
+        (
+            "<std>/system/json/json_options.dream",
+            include_str!("../system/json/json_options.dream"),
+        ),
+        (
             "<std>/system/json/json.dream",
             include_str!("../system/json/json.dream"),
         ),

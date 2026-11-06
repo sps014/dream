@@ -200,7 +200,7 @@ fn parse_into<'a>(
 
     let mut file_diagnostics = DiagnosticBag::new(Some(format!("{}#cpp", fd.file)));
     let lexer = Lexer::new(source);
-    let mut parser = Parser::new(lexer, arena, &mut file_diagnostics);
+    let mut parser = Parser::new(lexer, arena, &mut file_diagnostics).with_cfg(acc.cfg);
     let parsed = parser.parse();
     diagnostics.extend(&file_diagnostics);
     let ast = parsed?;

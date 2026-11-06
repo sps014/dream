@@ -10,6 +10,7 @@ use dream_text::text_span::TextSpan;
 use std::collections::HashMap;
 use std::io::Error;
 
+mod cfg;
 mod declarations;
 mod expressions;
 mod spans;
@@ -41,6 +42,10 @@ pub struct Parser<'a, 'b> {
     nesting_depth: u32,
     /// The nesting-limit diagnostic is reported once per file.
     nesting_reported: bool,
+    /// Symbols `@cfg` conditions are evaluated against.
+    cfg: crate::conditional::CfgSymbols,
+    /// Ranges of items dropped by a false `@cfg` condition.
+    inactive_spans: Vec<TextSpan>,
 }
 
 /// How deep expressions, statements, types, and patterns may nest. Past this the parser reports
@@ -64,7 +69,15 @@ impl<'a, 'b> Parser<'a, 'b> {
             in_generator_only_type: false,
             nesting_depth: 0,
             nesting_reported: false,
+            cfg: crate::conditional::CfgSymbols::default(),
+            inactive_spans: Vec::new(),
         }
+    }
+
+    /// Evaluates `@cfg` conditions against `cfg` instead of the host debug set.
+    pub fn with_cfg(mut self, cfg: crate::conditional::CfgSymbols) -> Self {
+        self.cfg = cfg;
+        self
     }
 
     /// Enters one recursive-descent level. Returns false when the file is already too deep; the
@@ -610,16 +623,35 @@ impl<'a, 'b> Parser<'a, 'b> {
             None
         };
 
-        while self.current_token().kind == TokenKind::ImportToken {
-            if let Ok(import_node) = self.parse_import() {
-                imports.push(import_node);
-            } else {
-                self.recover_to_next_declaration();
+        while self.current_token().kind == TokenKind::ImportToken
+            || (self.at_cfg_attribute()
+                && self.core_keyword_after_attrs() == TokenKind::ImportToken)
+        {
+            let gate = self.parse_cfg_gate();
+            let parsed = self.parse_import();
+            let keep = self.keep_cfg_item(gate);
+            match parsed {
+                Ok(import_node) if keep => imports.push(import_node),
+                Ok(_) => {}
+                Err(_) => self.recover_to_next_declaration(),
             }
         }
 
         while self.current_token().kind != TokenKind::EndOfFileToken {
             let loop_start = self.current_token_index;
+            let gate = self.parse_cfg_gate();
+            if self.cfg_gate_dangles(&gate) {
+                self.ensure_progress(loop_start);
+                continue;
+            }
+            let lengths = (
+                structs.len(),
+                interfaces.len(),
+                functions.len(),
+                enums.len(),
+                extends.len(),
+                globals.len(),
+            );
             let cur = self.current_token().kind;
             // The core declaration keyword, looking past any leading `public`/`static`/`async`.
             let core = self.first_keyword_after_modifiers();
@@ -687,6 +719,14 @@ impl<'a, 'b> Parser<'a, 'b> {
                 );
                 self.next_token();
             }
+            if !self.keep_cfg_item(gate) {
+                structs.truncate(lengths.0);
+                interfaces.truncate(lengths.1);
+                functions.truncate(lengths.2);
+                enums.truncate(lengths.3);
+                extends.truncate(lengths.4);
+                globals.truncate(lengths.5);
+            }
             // Final guard: every branch above is expected to consume at least one token (directly
             // or via recovery). If a future change ever leaves the cursor parked, skip a token so
             // top-level parsing can never spin forever.
@@ -696,6 +736,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             imports, structs, interfaces, functions, enums, extends, globals,
         );
         program.module = module;
+        program.inactive_spans = std::mem::take(&mut self.inactive_spans);
         program.node_spans = std::mem::take(&mut self.node_spans).into_values().collect();
         program
             .node_spans
@@ -738,3 +779,10 @@ impl<'a, 'b> Parser<'a, 'b> {
 #[cfg(test)]
 #[path = "../tests/parser_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../tests/cfg_tests.rs"]
+mod cfg_tests;
+#[cfg(test)]
+#[path = "../tests/raw_string_tests.rs"]
+mod raw_string_tests;

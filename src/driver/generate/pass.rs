@@ -72,7 +72,10 @@ fn gather_unresolved(
             continue;
         }
         if let Ok(source) = std::fs::read_to_string(file) {
-            let mut auxiliary = ProgramAccumulator::default();
+            let mut auxiliary = ProgramAccumulator {
+                cfg: acc.cfg,
+                ..ProgramAccumulator::default()
+            };
             let mut scratch = DiagnosticBag::new(Some(file.clone()));
             let _ = crate::driver::source_loader::parse_source_recursive(
                 file.clone(),

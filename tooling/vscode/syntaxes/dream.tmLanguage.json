@@ -30,6 +30,34 @@
     "strings": {
       "patterns": [
         {
+          "name": "string.interpolated.raw.dream",
+          "begin": "\\$(\"{3,})",
+          "end": "\\1",
+          "patterns": [
+            {
+              "name": "constant.character.escape.brace.dream",
+              "match": "\\{\\{|\\}\\}"
+            },
+            {
+              "name": "meta.interpolation.dream",
+              "begin": "\\{",
+              "end": "\\}",
+              "beginCaptures": {
+                "0": { "name": "punctuation.section.interpolation.begin.dream" }
+              },
+              "endCaptures": {
+                "0": { "name": "punctuation.section.interpolation.end.dream" }
+              },
+              "patterns": [{ "include": "$self" }]
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.triple.raw.dream",
+          "begin": "(\"{3,})",
+          "end": "\\1"
+        },
+        {
           "name": "string.interpolated.dream",
           "begin": "\\$\"",
           "end": "\"",
@@ -80,6 +108,27 @@
         }
       ]
     },
+    "cfg-condition": {
+      "patterns": [
+        {
+          "match": "\\b(Target)(\\.)(Debug|Release|Windows|Macos|Linux|Ios|Native|Wasm|Browser|Wasi)\\b",
+          "captures": {
+            "1": { "name": "entity.name.namespace.dream" },
+            "2": { "name": "punctuation.accessor.dream" },
+            "3": { "name": "constant.language.target.dream" }
+          }
+        },
+        {
+          "name": "keyword.operator.logical.dream",
+          "match": "!|&&|\\|\\|"
+        },
+        {
+          "begin": "\\(",
+          "end": "\\)",
+          "patterns": [{ "include": "#cfg-condition" }]
+        }
+      ]
+    },
     "keywords": {
       "patterns": [
         {
@@ -106,6 +155,16 @@
     },
     "attributes": {
       "patterns": [
+        {
+          "name": "meta.annotation.cfg.dream",
+          "begin": "(@)(cfg)\\s*(\\()",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.annotation.dream" },
+            "2": { "name": "keyword.control.directive.cfg.dream" }
+          },
+          "end": "\\)",
+          "patterns": [{ "include": "#cfg-condition" }]
+        },
         {
           "name": "meta.annotation.dream",
           "begin": "(@)([A-Za-z_][A-Za-z0-9_]*)",

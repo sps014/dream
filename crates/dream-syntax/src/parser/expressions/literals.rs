@@ -74,69 +74,79 @@ impl<'a, 'b> Parser<'a, 'b> {
             .and_then(|s| s.strip_suffix('"'))
             .unwrap_or("");
 
-        // Byte offset (in the original file) of the first character of `body`: skip `$"`.
+        // Absolute file offset of every body character: the body starts after `$"`.
         let body_base = pos.start + 2;
+        let chars: Vec<(char, usize)> = body
+            .char_indices()
+            .map(|(offset, c)| (c, body_base + offset))
+            .collect();
+        self.lower_interpolation(raw, &chars, pos, false)
+    }
 
-        let chars: Vec<char> = body.chars().collect();
+    /// Lowers the characters of an interpolated literal body into a `+` chain. Each character
+    /// carries its absolute file offset. A hole's source is sliced from `token_text` (which starts
+    /// at `pos.start`) so its tokens map back to the file even when the body was dedented. `raw`
+    /// literal text has no escapes, so it is escaped for the string literal node; `$"` text keeps
+    /// its escapes verbatim.
+    pub(crate) fn lower_interpolation(
+        &mut self,
+        token_text: &str,
+        chars: &[(char, usize)],
+        pos: dream_text::text_span::TextSpan,
+        raw: bool,
+    ) -> Result<ExpressionNode<'a>, Error> {
         let mut i = 0;
-        // Byte offset of `chars[i]` within `body`, kept in lockstep with `i` so hole sources can be
-        // mapped back to absolute file positions for IDE navigation.
-        let mut byte_pos = 0usize;
         let mut text_buf = String::new();
-        // Each segment is either literal text (`Ok`) or a hole `(source, byte offset in body)`.
+        // Each segment is either literal text (`Ok`) or a hole `(source, absolute offset)`.
         let mut segments: Vec<Result<String, (String, usize)>> = Vec::new();
 
         while i < chars.len() {
-            let c = chars[i];
+            let c = chars[i].0;
             if c == '{' {
                 // `{{` is an escaped literal `{`.
-                if i + 1 < chars.len() && chars[i + 1] == '{' {
+                if i + 1 < chars.len() && chars[i + 1].0 == '{' {
                     text_buf.push('{');
-                    byte_pos += 2;
                     i += 2;
                     continue;
                 }
-                // Open a hole: flush any pending literal text first.
                 if !text_buf.is_empty() {
                     segments.push(Ok(std::mem::take(&mut text_buf)));
                 }
-                byte_pos += 1; // consume `{`
                 i += 1;
-                let hole_byte_start = byte_pos;
+                let body_end = chars
+                    .last()
+                    .map_or(pos.start, |&(c, offset)| offset + c.len_utf8());
+                let hole_start = chars.get(i).map_or(body_end, |&(_, offset)| offset);
+                let mut hole_end = body_end;
                 let mut depth = 1;
-                let mut hole = String::new();
-                while i < chars.len() && depth > 0 {
-                    let h = chars[i];
-                    let advance = h.len_utf8();
+                while i < chars.len() {
+                    let (h, offset) = chars[i];
+                    i += 1;
                     if h == '{' {
                         depth += 1;
-                        hole.push(h);
                     } else if h == '}' {
                         depth -= 1;
                         if depth == 0 {
-                            byte_pos += advance; // consume the matching `}`
-                            i += 1;
+                            hole_end = offset;
                             break;
                         }
-                        hole.push(h);
-                    } else {
-                        hole.push(h);
                     }
-                    byte_pos += advance;
-                    i += 1;
                 }
+                let hole = token_text
+                    .get(hole_start - pos.start..hole_end - pos.start)
+                    .unwrap_or("")
+                    .to_string();
                 if depth > 0 {
                     self.diagnostics.report_error(
                         "unterminated '{' in interpolated string".to_string(),
                         Some(pos),
                     );
                 }
-                segments.push(Err((hole, hole_byte_start)));
+                segments.push(Err((hole, hole_start)));
             } else if c == '}' {
                 // `}}` is an escaped literal `}`.
-                if i + 1 < chars.len() && chars[i + 1] == '}' {
+                if i + 1 < chars.len() && chars[i + 1].0 == '}' {
                     text_buf.push('}');
-                    byte_pos += 2;
                     i += 2;
                     continue;
                 }
@@ -146,11 +156,12 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Some(pos),
                 );
                 text_buf.push('}');
-                byte_pos += 1;
                 i += 1;
             } else {
+                if raw && matches!(c, '\\' | '"') {
+                    text_buf.push('\\');
+                }
                 text_buf.push(c);
-                byte_pos += c.len_utf8();
                 i += 1;
             }
         }
@@ -163,9 +174,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         for segment in segments {
             let right = match segment {
                 Ok(text) => self.make_string_literal(text, pos),
-                Err((hole, hole_byte_start)) => {
-                    self.parse_interpolation_hole(hole, body_base + hole_byte_start, pos)?
-                }
+                Err((hole, hole_start)) => self.parse_interpolation_hole(hole, hole_start, pos)?,
             };
             let left_ref = self.arena.alloc(acc);
             let right_ref = self.arena.alloc(right);
@@ -232,6 +241,8 @@ impl<'a, 'b> Parser<'a, 'b> {
             in_generator_only_type: false,
             nesting_depth: self.nesting_depth,
             nesting_reported: self.nesting_reported,
+            cfg: self.cfg,
+            inactive_spans: Vec::new(),
         };
         let expr = sub.parse_expression(0)?;
         if sub.current_token().kind != EndOfFileToken {

@@ -24,15 +24,10 @@ dreamer toolchain install slang
 Programs without shaders, such as one that only lists devices, build without it.
 
 On Windows, DXIL targets also need the Windows SDK's DirectX compiler inside the Slang tool
-root so the generator sandbox can read it. From an x64 Visual Studio Developer PowerShell:
-
-```powershell
-$sdkBin = Join-Path $env:WindowsSdkVerBinPath x64
-$slangBin = Join-Path $env:USERPROFILE '.dream/toolchains/slang-2026.20/bin'
-foreach ($library in @('dxcompiler.dll', 'dxil.dll')) {
-    Copy-Item -LiteralPath (Join-Path $sdkBin $library) -Destination $slangBin
-}
-```
+root so the generator sandbox can read it. `dreamer toolchain install slang` copies
+`dxcompiler.dll` and `dxil.dll` from the newest installed Windows 10 SDK into that root. A
+Visual Studio Developer shell's `WindowsSdkVerBinPath` is used when it is set. The install
+prints where to find the SDK when neither the variable nor the registry has the libraries.
 
 The generator fingerprints these libraries together with the tool installation. They are
 build tools and are not shipped with the game. Dream chooses the shader model required by
@@ -68,8 +63,8 @@ async fun run(): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
 
     let n = 1000;
-    let xs = Array.alloc<float>(n);
-    let ys = Array.alloc<float>(n);
+    let xs = [0.0f; n];
+    let ys = [0.0f; n];
     for (let i = 0; i < n; i = i + 1) {
         xs[i] = (float)i;
         ys[i] = 1.0f;

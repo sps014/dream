@@ -25,6 +25,9 @@ pub fn install(tools: &[&'static PinnedTool]) -> Result<()> {
                 println!("Rebuilding dream-slang-layout for the current recorder sources …");
                 super::slang_layout::build(&tool_dir(tool))?;
             }
+            if tool.name == "slang" {
+                stage_directx_compilers(&tool_dir(tool))?;
+            }
             println!(
                 "{} already installed at {}",
                 tool.name,
@@ -86,6 +89,7 @@ fn install_one(tool: &PinnedTool, archive: &HostArchive) -> Result<()> {
     if tool.name == "slang" {
         println!("Building dream-slang-layout …");
         super::slang_layout::build(&dest)?;
+        stage_directx_compilers(&dest)?;
     }
     if !is_installed(tool) {
         bail!(
@@ -306,6 +310,115 @@ fn write_toolchains_env() -> Result<()> {
     Ok(())
 }
 
+/// DXIL targets need the Windows SDK's `dxcompiler.dll` and `dxil.dll` inside the Slang `bin`
+/// directory, because the generator sandbox can read only that root. Other hosts have nothing
+/// to copy.
+fn stage_directx_compilers(slang_root: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        let dest = slang_root.join("bin");
+        fs::create_dir_all(&dest)?;
+        let Some(sdk_bin) = windows_dxil_bin() else {
+            println!(
+                "Windows SDK shader compiler not found. DXIL targets need dxcompiler.dll and \
+                 dxil.dll in {}. Install the Windows SDK, or run this from a Visual Studio \
+                 Developer shell so WindowsSdkVerBinPath is set, then rerun `dreamer toolchain \
+                 install slang`.",
+                dest.display()
+            );
+            return Ok(());
+        };
+        for library in ["dxcompiler.dll", "dxil.dll"] {
+            let source = sdk_bin.join(library);
+            if !source.is_file() {
+                bail!(
+                    "Windows SDK directory {} has no {library}",
+                    sdk_bin.display()
+                );
+            }
+            fs::copy(&source, dest.join(library))
+                .with_context(|| format!("copying {library} into {}", dest.display()))?;
+            println!("Copied {library} into {}", dest.display());
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = slang_root;
+    }
+    Ok(())
+}
+
+/// `bin/<version>/<arch>` of the newest Windows 10 SDK that contains `dxcompiler.dll`.
+/// `WindowsSdkVerBinPath` (set by a Visual Studio Developer shell) wins over the registry.
+#[cfg(windows)]
+fn windows_dxil_bin() -> Option<PathBuf> {
+    let arch = if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "x64"
+    };
+    if let Some(bin) = std::env::var_os("WindowsSdkVerBinPath") {
+        let dir = PathBuf::from(bin).join(arch);
+        if dir.join("dxcompiler.dll").is_file() {
+            return Some(dir);
+        }
+    }
+    kits_root_from_registry().and_then(|root| newest_dxil_bin(&root, arch))
+}
+
+#[cfg(windows)]
+fn kits_root_from_registry() -> Option<PathBuf> {
+    for key in [
+        r"HKLM\SOFTWARE\Microsoft\Windows Kits\Installed Roots",
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots",
+    ] {
+        let output = std::process::Command::new("reg")
+            .args(["query", key, "/v", "KitsRoot10"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            continue;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        if let Some(path) = text.split("REG_SZ").nth(1) {
+            let root = PathBuf::from(path.trim());
+            if root.is_dir() {
+                return Some(root);
+            }
+        }
+    }
+    None
+}
+
+/// The highest `bin/<version>/<arch>` under a Windows Kits root that contains `dxcompiler.dll`.
+#[cfg(any(windows, test))]
+fn newest_dxil_bin(kits_root: &Path, arch: &str) -> Option<PathBuf> {
+    let mut versions: Vec<_> = fs::read_dir(kits_root.join("bin"))
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    versions.sort_by(|left, right| cmp_sdk_version(left, right));
+    versions.into_iter().rev().find_map(|version| {
+        let dir = version.join(arch);
+        dir.join("dxcompiler.dll").is_file().then_some(dir)
+    })
+}
+
+#[cfg(any(windows, test))]
+fn cmp_sdk_version(left: &Path, right: &Path) -> std::cmp::Ordering {
+    let parts = |path: &Path| -> Vec<u32> {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("")
+            .split('.')
+            .map(|part| part.parse().unwrap_or(0))
+            .collect()
+    };
+    parts(left).cmp(&parts(right))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +444,19 @@ mod tests {
         extract_archive(&archive, ArchiveKind::TarXz, &dest).unwrap();
         assert!(dest.join("bin/hello.txt").is_file());
         assert!(!dest.join("tool-1").exists());
+    }
+
+    #[test]
+    fn newest_windows_sdk_bin_wins_when_it_has_the_shader_compiler() {
+        let tmp = tempfile::tempdir().unwrap();
+        let older = tmp.path().join("bin/10.0.19041.0/x64");
+        let newer = tmp.path().join("bin/10.0.22621.0/x64");
+        fs::create_dir_all(&older).unwrap();
+        fs::create_dir_all(&newer).unwrap();
+        fs::write(older.join("dxcompiler.dll"), "old").unwrap();
+        fs::write(newer.join("dxcompiler.dll"), "new").unwrap();
+        fs::create_dir_all(tmp.path().join("bin/10.0.26100.0/arm64")).unwrap();
+        assert_eq!(newest_dxil_bin(tmp.path(), "x64").unwrap(), newer);
+        assert!(newest_dxil_bin(tmp.path(), "arm64").is_none());
     }
 }

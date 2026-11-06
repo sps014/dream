@@ -1,0 +1,33 @@
+module system.json;
+
+/// Settings for `Json.serialize`, `Json.deserialize`, and `Json.from_value`. Every setting has a
+/// default, so pass only the ones you change: `JsonOptions(naming: JsonNaming.CamelCase)`.
+public class JsonOptions {
+    /// How field names are spelled as property names, in both directions. Default `Identity`.
+    public naming: JsonNaming;
+
+    /// Whether `None` fields are written as `null` or left out. Reading accepts both.
+    /// Default `Include`.
+    public nulls: JsonNull;
+
+    /// Spaces per nesting level in written text. `0`, the default, writes compact text on one
+    /// line; reading ignores this setting.
+    public indent: int;
+
+    /// When true, reading matches property names to fields without regard to ASCII letter case.
+    /// Writing ignores this setting. Default `false`.
+    public ignore_case: bool;
+
+    /// Creates options; every parameter defaults to the behavior described on its field.
+    public constructor(
+        naming: JsonNaming = JsonNaming.Identity,
+        nulls: JsonNull = JsonNull.Include,
+        indent: int = 0,
+        ignore_case: bool = false
+    ) {
+        this.naming = naming;
+        this.nulls = nulls;
+        this.indent = indent;
+        this.ignore_case = ignore_case;
+    }
+}

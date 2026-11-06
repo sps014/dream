@@ -150,6 +150,7 @@ impl Index {
                 &mut acc.file_contents,
                 &mut acc.file_modules,
                 &acc.requested_std_packages,
+                acc.cfg,
             );
 
             let combined = dream::syntax::nodes::ProgramNode::new(

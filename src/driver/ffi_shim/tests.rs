@@ -42,6 +42,7 @@ fn expand(tag: &str, source: &str, with_native: bool) -> (Option<String>, String
         &mut acc.file_contents,
         &mut acc.file_modules,
         &acc.requested_std_packages,
+        acc.cfg,
     )
     .unwrap();
     let attributes =

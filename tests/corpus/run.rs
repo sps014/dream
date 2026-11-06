@@ -1,6 +1,8 @@
 use super::{Case, Expectation, cases};
 use dream::driver::compiler::Compiler;
 use dream::driver::test::{TestHost, TestOptions, discover_tests_in_source, run_tests};
+use dream::syntax::conditional::CfgSymbols;
+use dream_abi::target::TargetSpec;
 use dream::driver::toolchain::ToolchainConfig;
 use dream::driver::wasm_opt::OptLevel;
 use dream_mir::backend::Target;
@@ -61,7 +63,7 @@ pub fn run_selected_profile(stems: Option<&[&str]>, hosts: &[TestHost], release_
                 Expectation::Project(suite) => projects
                     .entry(suite)
                     .or_default()
-                    .extend(project_tests(case)),
+                    .extend(project_tests(case, host_cfg(*host, release_build))),
                 _ => isolated.push(**case),
             }
         }
@@ -152,10 +154,20 @@ fn corpus_config(release_build: bool) -> Arc<ToolchainConfig> {
     Arc::new(config)
 }
 
-pub(super) fn project_tests(case: &Case) -> Vec<String> {
+/// The `@cfg` symbols the runner for `host` compiles with.
+fn host_cfg(host: TestHost, release_build: bool) -> CfgSymbols {
+    let target = if host == TestHost::Node {
+        TargetSpec::wasm32()
+    } else {
+        TargetSpec::host()
+    };
+    target.cfg_symbols(release_build)
+}
+
+pub(super) fn project_tests(case: &Case, cfg: CfgSymbols) -> Vec<String> {
     let path = case.source();
     let source = std::fs::read_to_string(&path).unwrap();
-    let found = discover_tests_in_source(&path.to_string_lossy(), &source)
+    let found = discover_tests_in_source(&path.to_string_lossy(), &source, cfg)
         .unwrap_or_else(|error| panic!("{}: {error}", case.stem));
     found.tests.into_iter().map(|test| test.name).collect()
 }

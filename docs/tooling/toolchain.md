@@ -24,7 +24,7 @@ dreamer toolchain install binaryen
 | Component | When you need it |
 | --- | --- |
 | `binaryen` | Optimizing WebAssembly output (`--release` / `-O`) |
-| `slang` | Generators that compile shaders with `slangc` |
+| `slang` | Generators that compile shaders with `slangc`. On Windows the install also copies `dxcompiler.dll` and `dxil.dll` from the Windows SDK into the Slang `bin` directory, which DXIL targets need |
 
 Native programs are compiled and linked by the tools that ship with Dream: the pinned clang drives
 every native build, and links with mold for Linux and macOS outputs or lld for Windows outputs. No

@@ -248,6 +248,39 @@ impl TargetSpec {
         self.triple.to_string()
     }
 
+    /// The `@cfg` symbols a build of this target defines.
+    pub fn cfg_symbols(&self, release: bool) -> dream_syntax::conditional::CfgSymbols {
+        use dream_syntax::conditional::{CfgSymbols, TargetSymbol};
+        let mut symbols = CfgSymbols::empty().with(if release {
+            TargetSymbol::Release
+        } else {
+            TargetSymbol::Debug
+        });
+        symbols = match self.execution_environment {
+            ExecutionEnvironment::Native => symbols.with(TargetSymbol::Native),
+            ExecutionEnvironment::Browser => {
+                symbols.with(TargetSymbol::Wasm).with(TargetSymbol::Browser)
+            }
+            ExecutionEnvironment::WasiP2 | ExecutionEnvironment::WasiP3 => {
+                symbols.with(TargetSymbol::Wasm).with(TargetSymbol::Wasi)
+            }
+        };
+        if self.capabilities.linear_memory {
+            return symbols;
+        }
+        if self.is_windows() {
+            symbols.with(TargetSymbol::Windows)
+        } else if self.is_ios() {
+            symbols.with(TargetSymbol::Ios)
+        } else if self.is_apple() {
+            symbols.with(TargetSymbol::Macos)
+        } else if self.os == OperatingSystem::Linux {
+            symbols.with(TargetSymbol::Linux)
+        } else {
+            symbols
+        }
+    }
+
     pub fn can_link_on_host(&self) -> bool {
         self.link_compatible_with(&Self::host())
     }
@@ -379,6 +412,23 @@ mod tests {
         );
         assert!(!TargetSpec::wasm32().can_link_on_host());
         assert!(TargetSpec::host().can_link_on_host());
+    }
+
+    #[test]
+    fn cfg_symbols_follow_target_and_profile() {
+        let key = |triple: &str, release: bool| {
+            TargetSpec::parse(triple)
+                .unwrap()
+                .cfg_symbols(release)
+                .key()
+        };
+        assert_eq!(key("x86_64-pc-windows-msvc", true), "Release,Windows,Native");
+        assert_eq!(key("aarch64-apple-darwin", false), "Debug,Macos,Native");
+        assert_eq!(key("arm64-apple-ios", false), "Debug,Ios,Native");
+        assert_eq!(key("x86_64-unknown-linux-gnu", false), "Debug,Linux,Native");
+        assert_eq!(key("aarch64-linux-android", false), "Debug,Linux,Native");
+        assert_eq!(key("wasm32-unknown-unknown", false), "Debug,Wasm,Browser");
+        assert_eq!(key("wasm32-wasip2", true), "Release,Wasm,Wasi");
     }
 
     #[test]

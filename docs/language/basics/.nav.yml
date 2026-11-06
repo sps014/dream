@@ -5,4 +5,5 @@ nav:
   - operators.md
   - control-flow.md
   - type-queries.md
+  - conditional-compilation.md
   - comments.md

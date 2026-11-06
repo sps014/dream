@@ -420,7 +420,10 @@ impl Printer {
         }
 
         if self.attribute_end == Some(i) {
-            self.layout.break_line();
+            // `@cfg(...) { ... }` gates a statement group; its brace stays on the attribute line.
+            if tokens.get(i + 1).map(|t| t.kind) != Some(TokenKind::CurlyOpenBracketToken) {
+                self.layout.break_line();
+            }
             self.attribute_end = None;
         }
         self.update_prev_tracking(token);

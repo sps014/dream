@@ -1,0 +1,198 @@
+import system.testing;
+import system;
+import system.json;
+import system.collections;
+
+@json
+class jo_Address {
+    public street_name: string;
+    public zip_code: string;
+
+    public constructor(street_name: string, zip_code: string) {
+        this.street_name = street_name;
+        this.zip_code = zip_code;
+    }
+}
+
+@json
+class jo_User {
+    public user_id: int;
+    public display_name: string;
+
+    @property_name("EMAIL")
+    public email_address: string;
+
+    public nick_name: Option<string>;
+    public home_address: jo_Address;
+    public extra_tags: Map<string, int>;
+
+    public constructor(
+        user_id: int,
+        display_name: string,
+        email_address: string,
+        nick_name: Option<string>,
+        home_address: jo_Address,
+        extra_tags: Map<string, int>
+    ) {
+        this.user_id = user_id;
+        this.display_name = display_name;
+        this.email_address = email_address;
+        this.nick_name = nick_name;
+        this.home_address = home_address;
+        this.extra_tags = extra_tags;
+    }
+}
+
+@json
+class jo_Note {
+    public title: Option<string>;
+    public body: string;
+
+    public constructor(title: Option<string>, body: string) {
+        this.title = title;
+        this.body = body;
+    }
+}
+
+fun jo_user(nick_name: Option<string>): jo_User {
+    let tags = Map<string, int>();
+    tags["some_key"] = 1;
+    return jo_User(7, "Ada", "a@x.io", nick_name, jo_Address("Main", "N1"), tags);
+}
+
+@test
+fun json_options_naming_renames_declared_fields(): void {
+    let none: Option<string> = Option.None;
+    let user = jo_user(none);
+
+    Assert.eq(
+        Json.serialize(user, JsonOptions(naming: JsonNaming.CamelCase)),
+        "{\"userId\":7,\"displayName\":\"Ada\",\"EMAIL\":\"a@x.io\",\"nickName\":null,\"homeAddress\":{\"streetName\":\"Main\",\"zipCode\":\"N1\"},\"extraTags\":{\"some_key\":1}}"
+    );
+    Assert.eq(
+        Json.serialize(user, JsonOptions(naming: JsonNaming.KebabCase)),
+        "{\"user-id\":7,\"display-name\":\"Ada\",\"EMAIL\":\"a@x.io\",\"nick-name\":null,\"home-address\":{\"street-name\":\"Main\",\"zip-code\":\"N1\"},\"extra-tags\":{\"some_key\":1}}"
+    );
+    Assert.eq(
+        Json.serialize(user, JsonOptions(naming: JsonNaming.SnakeCase)),
+        Json.serialize(user)
+    );
+
+    let camel = JsonOptions(naming: JsonNaming.CamelCase);
+    let text = Json.serialize(jo_user(Option.Some("Countess")), camel);
+    let back = Json.deserialize<jo_User>(text, camel).unwrap_or(user);
+    Assert.eq(back.user_id, 7);
+    Assert.eq(back.display_name, "Ada");
+    Assert.eq(back.email_address, "a@x.io");
+    Assert.eq(back.nick_name ?? "<none>", "Countess");
+    Assert.eq(back.home_address.zip_code, "N1");
+    Assert.eq(back.extra_tags["some_key"], 1);
+
+    let tree = Json.deserialize<JsonValue>(text).unwrap_or(JsonValue.null());
+    let from_tree = Json.from_value<jo_User>(tree, camel);
+    Assert.eq(from_tree.display_name, "Ada");
+    Assert.eq(from_tree.home_address.street_name, "Main");
+
+    // Snake-case keys do not name camel-case fields, so the fields keep their defaults.
+    let snake_text = Json.serialize(user);
+    let mismatched = Json.deserialize<jo_User>(snake_text, camel).unwrap_or(user);
+    Assert.eq(mismatched.user_id, 0);
+}
+
+@test
+fun json_options_omit_skips_none_fields(): void {
+    let omit = JsonOptions(nulls: JsonNull.Omit);
+    let none: Option<string> = Option.None;
+    Assert.eq(
+        Json.serialize(jo_user(none), omit),
+        "{\"user_id\":7,\"display_name\":\"Ada\",\"EMAIL\":\"a@x.io\",\"home_address\":{\"street_name\":\"Main\",\"zip_code\":\"N1\"},\"extra_tags\":{\"some_key\":1}}"
+    );
+    Assert.eq(Json.serialize(jo_Note(none, "x"), omit), "{\"body\":\"x\"}");
+    Assert.eq(Json.serialize(jo_Note(none, "x")), "{\"title\":null,\"body\":\"x\"}");
+    Assert.eq(
+        Json.serialize(jo_Note(Option.Some("t"), "x"), omit),
+        "{\"title\":\"t\",\"body\":\"x\"}"
+    );
+
+    let back = Json.deserialize<jo_Note>("{\"body\":\"y\"}").unwrap_or(jo_Note(none, ""));
+    Assert.is_true(back.title.is_none());
+    Assert.eq(back.body, "y");
+}
+
+@test
+fun json_options_indent_formats_every_type(): void {
+    let options = JsonOptions(naming: JsonNaming.CamelCase, indent: 2);
+    Assert.eq(
+        Json.serialize(jo_Address("Main", "N1"), options),
+        "{\n  \"streetName\": \"Main\",\n  \"zipCode\": \"N1\"\n}"
+    );
+    let indented = Json.serialize(jo_Address("Main", "N1"), options);
+    let back = Json.deserialize<jo_Address>(indented, options).unwrap_or(jo_Address("", ""));
+    Assert.eq(back.street_name, "Main");
+    Assert.eq(back.zip_code, "N1");
+
+    let addresses = List<jo_Address>();
+    addresses.push(jo_Address("a, b", "{ }"));
+    Assert.eq(
+        Json.serialize(addresses, options),
+        "[\n  {\n    \"streetName\": \"a, b\",\n    \"zipCode\": \"{ }\"\n  }\n]"
+    );
+    Assert.eq(Json.serialize(List<int>(), options), "[]");
+}
+
+@test
+fun json_options_ignore_case_matches_any_letter_case(): void {
+    let none: Option<string> = Option.None;
+    let fallback = jo_user(none);
+    let text = "{\"USERID\":3,\"DisplayName\":\"Lin\",\"email\":\"l@x.io\",\"homeaddress\":{\"STREETNAME\":\"High\"}}";
+
+    let exact = Json.deserialize<jo_User>(text, JsonOptions(naming: JsonNaming.CamelCase))
+        .unwrap_or(fallback);
+    Assert.eq(exact.user_id, 0);
+    Assert.eq(exact.email_address, "");
+
+    let loose = JsonOptions(naming: JsonNaming.CamelCase, ignore_case: true);
+    let user = Json.deserialize<jo_User>(text, loose).unwrap_or(fallback);
+    Assert.eq(user.user_id, 3);
+    Assert.eq(user.display_name, "Lin");
+    Assert.eq(user.email_address, "l@x.io");
+    Assert.eq(user.home_address.street_name, "High");
+
+    let tree = Json.deserialize<JsonValue>(text).unwrap_or(JsonValue.null());
+    let from_tree = Json.from_value<jo_User>(tree, loose);
+    Assert.eq(from_tree.user_id, 3);
+    Assert.eq(from_tree.home_address.street_name, "High");
+}
+
+@test
+fun json_options_pascal_case_capitalizes_every_word(): void {
+    let none: Option<string> = Option.None;
+    let pascal = JsonOptions(naming: JsonNaming.PascalCase);
+    Assert.eq(
+        Json.serialize(jo_user(none), pascal),
+        "{\"UserId\":7,\"DisplayName\":\"Ada\",\"EMAIL\":\"a@x.io\",\"NickName\":null,\"HomeAddress\":{\"StreetName\":\"Main\",\"ZipCode\":\"N1\"},\"ExtraTags\":{\"some_key\":1}}"
+    );
+    let back = Json.deserialize<jo_User>(Json.serialize(jo_user(Option.Some("A")), pascal), pascal)
+        .unwrap_or(jo_user(none));
+    Assert.eq(back.display_name, "Ada");
+    Assert.eq(back.nick_name ?? "<none>", "A");
+    Assert.eq(back.home_address.street_name, "Main");
+}
+
+@json
+class jo_Plain {
+    public label: string;
+    public count: int;
+}
+
+@test
+fun json_type_without_constructor_round_trips(): void {
+    let value = jo_Plain();
+    value.label = "Ada";
+    value.count = 36;
+    let text = Json.serialize(value);
+    Assert.eq(text, "{\"label\":\"Ada\",\"count\":36}");
+    let back = Json.deserialize<jo_Plain>(text).unwrap_or(value);
+    Assert.eq(back.label, "Ada");
+    Assert.eq(back.count, 36);
+}

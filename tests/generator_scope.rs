@@ -269,7 +269,7 @@ public fun stamp(ctx: GenContext): void {{
     std::fs::write(&main, format!("import system.json;\n{program}")).unwrap();
     std::fs::write(
         dir.path().join("gen.dream"),
-        source("JsonParser(\\\"\\\", 0).pos"),
+        source("JsonParser(\\\"\\\", 0, JsonOptions()).pos"),
     )
     .unwrap();
     let run = dream(dir.path(), &["main.dream"]);

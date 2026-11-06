@@ -139,7 +139,11 @@ pub struct GenExe {
 /// sources are part of the compiler identity.
 fn user_sources(entry: &str, harness: &str) -> BTreeMap<String, String> {
     let arena = bumpalo::Bump::new();
-    let mut acc = crate::driver::source_loader::ProgramAccumulator::default();
+    // Generator executables are host release builds.
+    let mut acc = crate::driver::source_loader::ProgramAccumulator {
+        cfg: dream_abi::target::TargetSpec::host().cfg_symbols(true),
+        ..Default::default()
+    };
     let mut scratch = dream_diagnostics::DiagnosticBag::new(None);
     let _ = crate::driver::source_loader::parse_source_recursive(
         entry.to_string(),

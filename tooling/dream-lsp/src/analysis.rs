@@ -47,6 +47,9 @@ pub struct DiagnosticOut {
 /// diagnostics are filtered out so library-internal spans never map onto the user's text.
 pub const MAIN_FILE: &str = "main.dream";
 
+/// Code of the hint covering an item a false `@cfg` condition removed; editors dim the range.
+pub const INACTIVE_CODE: &str = "inactive-code";
+
 /// Runs the full front-end over `text` and returns the diagnostics that belong to the user's
 /// document (with byte spans converted to LSP ranges) plus the analyzer's IDE snapshot.
 pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome {
@@ -162,6 +165,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         &mut acc.file_contents,
         &mut acc.file_modules,
         &acc.requested_std_packages,
+        acc.cfg,
     );
 
     // Skip compiled-in copies of prelude files the user is actively editing in the compiler repo.
@@ -276,6 +280,10 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         })
         .collect();
 
+    let inactive = user_ast
+        .as_ref()
+        .map(|ast| ast.get_root().inactive_spans.clone())
+        .unwrap_or_default();
     let diagnostics: Vec<DiagnosticOut> = diagnostics
         .diagnostics
         .iter()
@@ -301,6 +309,14 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                 code: d.code,
             })
         })
+        .chain(inactive.iter().filter(|span| span.end <= text.len()).map(|span| {
+            DiagnosticOut {
+                range: line_index.range(span.start, span.end),
+                severity: "hint",
+                message: "inactive code: its '@cfg' condition is false for this build".to_string(),
+                code: Some(INACTIVE_CODE),
+            }
+        }))
         .collect();
 
     AnalysisOutcome {

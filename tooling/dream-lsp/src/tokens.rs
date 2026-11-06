@@ -20,7 +20,7 @@ pub fn lex_category(kind: TokenKind) -> Option<LexCategory> {
     Some(match kind {
         DataTypeToken => LexCategory::Type,
         NumberToken => LexCategory::Number,
-        StringToken | CharToken => LexCategory::String,
+        StringToken | RawStringToken | CharToken => LexCategory::String,
         BooleanToken => LexCategory::Keyword,
         IfToken | ElseToken | ForToken | WhileToken | DoToken | YieldToken | ReturnToken
         | BreakToken | ContinueToken | LetToken | ConstToken | FunToken | StaticToken

@@ -27,6 +27,21 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error(
+        "cfg_errors",
+        "unknown target 'Target.Freebsd'; expected one of Target.Debug, Target.Release, Target.Windows, Target.Macos, Target.Linux, Target.Ios, Target.Native, Target.Wasm, Target.Browser, Target.Wasi\n'@cfg' conditions test 'Target.<name>', but found 'Os'\nexpected '&&', '||', or ')' in a '@cfg' condition but found identifier\nan item can have only one '@cfg'; combine the conditions with '&&' or '||'\n'@cfg' must be the first attribute of a declaration, member, or statement\n'@cfg' must be followed by the declaration, member, or statement it controls",
+        true,
+    ),
+    Case::error(
+        "cfg_target_outside",
+        "'Target' is only valid inside '@cfg(...)'; to compile code for one target, put '@cfg(Target.<name>)' on the declaration, member, or statement",
+        true,
+    ),
+    Case::error(
+        "raw_string_errors",
+        "a multi-line raw string must start on the line after its opening quotes\nthe closing quotes of a multi-line raw string must be on their own line\na raw string line must start with the same whitespace as its closing quotes\nraw string literal closes with more quotes than it opens with; open it with \"\"\"\"",
+        true,
+    ),
+    Case::error(
         "call_errors",
         "No overload of 'Point.constructor' matches argument types (Point, string)\nAmbiguous call to 'g'\n'add' is overloaded; give it a fun(...) type to select an overload\nNo overload of 'add' takes parameters (bool, bool)\nNo overload of 'h'\nno parameter named 'nam'\nvariadic parameter 'nums' cannot be passed by name\nfunction 'takes_ref' expects parameter 1 to be passed with 'ref', but it was passed by value\nfunction 'takes_value' expects parameter 1 to be passed by value, but 'ref' was given\n'clear' is an instance method of 'Counter'; call it on a 'Counter' value, not on the type name\nfunction 'take' expects parameter 1 to be List<List<int>>, got List<int>",
         true,

@@ -64,7 +64,7 @@ Absolute value, minimum, maximum, and clamping are methods on the number itself:
 ## Other
 
 - `.length` on strings, arrays, and collections.
-- `Array.alloc<T>(n)` — a zeroed fixed array. Prefer [List](../collections/index.md) when the size grows.
+- `[value; n]` — a fixed array of `n` copies of `value`, such as `[0; n]` for zeros. Prefer [List](../collections/index.md) when the size grows.
 - Override `public override fun to_string()` so `print` and `+` show your type. See [object](../../language/types/objects.md).
 
 ## Waiting for cancellation

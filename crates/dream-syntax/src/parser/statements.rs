@@ -17,8 +17,24 @@ impl<'a, 'b> Parser<'a, 'b> {
             // Recover at statement granularity: a malformed statement is reported (by the failing
             // sub-parser) and skipped to the next boundary so the rest of the block still parses
             // and surfaces its own diagnostics, instead of discarding the entire enclosing block.
-            match self.parse_statement() {
-                Ok(statement) => statements.push(statement),
+            let gate = self.parse_cfg_gate();
+            if self.cfg_gate_dangles(&gate) {
+                continue;
+            }
+            if gate.is_some() && self.current_token().kind == TokenKind::CurlyOpenBracketToken {
+                // `@cfg(...) { ... }` gates a group of statements that share the enclosing scope.
+                let group = self.parse_block()?;
+                if self.keep_cfg_item(gate) {
+                    statements.extend(group.iter().cloned());
+                }
+                self.ensure_progress(iter);
+                continue;
+            }
+            let parsed = self.parse_statement();
+            let keep = self.keep_cfg_item(gate);
+            match parsed {
+                Ok(statement) if keep => statements.push(statement),
+                Ok(_) => {}
                 Err(_) => self.recover_to_next_statement(),
             }
             self.ensure_progress(iter);
@@ -140,6 +156,8 @@ impl<'a, 'b> Parser<'a, 'b> {
                 | TokenKind::NumberToken
                 | TokenKind::StringToken
                 | TokenKind::InterpolatedStringToken
+                | TokenKind::RawStringToken
+                | TokenKind::InterpolatedRawStringToken
                 | TokenKind::BooleanToken
                 | TokenKind::CharToken
                 | TokenKind::OpenParenthesisToken

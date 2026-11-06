@@ -21,10 +21,7 @@ fun json_roundtrip(): void {
 
     let parsed = Json.deserialize<JsonValue>(Json.serialize(user)).unwrap_or(JsonValue.null());
     let none = JsonValue.null();
-    Assert.eq(
-        (parsed.get("name").unwrap_or(none).as_string().unwrap_or("")).to_string(),
-        "Ada"
-    );
+    Assert.eq((parsed.get("name").unwrap_or(none).as_string().unwrap_or("")).to_string(), "Ada");
     Assert.eq((parsed.get("age").unwrap_or(none).as_int().unwrap_or(0)).to_string(), "36");
     Assert.eq(
         (parsed.get("tags").unwrap_or(none).at(1).unwrap_or(none).as_string().unwrap_or(""))
@@ -45,15 +42,7 @@ fun json_parse(): void {
         "{\"a\":{\"b\":[1,2,3]},\"s\":\"hi\\nthere\",\"n\":-2.5,\"ok\":false}"
     ).unwrap_or(JsonValue.null());
     let none = JsonValue.null();
-    Assert.eq(
-        v.get("a")
-            .unwrap_or(none)["b"]
-            .at(2)
-            .unwrap_or(none)
-            .as_int()
-            .unwrap_or(0),
-        3
-    );
+    Assert.eq(v.get("a").unwrap_or(none)["b"].at(2).unwrap_or(none).as_int().unwrap_or(0), 3);
     Assert.eq(v.get("a").unwrap_or(none)["b"].length, 3);
     Assert.eq(v.get("n").unwrap_or(none).as_double().unwrap_or(0.0d).to_string(), "-2.5");
     Assert.is_false(v.get("ok").unwrap_or(none).as_bool().unwrap_or(true));
@@ -92,31 +81,31 @@ fun c125_walk(out: List<string>, path: string, borrow v: JsonValue): void {
         case JsonKind.Object:
             let i = 0;
             while i < v.length {
-                let key = v.key_at(i).unwrap_or("");
-                let child = v.value_at(i).unwrap_or(JsonValue.null());
-                let next = key;
-                if path.length > 0 {
-                    next = path + "." + key;
-                }
-                c125_walk(out, next, child);
-                i = i + 1;
+            let key = v.key_at(i).unwrap_or("");
+            let child = v.value_at(i).unwrap_or(JsonValue.null());
+            let next = key;
+            if path.length > 0 {
+                next = path + "." + key;
             }
+            c125_walk(out, next, child);
+            i = i + 1;
+        }
         case JsonKind.Array:
             switch (v.as_array()) {
-                Some(items) => {
-                    let i = 0;
-                    for (let item in items) {
-                        let idx = "[" + i.to_string() + "]";
-                        let next = idx;
-                        if path.length > 0 {
-                            next = path + idx;
-                        }
-                        c125_walk(out, next, item);
-                        i = i + 1;
+            Some(items) => {
+                let i = 0;
+                for (let item in items) {
+                    let idx = "[" + i.to_string() + "]";
+                    let next = idx;
+                    if path.length > 0 {
+                        next = path + idx;
                     }
-                },
-                None => {}
-            }
+                    c125_walk(out, next, item);
+                    i = i + 1;
+                }
+            },
+            None => {}
+        }
         default:
     }
 }
@@ -135,10 +124,15 @@ fun json_value_walk(): void {
 
     Assert.is_true(!v.contains("missing"));
     Assert.is_true(v["name"].as_int().is_none());
-    Assert.is_true(v.get("name").and_then((item: JsonValue) => item.as_string()).unwrap_or("") == "ada");
+    Assert.is_true(
+        v.get("name").and_then((item: JsonValue) => item.as_string()).unwrap_or("") == "ada"
+    );
     let meta = v.get("meta").unwrap();
     Assert.eq(meta.get("id").and_then((item: JsonValue) => item.as_int()).unwrap_or(0), 9);
 
     let dict: Map<string, JsonValue> = v.as_map().unwrap_or(Map<string, JsonValue>());
-    Assert.eq(Json.serialize(dict), "{\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9},\"name\":\"ada\"}");
+    Assert.eq(
+        Json.serialize(dict),
+        "{\"tags\":[1,2],\"on\":true,\"meta\":{\"id\":9},\"name\":\"ada\"}"
+    );
 }

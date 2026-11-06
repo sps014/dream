@@ -15395,26 +15395,38 @@
       },
       {
         "signature": "public static extern fun serialize<T>(borrow value: T): string",
-        "description": "Encodes `value` as JSON text. User-defined types need `@json`.",
-        "line": 7,
+        "description": "Encodes `value` as compact JSON text, with field names as declared. User-defined types need `@json`.",
+        "line": 8,
+        "page": "reference/api/json-json.md"
+      },
+      {
+        "signature": "public static extern fun serialize<T>(borrow value: T, borrow options: JsonOptions): string",
+        "description": "Encodes `value` as JSON text using `options` for property naming, whether `None` fields are written, and indentation. User-defined types need `@json`.",
+        "line": 13,
         "page": "reference/api/json-json.md"
       },
       {
         "signature": "public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>",
-        "description": "Decodes JSON text as `T`, returning `ParseError` if it cannot be decoded. User-defined types need `@json`.",
-        "line": 12,
+        "description": "Decodes JSON text as `T`, returning `ParseError` if it cannot be decoded. Property names must match field names exactly. User-defined types need `@json`.",
+        "line": 18,
+        "page": "reference/api/json-json.md"
+      },
+      {
+        "signature": "public static extern fun deserialize<T>( borrow text: string, borrow options: JsonOptions ): Result<T, ParseError>",
+        "description": "Decodes JSON text as `T`, matching property names to fields as `options` describes. Returns `ParseError` if the text cannot be decoded. User-defined types need `@json`.",
+        "line": 23,
         "page": "reference/api/json-json.md"
       },
       {
         "signature": "public static extern fun from_value<T>(borrow value: JsonValue): T",
-        "description": "Reconstruct a `@json` value from an already-parsed `JsonValue` (no parse step).",
-        "line": 16,
+        "description": "Builds a `@json` value from an already-parsed `JsonValue`. Missing or mismatched properties take the field defaults.",
+        "line": 31,
         "page": "reference/api/json-json.md"
       },
       {
-        "signature": "public static fun serialize_pretty(borrow value: JsonValue, indent: int): string",
-        "description": "Pretty-prints a `JsonValue` with newlines and `indent` spaces per nesting level. Pass 0 to produce compact JSON text.",
-        "line": 20,
+        "signature": "public static extern fun from_value<T>(borrow value: JsonValue, borrow options: JsonOptions): T",
+        "description": "Builds a `@json` value from an already-parsed `JsonValue`, matching property names to fields as `options` describes. Missing or mismatched properties take the field defaults.",
+        "line": 36,
         "page": "reference/api/json-json.md"
       }
     ]
@@ -15491,6 +15503,117 @@
         "description": "A JSON object mapping property names to values.",
         "line": 16,
         "page": "reference/api/json-json-kind.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/json/json_naming.dream",
+    "package": "system.json",
+    "page": "reference/api/json-json-naming.md",
+    "declarations": [
+      {
+        "signature": "public enum JsonNaming",
+        "description": "How `@json` field names are spelled as JSON property names. A field with `@property_name` keeps the name it gives, and map keys and `JsonValue` keys are never renamed.",
+        "line": 5,
+        "page": "reference/api/json-json-naming.md"
+      },
+      {
+        "signature": "Identity",
+        "description": "The field name as declared: `user_id` stays `user_id`.",
+        "line": 7,
+        "page": "reference/api/json-json-naming.md"
+      },
+      {
+        "signature": "CamelCase",
+        "description": "Lower camel case: `user_id` becomes `userId`.",
+        "line": 9,
+        "page": "reference/api/json-json-naming.md"
+      },
+      {
+        "signature": "PascalCase",
+        "description": "Upper camel case: `user_id` becomes `UserId`.",
+        "line": 11,
+        "page": "reference/api/json-json-naming.md"
+      },
+      {
+        "signature": "KebabCase",
+        "description": "Lowercase words joined by `-`: `user_id` becomes `user-id`.",
+        "line": 13,
+        "page": "reference/api/json-json-naming.md"
+      },
+      {
+        "signature": "SnakeCase",
+        "description": "Lowercase words joined by `_`: `userId` becomes `user_id`.",
+        "line": 15,
+        "page": "reference/api/json-json-naming.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/json/json_null.dream",
+    "package": "system.json",
+    "page": "reference/api/json-json-null.md",
+    "declarations": [
+      {
+        "signature": "public enum JsonNull",
+        "description": "What `Json.serialize` writes for an `Option` field of a `@json` type that holds `None`.",
+        "line": 4,
+        "page": "reference/api/json-json-null.md"
+      },
+      {
+        "signature": "Include",
+        "description": "Write the property with the value `null`.",
+        "line": 6,
+        "page": "reference/api/json-json-null.md"
+      },
+      {
+        "signature": "Omit",
+        "description": "Leave the property out of the object.",
+        "line": 8,
+        "page": "reference/api/json-json-null.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/json/json_options.dream",
+    "package": "system.json",
+    "page": "reference/api/json-json-options.md",
+    "declarations": [
+      {
+        "signature": "public class JsonOptions",
+        "description": "Settings for `Json.serialize`, `Json.deserialize`, and `Json.from_value`. Every setting has a default, so pass only the ones you change: `JsonOptions(naming: JsonNaming.CamelCase)`.",
+        "line": 5,
+        "page": "reference/api/json-json-options.md"
+      },
+      {
+        "signature": "public naming: JsonNaming",
+        "description": "How field names are spelled as property names, in both directions. Default `Identity`.",
+        "line": 7,
+        "page": "reference/api/json-json-options.md"
+      },
+      {
+        "signature": "public nulls: JsonNull",
+        "description": "Whether `None` fields are written as `null` or left out. Reading accepts both. Default `Include`.",
+        "line": 11,
+        "page": "reference/api/json-json-options.md"
+      },
+      {
+        "signature": "public indent: int",
+        "description": "Spaces per nesting level in written text. `0`, the default, writes compact text on one line; reading ignores this setting.",
+        "line": 15,
+        "page": "reference/api/json-json-options.md"
+      },
+      {
+        "signature": "public ignore_case: bool",
+        "description": "When true, reading matches property names to fields without regard to ASCII letter case. Writing ignores this setting. Default `false`.",
+        "line": 19,
+        "page": "reference/api/json-json-options.md"
+      },
+      {
+        "signature": "public constructor( naming: JsonNaming = JsonNaming.Identity, nulls: JsonNull = JsonNull.Include, indent: int = 0, ignore_case: bool = false )",
+        "description": "Creates options; every parameter defaults to the behavior described on its field.",
+        "line": 22,
+        "page": "reference/api/json-json-options.md"
       }
     ]
   },

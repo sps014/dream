@@ -35,7 +35,10 @@ impl Compiler {
         arena: &'a Bump,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<FrontEnd<'a>, CompileError> {
-        let mut acc = ProgramAccumulator::default();
+        let mut acc = ProgramAccumulator {
+            cfg: self.target.spec().cfg_symbols(!self.profile.is_debug()),
+            ..ProgramAccumulator::default()
+        };
         let source_phase = tracing::info_span!("compile_phase", phase = "source_load").entered();
         match &self.virtual_entry {
             Some(source) => {
@@ -72,6 +75,7 @@ impl Compiler {
             &mut acc.file_contents,
             &mut acc.file_modules,
             &acc.requested_std_packages,
+            acc.cfg,
         )?;
         drop(prelude_phase);
         let _attributes_phase =

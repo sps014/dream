@@ -270,6 +270,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             let tok = self.next_token();
             let expr = self.parse_interpolated_string(tok)?;
             return self.parse_postfix_chain(expr);
+        } else if self.current_token().kind == TokenKind::RawStringToken {
+            let tok = self.next_token();
+            let expr = self.parse_raw_string(tok)?;
+            return self.parse_postfix_chain(expr);
+        } else if self.current_token().kind == TokenKind::InterpolatedRawStringToken {
+            let tok = self.next_token();
+            let expr = self.parse_interpolated_raw_string(tok)?;
+            return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::CharToken {
             // A char literal `'a'` is a `char` whose backing token text is the (ASCII/code point)
             // value, so codegen can emit `i32.const <value>`. Escapes like '\n', '\t', '\\', '\''

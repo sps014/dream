@@ -22,6 +22,54 @@ fun main() {
 
 `.length` counts UTF-16 code units, not Unicode scalars. Use `.byte_size()` for the raw UTF-16 payload size (`length * 2`). Every empty string literal `""` shares one allocation.
 
+## Raw strings
+
+A raw string starts and ends with three or more double quotes. Its text is used exactly as written: backslashes are ordinary characters and `"` needs no escape. Raw strings suit file paths, regular expressions, JSON, and other text with many quotes or backslashes.
+
+```dream
+let path = """C:\temp\new""";
+let pattern = """^\d+(\.\d+)?$""";
+let quoted = """She said "hi".""";
+```
+
+`path` holds `C:\temp\new`; `\t` and `\n` stay two characters each. A raw string cannot start or end with `"` on the same line as its quotes, so add a space or use the multi-line form for that text.
+
+To put three quotes in the text, open and close with more quotes than any run inside: `""""a """ inside""""` holds `a """ inside`.
+
+### Multi-line raw strings
+
+Start the text on the line after the opening quotes and put the closing quotes on their own line. The whitespace before the closing quotes is removed from every line, so the literal can follow the indentation of your code:
+
+```dream
+fun usage(): string {
+    return """
+        Usage: tool [options]
+          --verbose  print each step
+        """;
+}
+```
+
+The result is `"Usage: tool [options]\n  --verbose  print each step"`. Neither the line break after the opening quotes nor the one before the closing quotes is part of the text. Blank lines stay blank.
+
+The compiler reports an error when text follows the opening quotes on the same line, when text comes before the closing quotes on their line, or when a nonblank line does not begin with the closing line's whitespace.
+
+### Interpolated raw strings
+
+Put `$` before the quotes to insert values with `{expression}`, like an ordinary interpolated string. Write `{{` and `}}` for literal braces:
+
+```dream
+fun user_json(name: string, age: int): string {
+    return $"""
+        {{
+          "name": "{name}",
+          "age": {age}
+        }}
+        """;
+}
+```
+
+`user_json("Ada", 36)` returns a three-line JSON object. Values are inserted as text; escape them yourself when the surrounding format needs it, or build JSON with [`Json.serialize`](../serialization/json.md).
+
 ## Look up and change
 
 | Call | Meaning |

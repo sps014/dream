@@ -65,6 +65,11 @@ impl<'a, 'b> Parser<'a, 'b> {
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
             let index_before = self.current_token_index;
+            let gate = self.parse_cfg_gate();
+            if self.cfg_gate_dangles(&gate) {
+                continue;
+            }
+            let lengths = (variants.len(), methods.len());
             let member_attributes = self.parse_attributes();
 
             // Classify like class members: look past visibility/static/async for `fun` / accessors.
@@ -139,6 +144,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if self.current_token().kind == TokenKind::CommaToken {
                     self.match_token(TokenKind::CommaToken);
                 }
+            }
+            if !self.keep_cfg_item(gate) {
+                variants.truncate(lengths.0);
+                methods.truncate(lengths.1);
             }
             // Safety: never spin on an unexpected token.
             if self.current_token_index == index_before {

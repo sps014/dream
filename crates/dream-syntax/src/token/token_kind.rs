@@ -1,4 +1,6 @@
-use super::lex::{lex_interpolated_string, lex_number};
+use super::lex::{
+    lex_interpolated_raw_string, lex_interpolated_string, lex_number, lex_raw_string,
+};
 use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone, Copy, Hash, Eq)]
@@ -21,6 +23,12 @@ pub enum TokenKind {
 
     #[regex(r#"\$""#, lex_interpolated_string)]
     InterpolatedStringToken,
+
+    #[token(r#"""""#, lex_raw_string)]
+    RawStringToken,
+
+    #[token(r#"$""""#, lex_interpolated_raw_string)]
+    InterpolatedRawStringToken,
 
     #[regex(r#"'([^'\\]*(\\.[^'\\]*)*)'"#)]
     CharToken,
@@ -241,6 +249,8 @@ impl TokenKind {
             TokenKind::NumberToken => "number",
             TokenKind::StringToken => "string",
             TokenKind::InterpolatedStringToken => "interpolated string",
+            TokenKind::RawStringToken => "raw string",
+            TokenKind::InterpolatedRawStringToken => "interpolated raw string",
             TokenKind::CharToken => "character",
             TokenKind::BooleanToken => "boolean",
             TokenKind::PlusToken => "'+'",

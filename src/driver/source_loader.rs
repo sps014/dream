@@ -63,6 +63,8 @@ pub struct ProgramAccumulator<'a> {
     /// Materialized artifacts whose source maps point into each consumed function, for editors.
     pub consumed_artifacts: indexmap::IndexMap<String, Vec<std::path::PathBuf>>,
     pub untracked_generator_inputs: bool,
+    /// Symbols every file's `@cfg` conditions are evaluated against.
+    pub cfg: dream_syntax::conditional::CfgSymbols,
 }
 
 /// Resolves an `import a.b.c;` reference (passed here as the slash-joined path `a/b/c`) relative to
@@ -252,7 +254,7 @@ pub fn parse_source_recursive<'a>(
     let mut file_diagnostics = DiagnosticBag::new(Some(path_str.clone()));
 
     let lexer = Lexer::new(text);
-    let mut parser = Parser::new(lexer, arena, &mut file_diagnostics);
+    let mut parser = Parser::new(lexer, arena, &mut file_diagnostics).with_cfg(acc.cfg);
 
     let ast = match parser.parse() {
         Ok(ast) => ast,

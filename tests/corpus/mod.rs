@@ -111,7 +111,7 @@ fn every_case_has_one_source_and_assertions() {
     for case in cases() {
         assert!(names.insert(case.stem), "duplicate {}", case.stem);
         if let Expectation::Project(suite) = case.expectation {
-            for test in run::project_tests(case) {
+            for test in run::project_tests(case, dream::syntax::conditional::CfgSymbols::host_debug()) {
                 // The runner calls every selected test of a suite by its bare name.
                 assert!(
                     tests.insert((suite, test.clone())),

@@ -72,7 +72,6 @@ fun cli_arguments(): void {
     Assert.eq(values[3], "こんにちは");
 }
 
-
 fun probe(): Command {
     return Command("probe")
         .description("Read a value")
@@ -116,7 +115,9 @@ fun cli_help_layout(): void {
     let selected = tool.parse(["--verbose", "check", "--mode", "slow"]).unwrap();
     Assert.is_true(selected.get_bool("verbose").unwrap());
     Assert.eq(selected.subcommand.unwrap().get_string("mode").unwrap(), "slow");
-    Assert.is_true(Command("required").positional("input", required: true).parse(["--help"]).unwrap().is_help);
+    Assert.is_true(
+        Command("required").positional("input", required: true).parse(["--help"]).unwrap().is_help
+    );
 }
 
 @test
@@ -128,21 +129,56 @@ fun cli_errors(): void {
         "error: unexpected argument '--unknown' found\n\nUsage: probe [OPTIONS] [files]...\n\n"
             + "For more information, try '--help'.\n"
     );
-    Assert.is_true(probe().parse(["--name"]).unwrap_err().message().contains("a value is required for '--name <name>'"));
-    Assert.is_true(probe().parse(["--count", "oops"]).unwrap_err().message().contains("expected a decimal 32-bit integer"));
-    Assert.is_true(probe().parse(["--verbose=yes"]).unwrap_err().message().contains("unexpected value 'yes'"));
-    Assert.is_true(probe().parse(["-x"]).unwrap_err().message().contains("unexpected argument '-x' found"));
     Assert.is_true(
-        Command("required").positional("input", required: true).parse([]).unwrap_err().message()
+        probe()
+            .parse(["--name"])
+            .unwrap_err()
+            .message()
+            .contains("a value is required for '--name <name>'")
+    );
+    Assert.is_true(
+        probe()
+            .parse(["--count", "oops"])
+            .unwrap_err()
+            .message()
+            .contains("expected a decimal 32-bit integer")
+    );
+    Assert.is_true(
+        probe().parse(["--verbose=yes"]).unwrap_err().message().contains("unexpected value 'yes'")
+    );
+    Assert.is_true(
+        probe().parse(["-x"]).unwrap_err().message().contains("unexpected argument '-x' found")
+    );
+    Assert.is_true(
+        Command("required")
+            .positional("input", required: true)
+            .parse([])
+            .unwrap_err()
+            .message()
             .contains("the following required arguments were not provided:\n  <input>")
     );
-    let separated = probe().parse(["-vn", "first", "--name=second", "--count", "-42", "--", "--not-an-option"]).unwrap();
+    let separated = probe()
+        .parse(["-vn", "first", "--name=second", "--count", "-42", "--", "--not-an-option"])
+        .unwrap();
     Assert.eq(separated.get_strings("name").unwrap().length, 2);
     Assert.eq(separated.get_int("count").unwrap(), -42);
     Assert.eq(separated.get_string("files").unwrap(), "--not-an-option");
-    Assert.eq(Command("bad").int_option("value", default_value: 1).choices("value", ["x"]).parse([]).unwrap_err().code(), "EINVAL");
     Assert.eq(
-        Command("bad").positional("first").positional("second", required: true).parse([]).unwrap_err().code(),
+        Command("bad")
+            .int_option("value", default_value: 1)
+            .choices("value", ["x"])
+            .parse([])
+            .unwrap_err()
+            .code(),
+        "EINVAL"
+    );
+    Assert.eq(
+        Command("bad")
+            .positional("first")
+            .positional("second", required: true)
+            .parse([])
+            .unwrap_err()
+            .code(),
         "EINVAL"
     );
 }

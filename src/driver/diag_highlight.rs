@@ -55,7 +55,11 @@ fn token_ansi(kind: TokenKind) -> Option<&'static str> {
             Some(KEYWORD)
         }
         DataTypeToken => Some(TYPE),
-        StringToken | InterpolatedStringToken | CharToken => Some(STRING),
+        StringToken
+        | InterpolatedStringToken
+        | RawStringToken
+        | InterpolatedRawStringToken
+        | CharToken => Some(STRING),
         NumberToken | BooleanToken => Some(NUMBER),
         LineCommentToken | BlockCommentToken => Some(COMMENT),
         AtToken => Some(ATTR),

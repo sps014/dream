@@ -19,6 +19,26 @@ fn clean_program_has_no_errors() {
 }
 
 #[test]
+fn inactive_cfg_items_are_hinted_and_not_checked() {
+    let harness = TestHarness::new(
+        "@cfg(Target.Release)\nfun broken(): int {\n    return \"not an int\";\n}\n\nfun main(): void {\n    @cfg(!Target.Debug)\n    let missing: int = nope;\n}\n|",
+    );
+    let diagnostics = harness.diagnostics();
+    assert!(
+        diagnostics.iter().all(|d| d.severity != "error"),
+        "inactive items must not be type-checked, got: {:?}",
+        diagnostics
+    );
+    let hints: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d.code == Some(dream_lsp::analysis::INACTIVE_CODE))
+        .collect();
+    assert_eq!(hints.len(), 2, "{diagnostics:?}");
+    assert!(hints.iter().all(|d| d.severity == "hint"));
+    assert_eq!((hints[0].range.start.line, hints[0].range.end.line), (0, 3));
+}
+
+#[test]
 fn debug_probes_analyze_cleanly() {
     // The `Debug.*` allocator probes are stdlib intrinsics; reading them (including the
     // `ref_count(object)` probe with a reference argument) must not produce "variable Debug does

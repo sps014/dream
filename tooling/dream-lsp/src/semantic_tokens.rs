@@ -251,6 +251,59 @@ fn push_interpolated_string(
     }
 }
 
+/// Emit one STRING span per line of a raw literal, which may span many lines. In `$"""`, hole
+/// braces are OPERATOR and hole interiors stay uncovered like `$"`.
+fn push_raw_string(
+    line_index: &LineIndex,
+    out: &mut Vec<(u32, u32, u32, u32)>,
+    token_start: usize,
+    raw: &str,
+    interpolated: bool,
+) {
+    let bytes = raw.as_bytes();
+    let mut literal_start = 0usize;
+    let mut i = 0usize;
+    let mut depth = 0usize;
+    let flush = |out: &mut Vec<(u32, u32, u32, u32)>, from: usize, to: usize| {
+        let mut line_start = from;
+        for (rel, b) in bytes[from..to].iter().enumerate() {
+            if *b == b'\n' {
+                let end = from + rel;
+                let end = if end > line_start && bytes[end - 1] == b'\r' { end - 1 } else { end };
+                push_raw_span(line_index, out, token_start, raw, line_start, end - line_start, STRING);
+                line_start = from + rel + 1;
+            }
+        }
+        push_raw_span(line_index, out, token_start, raw, line_start, to - line_start, STRING);
+    };
+    while i < bytes.len() {
+        let b = bytes[i];
+        if depth == 0 {
+            if interpolated && b == b'{' {
+                if bytes.get(i + 1) == Some(&b'{') {
+                    i += 2;
+                    continue;
+                }
+                flush(out, literal_start, i);
+                push_raw_span(line_index, out, token_start, raw, i, 1, OPERATOR);
+                depth = 1;
+            }
+        } else if b == b'{' {
+            depth += 1;
+        } else if b == b'}' {
+            depth -= 1;
+            if depth == 0 {
+                push_raw_span(line_index, out, token_start, raw, i, 1, OPERATOR);
+                literal_start = i + 1;
+            }
+        }
+        i += 1;
+    }
+    if depth == 0 {
+        flush(out, literal_start, bytes.len());
+    }
+}
+
 fn next_significant_kind(tokens: &[SyntaxToken], from: usize) -> Option<TokenKind> {
     tokens.get(from..)?.iter().find_map(|t| {
         if matches!(t.kind, TokenKind::EndOfFileToken | TokenKind::BadToken) {
@@ -307,6 +360,16 @@ fn compute_from(idx: &Index, tokens: Vec<SyntaxToken>, text: &str) -> Vec<Semant
                         &mut semantic_tokens,
                         token.position.start,
                         &token.text,
+                    );
+                }
+                TokenKind::RawStringToken | TokenKind::InterpolatedRawStringToken => {
+                    prev_was_at = false;
+                    push_raw_string(
+                        &line_index,
+                        &mut semantic_tokens,
+                        token.position.start,
+                        &token.text,
+                        token.kind == TokenKind::InterpolatedRawStringToken,
                     );
                 }
                 TokenKind::IdentifierToken => {

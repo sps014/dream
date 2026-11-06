@@ -44,7 +44,7 @@ async fun histogram(scores: int[]): Result<int[], GpuError> {
 
 async fun main(): void {
     let random = Random(42u);
-    let scores = Array.alloc<int>(100000);
+    let scores = [0; 100000];
     for (let i = 0; i < scores.length; i = i + 1) {
         scores[i] = (random.next_int(101) + random.next_int(101)) / 2;
     }

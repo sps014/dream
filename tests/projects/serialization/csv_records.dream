@@ -18,7 +18,10 @@ fun records(text: string): CsvReader {
 @test
 fun writer_quotes_only_fields_that_need_it(): void {
     Assert.eq(encoded(["a", "b c", "1.5"]), "a,b c,1.5\r\n");
-    Assert.eq(encoded(["b,c", "x\"y", "line\nnext", "cr\rhere"]), "\"b,c\",\"x\"\"y\",\"line\nnext\",\"cr\rhere\"\r\n");
+    Assert.eq(
+        encoded(["b,c", "x\"y", "line\nnext", "cr\rhere"]),
+        "\"b,c\",\"x\"\"y\",\"line\nnext\",\"cr\rhere\"\r\n"
+    );
     Assert.eq(encoded(["", "", ""]), ",,\r\n");
     Assert.eq(encoded([""]), "\"\"\r\n");
 }

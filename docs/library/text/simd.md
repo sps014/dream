@@ -49,7 +49,7 @@ fun add(a: float[], b: float[], c: float[]): void {
 fun main(): void {
     let a: float[] = [1.0f, 2.0f, 3.0f, 4.0f, 5.0f];
     let b: float[] = [10.0f, 20.0f, 30.0f, 40.0f, 50.0f];
-    let c = Array.alloc<float>(a.length);
+    let c = [0.0f; a.length];
 
     add(a, b, c);
 

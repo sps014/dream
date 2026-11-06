@@ -127,26 +127,20 @@ A zero value (`0`, `0.0`, `false`) fills the array with zeros.
 |------|--------|
 | `[a, b, c]` | An array holding the listed values |
 | `[value; len]` | `len` slots, all holding `value` (re-evaluated per slot only when `value` builds an array) |
-| `Array.alloc<T>(len)` | `len` zero-initialized slots |
 
 ## Fixed-size buffers
 
-Array literals produce a fixed-size `T[]`; you cannot push or pop. For an explicitly zero-initialized buffer of a runtime length, use `Array.alloc<T>(n)` (no extra import needed):
+Array literals produce a fixed-size `T[]`; you cannot push or pop. For a zero-filled buffer of a runtime length, repeat a zero value:
 
 ```dream
-let buf = Array.alloc<int>(4); // int[] of length 4, all zero
+let buf = [0; 4]; // int[] of length 4, all zero
 buf[0] = 10;
 ```
 
-There is no `new int[n]` / `int[5][10]` syntax — use `[value; len]` for a filled buffer, or `Array.alloc<int[]>(rows)` followed by per-row allocation when rows must be built individually (inner slots are null until you assign them):
+There is no `new int[n]` / `int[5][10]` syntax. Nest the repeat form for a grid; each row is a separate array:
 
 ```dream
-let grid = Array.alloc<int[]>(5);
-let r = 0;
-while r < 5 {
-    grid[r] = Array.alloc<int>(10);
-    r = r + 1;
-}
+let grid = [[0; 10]; 5]; // five rows of ten zeros
 grid[0][0] = 32;
 ```
 

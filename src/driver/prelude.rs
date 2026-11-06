@@ -12,6 +12,7 @@ use std::rc::Rc;
 use crate::driver::source_loader::collect_declarations;
 use dream_diagnostics::DiagnosticBag;
 use dream_stdlib::{StdPackage, resolve_packages_to_load};
+use dream_syntax::conditional::CfgSymbols;
 use dream_syntax::lexer::Lexer;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::{
@@ -49,11 +50,13 @@ pub fn merge_prelude<'a>(
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,
     requested_packages: &IndexSet<String>,
+    cfg: CfgSymbols,
 ) -> Result<(), Error> {
     let packages = resolve_packages_to_load(requested_packages);
     for pkg in packages {
         merge_package(
             pkg,
+            cfg,
             arena,
             all_functions,
             all_structs,
@@ -83,6 +86,7 @@ pub fn merge_full_prelude<'a>(
     diagnostics: &mut DiagnosticBag,
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,
+    cfg: CfgSymbols,
 ) -> Result<(), Error> {
     let all: IndexSet<String> = dream_stdlib::STD_PACKAGES
         .iter()
@@ -100,12 +104,14 @@ pub fn merge_full_prelude<'a>(
         file_contents,
         file_modules,
         &all,
+        cfg,
     )
 }
 
 #[allow(clippy::too_many_arguments)]
 fn merge_package<'a>(
     pkg: &StdPackage,
+    cfg: CfgSymbols,
     _arena: &'a Bump,
     all_functions: &mut Vec<FunctionNode<'a>>,
     all_structs: &mut Vec<StructDeclarationNode<'a>>,
@@ -117,7 +123,7 @@ fn merge_package<'a>(
     file_contents: &mut HashMap<String, String>,
     file_modules: &mut HashMap<String, Rc<str>>,
 ) -> Result<(), Error> {
-    let cached = cached_package(pkg)?;
+    let cached = cached_package(pkg, cfg)?;
     all_functions.extend(cached.functions.iter().cloned());
     all_structs.extend(cached.structs.iter().cloned());
     all_interfaces.extend(cached.interfaces.iter().cloned());
@@ -149,8 +155,8 @@ thread_local! {
 
 /// Identity of the embedded sources. The strings are `'static`, so the pointer and length change
 /// only when the compiler binary does.
-fn package_digest(pkg: &StdPackage) -> String {
-    let mut key = String::from(pkg.name);
+fn package_digest(pkg: &StdPackage, cfg: CfgSymbols) -> String {
+    let mut key = format!("{}|{}", pkg.name, cfg.key());
     for &(path, source) in pkg.files {
         key.push('|');
         key.push_str(path);
@@ -162,20 +168,24 @@ fn package_digest(pkg: &StdPackage) -> String {
     key
 }
 
-fn cached_package(pkg: &StdPackage) -> Result<CachedPackage, Error> {
-    let key = package_digest(pkg);
+fn cached_package(pkg: &StdPackage, cfg: CfgSymbols) -> Result<CachedPackage, Error> {
+    let key = package_digest(pkg, cfg);
     PRELUDE.with(|cache| {
         let mut cache = cache.borrow_mut();
         if let Some(hit) = cache.packages.get(&key) {
             return Ok(hit.clone());
         }
-        let parsed = parse_package(cache.arena, pkg)?;
+        let parsed = parse_package(cache.arena, pkg, cfg)?;
         cache.packages.insert(key, parsed.clone());
         Ok(parsed)
     })
 }
 
-fn parse_package(arena: &'static Bump, pkg: &StdPackage) -> Result<CachedPackage, Error> {
+fn parse_package(
+    arena: &'static Bump,
+    pkg: &StdPackage,
+    cfg: CfgSymbols,
+) -> Result<CachedPackage, Error> {
     let mut functions = Vec::new();
     let mut structs = Vec::new();
     let mut interfaces = Vec::new();
@@ -189,7 +199,7 @@ fn parse_package(arena: &'static Bump, pkg: &StdPackage) -> Result<CachedPackage
         file_contents.push((prelude_name.clone(), prelude_src.to_string()));
         let mut prelude_diagnostics = DiagnosticBag::new(Some(prelude_name.clone()));
         let lexer = Lexer::new(prelude_src.to_string());
-        let mut parser = Parser::new(lexer, arena, &mut prelude_diagnostics);
+        let mut parser = Parser::new(lexer, arena, &mut prelude_diagnostics).with_cfg(cfg);
         let ast = parser.parse()?;
         if prelude_diagnostics.has_errors() {
             let messages: Vec<&str> = prelude_diagnostics

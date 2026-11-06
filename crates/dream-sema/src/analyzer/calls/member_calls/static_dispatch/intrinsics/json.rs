@@ -38,11 +38,16 @@ impl<'a> Analyzer<'a> {
                 .first()
                 .map(|&ty| self.type_ctx.syntax_type(ty).get_type())
                 .unwrap_or_default();
-            let value = arg_hirs.into_iter().next().flatten();
-            if struct_name == "JsonValue" {
-                self.hir_set_type_method_call(json_ty, "stringify", vec![value], &named("string"));
-                return Ok(named("string"));
+            let mut args = arg_hirs.into_iter();
+            let value = args.next().flatten();
+            let options = self.json_options_arg(json_ty, call, &params_types, args, diagnostics);
+            let options_ty = named("JsonOptions");
+            let options_local = self.hir_alloc_local("__json_options", &options_ty);
+            let options_id = self.type_ctx.lower(&options_ty);
+            if let Some(local) = options_local {
+                self.hir_assign_local_id(local, options);
             }
+            let read_options = |local| HExpr::new(options_id, HExprKind::Var(Binding::Local(local)));
             let sb_ty = named("StringBuilder");
             let string_ty = named("string");
             let sb_local = self.hir_alloc_local("__json_sb", &sb_ty);
@@ -81,7 +86,9 @@ impl<'a> Analyzer<'a> {
                     self.hir_none();
                     return Ok(string_ty);
                 }
-                let prim_writer =
+                let prim_writer = if struct_name == "JsonValue" {
+                    Some("write_value")
+                } else {
                     value
                         .as_ref()
                         .and_then(|arg| match self.type_ctx.interner.kind(arg.ty) {
@@ -93,7 +100,8 @@ impl<'a> Analyzer<'a> {
                                 _ => "",
                             }),
                             _ => None,
-                        });
+                        })
+                };
                 match prim_writer {
                     Some("") => {
                         diagnostics.report_error(
@@ -119,7 +127,7 @@ impl<'a> Analyzer<'a> {
                         self.hir_set_type_method_call(
                             write_owner,
                             &write_member,
-                            vec![value, Some(sb_read)],
+                            vec![value, Some(sb_read), options_local.map(read_options)],
                             &Type::Void,
                         );
                     }
@@ -127,7 +135,12 @@ impl<'a> Analyzer<'a> {
                 let write_hir = self.hir_take();
                 self.hir_expr_stmt(write_hir);
                 let sb_read2 = HExpr::new(sb_ty_id, HExprKind::Var(Binding::Local(local)));
-                self.hir_set_type_method_call(sb_ty_id, "build", vec![Some(sb_read2)], &string_ty);
+                self.hir_set_type_method_call(
+                    json_ty,
+                    "finish",
+                    vec![Some(sb_read2), options_local.map(read_options)],
+                    &string_ty,
+                );
             } else {
                 self.hir_fail();
                 self.hir_none();
@@ -155,7 +168,9 @@ impl<'a> Analyzer<'a> {
                 }
             };
             let struct_name = t_type.get_type().trim_end_matches('?').to_string();
-            let text = arg_hirs.into_iter().next().flatten();
+            let mut args = arg_hirs.into_iter();
+            let text = args.next().flatten();
+            let options = self.json_options_arg(json_ty, call, &params_types, args, diagnostics);
             let t_id = self.type_ctx.lower(&t_type);
             let (from_json_owner, from_json_member) = match json_collection_de_fn(&struct_name) {
                 Some(adapter) => (json_ty, adapter),
@@ -232,7 +247,7 @@ impl<'a> Analyzer<'a> {
                 self.hir_set_type_method_call(
                     t_id,
                     "from_json_parser_text",
-                    vec![text],
+                    vec![text, options],
                     &result_ty,
                 );
                 return Ok(result_ty);
@@ -311,7 +326,7 @@ impl<'a> Analyzer<'a> {
                             self.hir_set_type_method_call(
                                 from_json_owner,
                                 &from_json_member,
-                                vec![Some(read2)],
+                                vec![Some(read2), options],
                                 &t_type,
                             );
                             let from_json = self.hir_take();
@@ -368,7 +383,7 @@ impl<'a> Analyzer<'a> {
                     self.hir_set_type_method_call(
                         from_json_owner,
                         &from_json_member,
-                        vec![Some(read)],
+                        vec![Some(read), options],
                         &t_type,
                     );
                     let from_json = self.hir_take();
@@ -428,7 +443,9 @@ impl<'a> Analyzer<'a> {
                 }
             };
             let struct_name = t_type.get_type().trim_end_matches('?').to_string();
-            let value = arg_hirs.into_iter().next().flatten();
+            let mut args = arg_hirs.into_iter();
+            let value = args.next().flatten();
+            let options = self.json_options_arg(json_ty, call, &params_types, args, diagnostics);
             if struct_name == "JsonValue" {
                 self.hir_set_last(value);
                 return Ok(t_type);
@@ -448,9 +465,11 @@ impl<'a> Analyzer<'a> {
             }
             match json_collection_de_fn(&struct_name) {
                 Some(adapter) => {
-                    self.hir_set_type_method_call(json_ty, &adapter, vec![value], &t_type)
+                    self.hir_set_type_method_call(json_ty, &adapter, vec![value, options], &t_type)
                 }
-                None => self.hir_set_type_method_call(t_ty_id, "from_json", vec![value], &t_type),
+                None => {
+                    self.hir_set_type_method_call(t_ty_id, "from_json", vec![value, options], &t_type)
+                }
             }
             return Ok(t_type);
         }
@@ -459,5 +478,50 @@ impl<'a> Analyzer<'a> {
         // declaring type, exactly like the non-generic path in `analyze_static_call`. Without
         // this the generic branch below would return early and skip the check entirely.
         crate::internal_error!("unclassified json intrinsic")
+    }
+
+    // The `options` argument after the value, or a `Json.default_options()` call when omitted.
+    fn json_options_arg(
+        &mut self,
+        json_ty: dream_types::TypeId,
+        call: &GenericStaticMethodCall<'a, '_>,
+        params_types: &[dream_types::TypeId],
+        mut rest: impl Iterator<Item = Option<dream_hir::HExpr>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Option<dream_hir::HExpr> {
+        let method = call.method;
+        let mut options_ty = method.clone();
+        options_ty.text = "JsonOptions".to_string();
+        let options_ty = Type::from_token(options_ty).unwrap_or(Type::Unknown);
+        let expected = self.type_ctx.lower(&options_ty);
+        if params_types.len() > 2 {
+            diagnostics.report_error(
+                format!(
+                    "'Json.{}' takes a value and optional 'JsonOptions', but got {} arguments",
+                    method.text,
+                    params_types.len()
+                ),
+                Some(method.position),
+            );
+        }
+        let error = self.type_ctx.interner.error();
+        if let Some(&actual) = params_types.get(1)
+            && actual != expected
+            && actual != error
+        {
+            diagnostics.report_error(
+                format!(
+                    "'Json.{}' expects 'JsonOptions' as its second argument, but got '{}'",
+                    method.text,
+                    self.type_id_display(actual)
+                ),
+                Some(method.position),
+            );
+        }
+        if let Some(given) = rest.next() {
+            return given;
+        }
+        self.hir_set_type_method_call(json_ty, "default_options", vec![], &options_ty);
+        self.hir_take()
     }
 }

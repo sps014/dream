@@ -20,30 +20,91 @@ import system.json;
 
 @json
 class User {
-    name: string;
-    age: int;
+    public name: string;
+    public age: int;
 }
 
 fun main() {
-    let u = User("Ada", 36);
+    let u = User();
+    u.name = "Ada";
+    u.age = 36;
     let text = Json.serialize(u);
     let back = Json.deserialize<User>(text).unwrap_or(u);
     System.println(back.name);
 }
 ```
 
+A `@json` class with no constructor of its own uses the implicit zero-argument constructor. `Json.deserialize` fills the fields after that. Declare a constructor that takes the fields in order when you want `User("Ada", 36)`.
+
 | API | Role |
 | --- | --- |
 | `Json.serialize(x)` | Compact JSON text (`@json` types, `List`/`Set`/`Map<string, V>`/`SortedMap<string, V>`, arrays, and `JsonValue`) |
-| `Json.serialize_pretty(value, indent)` | Pretty-printed `JsonValue` (`indent` 0 is compact). For `@json` types use `serialize_pretty(x.to_json(), indent)` |
+| `Json.serialize(x, options)` | JSON text with the naming, `null`, and indentation settings in `options` |
 | `Json.deserialize<T>(text)` | `Result<T, ParseError>` — typed `T`, or `JsonValue` when the shape is unknown |
+| `Json.deserialize<T>(text, options)` | Same, matching property names to fields as `options` describes |
 | `Json.from_value<T>(value)` | Already-parsed `JsonValue` into `T` (`from_value<JsonValue>` is identity) |
+| `Json.from_value<T>(value, options)` | Same, matching property names to fields as `options` describes |
 
 Fields may be primitives, `string`, arrays, other `@json` types, tuples (JSON arrays), `List`/`Set`/`Map<string, V>`/`SortedMap<string, V>`, `JsonValue`, and `Option<T>` of supported types. JSON object keys are strings, so maps must be `Map<string, V>`. `@property_name("key")` renames a JSON key. Skip a field with the ignore attribute. [Unions](../../language/types/enums-unions.md) serialize with a `"type"` tag.
 
 Every field type must be one `@json` already knows. `object` is not: `Json.serialize` on a `Map<string, object>` is rejected. Reach for `JsonValue` instead — it carries its own shape and is passed through untouched.
 
 `Json.serialize(data)` infers `T` from `data` (including an annotated `let data: Map<string, string> = …`). `deserialize` still needs an explicit type argument because the JSON text does not name a Dream type.
+
+## Options
+
+Pass a `JsonOptions` to change how property names are spelled, whether `None` fields are written, and whether the text is indented. Each setting has a default, so name only the ones you change:
+
+```dream
+import system;
+import system.json;
+
+@json
+class Account {
+    public user_id: int;
+    public display_name: string;
+    public nick_name: Option<string>;
+
+    public constructor(user_id: int, display_name: string, nick_name: Option<string>) {
+        this.user_id = user_id;
+        this.display_name = display_name;
+        this.nick_name = nick_name;
+    }
+}
+
+fun main() {
+    let none: Option<string> = Option.None;
+    let account = Account(7, "Ada", none);
+    let options = JsonOptions(naming: JsonNaming.CamelCase, nulls: JsonNull.Omit, indent: 2);
+
+    let text = Json.serialize(account, options);
+    System.println(text);
+
+    let back = Json.deserialize<Account>(text, options).unwrap_or(account);
+    System.println(back.display_name);
+}
+```
+
+The program prints:
+
+```text
+{
+  "userId": 7,
+  "displayName": "Ada"
+}
+Ada
+```
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `naming` | `JsonNaming.Identity` | Spells field names as declared, or as `CamelCase` (`userId`), `PascalCase` (`UserId`), `KebabCase` (`user-id`), or `SnakeCase` (`user_id`). Applies when writing and reading. |
+| `nulls` | `JsonNull.Include` | `Include` writes `None` fields as `null`; `Omit` leaves them out. Reading accepts both. |
+| `indent` | `0` | Spaces per nesting level. `0` writes compact text on one line. |
+| `ignore_case` | `false` | When `true`, reading matches property names to fields regardless of ASCII letter case. |
+
+Naming changes only the names of declared fields. A `@property_name("key")` field always uses its key exactly, and map keys and the keys inside a `JsonValue` are written as they are. Read with the same `naming` you wrote with: a camel-case reader does not match `user_id` and leaves that field at its default. Add `ignore_case: true` to accept keys such as `USERID` or `DisplayName` from other systems.
+
+Indentation applies to every value `Json.serialize` accepts, including lists and `JsonValue` trees. Empty objects and arrays stay `{}` and `[]`.
 
 ## Unknown payloads (`JsonValue`)
 

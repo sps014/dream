@@ -3,6 +3,7 @@
 
 use super::discovery::{DiscoveredTest, discover_tests_in_source};
 use super::project::TestProject;
+use dream_syntax::conditional::CfgSymbols;
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -28,11 +29,13 @@ pub struct RunnerPlan {
 }
 
 impl RunnerPlan {
-    /// Discovers every `@test` in the project and keeps those whose label contains `filter`.
+    /// Discovers every `@test` that `cfg` keeps in the project, and keeps those whose label
+    /// contains `filter`.
     pub fn discover(
         project: &TestProject,
         filter: Option<&str>,
         names: &[String],
+        cfg: CfgSymbols,
     ) -> Result<Self, String> {
         let mut imports = Vec::new();
         let mut tests = Vec::new();
@@ -41,7 +44,7 @@ impl RunnerPlan {
             let source = std::fs::read_to_string(file)
                 .map_err(|e| format!("read '{}': {e}", file.display()))?;
             let import = project.import_path(file)?;
-            let Ok(found) = discover_tests_in_source(&file.to_string_lossy(), &source) else {
+            let Ok(found) = discover_tests_in_source(&file.to_string_lossy(), &source, cfg) else {
                 // The runner compile renders the parse errors with source excerpts.
                 unparsed = true;
                 imports.push(import);

@@ -16,6 +16,9 @@ fn dream(dir: &Path, envs: &[(&str, &Path)], args: &[&str]) -> Output {
         "DREAM_BENCH_NONCE",
         format!("{:?}", std::time::Instant::now()),
     );
+    // A developer shell often points `DREAM_SLANG` at the real compiler. These tests install
+    // their own `slangc`, and that override would win over `DREAM_TOOLCHAINS`.
+    command.env_remove("DREAM_SLANG");
     for (key, value) in envs {
         command.env(key, value);
     }

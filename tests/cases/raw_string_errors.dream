@@ -1,0 +1,16 @@
+import system;
+
+fun main(): void {
+    let opening = """first
+        second
+        """;
+    let closing = """
+        first
+        second""";
+    let dedent = """
+        first
+      second
+        """;
+    let extra = """too many"""";
+    System.println(opening + closing + dedent + extra);
+}

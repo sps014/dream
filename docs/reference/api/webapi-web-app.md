@@ -60,17 +60,6 @@ Installs generated dependency replacements before startup.
 public fun override_dependencies(overrides: DependencyOverrides): Result<Unit, IoError>
 ```
 
-## `lifespan`
-
-Pairs one startup acquisition with its shutdown release; completed pairs unwind in reverse order.
-
-```dream
-public fun lifespan(
-    start: fun(WebApp): Future<Result<Unit, IoError>>,
-    stop: fun(WebApp): Future<void>
-): Result<Unit, IoError>
-```
-
 ## `shutdown`
 
 Stops accepting traffic and cancels active transport operations on this app.
@@ -114,7 +103,7 @@ public fun listen(
 
 ## `run`
 
-Listens with the default `ServerConfig` and waits until shutdown or cancellation.
+Listens with the default `ServerConfig` and waits until shutdown or cancellation. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `Application.stopping` is cancelled.
 
 ```dream
 public fun run(
@@ -126,7 +115,7 @@ public fun run(
 
 ## `run`
 
-Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`.
+Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `Application.stopping` is cancelled.
 
 ```dream
 public fun run(

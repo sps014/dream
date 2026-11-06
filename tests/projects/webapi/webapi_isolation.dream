@@ -1,5 +1,6 @@
 import system;
 import system.webapi;
+import system.app;
 import system.net;
 import system.testing;
 import webapi_basic;
@@ -162,29 +163,53 @@ async fun webapi_isolation(): void {
     client.close().unwrap();
 }
 
+async fun quit_after_requests(base: string, order: List<string>): void {
+    let client = HttpClient();
+    Assert.eq(webapi_get(client, base, "/state", 200).await, "lifetime");
+    client.close().unwrap();
+    order.push("request");
+    Application.quit(0);
+}
+
 @test
-async fun webapi_lifespan(): void {
-    let app = WebApp();
+async fun webapi_application_lifetime(): void {
     let order = List<string>();
-    app.lifespan(
-        async (app: WebApp) => {
-            order.push("first");
-            return Result.Ok(Unit());
-        },
-        async (app: WebApp) => {
-            order.push("stop-first");
-        }
-    ).unwrap();
-    app.lifespan(
-        async (app: WebApp) => {
-            order.push("second");
-            return Result.Err(IoError.other("", "startup failed"));
-        },
-        async (app: WebApp) => {
-            order.push("stop-second");
-        }
-    ).unwrap();
-    Assert.is_true(app.listen("127.0.0.1", 0).await.is_err());
-    Assert.eq(order.length, 3);
-    Assert.eq(order[2], "stop-first");
+    let code = Application.run(async () => {
+        let app = WebApp();
+        app.state["name"] = "lifetime";
+        app.include_router(IsolatedRoutes.router()).unwrap();
+        let port = app.listen("127.0.0.1", 0).await?;
+        Application.on_stop(async () => {
+            app.shutdown();
+            app.wait().await;
+            order.push("stopped");
+        });
+        Promise.start(quit_after_requests("http://127.0.0.1:" + port.to_string(), order));
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 0);
+    Assert.eq(order.join(","), "request,stopped");
+}
+
+async fun quit_soon(): void {
+    Time.delay(50).await;
+    Application.quit(3);
+}
+
+@test
+async fun webapi_run_stops_with_application(): void {
+    let order = List<string>();
+    let code = Application.run(async () => {
+        let app = WebApp();
+        app.include_router(IsolatedRoutes.router()).unwrap();
+        Application.on_stop(async () => {
+            order.push("cleanup");
+        });
+        Promise.start(quit_soon());
+        app.run("127.0.0.1", 0).await?;
+        order.push("served");
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 3);
+    Assert.eq(order.join(","), "served,cleanup");
 }

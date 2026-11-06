@@ -19,6 +19,10 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "drawingFontRegister",
             "drawingAssetMetrics",
             "drawingAssetRelease",
+            "drawingTextMeasure",
+            "drawingTextIndexAt",
+            "drawingTextCaret",
+            "drawingTextSelection",
         ],
         HostCapability::Audio => &[
             "audioMediaCreate",
@@ -131,5 +135,14 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "gpuRelease",
         ],
         HostCapability::Timezone => &["dateZoneOffsetMinutes", "dateLocalZoneName"],
+        HostCapability::App => &[
+            "appStart",
+            "appNextEvent",
+            "appEventValue",
+            "appReply",
+            "appQuery",
+            "appReport",
+            "appStop",
+        ],
     }
 }

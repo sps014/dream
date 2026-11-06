@@ -1,15 +1,23 @@
 module system.drawing;
 
-/// An immutable drawing captured by Canvas.finish, reusable on CPU or GPU surfaces.
+/// An immutable drawing captured by Canvas.finish, reusable on CPU or GPU surfaces and inside other canvases with Canvas.draw_picture.
 public class Picture {
     internal values: float[];
     internal width: int;
     internal height: int;
     internal handles: int[];
-    owners: DrawingResource[];
+    internal owners: DrawingResource[];
+    internal text: string;
 
-    internal constructor(values: float[], width: int, height: int, owners: DrawingResource[]) {
+    internal constructor(
+        values: float[],
+        width: int,
+        height: int,
+        owners: DrawingResource[],
+        text: string
+    ) {
         this.values = values;
+        this.text = text;
         this.width = width;
         this.height = height;
         this.handles = Buffer.alloc<int>(owners.length);

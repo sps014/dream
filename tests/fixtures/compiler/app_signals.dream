@@ -1,0 +1,17 @@
+import system;
+import system.app;
+
+async fun main(): int {
+    return Application.run(async () => {
+        Application.on_shutdown_requested((request) => {
+            System.println("requested");
+        });
+        Application.on_stop(async () => {
+            System.println("cleanup start");
+            Time.delay(1000).await;
+            System.println("cleanup done");
+        });
+        System.println("ready");
+        return Result.Ok(Unit());
+    }).await;
+}

@@ -54,8 +54,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/window/window_error.dream"),
         ),
         (
-            "<std>/system/window/window_desc.dream",
-            include_str!("../system/window/window_desc.dream"),
+            "<std>/system/window/window_options.dream",
+            include_str!("../system/window/window_options.dream"),
         ),
         (
             "<std>/system/window/keyboard_state.dream",

@@ -110,7 +110,7 @@ fn nested_blur_excludes_later_drawing_and_global_panel_budget_is_enforced() {
     assert_eq!(&pixels[at..at + 4], &[255, 0, 0, 255]);
     assert!(pixels[(8 * 128 + 62) * 4 + 1] > 5);
     let mut values = Vec::new();
-    for _ in 0..9 {
+    for _ in 0..=crate::MAX_BACKDROPS {
         values.extend([7., 1., 0., 0.]);
         panel(&mut values, 0., 0., 0);
         values.push(4.);

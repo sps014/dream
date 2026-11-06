@@ -170,6 +170,26 @@ macro_rules! replay {
                             context.pop_clip();
                         }
                     }
+                    Command::BoxShadow {
+                        rect,
+                        radius,
+                        sigma,
+                        color,
+                        transform,
+                        clips,
+                    } => {
+                        context.set_fill_rule(Fill::NonZero);
+                        for clip in clips {
+                            context.push_clip_path(clip);
+                        }
+                        context.set_transform(*transform);
+                        context.set_paint(*color);
+                        context.fill_blurred_rounded_rect(rect, *radius, *sigma, false);
+                        context.set_transform(Affine::IDENTITY);
+                        for _ in clips {
+                            context.pop_clip();
+                        }
+                    }
                     Command::Text {
                         layout,
                         color,

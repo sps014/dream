@@ -45,7 +45,12 @@ pub async fn create(width: i32, height: i32, backend: i32) -> std::result::Resul
 }
 
 #[wasm_bindgen]
-pub fn render(handle: u32, values: &[f32], handles: &[i32]) -> std::result::Result<(), JsValue> {
+pub fn render(
+    handle: u32,
+    values: &[f32],
+    handles: &[i32],
+    text: &str,
+) -> std::result::Result<(), JsValue> {
     let assets = ASSETS.with(|table| {
         let table = table.borrow();
         handles
@@ -59,7 +64,7 @@ pub fn render(handle: u32, values: &[f32], handles: &[i32]) -> std::result::Resu
             })
             .collect::<std::result::Result<Vec<_>, _>>()
     })?;
-    let picture = Picture::decode_with(values, &assets).map_err(js_error)?;
+    let picture = Picture::decode_with(values, &assets, text).map_err(js_error)?;
     SURFACES.with(|table| {
         let table = table.borrow();
         let mut record = table
@@ -166,6 +171,51 @@ pub fn asset_metrics(handle: i32) -> Vec<f32> {
             .get(handle.wrapping_sub(1) as usize)
             .and_then(Option::as_ref)
             .map_or_else(Vec::new, Asset::metrics)
+    })
+}
+
+#[wasm_bindgen]
+pub fn text_measure(
+    text: &str,
+    family: &str,
+    size: f32,
+    weight: f32,
+    width: f32,
+    alignment: u32,
+) -> std::result::Result<Vec<f32>, JsValue> {
+    Ok(
+        crate::text::layout(text, family, size, weight, width, alignment)
+            .map_err(js_error)?
+            .metrics()
+            .to_vec(),
+    )
+}
+
+fn text_query<T: Default>(handle: i32, query: impl FnOnce(&crate::text::ShapedText) -> T) -> T {
+    ASSETS.with(
+        |table| match table.borrow().get(handle.wrapping_sub(1) as usize) {
+            Some(Some(Asset::Text(layout))) => query(layout),
+            _ => T::default(),
+        },
+    )
+}
+
+#[wasm_bindgen]
+pub fn text_index_at(handle: i32, x: f32, y: f32) -> i32 {
+    text_query(handle, |layout| layout.index_at(x, y) as i32)
+}
+
+#[wasm_bindgen]
+pub fn text_caret(handle: i32, index: i32) -> Vec<f32> {
+    text_query(handle, |layout| {
+        layout.caret(index.max(0) as usize).to_vec()
+    })
+}
+
+#[wasm_bindgen]
+pub fn text_selection(handle: i32, start: i32, end: i32) -> Vec<f32> {
+    text_query(handle, |layout| {
+        layout.selection(start.max(0) as usize, end.max(0) as usize)
     })
 }
 

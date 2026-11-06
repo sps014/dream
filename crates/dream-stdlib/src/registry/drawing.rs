@@ -50,6 +50,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/drawing/drawing_error.dream"),
         ),
         (
+            "<std>/system/drawing/corner_radii.dream",
+            include_str!("../system/drawing/corner_radii.dream"),
+        ),
+        (
+            "<std>/system/drawing/text_metrics.dream",
+            include_str!("../system/drawing/text_metrics.dream"),
+        ),
+        (
             "<std>/system/drawing/drawing_host.dream",
             include_str!("../system/drawing/drawing_host.dream"),
         ),

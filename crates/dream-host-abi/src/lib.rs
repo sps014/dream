@@ -41,6 +41,8 @@ unsafe extern "C" {
     fn dream_host_array_new(length: i32, element_size: i32) -> DreamPtr;
     fn dream_host_complete_foreign(future: DreamPtr, result: u64);
     fn dream_host_app_icon(length: *mut usize) -> *const u8;
+    fn dream_host_set_activity_sink(sink: Option<extern "C" fn(i32)>);
+    fn dream_host_report_activity(active: i32);
     fn dream_host_set_park(
         park: Option<unsafe extern "C" fn(i64, *mut u8)>,
         wake: Option<unsafe extern "C" fn(*mut u8)>,
@@ -70,6 +72,16 @@ pub fn set_scheduler_park(hooks: Option<SchedulerPark>) {
         },
         None => unsafe { dream_host_set_park(None, None, std::ptr::null_mut()) },
     }
+}
+
+/// Registers the app capability's receiver for window focus reports, or removes it.
+pub fn set_app_activity_sink(sink: Option<extern "C" fn(i32)>) {
+    unsafe { dream_host_set_activity_sink(sink) }
+}
+
+/// Reports whether any window of the program has focus, for `Application.on_active`.
+pub fn report_app_activity(active: bool) {
+    unsafe { dream_host_report_activity(i32::from(active)) }
 }
 
 pub fn app_icon_png() -> Option<&'static [u8]> {

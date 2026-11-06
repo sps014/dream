@@ -12,7 +12,8 @@ internal static class DrawingHost {
     internal static extern fun render(
         handle: int,
         borrow commands: float[],
-        borrow assets: int[]
+        borrow assets: int[],
+        borrow text: string
     ): int;
 
     @async_host
@@ -53,6 +54,25 @@ internal static class DrawingHost {
 
     @runtime("drawingAssetMetrics")
     internal static extern fun asset_metrics(handle: int): float[];
+
+    @runtime("drawingTextMeasure")
+    internal static extern fun text_measure(
+        borrow text: string,
+        borrow family: string,
+        size: float,
+        weight: float,
+        width: float,
+        alignment: int
+    ): float[];
+
+    @runtime("drawingTextIndexAt")
+    internal static extern fun text_index_at(handle: int, x: float, y: float): int;
+
+    @runtime("drawingTextCaret")
+    internal static extern fun text_caret(handle: int, index: int): float[];
+
+    @runtime("drawingTextSelection")
+    internal static extern fun text_selection(handle: int, start: int, end: int): float[];
 
     @runtime("drawingAssetRelease")
     internal static extern fun asset_release(handle: int): void;

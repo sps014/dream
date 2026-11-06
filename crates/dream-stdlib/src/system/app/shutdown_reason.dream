@@ -1,0 +1,25 @@
+module system.app;
+
+/// Why the program is being asked to stop, as carried by `ShutdownRequest.reason`.
+public enum ShutdownReason {
+    /// The user pressed Ctrl+C, or the process received `SIGINT`. It cannot be vetoed, and
+    /// the exit code is `130`. Pressing Ctrl+C again while cleanups run exits immediately.
+    Interrupt,
+    /// The process received `SIGTERM` or `SIGHUP`, or a Windows console program got Ctrl+Break,
+    /// a console close, logoff or shutdown notice. It cannot be vetoed, and the exit code is
+    /// `143`.
+    Terminate,
+    /// The user quit the app from its menu or Dock. It can be vetoed. No platform reports it
+    /// yet: Cmd+Q currently arrives as `WindowEvent.CloseRequested` on each window, so deliver
+    /// it with `Application.simulate` in tests.
+    OsQuit,
+    /// On Windows, the user is logging off or the computer is shutting down; on macOS, the
+    /// computer is shutting down or restarting. The first Windows request can be vetoed; the
+    /// final notice cannot.
+    SessionEnding,
+    /// The last open window of the app was closed. It can be vetoed. No platform reports it
+    /// yet, so deliver it with `Application.simulate` in tests.
+    LastWindowClosed,
+    /// The program called `Application.quit`. It cannot be vetoed.
+    Requested
+}

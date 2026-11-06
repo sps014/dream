@@ -16,7 +16,7 @@ Import `system.window`. See the [windows and game input guide](../../library/sys
 - [MouseButton](window-mouse-button.md)
 - [MouseState](window-mouse-state.md)
 - [Window](window-window.md)
-- [WindowDesc](window-window-desc.md)
+- [WindowOptions](window-window-options.md)
 - [WindowError](window-window-error.md)
 - [WindowEvent](window-window-event.md)
 - [WindowSize](window-window-size.md)

@@ -3605,6 +3605,8 @@ const GAMEPAD_CONNECTED = 13;
 const GAMEPAD_DISCONNECTED = 14;
 const FILE_DROPPED = 15;
 const GAMEPAD_SAMPLE = 16;
+const OCCLUDED = 19;
+const SCALE_CHANGED = 20;
 
 const FLAG_FULLSCREEN = 2;
 const CURSOR_CAPTURED = 2;
@@ -3714,6 +3716,23 @@ function syncSize(state, report) {
   }
 }
 
+// Scale goes first so `ScaleChanged` precedes the `Resized` that the new ratio causes.
+function syncScale(state) {
+  const ratio = pixelRatio();
+  if (ratio !== state.ratio) {
+    state.ratio = ratio;
+    push(state, SCALE_CHANGED, [ratio]);
+  }
+}
+
+function syncOcclusion(state) {
+  const hidden = globalThis.document?.visibilityState === "hidden" || !state.intersecting;
+  if (hidden !== state.hidden) {
+    state.hidden = hidden;
+    push(state, OCCLUDED, [hidden ? 1 : 0]);
+  }
+}
+
 function pollGamepads(state) {
   const pads = typeof globalThis.navigator?.getGamepads === "function" ? globalThis.navigator.getGamepads() : [];
   const present = new Set();
@@ -3744,7 +3763,14 @@ function attach(canvas, owns) {
   const state = {
     canvas, owns, queue: [], keys: new Set(), buttons: new Set(), pads: new Set(),
     listeners: [], x: 0, y: 0, cursorMode: 0, icon: 0, pixels: [0, 0],
+    ratio: pixelRatio(), hidden: false, intersecting: true, observer: null,
   };
+  if (typeof globalThis.IntersectionObserver === "function") {
+    state.observer = new globalThis.IntersectionObserver(entries => {
+      for (const entry of entries) state.intersecting = entry.isIntersecting;
+    });
+    state.observer.observe(canvas);
+  }
   const listen = (target, type, handler, options) => {
     target.addEventListener(type, handler, options);
     state.listeners.push([target, type, handler, options]);
@@ -3863,13 +3889,16 @@ function makeWindowHost() {
       for (const [target, type, handler, options] of state.listeners) {
         target.removeEventListener(type, handler, options);
       }
+      state.observer?.disconnect();
       if (locked(state)) globalThis.document.exitPointerLock?.();
       if (state.owns) state.canvas.remove?.();
     },
     windowPoll: handle => {
       const state = windows.get(handle);
       if (!state) return [];
+      syncScale(state);
       syncSize(state, true);
+      syncOcclusion(state);
       pollGamepads(state);
       const records = state.queue;
       state.queue = [];
@@ -5015,6 +5044,8 @@ function makeDrawingHost(getInstance) {
   };
   let engine;
   let error = "";
+  // Synchronous text queries need the engine; start loading it before the first async call.
+  loadDrawingEngine().then(module => { engine ??= module; }, () => {});
   const guard = (fallback, body) => (...args) => {
     try { return body(...args); }
     catch (failure) { error = failure.message || String(failure); return fallback; }
@@ -5031,7 +5062,7 @@ function makeDrawingHost(getInstance) {
       } catch (failure) { error = failure.message || String(failure); return 0; }
     },
     drawingLastError: () => error,
-    drawingRender: guard(0, (handle, values, assets) => { engine.render(handle, new Float32Array(values), new Int32Array(assets)); return 1; }),
+    drawingRender: guard(0, (handle, values, assets, text) => { engine.render(handle, new Float32Array(values), new Int32Array(assets), text); return 1; }),
     drawingPixels: async handle => {
       try { return await engine.pixels(handle); }
       catch (failure) { error = failure.message || String(failure); return []; }
@@ -5056,7 +5087,160 @@ function makeDrawingHost(getInstance) {
     drawingTextCreate: asyncGuard(0, (text, family, size, weight, width, alignment) => engine.text_create(text, family, size, weight, width, alignment)),
     drawingFontRegister: asyncGuard("", bytes => engine.font_register(new Uint8Array(bytes))),
     drawingAssetMetrics: guard([], handle => engine.asset_metrics(handle)),
+    drawingTextMeasure: guard([], (text, family, size, weight, width, alignment) => {
+      if (!engine) throw new Error("EUNAVAILABLE\nthe drawing engine is still loading; await an async drawing call first");
+      return engine.text_measure(text, family, size, weight, width, alignment);
+    }),
+    drawingTextIndexAt: guard(0, (handle, x, y) => engine.text_index_at(handle, x, y)),
+    drawingTextCaret: guard([], (handle, index) => engine.text_caret(handle, index)),
+    drawingTextSelection: guard([], (handle, start, end) => engine.text_selection(handle, start, end)),
     drawingAssetRelease: guard(undefined, handle => engine.asset_release(handle)),
+  };
+}
+
+// ----- hosts/app.js -----
+// Process lifetime for `system.app`. Event kinds and fact indexes match
+// crates/dream-host-app/src/events.rs and facts.rs. Browsers report page freeze/resume,
+// tab visibility, color scheme and language; Node reports SIGINT and SIGTERM only.
+
+const INTERRUPT = 1;
+const TERMINATE = 2;
+const SLEEPING = 4;
+const WOKE = 5;
+const ACTIVE = 8;
+const THEME = 10;
+const LOCALE = 11;
+
+const FACT_ACTIVE = 2;
+const FACT_THEME = 4;
+
+function currentTheme() {
+  const media = globalThis.matchMedia;
+  if (typeof media !== "function") return -1;
+  if (media("(forced-colors: active)").matches) return 2;
+  return media("(prefers-color-scheme: dark)").matches ? 1 : 0;
+}
+
+function currentActive() {
+  const doc = globalThis.document;
+  return doc ? Number(doc.visibilityState !== "hidden") : -1;
+}
+
+function makeAppHost() {
+  let running = false;
+  let queue = [];
+  let waiter = null;
+  let value = 0;
+  let stopSignals = 0;
+  let frozenAt = -1;
+  let keepAlive = null;
+  let detach = [];
+  const facts = [-1, -1, -1, -1, -1];
+
+  const deliver = (kind, payload) => {
+    if (!running) return;
+    if (waiter) {
+      const resolve = waiter;
+      waiter = null;
+      value = payload;
+      resolve(kind);
+      return;
+    }
+    if (kind === LOCALE && queue.some(([k]) => k === kind)) return;
+    if (kind === THEME && queue.some(([k, v]) => k === kind && v === payload)) return;
+    queue.push([kind, payload]);
+  };
+  const report = (fact, kind, next) => {
+    if (next < 0 || facts[fact] === next) return;
+    facts[fact] = next;
+    deliver(kind, next);
+  };
+  const listen = (target, name, handler) => {
+    if (!target?.addEventListener) return;
+    target.addEventListener(name, handler);
+    detach.push(() => target.removeEventListener(name, handler));
+  };
+
+  const attach = () => {
+    const doc = globalThis.document;
+    listen(doc, "visibilitychange", () => report(FACT_ACTIVE, ACTIVE, currentActive()));
+    listen(doc, "freeze", () => {
+      frozenAt = performance.now();
+      deliver(SLEEPING, 0);
+    });
+    listen(doc, "resume", () => {
+      const slept = frozenAt < 0 ? -1 : Math.round(performance.now() - frozenAt);
+      frozenAt = -1;
+      deliver(WOKE, slept);
+    });
+    listen(globalThis.window, "languagechange", () => deliver(LOCALE, 0));
+    if (typeof globalThis.matchMedia === "function") {
+      for (const query of ["(prefers-color-scheme: dark)", "(forced-colors: active)"]) {
+        listen(globalThis.matchMedia(query), "change", () => report(FACT_THEME, THEME, currentTheme()));
+      }
+    }
+    if (isNode) {
+      const signal = (kind, code) => () => {
+        stopSignals += 1;
+        if (stopSignals > 1) process.exit(code);
+        deliver(kind, 0);
+      };
+      const onInterrupt = signal(INTERRUPT, 130);
+      const onTerminate = signal(TERMINATE, 143);
+      process.on("SIGINT", onInterrupt);
+      process.on("SIGTERM", onTerminate);
+      detach.push(() => {
+        process.off("SIGINT", onInterrupt);
+        process.off("SIGTERM", onTerminate);
+      });
+    }
+  };
+
+  return {
+    appStart: () => {
+      if (running) return 0;
+      running = true;
+      queue = [];
+      stopSignals = 0;
+      facts[FACT_ACTIVE] = currentActive();
+      facts[FACT_THEME] = currentTheme();
+      attach();
+      return 1;
+    },
+    appNextEvent: () => {
+      if (!running) return Promise.resolve(0);
+      if (queue.length > 0) {
+        const [kind, payload] = queue.shift();
+        value = payload;
+        return Promise.resolve(kind);
+      }
+      // Node exits when nothing holds the event loop open, so a pending wait keeps a timer.
+      if (isNode && keepAlive === null) keepAlive = setInterval(() => {}, 1 << 30);
+      return new Promise(resolve => {
+        waiter = kind => {
+          if (keepAlive !== null) {
+            clearInterval(keepAlive);
+            keepAlive = null;
+          }
+          resolve(kind);
+        };
+      });
+    },
+    appEventValue: () => value,
+    appReply: () => {},
+    appQuery: fact => facts[fact] ?? -1,
+    appReport: message => console.error(message),
+    appStop: () => {
+      running = false;
+      queue = [];
+      for (const undo of detach) undo();
+      detach = [];
+      if (waiter) {
+        const resolve = waiter;
+        waiter = null;
+        resolve(0);
+      }
+    },
   };
 }
 
@@ -5080,6 +5264,7 @@ function defaultDreamModule(getInstance) {
     ...makeAudioCaptureHost(),
     ...makeGpuHost(getInstance),
     ...makeDrawingHost(getInstance),
+    ...makeAppHost(),
   };
 }
 

@@ -11,6 +11,7 @@ import { makeAudioCaptureHost } from "./hosts/audio_capture.js";
 import { makeWindowHost } from "./hosts/window.js";
 import { makeGpuHost } from "./hosts/gpu.js";
 import { makeDrawingHost } from "./hosts/drawing.js";
+import { makeAppHost } from "./hosts/app.js";
 
 /**
  * Full built-in `Dream` host module (every optional chunk). Selective runtimes compose a subset
@@ -31,6 +32,7 @@ export function defaultDreamModule(getInstance) {
     ...makeAudioCaptureHost(),
     ...makeGpuHost(getInstance),
     ...makeDrawingHost(getInstance),
+    ...makeAppHost(),
   };
 }
 
@@ -48,4 +50,5 @@ export {
   makeAudioCaptureHost,
   makeGpuHost,
   makeDrawingHost,
+  makeAppHost,
 };

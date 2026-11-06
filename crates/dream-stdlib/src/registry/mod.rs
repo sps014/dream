@@ -1,3 +1,4 @@
+mod app;
 mod audio;
 mod cli;
 mod codegen;
@@ -75,6 +76,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     validation_derive::PACKAGE,
     process::PACKAGE,
     system::PACKAGE,
+    app::PACKAGE,
     testing::PACKAGE,
     codegen::PACKAGE,
     json_derive::PACKAGE,

@@ -91,7 +91,7 @@ A GPU capability creates surfaces from handles that the window host exports. It 
 ```c
 typedef struct DreamWindowSurface {
     uint32_t platform;      /* 1 AppKit, 2 Win32, 3 Xlib, 4 Wayland */
-    uint32_t vsync;         /* 1 when WindowDesc.vsync(true) */
+    uint32_t vsync;         /* 1 when WindowOptions.vsync(true) */
     void *window;           /* NSView* | HWND | wl_surface* | NULL for Xlib */
     void *display;          /* NULL | HINSTANCE | wl_display* | Display* */
     unsigned long xlib_window;

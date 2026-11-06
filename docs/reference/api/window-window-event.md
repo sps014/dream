@@ -131,3 +131,35 @@ A file was dropped on the window. Native programs receive its full path; browser
 ```dream
 FileDropped(path: string)
 ```
+
+## `Minimized`
+
+The window was minimized to the taskbar or dock. Browsers never report this event, because a canvas cannot be minimized.
+
+```dream
+Minimized
+```
+
+## `Restored`
+
+A minimized window was restored. Browsers never report this event.
+
+```dream
+Restored
+```
+
+## `Occluded`
+
+The window became completely hidden (`hidden` is true) or visible again, for example behind other windows, on another virtual desktop, or in a background browser tab. Platforms that cannot tell never report it. A hidden window can skip drawing until it is visible again.
+
+```dream
+Occluded(hidden: bool)
+```
+
+## `ScaleChanged`
+
+The window moved to a monitor with a different `Window.scale_factor`, or the display's scale setting changed. It arrives before the `Resized` event that carries the new physical size, so fonts and layouts can be rebuilt at the new scale first.
+
+```dream
+ScaleChanged(factor: float)
+```

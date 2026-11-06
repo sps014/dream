@@ -23,6 +23,10 @@ pub mod kind {
     pub const GAMEPAD_DISCONNECTED: u8 = 14;
     pub const FILE_DROPPED: u8 = 15;
     pub const GAMEPAD_SAMPLE: u8 = 16;
+    pub const MINIMIZED: u8 = 17;
+    pub const RESTORED: u8 = 18;
+    pub const OCCLUDED: u8 = 19;
+    pub const SCALE_CHANGED: u8 = 20;
 }
 
 /// `MouseButton` has five choices; GLFW's extra buttons have no Dream name.
@@ -106,7 +110,35 @@ pub fn encode_event(
                 wire.push_text(kind::FILE_DROPPED, &[], &path.to_string_lossy());
             }
         }
+        WindowEvent::Iconify(true) => wire.push(kind::MINIMIZED, &[]),
+        WindowEvent::Iconify(false) => wire.push(kind::RESTORED, &[]),
+        WindowEvent::ContentScale(x, _) if *x > 0.0 => wire.push(kind::SCALE_CHANGED, &[*x]),
         _ => {}
+    }
+}
+
+/// Appends a poll's GLFW events. Scale changes go first: GLFW reports the framebuffer resize
+/// that a monitor change causes before the content-scale change, and consumers rebuild
+/// DPI-dependent resources from `ScaleChanged` before handling the new size.
+pub fn encode_events(
+    events: &[WindowEvent],
+    coord_scale: f64,
+    key_name: &dyn Fn(Key, Scancode) -> Option<String>,
+    wire: &mut Wire,
+) {
+    let (scales, rest): (Vec<_>, Vec<_>) = events
+        .iter()
+        .partition(|event| matches!(event, WindowEvent::ContentScale(..)));
+    for event in scales.into_iter().chain(rest) {
+        encode_event(event, coord_scale, key_name, wire);
+    }
+}
+
+/// Appends an `Occluded` record when the visibility observed this poll differs from the last.
+pub fn encode_occlusion(previous: &mut bool, hidden: bool, wire: &mut Wire) {
+    if *previous != hidden {
+        *previous = hidden;
+        wire.push(kind::OCCLUDED, &[f32::from(u8::from(hidden))]);
     }
 }
 
@@ -206,6 +238,41 @@ mod tests {
                 2.0, 47.0, 97.0, 15.0, 1.0, 98.0,
             ]
         );
+    }
+
+    #[test]
+    fn lifecycle_events_put_scale_before_resize() {
+        let name = |_: Key, _| None;
+        let mut wire = Wire::default();
+        encode_events(
+            &[
+                WindowEvent::Iconify(true),
+                WindowEvent::FramebufferSize(2000, 1000),
+                WindowEvent::ContentScale(2.0, 2.0),
+                WindowEvent::ContentScale(0.0, 0.0),
+                WindowEvent::Iconify(false),
+            ],
+            1.0,
+            &name,
+            &mut wire,
+        );
+        assert_eq!(
+            wire.values(),
+            &[
+                20.0, 1.0, 2.0, 17.0, 0.0, 1.0, 2.0, 2000.0, 1000.0, 18.0, 0.0
+            ]
+        );
+    }
+
+    #[test]
+    fn occlusion_reports_only_edges() {
+        let mut hidden = false;
+        let mut wire = Wire::default();
+        encode_occlusion(&mut hidden, false, &mut wire);
+        encode_occlusion(&mut hidden, true, &mut wire);
+        encode_occlusion(&mut hidden, true, &mut wire);
+        encode_occlusion(&mut hidden, false, &mut wire);
+        assert_eq!(wire.values(), &[19.0, 1.0, 1.0, 19.0, 1.0, 0.0]);
     }
 
     #[test]

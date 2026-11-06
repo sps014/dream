@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut reports = Vec::new();
     for (backend, code) in [("cpu", 1), ("gpu", 2)] {
-        for kind in ["unfiltered", "filtered", "acrylic"] {
+        for kind in ["unfiltered", "filtered", "acrylic", "panels", "cards"] {
             let mut values = vec![0., 0.1, 0.2, 0.3, 1.];
             if kind == "filtered" {
                 values.extend([
@@ -62,7 +62,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if kind == "acrylic" {
                 values.push(4.);
             }
-            let picture = Picture::decode(&values)?;
+            if kind == "panels" {
+                for i in 0..16 {
+                    let mut path = Vec::new();
+                    fill(
+                        &mut path,
+                        (i % 4) as f32 * 80.,
+                        (i / 4) as f32 * 60.,
+                        72.,
+                        52.,
+                        [0.; 4],
+                    );
+                    values.push(8.);
+                    values.extend_from_slice(&path[1..15]);
+                    values.extend([6., 1., 1., 1., 0.2, 0., 0., 0.]);
+                }
+            }
+            if kind == "cards" {
+                // Shadowed rounded cards with pooled labels: the common widget scene.
+                for i in 0..24 {
+                    let (x, y) = ((i % 6) as f32 * 52. + 6., (i / 6) as f32 * 58. + 6.);
+                    values.extend([13., x, y, 44., 48., 6., 0., 2., 4., 0., 0., 0., 0., 0.3]);
+                    values.extend([
+                        1., 1., 5., x, y, 44., 48., 6., 6., 6., 6., 0., 1., 1., 1., 1., 0.,
+                    ]);
+                    values.extend([
+                        10.,
+                        0.,
+                        4.,
+                        4.,
+                        9.,
+                        12.,
+                        400.,
+                        0.,
+                        0.,
+                        x + 4.,
+                        y + 4.,
+                        0.,
+                        0.,
+                        0.,
+                        1.,
+                    ]);
+                }
+            }
+            let picture = Picture::decode_with(&values, &[], "CardNoto Sans")?;
             let mut surface = pollster::block_on(Surface::create(320, 240, code))?;
             let start = Instant::now();
             surface.render(&picture)?;

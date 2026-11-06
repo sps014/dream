@@ -58,6 +58,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("option_unwrap_without_fallback_allocation", "core", true),
     Case::project("path_helpers", "native_services", true),
     Case::project("window_headless_state", "native_services", true),
+    Case::project("app_lifetime", "native_services", true),
     Case::project("gpu_desc_builders", "gpu", true),
     Case::project("gpu_generator_only_float16", "gpu", true),
     Case::project("gpu_autodiff_forward", "gpu_runtime", false),

@@ -137,7 +137,7 @@ public fun handle(sampler: GpuSampler): Result<GpuHandle<GpuSampler>, GpuError>
 
 ## `create_surface`
 
-Connects the device to `window` so frames can be drawn into it. The surface follows the window's vsync hint from `WindowDesc.vsync`. Headless and closed windows return `GpuError.SurfaceLost`.
+Connects the device to `window` so frames can be drawn into it. The surface follows the window's vsync hint from `WindowOptions.vsync`. Headless and closed windows return `GpuError.SurfaceLost`.
 
 ```dream
 public fun create_surface(window: Window): Result<GpuSurface, GpuError>

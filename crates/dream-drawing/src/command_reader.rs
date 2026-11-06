@@ -1,7 +1,7 @@
 use super::Brush;
 use crate::{DrawingError, Result};
 use vello_common::{
-    kurbo::{BezPath, Point},
+    kurbo::{BezPath, Cap, Join, Point, Rect, RoundedRect, RoundedRectRadii, Shape, Stroke},
     peniko::{BlendMode, Color, Compose, Gradient, Mix},
 };
 
@@ -48,14 +48,6 @@ impl Reader<'_> {
             _ => Mix::Exclusion,
         };
         Ok(BlendMode::new(mix, Compose::SrcOver))
-    }
-
-    pub(super) fn string(&mut self, limit: usize) -> Result<String> {
-        let length = self.count(limit)?;
-        let units = (0..length)
-            .map(|_| self.count(65535).map(|unit| unit as u16))
-            .collect::<Result<Vec<_>>>()?;
-        Ok(String::from_utf16_lossy(&units))
     }
 
     pub(super) fn rect(&mut self) -> Result<vello_common::kurbo::Rect> {
@@ -105,13 +97,49 @@ impl Reader<'_> {
         }
         Ok(Color::new(values))
     }
+    pub(super) fn stroke(&mut self) -> Result<Stroke> {
+        let width = self.value()?;
+        if width <= 0.0 {
+            return Err(invalid("stroke width must be positive"));
+        }
+        let cap = match self.count(2)? {
+            0 => Cap::Butt,
+            1 => Cap::Round,
+            _ => Cap::Square,
+        };
+        let join = match self.count(2)? {
+            0 => Join::Miter,
+            1 => Join::Round,
+            _ => Join::Bevel,
+        };
+        let miter = self.value()?;
+        if miter < 1.0 {
+            return Err(invalid("miter limit must be at least one"));
+        }
+        let offset = self.value()? as f64;
+        let count = self.count(256)?;
+        let mut dashes = Vec::with_capacity(count);
+        for _ in 0..count {
+            let dash = self.value()?;
+            if dash <= 0.0 {
+                return Err(invalid("dash lengths must be positive"));
+            }
+            dashes.push(dash as f64);
+        }
+        Ok(Stroke::new(width as f64)
+            .with_caps(cap)
+            .with_join(join)
+            .with_miter_limit(miter as f64)
+            .with_dashes(offset, dashes))
+    }
+
     pub(super) fn path(&mut self) -> Result<BezPath> {
         let count = self.count(65536)?;
         let mut path = BezPath::new();
         let mut moved = false;
         for _ in 0..count {
-            let opcode = self.count(4)?;
-            if opcode != 0 && !moved {
+            let opcode = self.count(5)?;
+            if !matches!(opcode, 0 | 5) && !moved {
                 return Err(invalid("a path must begin with move_to"));
             }
             match opcode {
@@ -130,6 +158,26 @@ impl Reader<'_> {
                     path.curve_to(a, b, self.point()?);
                 }
                 4 => path.close_path(),
+                5 => {
+                    let origin = self.point()?;
+                    let size = self.point()?;
+                    let mut radii = [0.0; 4];
+                    for radius in &mut radii {
+                        *radius = self.value()? as f64;
+                        if *radius < 0.0 {
+                            return Err(invalid("corner radii must not be negative"));
+                        }
+                    }
+                    let rect = Rect::from_origin_size(origin, (size.x, size.y));
+                    path.extend(
+                        RoundedRect::from_rect(
+                            rect,
+                            RoundedRectRadii::new(radii[0], radii[1], radii[2], radii[3]),
+                        )
+                        .path_elements(0.1),
+                    );
+                    moved = true;
+                }
                 _ => unreachable!(),
             }
         }

@@ -5,7 +5,7 @@ import system.window;
 @test
 @timeout(180000)
 fun window_headless_state(): void {
-    let window = Window.headless(WindowDesc("state", 320, 200).fullscreen(true).vsync(false));
+    let window = Window.headless(WindowOptions("state", 320, 200).fullscreen(true).vsync(false));
     Assert.is_true(window.is_open);
     Assert.is_true(window.is_fullscreen);
     Assert.eq(window.title, "state");
@@ -40,7 +40,7 @@ fun window_headless_state(): void {
 @test
 @timeout(180000)
 fun window_event_order(): void {
-    let window = Window.headless(WindowDesc("events", 320, 200));
+    let window = Window.headless(WindowOptions("events", 320, 200));
     window.simulate(WindowEvent.Text("hé"));
     window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.Q, "a", KeyModifiers.Shift, false)));
     window.simulate(WindowEvent.FileDropped("/tmp/level.map"));
@@ -74,8 +74,53 @@ fun window_event_order(): void {
 
 @test
 @timeout(180000)
+fun window_lifecycle_events(): void {
+    let window = Window.headless(WindowOptions("lifecycle", 320, 200));
+    Assert.is_false(window.is_minimized);
+    Assert.is_false(window.is_occluded);
+
+    window.simulate(WindowEvent.ScaleChanged(2.0f));
+    window.simulate(WindowEvent.Resized(WindowSize(640, 400)));
+    window.simulate(WindowEvent.Minimized);
+    window.simulate(WindowEvent.Occluded(true));
+    let frame = window.poll();
+    Assert.eq(frame.events.length, 4);
+    let seen = "";
+    for (let event in frame.events) {
+        switch (event) {
+            WindowEvent.ScaleChanged(factor) => {
+                seen = seen + "scale:" + factor.to_string() + ";";
+            }
+            WindowEvent.Resized(size) => {
+                seen = seen + "resized;";
+            }
+            WindowEvent.Minimized => {
+                seen = seen + "minimized;";
+            }
+            WindowEvent.Occluded(hidden) => {
+                seen = seen + "occluded:" + hidden.to_string() + ";";
+            }
+            _ => {
+                seen = seen + "other;";
+            }
+        }
+    }
+    Assert.eq(seen, "scale:2;resized;minimized;occluded:true;");
+    Assert.eq(window.scale_factor, 2.0f);
+    Assert.is_true(window.is_minimized);
+    Assert.is_true(window.is_occluded);
+
+    window.simulate(WindowEvent.Restored);
+    window.simulate(WindowEvent.Occluded(false));
+    window.poll();
+    Assert.is_false(window.is_minimized);
+    Assert.is_false(window.is_occluded);
+}
+
+@test
+@timeout(180000)
 fun window_focus_release(): void {
-    let window = Window.headless(WindowDesc("focus", 320, 200));
+    let window = Window.headless(WindowOptions("focus", 320, 200));
     window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.ShiftLeft, "", KeyModifiers.None, false)));
     window.simulate(WindowEvent.MouseDown(MouseButton.Right));
     window.poll();
@@ -93,7 +138,7 @@ fun window_focus_release(): void {
 @test
 @timeout(180000)
 fun window_key_edges(): void {
-    let window = Window.headless(WindowDesc("keys", 320, 200));
+    let window = Window.headless(WindowOptions("keys", 320, 200));
     window.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.A, "", KeyModifiers.None, false)));
     let first = window.poll();
     Assert.is_true(first.keyboard.is_down(KeyCode.A));
@@ -118,7 +163,7 @@ fun window_key_edges(): void {
     Assert.is_true(first.keyboard.pressed(KeyCode.A));
 
     // A tap between two polls reports both edges; a repeat never counts as a press.
-    let tapped = Window.headless(WindowDesc("tap", 320, 200));
+    let tapped = Window.headless(WindowOptions("tap", 320, 200));
     tapped.simulate(WindowEvent.KeyDown(KeyEvent(KeyCode.Space, "", KeyModifiers.None, false)));
     tapped.simulate(WindowEvent.KeyUp(KeyEvent(KeyCode.Space, "", KeyModifiers.None, false)));
     let tap = tapped.poll();
@@ -133,7 +178,7 @@ fun window_key_edges(): void {
 @test
 @timeout(180000)
 fun window_mouse_state(): void {
-    let window = Window.headless(WindowDesc("mouse", 320, 200));
+    let window = Window.headless(WindowOptions("mouse", 320, 200));
     window.simulate(WindowEvent.MouseMove(WindowVector(100.0f, 50.0f)));
     window.simulate(WindowEvent.MouseDown(MouseButton.Left));
     window.simulate(WindowEvent.Scroll(WindowVector(0.0f, 1.0f)));
@@ -162,14 +207,14 @@ fun window_mouse_state(): void {
 @test
 @timeout(180000)
 fun window_open_display(): void {
-    let invalid = Window.open(WindowDesc("bad", 0, 100));
+    let invalid = Window.open(WindowOptions("bad", 0, 100));
     Assert.is_true(invalid.is_err());
     switch (invalid) {
         Err(error) => Assert.eq(error.code(), "EINVAL"),
         Ok(_) => Assert.fail("a zero-width window must be rejected"),
     }
     // A desktop session opens a real window; servers, CI without a display and Node report it.
-    switch (Window.open(WindowDesc("probe", 160, 120).resizable(false))) {
+    switch (Window.open(WindowOptions("probe", 160, 120).resizable(false))) {
         Ok(window) => {
             Assert.is_true(window.is_open);
             window.poll();

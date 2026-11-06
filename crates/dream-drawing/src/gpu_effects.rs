@@ -25,6 +25,8 @@ pub struct Frame<'a> {
     pub bindings: TextureBindings,
     pub sources: BTreeMap<usize, ImageSource>,
     used: usize,
+    free: Vec<usize>,
+    bound: BTreeMap<usize, usize>,
     // Texture IDs derive from these identities; keep them alive until encoding finishes.
     images: Vec<Arc<RasterImage>>,
 }
@@ -39,10 +41,15 @@ impl<'a> Frame<'a> {
             bindings,
             sources,
             used: 0,
+            free: Vec::new(),
+            bound: BTreeMap::new(),
             images: Vec::new(),
         }
     }
     fn acquire(&mut self) -> Result<usize> {
+        if let Some(index) = self.free.pop() {
+            return Ok(index);
+        }
         let index = self.used;
         if index == self.surface.scratch.targets.len() {
             reserve(
@@ -97,12 +104,20 @@ impl<'a> Frame<'a> {
             ),
         );
         self.images.push(image.clone());
+        self.bound.insert(key, index);
         image
     }
 }
 impl FilterBackend for Frame<'_> {
     fn size(&self) -> (u16, u16) {
         (self.surface.width, self.surface.height)
+    }
+    // Queue submissions run in order, so a later render may overwrite a target whose readers
+    // were already submitted.
+    fn recycle(&mut self, image: Arc<RasterImage>) {
+        if let Some(index) = self.bound.remove(&(Arc::as_ptr(&image) as usize)) {
+            self.free.push(index);
+        }
     }
     fn filtered(&mut self, commands: &[Command], effects: &[Effect]) -> Result<Arc<RasterImage>> {
         let mut current = self.acquire()?;

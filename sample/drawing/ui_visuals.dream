@@ -51,7 +51,7 @@ fun card(width: int, height: int): Canvas {
 }
 
 async fun main(): void {
-    let window = Window.open(WindowDesc("Canvas UI visuals", 640, 400).resizable(false)).unwrap();
+    let window = Window.open(WindowOptions("Canvas UI visuals", 640, 400).resizable(false)).unwrap();
     let device = GpuDevice.create(GpuBackend.Auto).await.unwrap();
     let screen = device.create_surface(window).unwrap();
     let drawing = DrawingSurface.create(screen.width, screen.height, DrawingBackend.Cpu)

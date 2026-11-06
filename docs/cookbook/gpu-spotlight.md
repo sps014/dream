@@ -98,7 +98,7 @@ async fun run(window: Window): Result<Unit, GpuError> {
 }
 
 async fun main(): void {
-    let opened = Window.open(WindowDesc("Spotlight", 800, 600).resizable(true).vsync(true));
+    let opened = Window.open(WindowOptions("Spotlight", 800, 600).resizable(true).vsync(true));
     if opened.is_err() {
         System.println("no window: " + opened.unwrap_err().message());
         return;

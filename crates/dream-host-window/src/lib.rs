@@ -5,6 +5,7 @@
 mod exports;
 pub mod host;
 mod keys;
+mod occlusion;
 mod surface;
 mod thread;
 pub mod wire;

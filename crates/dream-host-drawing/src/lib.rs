@@ -48,11 +48,17 @@ pub extern "C" fn drawingLastError() -> DreamPtr {
 }
 
 /// # Safety
-/// `commands` is a readable guest float array retained for this call.
+/// `commands`, `assets` and `text` are readable guest arrays and a string retained for this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn drawingRender(handle: i32, commands: DreamPtr, assets: DreamPtr) -> i32 {
+pub unsafe extern "C" fn drawingRender(
+    handle: i32,
+    commands: DreamPtr,
+    assets: DreamPtr,
+    text: DreamPtr,
+) -> i32 {
     let data = unsafe { read_f32s(commands) };
     let handles = unsafe { read_i32s(assets) };
+    let text = unsafe { read_string(text) };
     let resources = {
         let assets = dream_host_abi::lock(&ASSETS);
         handles
@@ -65,7 +71,7 @@ pub unsafe extern "C" fn drawingRender(handle: i32, commands: DreamPtr, assets: 
             .collect::<dream_drawing::Result<Vec<_>>>()
     };
     let result = resources
-        .and_then(|resources| Picture::decode_with(&data, &resources))
+        .and_then(|resources| Picture::decode_with(&data, &resources, &text))
         .and_then(|picture| {
             let mut table = dream_host_abi::lock(&SURFACES);
             table
@@ -198,6 +204,59 @@ pub extern "C" fn drawingAssetMetrics(handle: i32) -> DreamPtr {
         .map(Asset::metrics)
         .unwrap_or_default();
     alloc_f32s(&values)
+}
+
+/// # Safety
+/// `text` and `family` are readable guest strings retained for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn drawingTextMeasure(
+    text: DreamPtr,
+    family: DreamPtr,
+    size: f32,
+    weight: f32,
+    width: f32,
+    alignment: i32,
+) -> DreamPtr {
+    let text = unsafe { read_string(text) };
+    let family = unsafe { read_string(family) };
+    match dream_drawing::text::layout(&text, &family, size, weight, width, alignment as u32) {
+        Ok(layout) => alloc_f32s(&layout.metrics()),
+        Err(error) => {
+            fail(error);
+            alloc_f32s(&[])
+        }
+    }
+}
+
+fn text_query<T>(
+    handle: i32,
+    query: impl FnOnce(&dream_drawing::text::ShapedText) -> T,
+) -> Option<T> {
+    match dream_host_abi::lock(&ASSETS).get(handle) {
+        Some(Asset::Text(layout)) => Some(query(layout)),
+        _ => None,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn drawingTextIndexAt(handle: i32, x: f32, y: f32) -> i32 {
+    text_query(handle, |layout| layout.index_at(x, y) as i32).unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn drawingTextCaret(handle: i32, index: i32) -> DreamPtr {
+    let values = text_query(handle, |layout| {
+        layout.caret(index.max(0) as usize).to_vec()
+    });
+    alloc_f32s(&values.unwrap_or_default())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn drawingTextSelection(handle: i32, start: i32, end: i32) -> DreamPtr {
+    let values = text_query(handle, |layout| {
+        layout.selection(start.max(0) as usize, end.max(0) as usize)
+    });
+    alloc_f32s(&values.unwrap_or_default())
 }
 
 #[unsafe(no_mangle)]

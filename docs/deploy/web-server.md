@@ -69,6 +69,6 @@ Decide whether interactive docs should be enabled in each environment. Disable d
 
 ## Stopping the service
 
-On termination, call `shutdown`, then await `wait`. The server stops accepting connections, lets running requests finish, sends WebSocket clients a `1012` close frame, and then runs lifespan shutdown hooks. Set `timeout_graceful_shutdown_ms` below your supervisor's kill timeout so slow requests are cut off before the process is killed.
+Run the service inside `Application.run`, so `SIGTERM` from the supervisor stops it gracefully: the server stops accepting connections, lets running requests finish, sends WebSocket clients a `1012` close frame, and then the `Application.on_stop` cleanups run. Outside `Application.run`, call `shutdown`, then await `wait`. Set `timeout_graceful_shutdown_ms` below your supervisor's kill timeout so slow requests are cut off before the process is killed.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](../web-server/example.md).

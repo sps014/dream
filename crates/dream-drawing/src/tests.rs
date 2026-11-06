@@ -126,7 +126,7 @@ fn backdrop_rejects_excessive_blur_and_noise() {
 fn image_picture() -> Picture {
     let image = RasterImage::rgba(2, 1, &[255, 0, 0, 255, 0, 255, 0, 128]).unwrap();
     let values = [9.0, 0.0, 0.0, 0.0, 2.0, 1.0, 0.0, 0.0, 32.0, 32.0, 1.0, 1.0];
-    Picture::decode_with(&values, &[Asset::Image(image)]).unwrap()
+    Picture::decode_with(&values, &[Asset::Image(image)], "").unwrap()
 }
 
 #[test]
@@ -180,6 +180,7 @@ fn shaped_text_wraps_and_renders_with_the_bundled_font() {
     let picture = Picture::decode_with(
         &[11.0, 0.0, 4.0, 2.0, 1.0, 1.0, 1.0, 1.0],
         &[Asset::Text(line)],
+        "",
     )
     .unwrap();
     let mut surface = pollster::block_on(Surface::create(200, 50, 1)).unwrap();
@@ -203,6 +204,7 @@ fn gpu_images_and_text_match_cpu() {
         Picture::decode_with(
             &[11.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0],
             &[Asset::Text(line)],
+            "",
         )
         .unwrap()
         .commands,

@@ -135,10 +135,26 @@ public fun clip(borrow path: DrawingPath): void
 
 ## `backdrop`
 
-Filters earlier drawing in the current isolated group (or canvas root), then applies tint and noise within the panel and clip. At most eight panels per picture.
+Filters earlier drawing in the current isolated group (or canvas root), then applies tint and noise within the panel and clip. At most 64 panels per picture, including panels inside pictures drawn with draw_picture. Each panel after the first in a group costs one extra full-canvas render.
 
 ```dream
 public fun backdrop(rect: Rect, borrow effect: Backdrop): void
+```
+
+## `box_shadow`
+
+Paints a soft shadow for a rounded box: a Gaussian-blurred rounded rectangle, computed exactly rather than by blurring pixels. The rectangle is the box being shadowed; dx and dy move the shadow, spread grows it on every side (negative values shrink it) and also grows the corner radius. Radius and spread are canvas units; sigma is the blur standard deviation in canvas units, 0..128, where zero paints a sharp shape. The shadow is also painted under the box, so draw the box afterwards; a translucent box shows its own shadow through it.
+
+```dream
+public fun box_shadow(
+    rect: Rect,
+    radius: float,
+    dx: float,
+    dy: float,
+    sigma: float,
+    color: Color,
+    spread: float = 0.0f
+): void
 ```
 
 ## `finish`
@@ -177,4 +193,12 @@ Draws an immutable precomputed layout at a top-left origin using the supplied co
 
 ```dream
 public fun fill_text(borrow layout: TextLayout, x: float, y: float, color: Color): void
+```
+
+## `draw_picture`
+
+Draws a finished picture in the current transform and clip, as if its commands were recorded here. Its own clear color fills only its bounds, and its drawing is clipped to them; backdrops inside it filter what this canvas drew earlier. Pictures nest at most eight levels deep.
+
+```dream
+public fun draw_picture(borrow picture: Picture): void
 ```

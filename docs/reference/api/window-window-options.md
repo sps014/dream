@@ -1,15 +1,15 @@
-# WindowDesc
+# WindowOptions
 
 **Import:** `import system.window;`
 
 Read the [usage guide](../../library/system/window.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `WindowDesc`
+## `WindowOptions`
 
-The settings a new window is created with.  Construct one with a title and content size, then chain the settings you want to change: `WindowDesc("Game", 1280, 720).resizable(false).fullscreen(true)`.
+The settings a new window is created with.  Construct one with a title and content size, then chain the settings you want to change: `WindowOptions("Game", 1280, 720).resizable(false).fullscreen(true)`.
 
 ```dream
-public class WindowDesc
+public class WindowOptions
 ```
 
 ## `constructor`
@@ -70,24 +70,24 @@ public get wants_vsync(): bool
 
 ## `resizable`
 
-Sets whether the user can resize the window, and returns this description.
+Sets whether the user can resize the window, and returns these options.
 
 ```dream
-public fun resizable(value: bool): WindowDesc
+public fun resizable(value: bool): WindowOptions
 ```
 
 ## `fullscreen`
 
-Sets whether the window starts fullscreen, and returns this description.
+Sets whether the window starts fullscreen, and returns these options.
 
 ```dream
-public fun fullscreen(value: bool): WindowDesc
+public fun fullscreen(value: bool): WindowOptions
 ```
 
 ## `vsync`
 
-Sets the vertical-sync hint for GPU surfaces, and returns this description.
+Sets the vertical-sync hint for GPU surfaces, and returns these options.
 
 ```dream
-public fun vsync(value: bool): WindowDesc
+public fun vsync(value: bool): WindowOptions
 ```

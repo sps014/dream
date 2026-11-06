@@ -1,0 +1,17 @@
+module system.app;
+
+/// A registered `Application` hook. Keep it to remove the hook early with `cancel`; a
+/// subscription that is ignored stays registered until the program stops.
+public class Subscription {
+    id: int;
+
+    internal constructor(id: int) {
+        this.id = id;
+    }
+
+    /// Removes the hook, so it no longer runs. For an `on_stop` cleanup, the cleanup is
+    /// skipped at shutdown. Cancelling twice, or after the hook ran, does nothing.
+    public fun cancel(): void {
+        APP.unsubscribe(this.id);
+    }
+}

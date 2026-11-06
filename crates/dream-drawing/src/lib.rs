@@ -13,6 +13,8 @@ mod gpu_effects;
 mod material_tests;
 mod noise;
 mod prepare;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod record_tests;
 mod replay;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests;
@@ -34,6 +36,9 @@ pub enum DrawingError {
     #[error("ERENDER\n{0}")]
     Render(String),
 }
+
+/// Backdrop panels allowed in one picture, including nested pictures.
+pub const MAX_BACKDROPS: usize = 64;
 
 pub type Result<T> = std::result::Result<T, DrawingError>;
 

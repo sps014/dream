@@ -120,6 +120,16 @@ impl FilterBackend for Frame<'_> {
     fn size(&self) -> (u16, u16) {
         (self.surface.width, self.surface.height)
     }
+    fn recycle(&mut self, image: Arc<RasterImage>) {
+        self.images.retain(|held| !Arc::ptr_eq(held, &image));
+        match Arc::try_unwrap(image) {
+            Ok(image) => match Arc::try_unwrap(image.pixels) {
+                Ok(pixels) => self.surface.pool.push(pixels),
+                Err(pixels) => self.images.push(Arc::new(RasterImage { pixels })),
+            },
+            Err(image) => self.images.push(image),
+        }
+    }
     fn filtered(&mut self, commands: &[Command], effects: &[Effect]) -> Result<Arc<RasterImage>> {
         let mut input = self.acquire()?;
         render(&mut input, &mut self.surface.resources, commands, None)?;

@@ -53,7 +53,7 @@ public class DrawingSurface {
         if picture.width != this.width || picture.height != this.height {
             return Result.Err(DrawingError("EINVAL\npicture and surface dimensions differ"));
         }
-        if DrawingHost.render(this.handle, picture.values, picture.handles) == 0 {
+        if DrawingHost.render(this.handle, picture.values, picture.handles, picture.text) == 0 {
             return Result.Err(DrawingError(DrawingHost.error()));
         }
         return Result.Ok(Unit());

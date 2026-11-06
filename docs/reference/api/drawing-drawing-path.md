@@ -60,10 +60,18 @@ public fun close(): DrawingPath
 
 ## `rect`
 
-Creates a closed rectangle. Radius rounds its corners and is clamped to half its smaller side.
+Creates a closed rectangle. Radius rounds every corner and is clamped to half the smaller side; negative radii draw square corners.
 
 ```dream
 public static fun rect(rect: Rect, radius: float = 0.0f): DrawingPath
+```
+
+## `rect`
+
+Creates a closed rectangle with a separate radius for each corner. Radii are clamped to half the smaller side; negative radii draw square corners.
+
+```dream
+public static fun rect(rect: Rect, radii: CornerRadii): DrawingPath
 ```
 
 ## `ellipse`

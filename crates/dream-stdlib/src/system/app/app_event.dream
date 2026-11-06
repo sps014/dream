@@ -1,0 +1,34 @@
+module system.app;
+
+/// An operating-system event to inject with `Application.simulate` in tests.
+///
+/// Each variant reaches the same hooks, properties, and transition checks as the real
+/// event. Programs never receive `AppEvent` values; they register `Application.on_*` hooks.
+public enum AppEvent {
+    /// Something asked the program to stop. `SessionEnding` is simulated as the first,
+    /// vetoable request.
+    ShutdownRequested(reason: ShutdownReason),
+    /// The computer is about to sleep. Runs `on_sleep` hooks.
+    Sleeping,
+    /// The computer woke up after `slept_ms` milliseconds, or `-1` when unknown. Runs
+    /// `on_wake` hooks.
+    Woke(slept_ms: int),
+    /// The user session was locked (`true`) or unlocked (`false`). Runs
+    /// `on_session_lock` hooks.
+    SessionLock(locked: bool),
+    /// The displays turned on (`true`) or went to sleep (`false`). Runs
+    /// `on_display_power` hooks.
+    DisplayPower(on: bool),
+    /// The app came to the foreground (`true`) or went to the background (`false`).
+    /// Runs `on_active` hooks.
+    Active(active: bool),
+    /// The computer switched power source. Runs `on_power_source` hooks.
+    PowerSourceChanged(source: PowerSource),
+    /// The user changed the system color scheme. Runs `on_theme` hooks.
+    ThemeChanged(theme: SystemTheme),
+    /// The user changed the system language or regional formats. Runs `on_locale` hooks.
+    LocaleChanged,
+    /// The operating system reported that memory is running low. Runs `on_low_memory`
+    /// hooks.
+    LowMemory
+}

@@ -60,24 +60,24 @@ public class DrawingPath {
         return this;
     }
 
-    /// Creates a closed rectangle. Radius rounds its corners and is clamped to half its smaller side.
+    /// Creates a closed rectangle. Radius rounds every corner and is clamped to half the smaller side; negative radii draw square corners.
     public static fun rect(rect: Rect, radius: float = 0.0f): DrawingPath {
+        let r = radius.max(0.0f);
+        return DrawingPath.rect(rect, CornerRadii(r, r, r, r));
+    }
+
+    /// Creates a closed rectangle with a separate radius for each corner. Radii are clamped to half the smaller side; negative radii draw square corners.
+    public static fun rect(rect: Rect, radii: CornerRadii): DrawingPath {
         let path = DrawingPath();
-        let r = radius.min(rect.width.min(rect.height) * 0.5f).max(0.0f);
-        let x = rect.x;
-        let y = rect.y;
-        let right = x + rect.width;
-        let bottom = y + rect.height;
-        let k = 0.55228475f;
-        path.move_to(x + r, y).line_to(right - r, y);
-        path.curve_to(right - r + k * r, y, right, y + r - k * r, right, y + r);
-        path.line_to(right, bottom - r);
-        path.curve_to(right, bottom - r + k * r, right - r + k * r, bottom, right - r, bottom);
-        path.line_to(x + r, bottom);
-        path.curve_to(x + r - k * r, bottom, x, bottom - r + k * r, x, bottom - r);
-        path.line_to(x, y + r);
-        path.curve_to(x, y + r - k * r, x + r - k * r, y, x + r, y);
-        return path.close();
+        path.values.push(5.0f);
+        path.point(rect.x, rect.y);
+        path.point(rect.width, rect.height);
+        path.values.push(radii.top_left.max(0.0f));
+        path.values.push(radii.top_right.max(0.0f));
+        path.values.push(radii.bottom_right.max(0.0f));
+        path.values.push(radii.bottom_left.max(0.0f));
+        path.segments = 1;
+        return path;
     }
 
     /// Creates a closed ellipse inscribed in the rectangle.

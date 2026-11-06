@@ -9,7 +9,7 @@ use crate::{
 use reader::{Reader, invalid};
 use std::sync::Arc;
 use vello_common::{
-    kurbo::{Affine, BezPath, Stroke},
+    kurbo::{Affine, BezPath, Shape, Stroke},
     peniko::{BlendMode, Color, Fill, Gradient},
 };
 
@@ -31,6 +31,7 @@ pub enum Command {
         commands: Vec<Command>,
     },
     Backdrop {
+        /// Earlier drawing in the same group, filled by `prepare` just before rendering.
         prefix: Arc<[Command]>,
         clips: Vec<BezPath>,
         sigma: f32,
@@ -38,6 +39,14 @@ pub enum Command {
         noise: Option<crate::noise::Noise>,
     },
     Image(Box<ImageCommand>),
+    BoxShadow {
+        rect: vello_common::kurbo::Rect,
+        radius: f32,
+        sigma: f32,
+        color: Color,
+        transform: Affine,
+        clips: Vec<BezPath>,
+    },
     Text {
         layout: Arc<ShapedText>,
         color: Color,
@@ -98,11 +107,10 @@ impl Picture {
                         output.insert(Arc::as_ptr(&draw.image) as usize, draw.image.clone());
                     }
                     Command::Layer { commands, .. } => collect(commands, output),
-                    Command::Backdrop { prefix, noise, .. } => {
-                        collect(prefix, output);
-                        if let Some(noise) = noise {
-                            output.insert(Arc::as_ptr(&noise.image) as usize, noise.image.clone());
-                        }
+                    Command::Backdrop {
+                        noise: Some(noise), ..
+                    } => {
+                        output.insert(Arc::as_ptr(&noise.image) as usize, noise.image.clone());
                     }
                     _ => {}
                 }
@@ -113,28 +121,95 @@ impl Picture {
         images
     }
     pub fn decode(values: &[f32]) -> Result<Self> {
-        Self::decode_with(values, &[])
+        Self::decode_with(values, &[], "")
     }
 
-    pub fn decode_with(values: &[f32], assets: &[Asset]) -> Result<Self> {
+    /// Decodes a canvas recording. `text` is the canvas text pool that text commands index
+    /// in UTF-16 code units.
+    pub fn decode_with(values: &[f32], assets: &[Asset], text: &str) -> Result<Self> {
         if values.len() > 4_000_000 {
             return Err(invalid("picture exceeds the command budget"));
         }
+        let mut decoder = Decoder {
+            pool: text.encode_utf16().collect(),
+            state: State::default(),
+            stack: Vec::new(),
+            groups: vec![Group {
+                opacity: 1.,
+                ..Default::default()
+            }],
+            backdrops: 0,
+        };
+        decoder.run(values, assets, 0, None, 0)?;
+        Ok(Self {
+            commands: decoder.groups.remove(0).commands,
+        })
+    }
+}
+
+struct Decoder {
+    pool: Vec<u16>,
+    state: State,
+    stack: Vec<(State, bool)>,
+    groups: Vec<Group>,
+    backdrops: usize,
+}
+
+impl Decoder {
+    fn group(&mut self) -> Result<&mut Group> {
+        self.groups
+            .last_mut()
+            .ok_or_else(|| invalid("missing drawing group"))
+    }
+
+    fn text(&self, reader: &mut Reader, base: usize, limit: usize) -> Result<String> {
+        let offset = reader.count(16_777_216)?;
+        let length = reader.count(limit)?;
+        let start = base + offset;
+        let units = self
+            .pool
+            .get(start..start + length)
+            .ok_or_else(|| invalid("text reference is outside the canvas text pool"))?;
+        Ok(String::from_utf16_lossy(units))
+    }
+
+    /// Decodes one recording. A nested picture (`bounds` set) shares the enclosing groups so
+    /// its backdrops see earlier drawing, and its resource and text indices start at the
+    /// supplied bases.
+    fn run(
+        &mut self,
+        values: &[f32],
+        assets: &[Asset],
+        text_base: usize,
+        bounds: Option<(f64, f64)>,
+        depth: usize,
+    ) -> Result<()> {
         let mut reader = Reader { values, offset: 0 };
-        let mut state = State::default();
-        let mut stack = Vec::new();
-        let mut groups = vec![Group {
-            opacity: 1.,
-            ..Default::default()
-        }];
-        let mut backdrops = 0;
+        let entry = self.stack.len();
         while reader.offset < values.len() {
-            match reader.count(11)? {
+            let first = reader.offset == 0;
+            match reader.count(13)? {
                 0 => {
-                    if groups.len() != 1 || !groups[0].commands.is_empty() {
+                    let color = reader.color()?;
+                    if !first
+                        || (bounds.is_none()
+                            && (self.groups.len() != 1 || !self.groups[0].commands.is_empty()))
+                    {
                         return Err(invalid("clear must be the first drawing command"));
                     }
-                    groups[0].commands.push(Command::Clear(reader.color()?));
+                    let command = match bounds {
+                        None => Command::Clear(color),
+                        Some((width, height)) => Command::Draw(Box::new(DrawCommand {
+                            path: vello_common::kurbo::Rect::new(0.0, 0.0, width, height)
+                                .to_path(0.1),
+                            brush: Brush::Solid(color),
+                            stroke: None,
+                            fill: Fill::NonZero,
+                            transform: self.state.transform,
+                            clips: self.state.clips.clone(),
+                        })),
+                    };
+                    self.group()?.commands.push(command);
                 }
                 opcode @ (1 | 2) => {
                     let path = reader.path()?;
@@ -142,90 +217,55 @@ impl Picture {
                     let mut stroke = None;
                     let mut fill = Fill::NonZero;
                     if opcode == 2 {
-                        let width = reader.value()?;
-                        if width <= 0.0 {
-                            return Err(invalid("stroke width must be positive"));
-                        }
-                        let cap = match reader.count(2)? {
-                            0 => vello_common::kurbo::Cap::Butt,
-                            1 => vello_common::kurbo::Cap::Round,
-                            _ => vello_common::kurbo::Cap::Square,
-                        };
-                        let join = match reader.count(2)? {
-                            0 => vello_common::kurbo::Join::Miter,
-                            1 => vello_common::kurbo::Join::Round,
-                            _ => vello_common::kurbo::Join::Bevel,
-                        };
-                        let miter = reader.value()?;
-                        if miter < 1.0 {
-                            return Err(invalid("miter limit must be at least one"));
-                        }
-                        let offset = reader.value()? as f64;
-                        let count = reader.count(256)?;
-                        let mut dashes = Vec::with_capacity(count);
-                        for _ in 0..count {
-                            let dash = reader.value()?;
-                            if dash <= 0.0 {
-                                return Err(invalid("dash lengths must be positive"));
-                            }
-                            dashes.push(dash as f64);
-                        }
-                        stroke = Some(
-                            Stroke::new(width as f64)
-                                .with_caps(cap)
-                                .with_join(join)
-                                .with_miter_limit(miter as f64)
-                                .with_dashes(offset, dashes),
-                        );
+                        stroke = Some(reader.stroke()?);
                     } else if reader.count(1)? == 1 {
                         fill = Fill::EvenOdd;
                     }
-                    groups
-                        .last_mut()
-                        .ok_or_else(|| invalid("missing drawing group"))?
-                        .commands
-                        .push(Command::Draw(Box::new(DrawCommand {
-                            path,
-                            brush,
-                            stroke,
-                            fill,
-                            transform: state.transform,
-                            clips: state.clips.clone(),
-                        })));
+                    let command = Command::Draw(Box::new(DrawCommand {
+                        path,
+                        brush,
+                        stroke,
+                        fill,
+                        transform: self.state.transform,
+                        clips: self.state.clips.clone(),
+                    }));
+                    self.group()?.commands.push(command);
                 }
                 3 => {
-                    if stack.len() >= 64 {
+                    if self.stack.len() >= 64 {
                         return Err(invalid("drawing state exceeds 64 levels"));
                     }
-                    stack.push((state.clone(), false));
+                    self.stack.push((self.state.clone(), false));
                 }
                 4 => {
-                    let (saved, layer) =
-                        stack.pop().ok_or_else(|| invalid("restore without save"))?;
+                    if self.stack.len() <= entry {
+                        return Err(invalid("restore without save"));
+                    }
+                    let (saved, layer) = self
+                        .stack
+                        .pop()
+                        .ok_or_else(|| invalid("restore without save"))?;
                     if layer {
-                        let group = groups
+                        let group = self
+                            .groups
                             .pop()
                             .ok_or_else(|| invalid("missing drawing group"))?;
-                        groups
-                            .last_mut()
-                            .ok_or_else(|| invalid("missing drawing group"))?
-                            .commands
-                            .push(Command::Layer {
-                                opacity: group.opacity,
-                                blend: group.blend,
-                                effects: group.effects,
-                                clips: group.clips,
-                                commands: group.commands,
-                            });
+                        self.group()?.commands.push(Command::Layer {
+                            opacity: group.opacity,
+                            blend: group.blend,
+                            effects: group.effects,
+                            clips: group.clips,
+                            commands: group.commands,
+                        });
                     }
-                    state = saved;
+                    self.state = saved;
                 }
                 5 => {
                     let mut matrix = [0.0; 6];
                     for value in &mut matrix {
                         *value = reader.value()? as f64;
                     }
-                    let next = state.transform * Affine::new(matrix);
+                    let next = self.state.transform * Affine::new(matrix);
                     if next
                         .as_coeffs()
                         .iter()
@@ -233,37 +273,42 @@ impl Picture {
                     {
                         return Err(invalid("transform exceeds the drawing coordinate range"));
                     }
-                    state.transform = next;
+                    self.state.transform = next;
                 }
                 6 => {
-                    if state.clips.len() >= 64 {
+                    if self.state.clips.len() >= 64 {
                         return Err(invalid("too many nested drawing clips"));
                     }
-                    state.clips.push(state.transform * reader.path()?);
+                    let clip = self.state.transform * reader.path()?;
+                    self.state.clips.push(clip);
                 }
                 7 => {
                     let opacity = reader.value()?;
-                    if !(0.0..=1.0).contains(&opacity) || stack.len() >= 64 {
+                    if !(0.0..=1.0).contains(&opacity) || self.stack.len() >= 64 {
                         return Err(invalid("invalid layer opacity or layer depth"));
                     }
-                    stack.push((state.clone(), true));
-                    groups.push(Group {
+                    self.stack.push((self.state.clone(), true));
+                    let group = Group {
                         opacity,
                         blend: reader.blend()?,
                         effects: reader.effects()?,
-                        clips: state.clips.clone(),
+                        clips: self.state.clips.clone(),
                         commands: Vec::new(),
-                    });
+                    };
+                    self.groups.push(group);
                     // Inherited clips bound the composite, not both the source and its edges.
-                    state.clips.clear();
+                    self.state.clips.clear();
                 }
                 8 => {
-                    backdrops += 1;
-                    if backdrops > 8 {
-                        return Err(invalid("a picture supports at most eight backdrop panels"));
+                    self.backdrops += 1;
+                    if self.backdrops > crate::MAX_BACKDROPS {
+                        return Err(invalid(&format!(
+                            "a picture supports at most {} backdrop panels",
+                            crate::MAX_BACKDROPS
+                        )));
                     }
-                    let mut clips = state.clips.clone();
-                    clips.push(state.transform * reader.path()?);
+                    let mut clips = self.state.clips.clone();
+                    clips.push(self.state.transform * reader.path()?);
                     let sigma = reader.value()?;
                     if !(0.0..=128.0).contains(&sigma) {
                         return Err(invalid(
@@ -285,12 +330,8 @@ impl Picture {
                             image: crate::noise::tile(low | (high << 16)),
                         })
                     };
-                    let group = groups
-                        .last_mut()
-                        .ok_or_else(|| invalid("missing drawing group"))?;
-                    let prefix = Arc::from(group.commands.clone());
-                    group.commands.push(Command::Backdrop {
-                        prefix,
+                    self.group()?.commands.push(Command::Backdrop {
+                        prefix: Arc::from([]),
                         clips,
                         sigma,
                         tint,
@@ -316,24 +357,21 @@ impl Picture {
                         return Err(invalid("image opacity must be in 0..1"));
                     }
                     let nearest = reader.count(1)? == 1;
-                    groups
-                        .last_mut()
-                        .ok_or_else(|| invalid("missing drawing group"))?
-                        .commands
-                        .push(Command::Image(Box::new(ImageCommand {
-                            image: image.clone(),
-                            source,
-                            target,
-                            opacity,
-                            nearest,
-                            transform: state.transform,
-                            clips: state.clips.clone(),
-                        })));
+                    let command = Command::Image(Box::new(ImageCommand {
+                        image: image.clone(),
+                        source,
+                        target,
+                        opacity,
+                        nearest,
+                        transform: self.state.transform,
+                        clips: self.state.clips.clone(),
+                    }));
+                    self.group()?.commands.push(command);
                 }
                 opcode @ (10 | 11) => {
                     let layout = if opcode == 10 {
-                        let text = reader.string(65536)?;
-                        let family = reader.string(1024)?;
+                        let text = self.text(&mut reader, text_base, 65536)?;
+                        let family = self.text(&mut reader, text_base, 1024)?;
                         let size = reader.value()?;
                         let weight = reader.value()?;
                         let width = reader.value()?;
@@ -350,25 +388,110 @@ impl Picture {
                     };
                     let origin = reader.point()?;
                     let color = reader.color()?;
-                    groups
-                        .last_mut()
-                        .ok_or_else(|| invalid("missing drawing group"))?
-                        .commands
-                        .push(Command::Text {
-                            layout,
+                    let command = Command::Text {
+                        layout,
+                        color,
+                        transform: self.state.transform * Affine::translate((origin.x, origin.y)),
+                        clips: self.state.clips.clone(),
+                    };
+                    self.group()?.commands.push(command);
+                }
+                13 => {
+                    let origin = reader.point()?;
+                    let size = reader.point()?;
+                    let radius = reader.value()?;
+                    let offset = reader.point()?;
+                    let sigma = reader.value()?;
+                    let spread = f64::from(reader.value()?);
+                    let color = reader.color()?;
+                    if size.x < 0.0
+                        || size.y < 0.0
+                        || radius < 0.0
+                        || !(0.0..=128.0).contains(&sigma)
+                    {
+                        return Err(invalid(
+                            "box shadow needs a non-negative size and radius and sigma in 0..128",
+                        ));
+                    }
+                    let rect = vello_common::kurbo::Rect::from_origin_size(
+                        origin + offset.to_vec2(),
+                        (size.x, size.y),
+                    )
+                    .inflate(spread, spread);
+                    if rect.width() <= 0.0 || rect.height() <= 0.0 {
+                        continue;
+                    }
+                    let radius = (f64::from(radius) + spread).max(0.0) as f32;
+                    let command = if sigma == 0.0 {
+                        Command::Draw(Box::new(DrawCommand {
+                            path: vello_common::kurbo::RoundedRect::from_rect(
+                                rect,
+                                f64::from(radius),
+                            )
+                            .to_path(0.1),
+                            brush: Brush::Solid(color),
+                            stroke: None,
+                            fill: Fill::NonZero,
+                            transform: self.state.transform,
+                            clips: self.state.clips.clone(),
+                        }))
+                    } else {
+                        Command::BoxShadow {
+                            rect,
+                            radius,
+                            sigma,
                             color,
-                            transform: state.transform * Affine::translate((origin.x, origin.y)),
-                            clips: state.clips.clone(),
-                        });
+                            transform: self.state.transform,
+                            clips: self.state.clips.clone(),
+                        }
+                    };
+                    self.group()?.commands.push(command);
+                }
+                12 => {
+                    if depth >= 8 {
+                        return Err(invalid("pictures nest at most 8 levels"));
+                    }
+                    let resource_base = reader.count(65535)?;
+                    let nested_text = reader.count(16_777_216)?;
+                    let width = reader.value()?;
+                    let height = reader.value()?;
+                    if width <= 0.0 || height <= 0.0 {
+                        return Err(invalid("nested picture dimensions must be positive"));
+                    }
+                    let length = reader.count(values.len() - reader.offset)?;
+                    let nested = &values[reader.offset..reader.offset + length];
+                    reader.offset += length;
+                    let nested_assets = assets
+                        .get(resource_base..)
+                        .ok_or_else(|| invalid("nested picture resources are missing"))?;
+                    let saved = self.state.clone();
+                    if self.state.clips.len() >= 64 {
+                        return Err(invalid("too many nested drawing clips"));
+                    }
+                    let bounds = vello_common::kurbo::Rect::new(
+                        0.0,
+                        0.0,
+                        f64::from(width),
+                        f64::from(height),
+                    );
+                    self.state
+                        .clips
+                        .push(self.state.transform * bounds.to_path(0.1));
+                    self.run(
+                        nested,
+                        nested_assets,
+                        text_base + nested_text,
+                        Some((f64::from(width), f64::from(height))),
+                        depth + 1,
+                    )?;
+                    self.state = saved;
                 }
                 _ => unreachable!(),
             }
         }
-        if !stack.is_empty() {
+        if self.stack.len() != entry {
             return Err(invalid("unbalanced canvas save/restore"));
         }
-        Ok(Self {
-            commands: groups.remove(0).commands,
-        })
+        Ok(())
     }
 }

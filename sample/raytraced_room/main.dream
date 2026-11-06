@@ -238,7 +238,7 @@ async fun run_room(window: Window): Result<Unit, GpuError> {
 }
 
 async fun main(): void {
-    switch (Window.open(WindowDesc("ION | Neon district", 960, 600).resizable(true).vsync(true))) {
+    switch (Window.open(WindowOptions("ION | Neon district", 960, 600).resizable(true).vsync(true))) {
         Ok(window) => {
             switch (run_room(window).await) {
                 Ok(_) => {}

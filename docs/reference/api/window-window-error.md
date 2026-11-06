@@ -22,7 +22,7 @@ public constructor(code: string, message: string)
 
 ## `code`
 
-The machine-readable reason. `ENODISPLAY` means no display is available, such as on a server, under Node, or when the platform window system failed to start. `ETHREAD` means the call came from a `Task` worker instead of the program's main thread, the only thread allowed to own windows. `ENOTFOUND` means `Window.canvas` found no `<canvas>` element with that id. `EINVAL` means the description has a non-positive size. `EWINDOW` means the platform refused to create the window.
+The machine-readable reason. `ENODISPLAY` means no display is available, such as on a server, under Node, or when the platform window system failed to start. `ETHREAD` means the call came from a `Task` worker instead of the program's main thread, the only thread allowed to own windows. `ENOTFOUND` means `Window.canvas` found no `<canvas>` element with that id. `EINVAL` means the window options have a non-positive size. `EWINDOW` means the platform refused to create the window.
 
 ```dream
 public fun code(): string

@@ -1,0 +1,318 @@
+module system.app;
+
+// The single process-wide lifetime. Host events and `Application.simulate` both go through
+// `deliver`, so they share the same transition checks.
+internal class AppState {
+    internal running: bool;
+    internal base_phase: AppPhase;
+    internal asleep: bool;
+    internal exit_code: int;
+    internal stop_source: CancellationSource;
+    internal stop_clock: Stopwatch;
+    internal next_id: int;
+
+    internal session_locked: bool;
+    internal displays_on: bool;
+    internal active: bool;
+    internal power: PowerSource;
+    internal theme: SystemTheme;
+
+    internal stops: HookList<fun(): Future<void>>;
+    internal shutdown_hooks: HookList<fun(ShutdownRequest): void>;
+    internal sleep_hooks: HookList<fun(): void>;
+    internal wake_hooks: HookList<fun(int): void>;
+    internal lock_hooks: HookList<fun(bool): void>;
+    internal display_hooks: HookList<fun(bool): void>;
+    internal active_hooks: HookList<fun(bool): void>;
+    internal power_hooks: HookList<fun(PowerSource): void>;
+    internal theme_hooks: HookList<fun(SystemTheme): void>;
+    internal locale_hooks: HookList<fun(): void>;
+    internal memory_hooks: HookList<fun(): void>;
+
+    public constructor() {
+        this.running = false;
+        this.base_phase = AppPhase.Starting;
+        this.asleep = false;
+        this.exit_code = 0;
+        this.stop_source = CancellationSource();
+        this.stop_clock = Stopwatch();
+        this.next_id = 1;
+        this.session_locked = false;
+        this.displays_on = true;
+        this.active = true;
+        this.power = PowerSource.Unknown;
+        this.theme = SystemTheme.Light;
+        this.stops = HookList<fun(): Future<void>>();
+        this.shutdown_hooks = HookList<fun(ShutdownRequest): void>();
+        this.sleep_hooks = HookList<fun(): void>();
+        this.wake_hooks = HookList<fun(int): void>();
+        this.lock_hooks = HookList<fun(bool): void>();
+        this.display_hooks = HookList<fun(bool): void>();
+        this.active_hooks = HookList<fun(bool): void>();
+        this.power_hooks = HookList<fun(PowerSource): void>();
+        this.theme_hooks = HookList<fun(SystemTheme): void>();
+        this.locale_hooks = HookList<fun(): void>();
+        this.memory_hooks = HookList<fun(): void>();
+    }
+
+    internal fun begin(): void {
+        this.running = true;
+        this.base_phase = AppPhase.Starting;
+        this.asleep = false;
+        this.exit_code = 0;
+        this.stop_source = CancellationSource();
+        let locked = AppHost.query(0);
+        if locked >= 0 {
+            this.session_locked = locked != 0;
+        }
+        let displays = AppHost.query(1);
+        if displays >= 0 {
+            this.displays_on = displays != 0;
+        }
+        let active = AppHost.query(2);
+        if active >= 0 {
+            this.active = active != 0;
+        }
+        let power = AppHost.query(3);
+        if power >= 0 {
+            this.power = AppState.power_from(power);
+        }
+        let theme = AppHost.query(4);
+        if theme >= 0 {
+            this.theme = AppState.theme_from(theme);
+        }
+    }
+
+    // Hooks belong to one run; a later `run` starts with none registered, and code after
+    // `run` sees a fresh, uncancelled `stopping` token.
+    internal fun finish(): void {
+        this.running = false;
+        this.base_phase = AppPhase.Starting;
+        this.asleep = false;
+        this.stop_source = CancellationSource();
+        this.stops.clear();
+        this.shutdown_hooks.clear();
+        this.sleep_hooks.clear();
+        this.wake_hooks.clear();
+        this.lock_hooks.clear();
+        this.display_hooks.clear();
+        this.active_hooks.clear();
+        this.power_hooks.clear();
+        this.theme_hooks.clear();
+        this.locale_hooks.clear();
+        this.memory_hooks.clear();
+    }
+
+    internal get is_stopping(): bool {
+        return this.base_phase == AppPhase.Stopping;
+    }
+
+    internal get phase(): AppPhase {
+        if this.base_phase == AppPhase.Stopping {
+            return AppPhase.Stopping;
+        }
+        if this.asleep {
+            return AppPhase.Asleep;
+        }
+        return this.base_phase;
+    }
+
+    // Milliseconds of the shutdown budget left since shutdown began.
+    internal fun remaining_ms(budget_ms: int): int {
+        let remaining = budget_ms - (int)this.stop_clock.elapsed_ms;
+        if remaining < 0 {
+            return 0;
+        }
+        return remaining;
+    }
+
+    internal fun take_id(): int {
+        let id = this.next_id;
+        this.next_id = this.next_id + 1;
+        return id;
+    }
+
+    internal fun unsubscribe(id: int): void {
+        this.stops.remove(id);
+        this.shutdown_hooks.remove(id);
+        this.sleep_hooks.remove(id);
+        this.wake_hooks.remove(id);
+        this.lock_hooks.remove(id);
+        this.display_hooks.remove(id);
+        this.active_hooks.remove(id);
+        this.power_hooks.remove(id);
+        this.theme_hooks.remove(id);
+        this.locale_hooks.remove(id);
+        this.memory_hooks.remove(id);
+    }
+
+    // `stopping` cancels exactly once, before any cleanup runs.
+    internal fun begin_stop(code: int): void {
+        if this.base_phase == AppPhase.Stopping {
+            return;
+        }
+        this.base_phase = AppPhase.Stopping;
+        this.exit_code = code;
+        this.stop_clock.restart();
+        this.stop_source.cancel();
+    }
+
+    internal fun request_shutdown(reason: ShutdownReason, vetoable: bool, code: int): bool {
+        if this.is_stopping {
+            return false;
+        }
+        let request = ShutdownRequest(reason, vetoable);
+        let ids = this.shutdown_hooks.snapshot_ids();
+        let hooks = this.shutdown_hooks.snapshot();
+        for (let i = 0; i < hooks.length; i = i + 1) {
+            if this.shutdown_hooks.contains(ids[i]) {
+                let hook = hooks[i];
+                hook(request);
+            }
+        }
+        if request.is_vetoed {
+            return false;
+        }
+        this.begin_stop(code);
+        return true;
+    }
+
+    internal fun deliver(event: AppEvent): bool {
+        if this.is_stopping {
+            return false;
+        }
+        switch (event) {
+            ShutdownRequested(reason) => {
+                return this.request_shutdown(
+                    reason,
+                    AppState.vetoable(reason),
+                    AppState.exit_code_for(reason)
+                );
+            }
+            Sleeping => {
+                if this.asleep {
+                    return false;
+                }
+                this.asleep = true;
+                this.fire_unit(this.sleep_hooks);
+                return true;
+            }
+            Woke(slept_ms) => {
+                if !this.asleep {
+                    return false;
+                }
+                this.asleep = false;
+                this.fire(this.wake_hooks, slept_ms);
+                return true;
+            }
+            SessionLock(locked) => {
+                if this.session_locked == locked {
+                    return false;
+                }
+                this.session_locked = locked;
+                this.fire(this.lock_hooks, locked);
+                return true;
+            }
+            DisplayPower(on) => {
+                if this.displays_on == on {
+                    return false;
+                }
+                this.displays_on = on;
+                this.fire(this.display_hooks, on);
+                return true;
+            }
+            Active(active) => {
+                if this.active == active {
+                    return false;
+                }
+                this.active = active;
+                this.fire(this.active_hooks, active);
+                return true;
+            }
+            PowerSourceChanged(source) => {
+                if this.power == source {
+                    return false;
+                }
+                this.power = source;
+                this.fire(this.power_hooks, source);
+                return true;
+            }
+            ThemeChanged(theme) => {
+                if this.theme == theme {
+                    return false;
+                }
+                this.theme = theme;
+                this.fire(this.theme_hooks, theme);
+                return true;
+            }
+            LocaleChanged => {
+                this.fire_unit(this.locale_hooks);
+                return true;
+            }
+            LowMemory => {
+                this.fire_unit(this.memory_hooks);
+                return true;
+            }
+        }
+    }
+
+    fun fire<T>(borrow list: HookList<fun(T): void>, value: T): void {
+        let ids = list.snapshot_ids();
+        let hooks = list.snapshot();
+        for (let i = 0; i < hooks.length; i = i + 1) {
+            if list.contains(ids[i]) {
+                let hook = hooks[i];
+                hook(value);
+            }
+        }
+    }
+
+    fun fire_unit(borrow list: HookList<fun(): void>): void {
+        let ids = list.snapshot_ids();
+        let hooks = list.snapshot();
+        for (let i = 0; i < hooks.length; i = i + 1) {
+            if list.contains(ids[i]) {
+                let hook = hooks[i];
+                hook();
+            }
+        }
+    }
+
+    internal static fun vetoable(reason: ShutdownReason): bool {
+        return reason == ShutdownReason.OsQuit
+            || reason == ShutdownReason.SessionEnding
+            || reason == ShutdownReason.LastWindowClosed;
+    }
+
+    internal static fun exit_code_for(reason: ShutdownReason): int {
+        if reason == ShutdownReason.Interrupt {
+            return 130;
+        }
+        if reason == ShutdownReason.Terminate {
+            return 143;
+        }
+        return 0;
+    }
+
+    internal static fun power_from(value: int): PowerSource {
+        if value == 1 {
+            return PowerSource.Ac;
+        }
+        if value == 2 {
+            return PowerSource.Battery;
+        }
+        return PowerSource.Unknown;
+    }
+
+    internal static fun theme_from(value: int): SystemTheme {
+        if value == 1 {
+            return SystemTheme.Dark;
+        }
+        if value == 2 {
+            return SystemTheme.HighContrast;
+        }
+        return SystemTheme.Light;
+    }
+}
+
+internal let APP: AppState = AppState();

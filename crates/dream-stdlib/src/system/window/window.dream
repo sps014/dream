@@ -21,18 +21,24 @@ public class Window {
     cursor: CursorMode;
     simulated: List<WindowEvent>;
     tracker: InputTracker;
+    minimized: bool;
+    occluded: bool;
+    headless_scale: float;
 
-    constructor(handle: int, headless: bool, desc: WindowDesc) {
+    constructor(handle: int, headless: bool, options: WindowOptions) {
         this.handle = handle;
         this.headless = headless;
         this.open = true;
-        this.window_title = desc.title;
-        this.fullscreen = desc.is_fullscreen;
-        this.logical = WindowSize(desc.width, desc.height);
-        this.vsync = desc.wants_vsync;
+        this.window_title = options.title;
+        this.fullscreen = options.is_fullscreen;
+        this.logical = WindowSize(options.width, options.height);
+        this.vsync = options.wants_vsync;
         this.cursor = CursorMode.Normal;
         this.simulated = List<WindowEvent>();
         this.tracker = InputTracker();
+        this.minimized = false;
+        this.occluded = false;
+        this.headless_scale = 1.0f;
     }
 
     @runtime("windowOpen")
@@ -69,21 +75,21 @@ public class Window {
     @runtime("windowSetCursorIcon")
     static extern fun set_cursor_icon_host(handle: int, icon: int): void;
 
-    /// Opens a native window described by `desc` and shows it.
+    /// Opens a native window configured by `options` and shows it.
     ///
     /// In a browser this creates a `<canvas>` of the requested size at the end of the
     /// page and uses the title as the page title. Under Node, on a machine without a
     /// display, or when called from a `Task` worker, it returns a `WindowError`; see
     /// `WindowError.code` for the reasons.
-    public static fun open(desc: WindowDesc): Result<Window, WindowError> {
-        if desc.width <= 0 || desc.height <= 0 {
+    public static fun open(options: WindowOptions): Result<Window, WindowError> {
+        if options.width <= 0 || options.height <= 0 {
             return Result.Err(WindowError("EINVAL", "window width and height must be positive"));
         }
-        let handle = Window.open_host(desc.title, desc.width, desc.height, desc.flags());
+        let handle = Window.open_host(options.title, options.width, options.height, options.flags());
         if handle <= 0 {
             return Result.Err(Window.last_error());
         }
-        return Result.Ok(Window(handle, false, desc));
+        return Result.Ok(Window(handle, false, options));
     }
 
     /// Uses the page's `<canvas>` element whose `id` attribute is `id` as a window.
@@ -98,15 +104,15 @@ public class Window {
         if handle <= 0 {
             return Result.Err(Window.last_error());
         }
-        return Result.Ok(Window(handle, false, WindowDesc("", 1, 1)));
+        return Result.Ok(Window(handle, false, WindowOptions("", 1, 1)));
     }
 
     /// Creates a window that exists only in memory. It never appears on screen and
     /// receives only the events passed to `simulate`, so tests, replays and servers can
     /// run input-driven code on machines without a display. Its pixel size equals its
     /// logical size, and simulated `Resized` events change both.
-    public static fun headless(desc: WindowDesc): Window {
-        return Window(0, true, desc);
+    public static fun headless(options: WindowOptions): Window {
+        return Window(0, true, options);
     }
 
     static fun last_error(): WindowError {
@@ -129,7 +135,7 @@ public class Window {
         return this.open;
     }
 
-    /// The title last set by the `WindowDesc` constructor or `set_title`. Canvas windows start with
+    /// The title last set by the `WindowOptions` constructor or `set_title`. Canvas windows start with
     /// an empty title.
     public get title(): string {
         return this.window_title;
@@ -151,7 +157,7 @@ public class Window {
         return this.tracker.focused;
     }
 
-    /// The content area's size in logical pixels, the units of the `WindowDesc` constructor,
+    /// The content area's size in logical pixels, the units of the `WindowOptions` constructor,
     /// `set_size` and mouse positions.
     public get size(): WindowSize {
         if this.handle > 0 {
@@ -170,7 +176,8 @@ public class Window {
     }
 
     /// Physical pixels per logical pixel on the window's current monitor: `1.0` on
-    /// standard displays and `2.0` on most high-DPI displays.
+    /// standard displays and `2.0` on most high-DPI displays. Headless windows start at
+    /// `1.0` and follow simulated `WindowEvent.ScaleChanged` events.
     public get scale_factor(): float {
         if this.handle > 0 {
             let scale = this.query(4);
@@ -178,7 +185,19 @@ public class Window {
                 return scale;
             }
         }
-        return 1.0f;
+        return this.headless_scale;
+    }
+
+    /// True between a `WindowEvent.Minimized` and the next `WindowEvent.Restored`, as
+    /// delivered by `poll`.
+    public get is_minimized(): bool {
+        return this.minimized;
+    }
+
+    /// True after `poll` delivered `WindowEvent.Occluded(true)`, until it delivers
+    /// `Occluded(false)`. Stays false on platforms that cannot detect occlusion.
+    public get is_occluded(): bool {
+        return this.occluded;
     }
 
     /// The cursor mode last set with `set_cursor_mode`; starts as `CursorMode.Normal`.
@@ -211,13 +230,27 @@ public class Window {
         for (let i = 0; i < events.length; i = i + 1) {
             let event = events[i];
             this.tracker.apply(event);
-            if this.headless {
-                switch (event) {
-                    Resized(size) => {
+            switch (event) {
+                Resized(size) => {
+                    if this.headless {
                         this.logical = size;
                     }
-                    _ => {}
                 }
+                Minimized => {
+                    this.minimized = true;
+                }
+                Restored => {
+                    this.minimized = false;
+                }
+                Occluded(hidden) => {
+                    this.occluded = hidden;
+                }
+                ScaleChanged(factor) => {
+                    if this.headless && factor > 0.0f {
+                        this.headless_scale = factor;
+                    }
+                }
+                _ => {}
             }
         }
         if this.tracker.close_requested {

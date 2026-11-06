@@ -1,0 +1,57 @@
+module system.app;
+
+// Registration-ordered callbacks keyed by subscription id.
+internal class HookList<F> {
+    ids: List<int>;
+    callbacks: List<F>;
+
+    internal constructor() {
+        this.ids = List<int>();
+        this.callbacks = List<F>();
+    }
+
+    internal fun add(id: int, callback: F): void {
+        this.ids.push(id);
+        this.callbacks.push(callback);
+    }
+
+    internal fun remove(id: int): void {
+        for (let i = 0; i < this.ids.length; i = i + 1) {
+            if this.ids[i] == id {
+                this.ids.remove_at(i);
+                this.callbacks.remove_at(i);
+                return;
+            }
+        }
+    }
+
+    internal fun contains(id: int): bool {
+        return this.ids.contains(id);
+    }
+
+    // Delivery iterates a copy, so hooks may subscribe or cancel while an event is delivered.
+    internal fun snapshot_ids(): List<int> {
+        return this.ids.clone();
+    }
+
+    internal fun snapshot(): List<F> {
+        return this.callbacks.clone();
+    }
+
+    internal fun pop(): Option<F> {
+        if this.ids.length == 0 {
+            return Option.None;
+        }
+        this.ids.pop();
+        return this.callbacks.pop();
+    }
+
+    internal get length(): int {
+        return this.ids.length;
+    }
+
+    internal fun clear(): void {
+        this.ids.clear();
+        this.callbacks.clear();
+    }
+}

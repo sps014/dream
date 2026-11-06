@@ -25,7 +25,7 @@ pub const WINDOW_PLATFORM_WAYLAND: u32 = 4;
 #[derive(Clone, Copy, Debug)]
 pub struct WindowSurface {
     pub platform: u32,
-    /// `1` when the window was created with `WindowDesc.vsync(true)`.
+    /// `1` when the window was created with `WindowOptions.vsync(true)`.
     pub vsync: u32,
     pub window: *mut c_void,
     pub display: *mut c_void,

@@ -27,6 +27,8 @@ export function makeDrawingHost(getInstance) {
   };
   let engine;
   let error = "";
+  // Synchronous text queries need the engine; start loading it before the first async call.
+  loadDrawingEngine().then(module => { engine ??= module; }, () => {});
   const guard = (fallback, body) => (...args) => {
     try { return body(...args); }
     catch (failure) { error = failure.message || String(failure); return fallback; }
@@ -43,7 +45,7 @@ export function makeDrawingHost(getInstance) {
       } catch (failure) { error = failure.message || String(failure); return 0; }
     },
     drawingLastError: () => error,
-    drawingRender: guard(0, (handle, values, assets) => { engine.render(handle, new Float32Array(values), new Int32Array(assets)); return 1; }),
+    drawingRender: guard(0, (handle, values, assets, text) => { engine.render(handle, new Float32Array(values), new Int32Array(assets), text); return 1; }),
     drawingPixels: async handle => {
       try { return await engine.pixels(handle); }
       catch (failure) { error = failure.message || String(failure); return []; }
@@ -68,6 +70,13 @@ export function makeDrawingHost(getInstance) {
     drawingTextCreate: asyncGuard(0, (text, family, size, weight, width, alignment) => engine.text_create(text, family, size, weight, width, alignment)),
     drawingFontRegister: asyncGuard("", bytes => engine.font_register(new Uint8Array(bytes))),
     drawingAssetMetrics: guard([], handle => engine.asset_metrics(handle)),
+    drawingTextMeasure: guard([], (text, family, size, weight, width, alignment) => {
+      if (!engine) throw new Error("EUNAVAILABLE\nthe drawing engine is still loading; await an async drawing call first");
+      return engine.text_measure(text, family, size, weight, width, alignment);
+    }),
+    drawingTextIndexAt: guard(0, (handle, x, y) => engine.text_index_at(handle, x, y)),
+    drawingTextCaret: guard([], (handle, index) => engine.text_caret(handle, index)),
+    drawingTextSelection: guard([], (handle, start, end) => engine.text_selection(handle, start, end)),
     drawingAssetRelease: guard(undefined, handle => engine.asset_release(handle)),
   };
 }

@@ -5,6 +5,7 @@ mod corpus;
 mod dap;
 mod format_cli;
 
+mod app_signals;
 mod attribute_resolution;
 mod build_cache;
 mod cli_download;

@@ -198,7 +198,7 @@ public class GpuDevice {
     }
 
     /// Connects the device to `window` so frames can be drawn into it. The surface
-    /// follows the window's vsync hint from `WindowDesc.vsync`. Headless and closed windows
+    /// follows the window's vsync hint from `WindowOptions.vsync`. Headless and closed windows
     /// return `GpuError.SurfaceLost`.
     public fun create_surface(window: Window): Result<GpuSurface, GpuError> {
         let window_handle = window.host_handle;

@@ -1,0 +1,325 @@
+module system.app;
+
+/// The lifetime of the whole program: startup, shutdown, and operating-system events such
+/// as sleep, session lock, and theme changes.
+///
+/// Wrap the program in `Application.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the
+/// `stopping` token is cancelled, `on_stop` cleanups run newest first, and `run` returns
+/// the exit code for `main` to return. Register hooks for the events you care about; each
+/// hook returns a `Subscription` that can remove it.
+///
+/// Hooks run on the program's main scheduler, one event at a time, in registration order.
+/// They are not awaited, so they must return promptly; start a task for longer work.
+public static class Application {
+    /// Runs the program. `start` performs startup and may register hooks and cleanups.
+    ///
+    /// After `start` returns `Ok`, the program keeps running until it is asked to stop:
+    /// by `quit`, Ctrl+C, `SIGTERM`, or an operating-system shutdown that no hook vetoes.
+    /// `start` may also keep running for the whole program, for example while serving
+    /// requests, as long as it returns once `stopping` is cancelled. When `start` returns
+    /// `Err`, the error is printed to standard error, cleanups registered so far run, and
+    /// the exit code is `1`.
+    ///
+    /// Shutdown cancels `stopping`, waits for `start` to return if it is still running,
+    /// then runs `on_stop` cleanups in reverse registration order. All of this shares
+    /// `shutdown_timeout_ms` milliseconds, counted from the start of shutdown: a `start` or
+    /// cleanup still running when the time is up is cancelled and reported, and the
+    /// remaining cleanups still run.
+    ///
+    /// Returns the exit code: the value given to `quit`, `130` after Ctrl+C, `143` after
+    /// `SIGTERM`, `1` after a failed `start`, and `0` otherwise. Calling `run` while another
+    /// `run` is active prints an error and returns `1`.
+    public static async fun run(
+        start: fun(): Future<Result<Unit, Error>>,
+        shutdown_timeout_ms: int = 5000
+    ): int {
+        if APP.running {
+            AppHost.report("error: Application.run is already running");
+            return 1;
+        }
+        AppHost.start(shutdown_timeout_ms);
+        APP.begin();
+        let pump = Application.pump();
+        Promise.start(pump);
+
+        let outcome = StartOutcome();
+        let starting = Application.finish_start(start, outcome);
+        let deadline = Application.expire_after_stop(shutdown_timeout_ms);
+        let finished = Promise.race([starting, deadline]).await;
+        Promise.cancel(starting);
+        Promise.cancel(deadline);
+        if !finished {
+            AppHost.report(
+                "warning: Application.run start did not return within the shutdown timeout "
+                    + "and was cancelled"
+            );
+        } else {
+            let result = outcome.result.unwrap();
+            if result.is_err() {
+                let error = result.unwrap_err();
+                AppHost.report("error: " + error.code() + ": " + error.message());
+                APP.begin_stop(1);
+                APP.exit_code = 1;
+            }
+        }
+        if !APP.is_stopping {
+            APP.base_phase = AppPhase.Running;
+            APP.stop_source.token.wait_cancelled().await;
+        }
+
+        Application.unwind(shutdown_timeout_ms).await;
+        AppHost.stop();
+        pump.await;
+        APP.finish();
+        return APP.exit_code;
+    }
+
+    static async fun finish_start(
+        start: fun(): Future<Result<Unit, Error>>,
+        outcome: StartOutcome
+    ): bool {
+        outcome.result = Option.Some(start().await);
+        return true;
+    }
+
+    static async fun expire_after_stop(budget_ms: int): bool {
+        APP.stop_source.token.wait_cancelled().await;
+        Time.delay(APP.remaining_ms(budget_ms)).await;
+        return false;
+    }
+
+    static async fun pump(): void {
+        while true {
+            let kind = AppHost.next_event().await;
+            if kind == 0 {
+                return;
+            }
+            Application.dispatch(kind, AppHost.event_value());
+        }
+    }
+
+    static fun dispatch(kind: int, value: int): void {
+        if kind == 1 {
+            APP.deliver(AppEvent.ShutdownRequested(ShutdownReason.Interrupt));
+        } else if kind == 2 {
+            APP.deliver(AppEvent.ShutdownRequested(ShutdownReason.Terminate));
+        } else if kind == 3 {
+            // 1 is the final notice; 0 asks whether the session may end and expects a reply.
+            if value == 1 {
+                APP.request_shutdown(ShutdownReason.SessionEnding, false, 0);
+            } else {
+                let accepted = APP.deliver(
+                    AppEvent.ShutdownRequested(ShutdownReason.SessionEnding)
+                );
+                if accepted {
+                    AppHost.reply(0);
+                } else {
+                    AppHost.reply(1);
+                }
+            }
+        } else if kind == 4 {
+            APP.deliver(AppEvent.Sleeping);
+            AppHost.reply(1);
+        } else if kind == 5 {
+            APP.deliver(AppEvent.Woke(value));
+        } else if kind == 6 {
+            APP.deliver(AppEvent.DisplayPower(value != 0));
+        } else if kind == 7 {
+            APP.deliver(AppEvent.SessionLock(value != 0));
+        } else if kind == 8 {
+            APP.deliver(AppEvent.Active(value != 0));
+        } else if kind == 9 {
+            APP.deliver(AppEvent.PowerSourceChanged(AppState.power_from(value)));
+        } else if kind == 10 {
+            APP.deliver(AppEvent.ThemeChanged(AppState.theme_from(value)));
+        } else if kind == 11 {
+            APP.deliver(AppEvent.LocaleChanged);
+        } else if kind == 12 {
+            APP.deliver(AppEvent.LowMemory);
+        }
+    }
+
+    static async fun unwind(budget_ms: int): void {
+        while APP.stops.length > 0 {
+            let cleanup = APP.stops.pop().unwrap();
+            let work = Application.finish_cleanup(cleanup);
+            let timer = Application.expire(APP.remaining_ms(budget_ms));
+            let finished = Promise.race([work, timer]).await;
+            Promise.cancel(work);
+            Promise.cancel(timer);
+            if !finished {
+                AppHost.report(
+                    "warning: an Application.on_stop cleanup did not finish within "
+                        + budget_ms.to_string()
+                        + " ms and was cancelled"
+                );
+            }
+        }
+    }
+
+    static async fun finish_cleanup(cleanup: fun(): Future<void>): bool {
+        cleanup().await;
+        return true;
+    }
+
+    static async fun expire(ms: int): bool {
+        Time.delay(ms).await;
+        return false;
+    }
+
+    /// Registers `cleanup` to run during shutdown. Cleanups run newest first, so register
+    /// each one right after acquiring the resource it releases. A cleanup registered during
+    /// startup also runs when startup fails or is cancelled.
+    ///
+    /// Returns `Err(AppError)` with code `ESTOPPING` once shutdown has begun, because the
+    /// cleanup would never run.
+    public static fun on_stop(cleanup: fun(): Future<void>): Result<Subscription, AppError> {
+        if APP.is_stopping {
+            return Result.Err(
+                AppError("ESTOPPING", "shutdown already began; the cleanup would never run")
+            );
+        }
+        let id = APP.take_id();
+        APP.stops.add(id, cleanup);
+        return Result.Ok(Subscription(id));
+    }
+
+    /// Runs `hook` when something asks the program to stop: Ctrl+C, `SIGTERM`, `quit`, an
+    /// operating-system quit, or the user session ending. Call `ShutdownRequest.veto` to
+    /// keep running when the request allows it. Only the first accepted request is
+    /// delivered; later requests are ignored once shutdown begins.
+    public static fun on_shutdown_requested(hook: fun(ShutdownRequest): void): Subscription {
+        let id = APP.take_id();
+        APP.shutdown_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` just before the computer sleeps. Save anything that must survive a
+    /// power loss, quickly: the operating system waits at most about half a second.
+    public static fun on_sleep(hook: fun(): void): Subscription {
+        let id = APP.take_id();
+        APP.sleep_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` after the computer wakes, with how long it slept in milliseconds, or
+    /// `-1` when the platform cannot tell. Measure gaps with this value: wall-clock time
+    /// can jump across sleep.
+    public static fun on_wake(hook: fun(int): void): Subscription {
+        let id = APP.take_id();
+        APP.wake_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` with `true` when the user session is locked, or another user switches
+    /// in, and with `false` when it is unlocked again. Use it to hide sensitive content.
+    /// Never fires in browsers, Node, or on Linux.
+    public static fun on_session_lock(hook: fun(bool): void): Subscription {
+        let id = APP.take_id();
+        APP.lock_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` with `false` when the displays go to sleep and `true` when they turn
+    /// back on. The computer and the program keep running meanwhile. Never fires in
+    /// browsers, Node, or on Linux.
+    public static fun on_display_power(hook: fun(bool): void): Subscription {
+        let id = APP.take_id();
+        APP.display_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` with `true` when the app comes to the foreground and `false` when it
+    /// goes to the background: when every window lost focus natively, or when the browser
+    /// tab is hidden. Programs without windows stay active.
+    public static fun on_active(hook: fun(bool): void): Subscription {
+        let id = APP.take_id();
+        APP.active_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` when the computer switches between wall power and battery.
+    public static fun on_power_source(hook: fun(PowerSource): void): Subscription {
+        let id = APP.take_id();
+        APP.power_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` when the user changes the system color scheme.
+    public static fun on_theme(hook: fun(SystemTheme): void): Subscription {
+        let id = APP.take_id();
+        APP.theme_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` when the user changes the system language or regional formats, so
+    /// cached formatted text can be rebuilt.
+    public static fun on_locale(hook: fun(): void): Subscription {
+        let id = APP.take_id();
+        APP.locale_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// Runs `hook` when the operating system reports that memory is running low. Drop
+    /// caches that can be rebuilt. Repeated warnings that arrive together run the hook once.
+    public static fun on_low_memory(hook: fun(): void): Subscription {
+        let id = APP.take_id();
+        APP.memory_hooks.add(id, hook);
+        return Subscription(id);
+    }
+
+    /// A token that is cancelled once, when shutdown begins and before any `on_stop`
+    /// cleanup runs. Loops check `is_cancelled`; waits take it as their `token` argument.
+    /// Outside `Application.run` the token is never cancelled.
+    public static get stopping(): CancellationToken {
+        return APP.stop_source.token;
+    }
+
+    /// Stops the program with exit code `code`. `on_shutdown_requested` hooks see the
+    /// reason `Requested`, which cannot be vetoed.
+    /// Does nothing once shutdown has begun or when no `run` is active.
+    public static fun quit(code: int = 0): void {
+        if !APP.running {
+            return;
+        }
+        APP.request_shutdown(ShutdownReason.Requested, false, code);
+    }
+
+    /// Where the program is in its lifetime. Intended for diagnostics and tests.
+    public static get phase(): AppPhase {
+        return APP.phase;
+    }
+
+    /// True while the user session is locked or switched away from.
+    public static get is_session_locked(): bool {
+        return APP.session_locked;
+    }
+
+    /// False while the displays are asleep. True when the platform cannot tell.
+    public static get are_displays_on(): bool {
+        return APP.displays_on;
+    }
+
+    /// True while the app is in the foreground. See `on_active`.
+    public static get is_active(): bool {
+        return APP.active;
+    }
+
+    /// The current power source. Read when `run` starts and kept current afterwards.
+    public static get power_source(): PowerSource {
+        return APP.power;
+    }
+
+    /// The current system color scheme. Read when `run` starts and kept current afterwards.
+    public static get theme(): SystemTheme {
+        return APP.theme;
+    }
+
+    /// Delivers `event` as if the operating system had reported it, for tests. Hooks run
+    /// before `simulate` returns. Returns false when the event was ignored: a duplicate
+    /// (for example `Woke` while not asleep, or locking an already locked session), any
+    /// event after shutdown began, or a vetoed shutdown request.
+    public static fun simulate(event: AppEvent): bool {
+        return APP.deliver(event);
+    }
+}

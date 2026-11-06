@@ -64,6 +64,9 @@ struct Entry {
     vsync: bool,
     /// Windowed position and size to restore when leaving fullscreen.
     restore: (i32, i32, i32, i32),
+    /// Occlusion last reported through the wire.
+    occluded: bool,
+    focused: bool,
 }
 
 struct Host {
@@ -71,6 +74,8 @@ struct Host {
     windows: BTreeMap<i32, Entry>,
     next_id: i32,
     cursors: [*mut ffi::GLFWcursor; CURSOR_SHAPES.len()],
+    /// Whether any window had focus at the last report to `Application.on_active`.
+    any_focused: bool,
 }
 
 thread_local! {
@@ -105,6 +110,7 @@ pub fn initialize(platform: Platform) -> Result<(), HostError> {
             windows: BTreeMap::new(),
             next_id: 1,
             cursors: [std::ptr::null_mut(); CURSOR_SHAPES.len()],
+            any_focused: true,
         });
         Ok(())
     })
@@ -200,6 +206,8 @@ pub fn open(title: &str, width: i32, height: i32, flags: i32) -> Result<i32, Hos
                 pads: 0,
                 vsync: flags & FLAG_VSYNC != 0,
                 restore: (100, 100, width, height),
+                occluded: false,
+                focused: true,
             },
         );
         Ok(id)
@@ -212,6 +220,7 @@ pub fn close(id: i32) {
         if host.windows.remove(&id).is_some() && host.windows.is_empty() {
             dream_host_abi::set_scheduler_park(None);
         }
+        report_activity(host);
     });
 }
 
@@ -254,13 +263,32 @@ pub fn poll(id: i32) -> Vec<f32> {
         let mut out = Wire::default();
         let scale = coord_scale(&entry.window);
         let key_name = |key, scancode| glfw::get_key_name(Some(key), Some(scancode));
-        for (_, event) in glfw::flush_messages(&entry.events) {
-            wire::encode_event(&event, scale, &key_name, &mut out);
+        let events: Vec<WindowEvent> = glfw::flush_messages(&entry.events)
+            .map(|(_, event)| event)
+            .collect();
+        wire::encode_events(&events, scale, &key_name, &mut out);
+        for event in &events {
+            if let WindowEvent::Focus(focused) = event {
+                entry.focused = *focused;
+            }
+        }
+        if let Some(hidden) = crate::occlusion::is_hidden(&entry.window) {
+            wire::encode_occlusion(&mut entry.occluded, hidden, &mut out);
         }
         poll_gamepads(&host.glfw, entry, &mut out);
+        report_activity(host);
         out.into_values()
     })
     .unwrap_or_default()
+}
+
+/// The app is active while any of its windows has focus; only the edges are reported.
+fn report_activity(host: &mut Host) {
+    let any_focused = host.windows.values().any(|entry| entry.focused);
+    if any_focused != host.any_focused {
+        host.any_focused = any_focused;
+        dream_host_abi::report_app_activity(any_focused);
+    }
 }
 
 fn poll_gamepads(glfw: &Glfw, entry: &mut Entry, out: &mut Wire) {

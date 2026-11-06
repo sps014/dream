@@ -1,0 +1,16 @@
+module system.app;
+
+/// Where the program is in its lifetime, as reported by `Application.phase`.
+///
+/// Normal code does not need the phase: use the `Application.on_*` hooks and
+/// `Application.stopping` instead. It exists for diagnostics and tests.
+public enum AppPhase {
+    /// `Application.run` is running the `start` function.
+    Starting,
+    /// `start` finished successfully and no shutdown has begun.
+    Running,
+    /// The computer is asleep: `on_sleep` ran and `on_wake` has not run yet.
+    Asleep,
+    /// Shutdown began. `Application.stopping` is cancelled and `on_stop` cleanups run.
+    Stopping
+}

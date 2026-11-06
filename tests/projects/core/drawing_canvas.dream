@@ -39,6 +39,9 @@ async fun drawing_canvas(): void {
     Assert.is_true(surface.render(picture).is_err());
     Assert.is_true(surface.read_pixels().await.is_err());
     drawing_images_and_text().await;
+    drawing_text_queries().await;
+    drawing_composed_pictures().await;
+    drawing_shadows_and_panels().await;
     drawing_styles().await;
     drawing_effects().await;
     drawing_materials().await;
@@ -224,5 +227,91 @@ async fun drawing_materials(): void {
     Assert.eq((int)clipped[(8 * 128 + 8) * 4 + 3], 255);
     canvas.clear(Color.transparent);
     canvas.backdrop(Rect(0, 0, 128, 32), Backdrop.blur(0).noise(2));
+    Assert.is_true(surface.render(canvas).is_err());
+}
+
+async fun drawing_text_queries(): void {
+    let style = TextStyle(20, Color.white);
+    let layout = TextLayout.create("a😀b", style).await.unwrap();
+    let measured = TextLayout.measure("a😀b", style).unwrap();
+    Assert.eq(measured.width, layout.width);
+    Assert.eq(measured.height, layout.height);
+    Assert.eq(measured.line_count, 1);
+    Assert.eq(layout.line_count, 1);
+    Assert.is_true(layout.baseline > 0.0f);
+    Assert.is_true(layout.baseline < layout.height);
+
+    Assert.eq(layout.index_at(-10.0f, 5.0f), 0);
+    Assert.eq(layout.index_at(10000.0f, 5.0f), 4);
+    let start = layout.caret(0);
+    Assert.eq(start.width, 1.0f);
+    Assert.is_true(layout.caret(3).x > start.x);
+    Assert.eq(layout.caret(2).x, layout.caret(1).x);
+    Assert.eq(layout.selection(1, 3).length, 1);
+    Assert.eq(layout.selection(3, 1).length, 1);
+    Assert.eq(layout.selection(2, 2).length, 0);
+
+    let wrapped = TextStyle(20, Color.white);
+    wrapped.max_width = 50.0f;
+    let paragraph = TextLayout.measure("alpha beta gamma delta", wrapped).unwrap();
+    Assert.is_true(paragraph.line_count > 1);
+    Assert.is_true(paragraph.height > measured.height);
+    let lines = TextLayout.create("alpha beta gamma delta", wrapped).await.unwrap();
+    Assert.eq(lines.selection(0, 22).length, lines.line_count);
+
+    let invalid = TextStyle(0, Color.white);
+    Assert.is_true(TextLayout.measure("x", invalid).is_err());
+}
+
+async fun drawing_composed_pictures(): void {
+    let style = TextStyle(12, Color.white);
+    let badge = Canvas(16, 16);
+    badge.clear(Color.rgb(255, 0, 0));
+    badge.fill(
+        DrawingPath.rect(Rect(0, 0, 16, 16), CornerRadii(8, 0, 0, 0)),
+        Paint.solid(Color.rgb(0, 0, 255))
+    );
+    badge.fill_text("ok", 0, 0, style);
+    badge.fill_text("ok", 0, 0, style);
+    let tile = badge.finish().unwrap();
+
+    let canvas = Canvas(32, 32);
+    canvas.clear(Color.black);
+    canvas.fill_text("label", 0, 20, style);
+    canvas.translate(16, 16);
+    canvas.draw_picture(tile);
+    canvas.translate(-16, -16);
+    canvas.draw_picture(tile);
+    let surface = DrawingSurface.create(32, 32, DrawingBackend.Cpu).await.unwrap();
+    Assert.is_true(surface.render(canvas).is_ok());
+    let pixels = surface.read_pixels().await.unwrap();
+    Assert.eq((int)pixels[(16 * 32 + 16) * 4 + 2], 0);
+    Assert.eq((int)pixels[(16 * 32 + 16) * 4], 255);
+    Assert.eq((int)pixels[(31 * 32 + 31) * 4 + 2], 255);
+    Assert.eq((int)pixels[0], 255);
+    Assert.eq((int)pixels[2], 0);
+    Assert.eq((int)pixels[(0 * 32 + 15) * 4 + 2], 255);
+}
+
+async fun drawing_shadows_and_panels(): void {
+    let canvas = Canvas(32, 32);
+    canvas.clear(Color.white);
+    canvas.box_shadow(Rect(8, 8, 16, 16), 4, 0, 0, 3, Color.black);
+    let surface = DrawingSurface.create(32, 32, DrawingBackend.Cpu).await.unwrap();
+    Assert.is_true(surface.render(canvas).is_ok());
+    let pixels = surface.read_pixels().await.unwrap();
+    Assert.is_true((int)pixels[(16 * 32 + 16) * 4] < 16);
+    let edge = (int)pixels[(16 * 32 + 8) * 4];
+    Assert.is_true(edge > 64);
+    Assert.is_true(edge < 192);
+    Assert.eq((int)pixels[(16 * 32 + 0) * 4], 255);
+
+    canvas.clear(Color.black);
+    for (let i = 0; i < 9; i = i + 1) {
+        canvas.fill_rect((float)(i * 3), 0, 2, 32, Color.white);
+        canvas.backdrop(Rect((float)(i * 3), 0, 4, 32), Backdrop.blur(1));
+    }
+    Assert.is_true(surface.render(canvas).is_ok());
+    canvas.box_shadow(Rect(0, 0, 4, 4), 0, 0, 0, 200, Color.black);
     Assert.is_true(surface.render(canvas).is_err());
 }

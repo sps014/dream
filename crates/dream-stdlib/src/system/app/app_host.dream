@@ -1,0 +1,29 @@
+module system.app;
+
+// Event kinds and fact indexes are shared with dream-host-app and runtime/src/hosts/app.js.
+internal static class AppHost {
+    @runtime("appStart")
+    internal static extern fun start(shutdown_timeout_ms: int): int;
+
+    // Completes with the next event kind, or 0 after `stop`.
+    @async_host
+    @runtime("appNextEvent")
+    internal static extern async fun next_event(): int;
+
+    @runtime("appEventValue")
+    internal static extern fun event_value(): int;
+
+    // Releases a host thread waiting for the outcome of a sleep or session-ending event.
+    @runtime("appReply")
+    internal static extern fun reply(value: int): void;
+
+    // Returns -1 when the platform does not know the fact.
+    @runtime("appQuery")
+    internal static extern fun query(fact: int): int;
+
+    @runtime("appReport")
+    internal static extern fun report(borrow message: string): void;
+
+    @runtime("appStop")
+    internal static extern fun stop(): void;
+}

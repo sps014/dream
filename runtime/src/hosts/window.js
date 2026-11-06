@@ -17,6 +17,8 @@ const GAMEPAD_CONNECTED = 13;
 const GAMEPAD_DISCONNECTED = 14;
 const FILE_DROPPED = 15;
 const GAMEPAD_SAMPLE = 16;
+const OCCLUDED = 19;
+const SCALE_CHANGED = 20;
 
 const FLAG_FULLSCREEN = 2;
 const CURSOR_CAPTURED = 2;
@@ -126,6 +128,23 @@ function syncSize(state, report) {
   }
 }
 
+// Scale goes first so `ScaleChanged` precedes the `Resized` that the new ratio causes.
+function syncScale(state) {
+  const ratio = pixelRatio();
+  if (ratio !== state.ratio) {
+    state.ratio = ratio;
+    push(state, SCALE_CHANGED, [ratio]);
+  }
+}
+
+function syncOcclusion(state) {
+  const hidden = globalThis.document?.visibilityState === "hidden" || !state.intersecting;
+  if (hidden !== state.hidden) {
+    state.hidden = hidden;
+    push(state, OCCLUDED, [hidden ? 1 : 0]);
+  }
+}
+
 function pollGamepads(state) {
   const pads = typeof globalThis.navigator?.getGamepads === "function" ? globalThis.navigator.getGamepads() : [];
   const present = new Set();
@@ -156,7 +175,14 @@ function attach(canvas, owns) {
   const state = {
     canvas, owns, queue: [], keys: new Set(), buttons: new Set(), pads: new Set(),
     listeners: [], x: 0, y: 0, cursorMode: 0, icon: 0, pixels: [0, 0],
+    ratio: pixelRatio(), hidden: false, intersecting: true, observer: null,
   };
+  if (typeof globalThis.IntersectionObserver === "function") {
+    state.observer = new globalThis.IntersectionObserver(entries => {
+      for (const entry of entries) state.intersecting = entry.isIntersecting;
+    });
+    state.observer.observe(canvas);
+  }
   const listen = (target, type, handler, options) => {
     target.addEventListener(type, handler, options);
     state.listeners.push([target, type, handler, options]);
@@ -275,13 +301,16 @@ export function makeWindowHost() {
       for (const [target, type, handler, options] of state.listeners) {
         target.removeEventListener(type, handler, options);
       }
+      state.observer?.disconnect();
       if (locked(state)) globalThis.document.exitPointerLock?.();
       if (state.owns) state.canvas.remove?.();
     },
     windowPoll: handle => {
       const state = windows.get(handle);
       if (!state) return [];
+      syncScale(state);
       syncSize(state, true);
+      syncOcclusion(state);
       pollGamepads(state);
       const records = state.queue;
       state.queue = [];

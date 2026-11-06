@@ -1,0 +1,276 @@
+import system.testing;
+import system;
+import system.app;
+
+class StartError: Error {
+    public constructor() {}
+
+    public fun message(): string {
+        return "database unavailable";
+    }
+
+    public fun code(): string {
+        return "EDB";
+    }
+}
+
+class Log {
+    public text: string;
+
+    public constructor() {
+        this.text = "";
+    }
+
+    public fun add(entry: string): void {
+        this.text = this.text + entry + ";";
+    }
+}
+
+async fun fail_start(): Result<int, StartError> {
+    return Result.Err(StartError());
+}
+
+async fun register_late_cleanup(log: Log): void {
+    Time.delay(5).await;
+    log.add("phase:" + (Application.phase == AppPhase.Running).to_string());
+    Application.on_stop(async () => {
+        log.add("late");
+    });
+    Application.quit(0);
+}
+
+@test
+@timeout(60000)
+async fun app_cleanups_run_newest_first_after_stopping_cancels(): void {
+    let log = Log();
+    let code = Application.run(async () => {
+        Assert.is_true(Application.phase == AppPhase.Starting);
+        Assert.is_false(Application.stopping.is_cancelled);
+        for (let i = 1; i <= 3; i = i + 1) {
+            let index = i;
+            Application.on_stop(async () => {
+                log.add(
+                    "c" + index.to_string() + ":" + Application.stopping.is_cancelled.to_string()
+                );
+            });
+        }
+        Application.quit(4);
+        Application.quit(9);
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 4);
+    Assert.eq(log.text, "c3:true;c2:true;c1:true;");
+    Assert.is_true(Application.phase == AppPhase.Starting);
+    Assert.is_false(Application.stopping.is_cancelled);
+}
+
+@test
+@timeout(60000)
+async fun app_failed_start_runs_earlier_cleanups_and_exits_one(): void {
+    let log = Log();
+    let code = Application.run(async () => {
+        Application.on_stop(async () => {
+            log.add("closed");
+        });
+        let value = fail_start().await?;
+        log.add("unreachable " + value.to_string());
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 1);
+    Assert.eq(log.text, "closed;");
+}
+
+@test
+@timeout(60000)
+async fun app_late_cleanup_runs_and_stopping_rejects_new_cleanups(): void {
+    let log = Log();
+    let code = Application.run(async () => {
+        Application.on_stop(async () => {
+            let refused = Application.on_stop(async () => {
+                log.add("never");
+            });
+            Assert.is_true(refused.is_err());
+            log.add(refused.unwrap_err().code());
+        });
+        Promise.start(register_late_cleanup(log));
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 0);
+    Assert.eq(log.text, "phase:true;late;ESTOPPING;");
+}
+
+@test
+@timeout(60000)
+async fun app_vetoable_requests_can_be_vetoed_but_interrupt_cannot(): void {
+    let log = Log();
+    let code = Application.run(async () => {
+        Application.on_shutdown_requested((request) => {
+            log.add(request.can_veto.to_string());
+            request.veto();
+        });
+        Assert.is_false(Application.simulate(AppEvent.ShutdownRequested(ShutdownReason.OsQuit)));
+        Assert.is_false(Application.stopping.is_cancelled);
+        Assert.is_true(Application.simulate(AppEvent.ShutdownRequested(ShutdownReason.Interrupt)));
+        Assert.is_false(Application.simulate(AppEvent.ShutdownRequested(ShutdownReason.Terminate)));
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 130);
+    Assert.eq(log.text, "true;false;");
+}
+
+@test
+@timeout(60000)
+async fun app_cleanup_timeout_does_not_skip_older_cleanups(): void {
+    let log = Log();
+    let watch = Stopwatch();
+    let code = Application.run(
+        async () => {
+            Application.on_stop(async () => {
+                log.add("older");
+            });
+            Application.on_stop(async () => {
+                Time.delay(60000).await;
+                log.add("never");
+            });
+            Application.quit(2);
+            return Result.Ok(Unit());
+        },
+        shutdown_timeout_ms: 50
+    ).await;
+    Assert.eq(code, 2);
+    Assert.eq(log.text, "older;");
+    Assert.is_true(watch.elapsed_ms < 30000L);
+}
+
+@test
+@timeout(60000)
+async fun app_sleep_and_session_events_follow_transition_rules(): void {
+    let log = Log();
+    let code = Application.run(async () => {
+        Application.on_sleep(() => {
+            log.add("sleep");
+        });
+        Application.on_wake((slept_ms) => {
+            log.add("wake:" + slept_ms.to_string());
+        });
+        Application.on_session_lock((locked) => {
+            log.add("lock:" + locked.to_string());
+        });
+        Application.on_display_power((on) => {
+            log.add("display:" + on.to_string());
+        });
+
+        Assert.is_false(Application.simulate(AppEvent.Woke(5)));
+        Assert.is_true(Application.simulate(AppEvent.Sleeping));
+        Assert.is_true(Application.phase == AppPhase.Asleep);
+        Assert.is_false(Application.simulate(AppEvent.Sleeping));
+        Assert.is_true(Application.simulate(AppEvent.Woke(1234)));
+        Assert.is_true(Application.phase == AppPhase.Starting);
+
+        let locked = Application.is_session_locked;
+        Assert.is_true(Application.simulate(AppEvent.SessionLock(!locked)));
+        Assert.is_false(Application.simulate(AppEvent.SessionLock(!locked)));
+        Assert.eq(Application.is_session_locked, !locked);
+        let on = Application.are_displays_on;
+        Assert.is_true(Application.simulate(AppEvent.DisplayPower(!on)));
+        Assert.eq(Application.are_displays_on, !on);
+        Assert.is_true(Application.phase == AppPhase.Starting);
+        Application.quit(0);
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 0);
+    Assert.is_true(log.text.starts_with("sleep;wake:1234;lock:"));
+    Assert.is_true(log.text.contains(";display:"));
+}
+
+@test
+@timeout(60000)
+async fun app_facts_cancel_and_events_after_stopping(): void {
+    let log = Log();
+    let code = Application.run(async () => {
+        let theme = SystemTheme.HighContrast;
+        if Application.theme == SystemTheme.HighContrast {
+            theme = SystemTheme.Light;
+        }
+        let power = PowerSource.Battery;
+        if Application.power_source == PowerSource.Battery {
+            power = PowerSource.Ac;
+        }
+        let memory = Application.on_low_memory(() => {
+            log.add("memory");
+        });
+        Application.on_locale(() => {
+            log.add("locale");
+        });
+        Application.on_theme((changed) => {
+            log.add("theme:" + (changed == theme).to_string());
+        });
+        Application.on_power_source((source) => {
+            log.add("power:" + (source == power).to_string());
+        });
+        Application.on_active((active) => {
+            log.add("active:" + active.to_string());
+        });
+        Assert.is_true(Application.simulate(AppEvent.LowMemory));
+        memory.cancel();
+        memory.cancel();
+        Assert.is_true(Application.simulate(AppEvent.LowMemory));
+        Assert.is_true(Application.simulate(AppEvent.LocaleChanged));
+        Assert.is_true(Application.simulate(AppEvent.ThemeChanged(theme)));
+        Assert.is_false(Application.simulate(AppEvent.ThemeChanged(theme)));
+        Assert.is_true(Application.theme == theme);
+        Assert.is_true(Application.simulate(AppEvent.PowerSourceChanged(power)));
+        Assert.is_true(Application.power_source == power);
+        let active = Application.is_active;
+        Assert.is_true(Application.simulate(AppEvent.Active(!active)));
+        Application.on_stop(async () => {
+            Assert.is_false(Application.simulate(AppEvent.LowMemory));
+            Assert.is_false(Application.simulate(AppEvent.Sleeping));
+            log.add("stopped");
+        });
+        Application.quit(0);
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 0);
+    Assert.is_true(
+        log.text.starts_with("memory;locale;theme:true;power:true;active:")
+    );
+    Assert.is_true(log.text.ends_with("stopped;"));
+}
+
+@test
+@timeout(60000)
+async fun app_quit_during_startup_lets_start_observe_stopping(): void {
+    let log = Log();
+    let code = Application.run(async () => {
+        Application.on_stop(async () => {
+            log.add("cleanup");
+        });
+        Application.quit(5);
+        let waited = Time.delay(60000, Option.Some(Application.stopping)).await;
+        log.add("stopping:" + waited.is_err().to_string());
+        return Result.Ok(Unit());
+    }).await;
+    Assert.eq(code, 5);
+    Assert.eq(log.text, "stopping:true;cleanup;");
+}
+
+@test
+@timeout(60000)
+async fun app_start_ignoring_stopping_is_cancelled_after_the_timeout(): void {
+    let log = Log();
+    let code = Application.run(
+        async () => {
+            Application.on_stop(async () => {
+                log.add("cleanup");
+            });
+            Application.quit(6);
+            Time.delay(60000).await;
+            log.add("unreachable");
+            return Result.Ok(Unit());
+        },
+        shutdown_timeout_ms: 50
+    ).await;
+    Assert.eq(code, 6);
+    Assert.eq(log.text, "cleanup;");
+}

@@ -3,4 +3,5 @@
 #![allow(clippy::missing_safety_doc)]
 
 mod abi;
+mod app_activity;
 mod app_icon;

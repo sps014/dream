@@ -8,11 +8,15 @@ public class Canvas {
     depth: int;
     valid: bool;
     resources: List<DrawingResource>;
+    text: StringBuilder;
+    text_offsets: Map<string, int>;
 
     /// Creates a recording canvas of the given physical pixel size, initially transparent.
     public constructor(width: int, height: int) {
         this.values = List<float>();
         this.resources = List<DrawingResource>();
+        this.text = StringBuilder();
+        this.text_offsets = Map<string, int>();
         this.width = width;
         this.height = height;
         this.depth = 0;
@@ -23,6 +27,8 @@ public class Canvas {
     public fun clear(color: Color): void {
         this.values.clear();
         this.resources.clear();
+        this.text.clear();
+        this.text_offsets.clear();
         this.depth = 0;
         this.valid = this.width > 0 && this.height > 0;
         this.values.push(0.0f);
@@ -136,7 +142,7 @@ public class Canvas {
         path.encode(this.values);
     }
 
-    /// Filters earlier drawing in the current isolated group (or canvas root), then applies tint and noise within the panel and clip. At most eight panels per picture.
+    /// Filters earlier drawing in the current isolated group (or canvas root), then applies tint and noise within the panel and clip. At most 64 panels per picture, including panels inside pictures drawn with draw_picture. Each panel after the first in a group costs one extra full-canvas render.
     public fun backdrop(rect: Rect, borrow effect: Backdrop): void {
         this.values.push(8.0f);
         DrawingPath.rect(rect, effect.radius).encode(this.values);
@@ -145,6 +151,26 @@ public class Canvas {
         this.values.push(effect.noise_opacity);
         this.values.push((float)(effect.noise_seed & 65535));
         this.values.push((float)((effect.noise_seed >> 16) & 65535));
+    }
+
+    /// Paints a soft shadow for a rounded box: a Gaussian-blurred rounded rectangle, computed exactly rather than by blurring pixels. The rectangle is the box being shadowed; dx and dy move the shadow, spread grows it on every side (negative values shrink it) and also grows the corner radius. Radius and spread are canvas units; sigma is the blur standard deviation in canvas units, 0..128, where zero paints a sharp shape. The shadow is also painted under the box, so draw the box afterwards; a translucent box shows its own shadow through it.
+    public fun box_shadow(
+        rect: Rect,
+        radius: float,
+        dx: float,
+        dy: float,
+        sigma: float,
+        color: Color,
+        spread: float = 0.0f
+    ): void {
+        this.values.push(13.0f);
+        this.encode_rect(rect);
+        this.values.push(radius.max(0.0f));
+        this.values.push(dx);
+        this.values.push(dy);
+        this.values.push(sigma);
+        this.values.push(spread);
+        color.encode(this.values);
     }
 
     /// Captures an immutable picture. Invalid dimensions or unbalanced save/restore return an error; render validates geometry and colors.
@@ -162,7 +188,7 @@ public class Canvas {
         for (let i = 0; i < owners.length; i = i + 1) {
             owners[i] = this.resources[i];
         }
-        return Result.Ok(Picture(snapshot, this.width, this.height, owners));
+        return Result.Ok(Picture(snapshot, this.width, this.height, owners, this.text.build()));
     }
 
     fun record_fill(borrow path: DrawingPath, borrow paint: Paint, even_odd: bool): void {
@@ -211,8 +237,8 @@ public class Canvas {
     /// Draws shaped text at a top-left origin. Text and style are captured immediately; matching layouts are cached during rendering.
     public fun fill_text(text: string, x: float, y: float, borrow style: TextStyle): void {
         this.values.push(10.0f);
-        this.encode_string(text);
-        this.encode_string(style.family);
+        this.encode_text(text);
+        this.encode_text(style.family);
         this.values.push(style.size);
         this.values.push(style.weight);
         this.values.push(style.max_width);
@@ -233,11 +259,32 @@ public class Canvas {
         color.encode(this.values);
     }
 
-    fun encode_string(borrow text: string): void {
-        this.values.push((float)text.length);
-        for (let i = 0; i < text.length; i = i + 1) {
-            this.values.push((float)(int)text.char_at(i));
+    /// Draws a finished picture in the current transform and clip, as if its commands were recorded here. Its own clear color fills only its bounds, and its drawing is clipped to them; backdrops inside it filter what this canvas drew earlier. Pictures nest at most eight levels deep.
+    public fun draw_picture(borrow picture: Picture): void {
+        this.values.push(12.0f);
+        this.values.push((float)this.resources.length);
+        this.values.push((float)this.text.length);
+        this.values.push((float)picture.width);
+        this.values.push((float)picture.height);
+        this.values.push((float)picture.values.length);
+        for (let i = 0; i < picture.values.length; i = i + 1) {
+            this.values.push(picture.values[i]);
         }
+        for (let i = 0; i < picture.owners.length; i = i + 1) {
+            this.resources.push(picture.owners[i]);
+        }
+        this.text.append(picture.text);
+    }
+
+    fun encode_text(borrow text: string): void {
+        let offset = this.text_offsets.get(text).unwrap_or(-1);
+        if offset < 0 {
+            offset = this.text.length;
+            this.text.append(text);
+            this.text_offsets[text] = offset;
+        }
+        this.values.push((float)offset);
+        this.values.push((float)text.length);
     }
 
     fun encode_rect(rect: Rect): void {

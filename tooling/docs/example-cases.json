@@ -241,6 +241,27 @@
     "timeout": 300
   },
   {
+    "name": "app-heartbeat",
+    "page": "docs/library/system/app.md",
+    "block": 0,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "app-hooks",
+    "page": "docs/library/system/app.md",
+    "block": 2,
+    "mode": "compile",
+    "timeout": 300
+  },
+  {
+    "name": "app-simulate-test",
+    "page": "docs/library/system/app.md",
+    "block": 3,
+    "mode": "test",
+    "timeout": 300
+  },
+  {
     "name": "web-middleware",
     "page": "docs/web-server/middleware.md",
     "block": 0,

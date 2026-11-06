@@ -14,10 +14,10 @@ public class Window
 
 ## `open`
 
-Opens a native window described by `desc` and shows it.  In a browser this creates a `<canvas>` of the requested size at the end of the page and uses the title as the page title. Under Node, on a machine without a display, or when called from a `Task` worker, it returns a `WindowError`; see `WindowError.code` for the reasons.
+Opens a native window configured by `options` and shows it.  In a browser this creates a `<canvas>` of the requested size at the end of the page and uses the title as the page title. Under Node, on a machine without a display, or when called from a `Task` worker, it returns a `WindowError`; see `WindowError.code` for the reasons.
 
 ```dream
-public static fun open(desc: WindowDesc): Result<Window, WindowError>
+public static fun open(options: WindowOptions): Result<Window, WindowError>
 ```
 
 ## `canvas`
@@ -33,7 +33,7 @@ public static fun canvas(id: string): Result<Window, WindowError>
 Creates a window that exists only in memory. It never appears on screen and receives only the events passed to `simulate`, so tests, replays and servers can run input-driven code on machines without a display. Its pixel size equals its logical size, and simulated `Resized` events change both.
 
 ```dream
-public static fun headless(desc: WindowDesc): Window
+public static fun headless(options: WindowOptions): Window
 ```
 
 ## `is_open`
@@ -46,7 +46,7 @@ public get is_open(): bool
 
 ## `title`
 
-The title last set by the `WindowDesc` constructor or `set_title`. Canvas windows start with an empty title.
+The title last set by the `WindowOptions` constructor or `set_title`. Canvas windows start with an empty title.
 
 ```dream
 public get title(): string
@@ -70,7 +70,7 @@ public get is_focused(): bool
 
 ## `size`
 
-The content area's size in logical pixels, the units of the `WindowDesc` constructor, `set_size` and mouse positions.
+The content area's size in logical pixels, the units of the `WindowOptions` constructor, `set_size` and mouse positions.
 
 ```dream
 public get size(): WindowSize
@@ -86,10 +86,26 @@ public get pixel_size(): WindowSize
 
 ## `scale_factor`
 
-Physical pixels per logical pixel on the window's current monitor: `1.0` on standard displays and `2.0` on most high-DPI displays.
+Physical pixels per logical pixel on the window's current monitor: `1.0` on standard displays and `2.0` on most high-DPI displays. Headless windows start at `1.0` and follow simulated `WindowEvent.ScaleChanged` events.
 
 ```dream
 public get scale_factor(): float
+```
+
+## `is_minimized`
+
+True between a `WindowEvent.Minimized` and the next `WindowEvent.Restored`, as delivered by `poll`.
+
+```dream
+public get is_minimized(): bool
+```
+
+## `is_occluded`
+
+True after `poll` delivered `WindowEvent.Occluded(true)`, until it delivers `Occluded(false)`. Stays false on platforms that cannot detect occlusion.
+
+```dream
+public get is_occluded(): bool
 ```
 
 ## `cursor_mode`

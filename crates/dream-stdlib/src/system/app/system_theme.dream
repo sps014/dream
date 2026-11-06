@@ -1,0 +1,14 @@
+module system.app;
+
+/// The color scheme the user chose for the operating system or browser, as reported by
+/// `Application.theme`.
+public enum SystemTheme {
+    /// Dark text on light backgrounds. This is also the value when the platform does not
+    /// report a preference.
+    Light,
+    /// Light text on dark backgrounds.
+    Dark,
+    /// An accessibility mode with a small set of strongly contrasting colors, such as
+    /// Windows contrast themes or the browser `forced-colors` mode.
+    HighContrast
+}

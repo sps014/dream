@@ -318,7 +318,7 @@ async fun run_ocean(window: Window): Result<Unit, GpuError> {
 
 async fun main(): void {
     let opened = Window.open(
-        WindowDesc("Pelagic | Dream Seascape", 1280, 800).resizable(true).vsync(true)
+        WindowOptions("Pelagic | Dream Seascape", 1280, 800).resizable(true).vsync(true)
     );
     if opened.is_err() {
         System.println("Window error: " + opened.unwrap_err().message());

@@ -4,6 +4,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.webapi",
     deps: &[
         "system",
+        "system.app",
         "system.validation",
         "system.net",
         "system.task",

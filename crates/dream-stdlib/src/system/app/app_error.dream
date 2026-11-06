@@ -1,0 +1,23 @@
+module system.app;
+
+/// Why an `Application` operation was refused.
+public class AppError: Error {
+    error_code: string;
+    error_message: string;
+
+    internal constructor(code: string, message: string) {
+        this.error_code = code;
+        this.error_message = message;
+    }
+
+    /// The machine-readable reason. `ESTOPPING` means shutdown already began, so a new
+    /// `on_stop` cleanup would never run.
+    public fun code(): string {
+        return this.error_code;
+    }
+
+    /// A human-readable description of the problem.
+    public fun message(): string {
+        return this.error_message;
+    }
+}

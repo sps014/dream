@@ -8,6 +8,7 @@ nav:
   - debug.md
   - process.md
   - cli.md
+  - app.md
   - application-utilities.md
   - raw-sockets-compression.md
   - window.md

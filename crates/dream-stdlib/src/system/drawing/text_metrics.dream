@@ -1,0 +1,23 @@
+module system.drawing;
+
+/// Size of laid-out text, measured without creating a reusable layout.
+public struct TextMetrics {
+    /// Width of the widest line in canvas units.
+    public width: float;
+
+    /// Total height of all lines in canvas units.
+    public height: float;
+
+    /// Number of lines after wrapping and explicit newlines. Empty text has at most one line.
+    public line_count: int;
+
+    /// Distance from the top of the text to the first line's baseline, in canvas units; zero for empty text.
+    public baseline: float;
+
+    internal constructor(values: float[]) {
+        this.width = values[0];
+        this.height = values[1];
+        this.line_count = (int)values[2];
+        this.baseline = values[3];
+    }
+}

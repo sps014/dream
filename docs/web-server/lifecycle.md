@@ -6,10 +6,11 @@ icon: material/power
 
 # Lifecycle and application state
 
-Register paired startup and shutdown operations before listening.
+A web service shares its process lifetime with every other Dream program: wrap `main` in `Application.run` from `system.app`. Startup code goes in the `start` function, and each resource registers its release with `Application.on_stop` right after it is acquired. Ctrl+C and `SIGTERM` then stop the server gracefully.
 
 ```dream
 import system;
+import system.app;
 import system.webapi;
 
 @router("")
@@ -20,32 +21,41 @@ class Routes {
     }
 }
 
-async fun main(): void {
-    let app = WebApp();
-    app.include_router(Routes.router()).unwrap();
-    app.lifespan(
-        async (app: WebApp) => {
-            app.state["service"] = "ready";
-            return Result.Ok(Unit());
-        },
-        async (app: WebApp) => {
+async fun main(): int {
+    return Application.run(async () => {
+        let app = WebApp();
+        app.include_router(Routes.router()).unwrap();
+        app.state["service"] = "ready";
+        Application.on_stop(async () => {
             app.state.clear();
-        }
-    ).unwrap();
-    app.run("127.0.0.1", 8000).await.unwrap();
+        });
+
+        app.run("127.0.0.1", 8000).await?;
+        return Result.Ok(Unit());
+    }).await;
 }
+```
+
+When the process is asked to stop, `Application.stopping` is cancelled. `run` without a token watches that token, so it stops accepting connections, lets running requests finish, and returns. `Application.run` then runs the `on_stop` cleanups, newest first, and returns the exit code for `main`: `130` after Ctrl+C and `143` after `SIGTERM`. If `start` returns an error, for example because `run` could not bind the port, the error is printed, the cleanups registered so far run, and the exit code is `1`.
+
+To start the server without blocking `start`, call `listen` and register the drain as a cleanup:
+
+```dream
+let port = app.listen("127.0.0.1", 0).await?;
+Application.on_stop(async () => {
+    app.shutdown();
+    app.wait().await;
+});
 ```
 
 | `WebApp` member | Effect |
 | --- | --- |
-| `lifespan(start, stop)` | Registers a pair: `start(app)` returns `Result<Unit, IoError>` and runs at startup; `stop(app)` runs at shutdown only if `start` succeeded. |
 | `state` | A `Map<string, string>` shared by every request; handlers see it as `ctx.app_state`. |
+| `run(host, port, token?)` | Listens, then waits until the server stops. Without a token it stops when `Application.stopping` is cancelled. |
 | `shutdown()` | Stops accepting connections and cancels pending transport work. |
-| `wait(token?)` | Waits for active requests and their cleanup, then runs the `stop` hooks. |
+| `wait(token?)` | Waits for active requests and their cleanup, then releases the listener. |
 
-Startup hooks run in registration order before accepting traffic. A successful hook activates its matching shutdown hook. If a later startup hook or listener bind fails, completed hooks unwind in reverse order; the failed hook must release any partially acquired resources itself.
-
-`shutdown` stops acceptance and cancels pending transport operations. `wait` drains active requests and their cleanup before invoking application shutdown hooks. Call both during controlled termination. A trailing cancellation token on `listen`, `run`, or `wait` participates in structured cancellation.
+`shutdown` stops acceptance and cancels pending transport operations. `wait` drains active requests and their cleanup. Call both during controlled termination. A trailing cancellation token on `listen`, `run`, or `wait` participates in structured cancellation. See [Application lifetime](../library/system/app.md) for the shutdown timeout and the other process events.
 
 ## Request context
 

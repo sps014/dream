@@ -214,7 +214,7 @@ async fun main(): void {
         visualizer_audio = Audio(AudioBuffer.from_pcm(samples, 48000, 1).unwrap());
         visualizer_audio.loop = true;
     }
-    let opened = Window.open(WindowDesc("Dream audio | Space: play", 1100, 680));
+    let opened = Window.open(WindowOptions("Dream audio | Space: play", 1100, 680));
     if opened.is_err() {
         System.println(opened.unwrap_err().message());
         return;

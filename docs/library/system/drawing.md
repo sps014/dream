@@ -1,6 +1,6 @@
 ---
 title: Drawing
-summary: Draw shapes, images, text and backdrop panels on CPU or GPU.
+summary: Draw shapes, shadows, images, text and backdrop panels on CPU or GPU, and measure and hit-test text.
 ---
 
 # Drawing
@@ -57,8 +57,10 @@ recorded afterward stays sharp. A zero blur sigma applies only the tint. Sigma i
 pixels, ranges from 0 to 128, and does not scale with the current transform.
 
 The effect sees only this canvas. It cannot sample the desktop or other application windows. A
-picture permits at most eight backdrop panels across all groups. An enclosing group applies its
-filters, opacity and blending after its nested panels have been composed.
+picture permits at most 64 backdrop panels across all groups, including panels inside pictures
+drawn with `draw_picture`. Every panel after the first in the same group adds one full-canvas
+render, so the cost grows with the number of panels. An enclosing group applies its filters,
+opacity and blending after its nested panels have been composed.
 
 Add `.noise(opacity, seed: 0)` for acrylic-style grain after blur and tint. Opacity is 0..1;
 noise preserves the filtered panel's alpha. A seed selects a deterministic 64 by 64 monochrome
@@ -100,6 +102,15 @@ Pair every `save` or `save_layer` with `restore`. `save_layer(opacity)` composit
 one isolated group, so overlapping shapes do not each apply the group opacity. Save depth and clip
 depth are limited to 64. `finish()` captures an immutable `Picture` for reuse; rendering a canvas
 captures one automatically. `clear` discards the previous recording and resets canvas state.
+
+Pass `CornerRadii(top_left, top_right, bottom_right, bottom_left)` instead of a single radius to
+round each corner separately, for example a sheet with rounded top corners. Radii larger than half
+the rectangle's smaller side are clamped, and negative radii draw square corners.
+
+```dream
+let sheet = DrawingPath.rect(Rect(0, 120, 320, 120), CornerRadii(16, 16, 0, 0));
+canvas.fill(sheet, Paint.solid(Color.white));
+```
 
 `finish` rejects unbalanced state. Rendering additionally validates colors, paths, transforms, blur
 sigma and command limits. Invalid input returns `DrawingError`. Geometry values must be finite and
@@ -152,6 +163,51 @@ return `DrawingError` at render. GPU filters stay on the GPU. `read_pixels` expl
 native GPU presentation also currently reads pixels through its upload bridge. Inset shadows, spread and arbitrary filter
 graphs are not provided.
 
+## Box shadows
+
+`canvas.box_shadow(rect, radius, dx, dy, sigma, color, spread)` paints the soft shadow of a rounded
+box in one step. The shadow is computed exactly from the rectangle, so it costs about as much as a
+plain fill and needs no isolated group, which makes it the cheap way to give many cards elevation.
+
+```dream
+let card = Rect(40, 40, 240, 120);
+canvas.box_shadow(card, 16, 0, 8, 12, Color.rgba(0, 0, 0, 0.25f));
+canvas.fill_rect(card.x, card.y, card.width, card.height, Color.white, 16);
+```
+
+`rect` and `radius` describe the box being shadowed. `dx` and `dy` move the shadow, and `spread`
+(default zero) grows it on every side, or shrinks it when negative, and grows the corner radius by
+the same amount. Unlike group shadows, these values are canvas units and follow the current
+transform. `sigma` is the blur's standard deviation, 0..128; zero paints a sharp shape. The shadow
+is also painted under the box, so draw the box afterwards; a translucent box shows its own shadow
+through it. Inset shadows are not provided.
+
+## Reusing pictures
+
+`canvas.draw_picture(picture)` draws a finished `Picture` into another canvas, under the current
+transform and clip, as if its commands had been recorded there. Record a part of the scene that
+rarely changes once, then draw it every frame. The nested picture's `clear` color fills only its own
+bounds, and its drawing is clipped to them. Backdrop panels inside it filter what the outer canvas
+drew before it.
+
+```dream
+let badge = Canvas(48, 48);
+badge.fill_circle(24, 24, 24, Color.rgb(220, 60, 60));
+badge.fill_text("3", 18, 12, TextStyle(20, Color.white));
+let icon = badge.finish()?;
+
+for (let i = 0; i < 4; i = i + 1) {
+    canvas.save();
+    canvas.translate((float)(i * 64), 0);
+    canvas.draw_picture(icon);
+    canvas.restore();
+}
+```
+
+Pictures nest at most eight levels deep. The outer picture keeps the nested picture's images and
+text layouts alive, and each `draw_picture` copies the commands, so very large pictures drawn many
+times count toward the 4000000-value limit.
+
 ## Images and text
 
 Decode PNG or JPEG bytes with `Image.decode(bytes).await`, or create an image from straight RGBA8
@@ -186,7 +242,61 @@ assigned to `style.family`. Registered fonts are available to subsequent layouts
 For a frequently reused label, create `TextLayout.create(text, style).await`, inspect its `width` and
 `height`, and draw it with `canvas.fill_text(layout, x, y, color)`. Layout captures the style's font
 and paragraph settings; the draw call supplies its color. The simple string overload caches shaping
-internally. `draw_image` accepts an optional source rectangle, opacity and nearest-neighbor filtering.
+internally, keeping the 256 most recently used layouts up to 16 MiB. Each distinct string is stored
+once per canvas recording, however many times it is drawn. `draw_image` accepts an optional source rectangle, opacity and nearest-neighbor filtering.
+
+### Measuring text
+
+`TextLayout.measure(text, style)` returns `Result<TextMetrics, DrawingError>` without waiting or
+keeping a layout, so layout code can size a label before drawing it. `TextMetrics` reports the
+`width` of the widest line, the total `height`, the `line_count` after wrapping and explicit
+newlines, and the `baseline`: the distance from the top to the first line's baseline, for aligning
+text with icons. A `TextLayout` exposes the same `line_count` and `baseline` properties.
+
+```dream
+let style = TextStyle(14, Color.black);
+style.max_width = 200;
+let size = TextLayout.measure("A paragraph that wraps onto several lines", style)?;
+canvas.fill_rect(10, 10, size.width + 16, size.height + 16, Color.rgb(240, 240, 240), 8);
+canvas.fill_text("A paragraph that wraps onto several lines", 18, 18, style);
+```
+
+Measuring and then drawing the same text with the same style shapes it once: both share the
+layout cache. Invalid style values return `EINVAL`. In browsers and Node, the drawing engine loads
+in the background when the program starts. A measurement made before it is ready returns
+`EUNAVAILABLE`; awaiting any async drawing call, such as `TextLayout.create` or
+`DrawingSurface.create`, guarantees it is ready.
+
+### Carets and selections
+
+A `TextLayout` answers the questions a text field asks. Positions are UTF-16 code unit offsets, the
+same units as `string.length`: 0 is before the first character and `text.length` after the last.
+
+- `index_at(x, y)` returns the position nearest to a point relative to the layout's top-left
+  corner, so a click anywhere, even beside or below the text, places a caret.
+- `caret(index)` returns a `Rect` one unit wide and as tall as the line, before that position.
+- `selection(start, end)` returns a `List<Rect>` with one highlight per line fragment. The two
+  positions may come in either order; an empty range returns no rectangles.
+
+```dream
+let field = TextLayout.create("Hello, world", TextStyle(16, Color.black)).await?;
+let clicked = field.index_at(pointer_x - 20, pointer_y - 20);
+for (let highlight in field.selection(selection_start, clicked)) {
+    canvas.fill_rect(
+        highlight.x + 20,
+        highlight.y + 20,
+        highlight.width,
+        highlight.height,
+        Color.rgba(60, 120, 255, 0.3f)
+    );
+}
+canvas.fill_text(field, 20, 20, Color.black);
+let caret = field.caret(clicked);
+canvas.fill_rect(caret.x + 20, caret.y + 20, caret.width, caret.height, Color.black);
+```
+
+A position past the end clamps to the end, and a position inside a surrogate pair moves to the start
+of that character.
 
 ## Existing GPU windows
 
@@ -203,7 +313,7 @@ import system.gpu;
 import system.window;
 
 async fun main(): void {
-    let window = Window.open(WindowDesc("Canvas UI", 640, 400).resizable(false)).unwrap();
+    let window = Window.open(WindowOptions("Canvas UI", 640, 400).resizable(false)).unwrap();
     let device = GpuDevice.create(GpuBackend.Auto).await.unwrap();
     let screen = device.create_surface(window).unwrap();
     let drawing = DrawingSurface.create(screen.width, screen.height, DrawingBackend.Cpu)
@@ -313,7 +423,7 @@ returned `Result` values in an application that needs recovery.
 
 ```dream
 async fun main(): void {
-    let window = Window.open(WindowDesc("Canvas UI visuals", 640, 400).resizable(false)).unwrap();
+    let window = Window.open(WindowOptions("Canvas UI visuals", 640, 400).resizable(false)).unwrap();
     let device = GpuDevice.create(GpuBackend.Auto).await.unwrap();
     let screen = device.create_surface(window).unwrap();
     let drawing = DrawingSurface.create(screen.width, screen.height, DrawingBackend.Cpu)
@@ -347,7 +457,9 @@ supports CPU rendering under Node when emitted with `--runtime --node`.
 
 ## Current coverage
 
-Shapes, Bézier paths, strokes, solid colors, linear and radial gradients, affine transforms,
-nonzero/even-odd fills, clips, isolated opacity groups, backdrop blur, PNG/JPEG images, shaped text,
-group filters, shadows, acrylic noise, nested backdrops, pixel reads and existing GPU window presentation are supported. SVG, additional blend modes,
+Shapes, Bézier paths, per-corner rounded rectangles, strokes, solid colors, linear and radial
+gradients, affine transforms, nonzero/even-odd fills, clips, isolated opacity groups, backdrop blur,
+PNG/JPEG images, shaped text with measurement and hit-testing, group filters, shadows, analytic box
+shadows, nested pictures, acrylic noise, nested backdrops, pixel reads and existing GPU window
+presentation are supported. SVG, additional blend modes,
 arbitrary filter graphs and direct GPU texture sharing remain future work.

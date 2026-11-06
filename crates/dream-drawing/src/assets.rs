@@ -61,7 +61,7 @@ impl Asset {
                 f32::from(image.pixels.width()),
                 f32::from(image.pixels.height()),
             ],
-            Self::Text(text) => vec![text.width, text.height],
+            Self::Text(text) => text.metrics().to_vec(),
         }
     }
 }

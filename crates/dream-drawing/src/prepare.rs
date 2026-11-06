@@ -13,6 +13,9 @@ use vello_common::{
 pub trait FilterBackend {
     fn filtered(&mut self, commands: &[Command], effects: &[Effect]) -> Result<Arc<RasterImage>>;
     fn size(&self) -> (u16, u16);
+    /// Returns a snapshot from `filtered` whose rendering has been submitted and that no
+    /// prepared command references any more.
+    fn recycle(&mut self, image: Arc<RasterImage>);
 }
 
 pub fn image_command(image: Arc<RasterImage>, width: u16, height: u16) -> Command {
@@ -35,10 +38,28 @@ pub fn external_image() -> Arc<RasterImage> {
     })
 }
 
+#[cfg(test)]
+thread_local! {
+    pub static UNBATCHED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn flatten_backdrops() -> bool {
+    #[cfg(test)]
+    if UNBATCHED.get() {
+        return false;
+    }
+    true
+}
+
+/// Resolves layer effects to images and gives each backdrop its prefix. A backdrop replays
+/// everything before it in its group, so a backdrop after another would replay that one's prefix
+/// too and cost would double per panel. Once a group holds a backdrop, the next backdrop first
+/// flattens the group so far into one snapshot image, keeping the work linear in the panels.
 pub fn commands(backend: &mut impl FilterBackend, input: &[Command]) -> Result<Vec<Command>> {
-    input
-        .iter()
-        .map(|command| match command {
+    let mut output: Vec<Command> = Vec::with_capacity(input.len());
+    let mut snapshot: Option<Arc<RasterImage>> = None;
+    for command in input {
+        match command {
             Command::Layer {
                 opacity,
                 blend,
@@ -54,30 +75,45 @@ pub fn commands(backend: &mut impl FilterBackend, input: &[Command]) -> Result<V
                     let (width, height) = backend.size();
                     vec![image_command(image, width, height)]
                 };
-                Ok(Command::Layer {
+                output.push(Command::Layer {
                     opacity: *opacity,
                     blend: *blend,
                     effects: Vec::new(),
                     clips: clips.clone(),
                     commands: children,
-                })
+                });
             }
             Command::Backdrop {
-                prefix,
                 clips,
                 sigma,
                 tint,
                 noise,
-            } => Ok(Command::Backdrop {
-                prefix: Arc::from(commands(backend, prefix)?),
-                clips: clips.clone(),
-                sigma: *sigma,
-                tint: *tint,
-                noise: noise.clone(),
-            }),
-            _ => Ok(command.clone()),
-        })
-        .collect()
+                ..
+            } => {
+                if flatten_backdrops()
+                    && output
+                        .iter()
+                        .any(|command| matches!(command, Command::Backdrop { .. }))
+                {
+                    let image = backend.filtered(&output, &[])?;
+                    let (width, height) = backend.size();
+                    output = vec![image_command(image.clone(), width, height)];
+                    if let Some(previous) = snapshot.replace(image) {
+                        backend.recycle(previous);
+                    }
+                }
+                output.push(Command::Backdrop {
+                    prefix: Arc::from(output.clone()),
+                    clips: clips.clone(),
+                    sigma: *sigma,
+                    tint: *tint,
+                    noise: noise.clone(),
+                });
+            }
+            _ => output.push(command.clone()),
+        }
+    }
+    Ok(output)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

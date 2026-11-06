@@ -13,6 +13,7 @@ const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-gpu/src/exports.rs"),
     include_str!("../../dream-host-audio/src/lib.rs"),
     include_str!("../../dream-host-drawing/src/lib.rs"),
+    include_str!("../../dream-host-app/src/exports.rs"),
 ];
 
 fn prelude_dream_host_names(include_native_only: bool) -> HashSet<String> {
@@ -110,6 +111,7 @@ fn capability_inventory_matches_each_library_exports() {
         (HostCapability::Gpu, vec![HOST_SOURCES[6]]),
         (HostCapability::Audio, vec![HOST_SOURCES[7]]),
         (HostCapability::Drawing, vec![HOST_SOURCES[8]]),
+        (HostCapability::App, vec![HOST_SOURCES[9]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();
@@ -143,6 +145,7 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/window.js"),
     include_str!("../../../runtime/src/hosts/gpu.js"),
     include_str!("../../../runtime/src/hosts/drawing.js"),
+    include_str!("../../../runtime/src/hosts/app.js"),
     include_str!("../../../runtime/src/hosts/audio.js"),
     include_str!("../../../runtime/src/hosts/audio_media.js"),
     include_str!("../../../runtime/src/hosts/audio_capture.js"),

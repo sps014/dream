@@ -187,7 +187,7 @@ test('resizes follow the canvas layout size times devicePixelRatio', () => {
     assert.deepEqual(records(host.windowPoll(id)), [[1, 1000, 400]]);
     assert.deepEqual(host.windowQuery(id).slice(0, 4), [500, 200, 1000, 400]);
     globalThis.devicePixelRatio = 1;
-    assert.deepEqual(records(host.windowPoll(id)), [[1, 500, 200]]);
+    assert.deepEqual(records(host.windowPoll(id)), [[20, 1], [1, 500, 200]]);
     host.windowSetSize(id, 640, 360);
     assert.equal(page.style.width, '640px');
   } finally { uninstallDom(); }

@@ -28,7 +28,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "cfg_errors",
-        "unknown target 'Target.Freebsd'; expected one of Target.Debug, Target.Release, Target.Windows, Target.Macos, Target.Linux, Target.Ios, Target.Native, Target.Wasm, Target.Browser, Target.Wasi\n'@cfg' conditions test 'Target.<name>', but found 'Os'\nexpected '&&', '||', or ')' in a '@cfg' condition but found identifier\nan item can have only one '@cfg'; combine the conditions with '&&' or '||'\n'@cfg' must be the first attribute of a declaration, member, or statement\n'@cfg' must be followed by the declaration, member, or statement it controls",
+        "unknown target 'Target.Freebsd'; expected one of Target.Debug, Target.Release, Target.Windows, Target.Macos, Target.Linux, Target.Android, Target.Ios, Target.Native, Target.Wasm, Target.Browser, Target.Wasi\n'@cfg' conditions test 'Target.<name>', but found 'Os'\nexpected '&&', '||', or ')' in a '@cfg' condition but found identifier\nan item can have only one '@cfg'; combine the conditions with '&&' or '||'\n'@cfg' must be the first attribute of a declaration, member, or statement\n'@cfg' must be followed by the declaration, member, or statement it controls",
         true,
     ),
     Case::error(

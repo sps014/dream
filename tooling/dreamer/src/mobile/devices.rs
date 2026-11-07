@@ -5,11 +5,11 @@ use std::collections::BTreeMap;
 use std::process::Command;
 
 #[derive(Debug, Serialize)]
-struct Device {
+pub(super) struct Device {
     platform: Platform,
-    id: String,
+    pub(super) id: String,
     name: String,
-    state: String,
+    pub(super) state: String,
 }
 
 #[derive(Serialize)]
@@ -67,7 +67,7 @@ pub fn run(target: Option<&str>, json: bool) -> Result<()> {
     Ok(())
 }
 
-fn discover(platform: Platform) -> Result<Vec<Device>> {
+pub(super) fn discover(platform: Platform) -> Result<Vec<Device>> {
     match platform {
         Platform::Android => {
             let adb = sdk::adb(&sdk::android_root()?)?;

@@ -269,12 +269,32 @@ fn push_raw_string(
         for (rel, b) in bytes[from..to].iter().enumerate() {
             if *b == b'\n' {
                 let end = from + rel;
-                let end = if end > line_start && bytes[end - 1] == b'\r' { end - 1 } else { end };
-                push_raw_span(line_index, out, token_start, raw, line_start, end - line_start, STRING);
+                let end = if end > line_start && bytes[end - 1] == b'\r' {
+                    end - 1
+                } else {
+                    end
+                };
+                push_raw_span(
+                    line_index,
+                    out,
+                    token_start,
+                    raw,
+                    line_start,
+                    end - line_start,
+                    STRING,
+                );
                 line_start = from + rel + 1;
             }
         }
-        push_raw_span(line_index, out, token_start, raw, line_start, to - line_start, STRING);
+        push_raw_span(
+            line_index,
+            out,
+            token_start,
+            raw,
+            line_start,
+            to - line_start,
+            STRING,
+        );
     };
     while i < bytes.len() {
         let b = bytes[i];

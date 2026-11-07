@@ -1590,6 +1590,10 @@ dream_ptr dream_new_future(dream_size size, int32_t poll, int32_t kind);
 void dream_enqueue(dream_ptr f);
 void dream_start(dream_ptr f);
 void dream_run_loop(void);
+#ifndef DREAM_WASM32
+/* One bounded scheduler pass for a platform event loop; see dream_embed.h. */
+int dream_scheduler_pump(void);
+#endif
 dream_ptr dream_yield_signal(void);
 void dream_yield_signal_complete(dream_ptr signal);
 void dream_yield_run(dream_ptr producer, dream_ptr ready);

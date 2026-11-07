@@ -16,6 +16,7 @@ pub enum TargetSymbol {
     Windows,
     Macos,
     Linux,
+    Android,
     Ios,
     Native,
     Wasm,
@@ -24,12 +25,13 @@ pub enum TargetSymbol {
 }
 
 impl TargetSymbol {
-    pub const ALL: [TargetSymbol; 10] = [
+    pub const ALL: [TargetSymbol; 11] = [
         TargetSymbol::Debug,
         TargetSymbol::Release,
         TargetSymbol::Windows,
         TargetSymbol::Macos,
         TargetSymbol::Linux,
+        TargetSymbol::Android,
         TargetSymbol::Ios,
         TargetSymbol::Native,
         TargetSymbol::Wasm,
@@ -45,6 +47,7 @@ impl TargetSymbol {
             TargetSymbol::Windows => "Windows",
             TargetSymbol::Macos => "Macos",
             TargetSymbol::Linux => "Linux",
+            TargetSymbol::Android => "Android",
             TargetSymbol::Ios => "Ios",
             TargetSymbol::Native => "Native",
             TargetSymbol::Wasm => "Wasm",

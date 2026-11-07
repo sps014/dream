@@ -31,6 +31,7 @@ pub(crate) fn wake() {
 
 pub(crate) fn drain(host: &mut Host) {
     let mut events = std::mem::take(&mut host.parked);
+    events.extend(crate::app::take_recorded());
     events.extend(host.pump.poll_iter());
     for entry in host.windows.values_mut() {
         let metrics = Metrics::read(&entry.window);

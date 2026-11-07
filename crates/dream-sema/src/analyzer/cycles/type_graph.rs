@@ -141,11 +141,7 @@ impl<'a> TypeGraph<'a> {
                 args.iter().map(|a| (*a, Edge::Inline)).collect()
             }
             TyKind::Union(..) | TyKind::Struct(..) if self.interner.is_reference(ty) => erased(),
-            TyKind::Object => self
-                .references
-                .iter()
-                .map(|r| (*r, Edge::Erased))
-                .collect(),
+            TyKind::Object => self.references.iter().map(|r| (*r, Edge::Erased)).collect(),
             TyKind::Interface(..) => match self.implementers.get(&ty) {
                 Some(classes) => classes.iter().map(|c| (*c, Edge::Erased)).collect(),
                 None => erased(),

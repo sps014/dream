@@ -124,7 +124,8 @@ A condition names targets as `Target.<name>`. The names a build defines:
 | `Target.Wasi` | building WebAssembly for a WASI host |
 | `Target.Windows` | building a native binary for Windows |
 | `Target.Macos` | building a native binary for macOS |
-| `Target.Linux` | building a native binary for Linux or Android |
+| `Target.Linux` | building a native binary for Linux |
+| `Target.Android` | building a native binary for Android |
 | `Target.Ios` | building a native binary for iOS |
 
 Every build defines exactly one of `Debug` and `Release`, and exactly one of `Native` and `Wasm`.
@@ -140,7 +141,7 @@ fun uses_posix_paths(): bool {
     return true;
 }
 
-@cfg(Target.Native && !(Target.Windows || Target.Ios))
+@cfg(Target.Native && !(Target.Windows || Target.Android || Target.Ios))
 fun can_fork(): bool {
     return true;
 }

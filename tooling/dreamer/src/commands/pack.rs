@@ -39,7 +39,9 @@ pub fn run(
         );
     }
     if workspace.manifest.app.is_some() && !pkg.targets.iter().any(|target| target == "native") {
-        bail!("{}", crate::mobile::CANVAS_UNAVAILABLE);
+        bail!(
+            "pack produces desktop executables; build the mobile app with `dreamer build --target android` or `--target ios`"
+        );
     }
 
     let triples = resolve_pack_targets(target_args)?;

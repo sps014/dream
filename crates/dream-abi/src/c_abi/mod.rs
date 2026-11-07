@@ -73,7 +73,7 @@ pub fn is_c_identifier(name: &str) -> bool {
 
 /// The embedding API declared by `include/dream_embed.h`, preserved for native libraries and
 /// programs whose reachable foreign code or exports can invoke it.
-pub const EMBED_EXPORTS: [&str; 7] = [
+pub const EMBED_EXPORTS: [&str; 8] = [
     "dream_thread_attach",
     "dream_thread_detach",
     "dream_retain",
@@ -81,7 +81,13 @@ pub const EMBED_EXPORTS: [&str; 7] = [
     "dream_complete_foreign",
     "dream_set_panic_hook",
     "dream_set_platform",
+    "dream_scheduler_pump",
 ];
+
+/// The window host's platform loop on targets whose operating system owns the main thread
+/// (`TargetSpec::hosts_event_loop`): `int(argc, argv, guest_entry, scheduler_pump)`. The guest's
+/// `main` hands both entry points to it and the platform calls back between frames.
+pub const PLATFORM_APP_MAIN: &str = "dream_window_app_main";
 
 /// The stdlib callback class (`system.NativeCallback<F>`), passed to C as `(fn, void* user_data)`.
 pub const NATIVE_CALLBACK_TYPE: &str = "NativeCallback";

@@ -1,6 +1,6 @@
 //! Native audio output. Guest calls serialize graph mutations; callbacks stay in C.
-use dream_host_abi::{DreamPtr, alloc_f32s, alloc_string, read_f32s, read_string};
 use dream_host_abi::handles::HandleTable;
+use dream_host_abi::{DreamPtr, alloc_f32s, alloc_string, read_f32s, read_string};
 use std::ffi::{CStr, c_char, c_void};
 use std::sync::Mutex;
 

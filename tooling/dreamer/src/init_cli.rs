@@ -9,7 +9,7 @@ enum Template {
     Console,
     /// A GPU canvas app for the current desktop OS.
     Desktop,
-    /// A shared GPU canvas project for Android and iOS (mobile execution is pending).
+    /// A shared GPU canvas project for Android and iOS.
     Mobile,
     /// A shared GPU canvas project for desktop, Android, and iOS.
     App,

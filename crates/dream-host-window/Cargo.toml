@@ -15,6 +15,12 @@ path = "tests/main_thread.rs"
 # SDL video must run on the process main thread; libtest uses worker threads.
 harness = false
 
+[[test]]
+name = "app_loop"
+path = "tests/app_loop.rs"
+# The platform loop runs SDL's main callbacks on the main thread and quits SDL when it ends.
+harness = false
+
 [dependencies]
 dream-host-core = { path = "../dream-host-core" }
 dream-host-abi = { path = "../dream-host-abi" }

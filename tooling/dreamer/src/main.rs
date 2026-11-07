@@ -108,7 +108,7 @@ enum Cmd {
     },
     /// Install dependencies, then compile the project's entry point.
     Build {
-        /// Build for native, web, node, android, or ios (mobile canvas packaging is pending).
+        /// Build for native, web, node, android (debug APK), or ios (simulator app).
         #[arg(long)]
         target: Option<String>,
         #[command(flatten)]
@@ -118,9 +118,13 @@ enum Cmd {
     },
     /// Install dependencies, then run the project on the resolved host from dream.toml.
     Run {
-        /// Select native, web, node, android, or ios; mobile canvas execution is pending.
+        /// Select native, web, node, android, or ios.
         #[arg(long, value_name = "HOST")]
         target: Option<String>,
+        /// Android serial or iOS simulator UDID from `dreamer devices`; optional when exactly one
+        /// device is running.
+        #[arg(long, value_name = "ID")]
+        device: Option<String>,
         #[command(flatten)]
         opt: OptFlags,
         /// TCP port for `--target web` (default 8787). Reuses/restarts the previous project server.
@@ -271,14 +275,20 @@ fn main() -> ExitCode {
         },
         Cmd::Run {
             target,
+            device,
             opt,
             port,
             package,
             args,
         } => match opt.into_compile_flags() {
-            Ok(flags) => {
-                commands::run::run_with(&cwd, target, flags, port, &args, package.as_deref())
-            }
+            Ok(flags) => commands::run::run_with(
+                &cwd,
+                commands::run::Selection { target, device },
+                flags,
+                port,
+                &args,
+                package.as_deref(),
+            ),
             Err(e) => {
                 print_error(e);
                 return ExitCode::FAILURE;

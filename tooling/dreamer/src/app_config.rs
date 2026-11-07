@@ -14,7 +14,7 @@ pub struct AppConfig {
 }
 
 fn android_min_sdk() -> u32 {
-    26
+    dream_abi::target::ANDROID_MIN_API
 }
 fn ios_min_os() -> String {
     "16.0".into()
@@ -41,8 +41,11 @@ impl AppConfig {
                 "app.id must have at least two dot-separated segments and contain only letters, digits, and dots for Android/iOS"
             );
         }
-        if self.android_min_sdk < 26 {
-            bail!("app.android-min-sdk must be at least 26");
+        if self.android_min_sdk < dream_abi::target::ANDROID_MIN_API {
+            bail!(
+                "app.android-min-sdk must be at least {}",
+                dream_abi::target::ANDROID_MIN_API
+            );
         }
         let version = self
             .ios_min_os

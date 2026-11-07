@@ -103,7 +103,11 @@ fn android(checks: &mut Vec<Check>) -> Option<PathBuf> {
         "adb",
         sdk::adb(&root).map(|p| p.display().to_string()),
     ));
-    checks.push(Check::new("android-platform", android_platform(&root)));
+    checks.push(Check::new(
+        "android-platform",
+        sdk::android_platform(&root, super::android::COMPILE_API)
+            .map(|(_, jar)| jar.display().to_string()),
+    ));
     checks.push(Check::new("android-build-tools", build_tools(&root)));
     let ndk = sdk::ndk(&root).and_then(|path| sdk::ndk_prebuilt(&path));
     checks.push(Check::new(
@@ -147,32 +151,6 @@ fn validate_jdk(version: &str) -> Result<()> {
         );
     }
     Ok(())
-}
-
-fn android_platform(root: &Path) -> Result<String> {
-    let mut installed = Vec::new();
-    for entry in root
-        .join("platforms")
-        .read_dir()
-        .context("install an Android SDK platform (API 26 or newer) with sdkmanager")?
-    {
-        let entry = entry?;
-        if let Some(api) = entry
-            .file_name()
-            .to_string_lossy()
-            .strip_prefix("android-")
-            .and_then(|s| s.parse::<u32>().ok())
-            && api >= 26
-            && entry.path().join("android.jar").is_file()
-        {
-            installed.push((api, entry.path()));
-        }
-    }
-    installed.sort();
-    installed
-        .pop()
-        .map(|(_, path)| path.display().to_string())
-        .context("install an Android SDK platform (API 26 or newer) with sdkmanager")
 }
 
 fn build_tools(root: &Path) -> Result<String> {
@@ -338,22 +316,5 @@ mod tests {
             assert!(simulator_runtime(&format!(r#"{{"runtimes":{runtime}}}"#)).is_err());
         }
         assert!(simulator_runtime(r#"{"runtimes":[{"identifier":"com.apple.CoreSimulator.SimRuntime.iOS-18-0","isAvailable":true}]}"#).is_ok());
-    }
-
-    #[test]
-    fn platform_requires_api_26_and_android_jar() {
-        let root = tempfile::tempdir().unwrap();
-        for api in [25, 26, 35, 36] {
-            let dir = root.path().join(format!("platforms/android-{api}"));
-            std::fs::create_dir_all(&dir).unwrap();
-            if api != 36 {
-                std::fs::write(dir.join("android.jar"), "").unwrap();
-            }
-        }
-        assert!(
-            android_platform(root.path())
-                .unwrap()
-                .ends_with("android-35")
-        );
     }
 }

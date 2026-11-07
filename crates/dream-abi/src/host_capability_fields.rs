@@ -103,6 +103,7 @@ pub(super) fn fields(capability: HostCapability) -> &'static [&'static str] {
             "windowSetCursorMode",
             "windowSetCursorIcon",
             "windowGamepadRumble",
+            crate::c_abi::PLATFORM_APP_MAIN,
         ],
         HostCapability::Gpu => &[
             "gpuDeviceCreate",

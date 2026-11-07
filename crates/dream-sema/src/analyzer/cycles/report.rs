@@ -90,18 +90,15 @@ impl<'a> Analyzer<'a> {
                     _ => None,
                 })
                 .collect();
-            let fix = fields
-                .iter()
-                .copied()
-                .min_by_key(|&(at, owner, index, d)| {
-                    let distance = (cycle.len() - at) % cycle.len();
-                    (
-                        is_std(d),
-                        self.collection(graph, owner, index).is_some(),
-                        interner.is_value_type(owner),
-                        distance,
-                    )
-                });
+            let fix = fields.iter().copied().min_by_key(|&(at, owner, index, d)| {
+                let distance = (cycle.len() - at) % cycle.len();
+                (
+                    is_std(d),
+                    self.collection(graph, owner, index).is_some(),
+                    interner.is_value_type(owner),
+                    distance,
+                )
+            });
             let start = fix.map_or(0, |(at, ..)| at);
             let chain = self.cycle_chain(graph, &cycle, start);
             let key = match fix {
@@ -222,7 +219,13 @@ impl<'a> Analyzer<'a> {
 
     /// The type of field `index` of `owner` when it is a standard collection class.
     fn collection(&self, graph: &TypeGraph<'_>, owner: TypeId, index: u32) -> Option<TypeId> {
-        let ty = graph.layouts().structs.get(&owner)?.fields.get(index as usize)?.ty;
+        let ty = graph
+            .layouts()
+            .structs
+            .get(&owner)?
+            .fields
+            .get(index as usize)?
+            .ty;
         let interner = &self.type_ctx.interner;
         match interner.kind(ty) {
             TyKind::Struct(def, _) if !interner.is_value_type(ty) && self.std_def(*def) => Some(ty),
@@ -240,7 +243,8 @@ impl Report {
         )
         .with_note("objects in this cycle keep each other alive, so none of them is ever freed");
         for store in &self.stores {
-            diagnostic = diagnostic.with_note(format!("the cycle is closed by the store at {store}"));
+            diagnostic =
+                diagnostic.with_note(format!("the cycle is closed by the store at {store}"));
         }
         if self.more > 0 {
             let plural = if self.more == 1 { "" } else { "s" };

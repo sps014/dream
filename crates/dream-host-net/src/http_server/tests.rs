@@ -408,7 +408,10 @@ fn proxy_headers_apply_only_to_trusted_peers() {
                 .status()
         });
         let (request, host, client_port, scheme) = accept_client(server);
-        assert_eq!((host.as_str(), scheme.as_str()), (expected_host, expected_scheme));
+        assert_eq!(
+            (host.as_str(), scheme.as_str()),
+            (expected_host, expected_scheme)
+        );
         assert_eq!(client_port == 0, expected_host != "127.0.0.1");
         respond(Action::Respond, request, b"ok");
         super::release(request);

@@ -61,7 +61,9 @@ fn literal_rc_function(other_def: bool) -> (crate::MirFunction, TypeInterner) {
         b.assign(Place::Local(s), Rvalue::Use(Operand::Copy(Place::Local(p))));
     }
     b.push(Statement::Retain(Operand::Copy(Place::Local(s))));
-    b.push(Statement::Retain(Operand::Const(crate::Const::Str("x".into()))));
+    b.push(Statement::Retain(Operand::Const(crate::Const::Str(
+        "x".into(),
+    ))));
     b.terminate(Terminator::Goto(call));
     b.switch_to(call);
     b.push(Statement::Print {
@@ -70,7 +72,10 @@ fn literal_rc_function(other_def: bool) -> (crate::MirFunction, TypeInterner) {
         newline: true,
     });
     b.push(Statement::Release(Operand::Copy(Place::Local(s))));
-    b.assign(Place::Local(s), Rvalue::Use(Operand::Const(crate::Const::Null)));
+    b.assign(
+        Place::Local(s),
+        Rvalue::Use(Operand::Const(crate::Const::Null)),
+    );
     b.terminate(Terminator::Return(None));
     (b.finish(), i)
 }

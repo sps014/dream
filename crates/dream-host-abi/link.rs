@@ -5,7 +5,13 @@ fn configure_library(capability: &str) {
             println!("cargo:rustc-link-arg-cdylib=-Wl,-soname,lib{name}.so");
             println!("cargo:rustc-link-arg-cdylib=-Wl,-rpath,$ORIGIN");
         }
-        Ok("macos") => {
+        // The APK's library directory is already on the loader path. Android 15 devices may use
+        // 16 KB pages, which reject 4 KB-aligned segments.
+        Ok("android") => {
+            println!("cargo:rustc-link-arg-cdylib=-Wl,-soname,lib{name}.so");
+            println!("cargo:rustc-link-arg-cdylib=-Wl,-z,max-page-size=16384");
+        }
+        Ok("macos" | "ios") => {
             println!("cargo:rustc-link-arg-cdylib=-Wl,-install_name,@rpath/lib{name}.dylib");
             println!("cargo:rustc-link-arg-cdylib=-Wl,-rpath,@loader_path");
         }

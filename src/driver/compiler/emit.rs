@@ -87,6 +87,18 @@ impl Compiler {
         .map_err(|error| stale(error.to_string()))?;
         let c_shim = (!module.c_shim.is_empty())
             .then(|| crate::driver::ffi_shim::c_shim::render(&module.c_shim));
+        let mut live_imports = live_imports;
+        if self.target.spec().hosts_event_loop()
+            && mir
+                .functions
+                .iter()
+                .any(|f| f.name == dream_mir::abi::ENTRY_FN)
+        {
+            live_imports.push((
+                dream_abi::js_abi::HOST_MODULE.to_string(),
+                dream_abi::c_abi::PLATFORM_APP_MAIN.to_string(),
+            ));
+        }
         Ok(EmittedModule {
             bytes: module.ir.into_bytes(),
             header: module.header,

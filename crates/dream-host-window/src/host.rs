@@ -27,6 +27,9 @@ impl HostError {
 }
 
 pub(crate) struct Entry {
+    // Fields drop in order: the Metal view is a subview of the window.
+    #[cfg(target_os = "ios")]
+    pub metal: crate::surface::MetalView,
     pub window: Window,
     pub input: Input,
     pub metrics: Metrics,
@@ -133,6 +136,8 @@ pub fn open(title: &str, width: i32, height: i32, flags: i32) -> Result<i32, Hos
         if flags & 2 != 0 {
             builder.fullscreen();
         }
+        #[cfg(target_os = "ios")]
+        builder.metal_view();
         let mut window = builder
             .build()
             .map_err(|error| HostError::new("EWINDOW", error))?;
@@ -156,12 +161,17 @@ pub fn open(title: &str, width: i32, height: i32, flags: i32) -> Result<i32, Hos
                 .wire
                 .push(crate::wire::kind::SAFE_AREA_CHANGED, &metrics.insets);
         }
+        #[cfg(target_os = "ios")]
+        let metal = crate::surface::MetalView::create(&window)
+            .ok_or_else(|| HostError::new("EWINDOW", sdl3::get_error()))?;
         let id = host.next_id;
         host.next_id = next;
         host.native_ids.insert(window.id(), id);
         host.windows.insert(
             id,
             Entry {
+                #[cfg(target_os = "ios")]
+                metal,
                 window,
                 input,
                 metrics,
@@ -191,6 +201,16 @@ pub fn close(id: i32) {
         }
         report_activity(host);
     });
+}
+
+/// Releases every window and subsystem while SDL is still initialized, before the platform loop
+/// shuts SDL down.
+pub(crate) fn shutdown() {
+    if !is_window_thread() {
+        return;
+    }
+    dream_host_abi::set_scheduler_park(None);
+    HOST.with_borrow_mut(|host| *host = None);
 }
 
 /// Waits for platform events, preserving the event consumed by the wait for the next poll.
@@ -320,7 +340,7 @@ pub fn surface(id: i32) -> Option<WindowSurface> {
         if host.background || entry.input.hidden {
             return None;
         }
-        crate::surface::native(&entry.window, entry.vsync)
+        crate::surface::native(entry)
     })
     .flatten()
 }

@@ -92,6 +92,31 @@ pub(super) fn ndk_prebuilt(root: &Path) -> Result<PathBuf> {
     )
 }
 
+/// The newest installed SDK platform at or above `minimum`, as `(api, android.jar)`.
+pub(super) fn android_platform(root: &Path, minimum: u32) -> Result<(u32, PathBuf)> {
+    let advice = || {
+        format!(
+            "install Android SDK platform {minimum} or newer with sdkmanager \"platforms;android-{minimum}\""
+        )
+    };
+    let mut installed = Vec::new();
+    for entry in root.join("platforms").read_dir().with_context(advice)? {
+        let entry = entry?;
+        if let Some(api) = entry
+            .file_name()
+            .to_string_lossy()
+            .strip_prefix("android-")
+            .and_then(|s| s.parse::<u32>().ok())
+            && api >= minimum
+            && entry.path().join("android.jar").is_file()
+        {
+            installed.push((api, entry.path().join("android.jar")));
+        }
+    }
+    installed.sort();
+    installed.pop().with_context(advice)
+}
+
 pub(super) fn ios_sdk(name: &str) -> Result<PathBuf> {
     if !cfg!(target_os = "macos") {
         bail!("iOS development requires macOS and full Xcode");
@@ -169,6 +194,23 @@ mod tests {
                 native_clang.parent().unwrap().parent().unwrap()
             );
         }
+    }
+
+    #[test]
+    fn platform_requires_the_minimum_api_and_android_jar() {
+        let root = tempfile::tempdir().unwrap();
+        for api in [26, 34, 35, 36] {
+            let dir = root.path().join(format!("platforms/android-{api}"));
+            std::fs::create_dir_all(&dir).unwrap();
+            if api != 36 {
+                std::fs::write(dir.join("android.jar"), "").unwrap();
+            }
+        }
+        let (api, jar) = android_platform(root.path(), 35).unwrap();
+        assert_eq!(api, 35);
+        assert!(jar.ends_with("android-35/android.jar"));
+        let error = android_platform(root.path(), 37).unwrap_err().to_string();
+        assert!(error.contains("platforms;android-37"));
     }
 
     #[test]

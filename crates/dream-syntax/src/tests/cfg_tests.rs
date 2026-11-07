@@ -257,11 +257,23 @@ fn doc_comments_above_cfg_stay_with_the_item() {
 #[test]
 fn cfg_errors_are_reported() {
     let cases = [
-        ("@cfg(Target.Freebsd)\nfun f() {}\n", "unknown target 'Target.Freebsd'"),
-        ("@cfg(Os.Linux)\nfun f() {}\n", "'@cfg' conditions test 'Target.<name>'"),
+        (
+            "@cfg(Target.Freebsd)\nfun f() {}\n",
+            "unknown target 'Target.Freebsd'",
+        ),
+        (
+            "@cfg(Os.Linux)\nfun f() {}\n",
+            "'@cfg' conditions test 'Target.<name>'",
+        ),
         ("@cfg\nfun f() {}\n", "'@cfg' needs a condition"),
-        ("@cfg(Target.Linux Target.Wasm)\nfun f() {}\n", "expected '&&', '||', or ')'"),
-        ("@cfg()\nfun f() {}\n", "expected a condition like 'Target.Windows'"),
+        (
+            "@cfg(Target.Linux Target.Wasm)\nfun f() {}\n",
+            "expected '&&', '||', or ')'",
+        ),
+        (
+            "@cfg()\nfun f() {}\n",
+            "expected a condition like 'Target.Windows'",
+        ),
         (
             "@cfg(Target.Linux)\n@cfg(Target.Debug)\nfun f() {}\n",
             "an item can have only one '@cfg'",
@@ -270,7 +282,10 @@ fn cfg_errors_are_reported() {
             "@inline\n@cfg(Target.Linux)\nfun f() {}\n",
             "'@cfg' must be the first attribute",
         ),
-        ("fun f() {\n    @cfg(Target.Linux)\n}\n", "'@cfg' must be followed by"),
+        (
+            "fun f() {\n    @cfg(Target.Linux)\n}\n",
+            "'@cfg' must be followed by",
+        ),
     ];
     for (code, expected) in cases {
         let parsed = parse_with(code, linux_debug());
@@ -298,8 +313,8 @@ fn symbol_key_is_stable_and_ordered() {
 #[test]
 fn fuzz_cfg_conditions_never_panic() {
     let pieces = [
-        "@", "cfg", "(", ")", "!", "&&", "||", "Target", ".", "Linux", "Wasm", "Nope", "fun",
-        "f", "{", "}", ";", "let", "x", "=", "1", "class", "C", ":", "int", ",", "enum",
+        "@", "cfg", "(", ")", "!", "&&", "||", "Target", ".", "Linux", "Wasm", "Nope", "fun", "f",
+        "{", "}", ";", "let", "x", "=", "1", "class", "C", ":", "int", ",", "enum",
     ];
     let mut seed: u64 = 0x05ee_dcf9;
     for _ in 0..400 {
@@ -316,4 +331,3 @@ fn fuzz_cfg_conditions_never_panic() {
         parse_with(&format!("fun main() {{ {code} }}"), browser());
     }
 }
-

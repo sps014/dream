@@ -141,10 +141,7 @@ fn array_reallocated_each_iteration_reuses_one_frame_buffer() {
     let cond = b.new_block();
     let body = b.new_block();
     let exit = b.new_block();
-    b.assign(
-        Place::Local(held),
-        Rvalue::Use(Operand::Const(Const::Null)),
-    );
+    b.assign(Place::Local(held), Rvalue::Use(Operand::Const(Const::Null)));
     b.terminate(Terminator::Goto(cond));
     b.switch_to(cond);
     b.terminate(Terminator::If {
@@ -177,10 +174,7 @@ fn array_reallocated_each_iteration_reuses_one_frame_buffer() {
         Place::Local(held),
         Rvalue::Use(Operand::Copy(Place::Local(tmp))),
     );
-    b.assign(
-        Place::Local(tmp),
-        Rvalue::Use(Operand::Const(Const::Null)),
-    );
+    b.assign(Place::Local(tmp), Rvalue::Use(Operand::Const(Const::Null)));
     b.terminate(Terminator::Goto(cond));
     b.switch_to(exit);
     b.push(Statement::Release(Operand::Copy(Place::Local(held))));

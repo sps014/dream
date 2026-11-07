@@ -1,10 +1,10 @@
 ---
-title: Mobile libraries
-summary: Package Dream libraries as an iOS XCFramework or Android AAR.
+title: Mobile apps and libraries
+summary: Build and run Dream canvas apps on Android and iOS, or package libraries as an XCFramework or AAR.
 icon: material/cellphone
 ---
 
-# Mobile library packages
+# Mobile apps and libraries
 
 ## Canvas application projects
 
@@ -19,10 +19,31 @@ scale handling, and safe-area offsets. The renderer includes its default Noto Sa
 Edit the source and `[app]` identity in `dream.toml` as described in
 [Create a project](../tooling/create-project.md).
 
-The canvas scaffold is available, but Android/iOS window, presentation, lifecycle, and
-application-shell integration are not complete. `build` and `run` report that limitation
-for mobile targets; they do not produce APKs or simulator apps yet. Desktop canvas builds,
-browser touch delivery, and headless touch/inset simulations can be tested independently.
+Build and run the app on a running emulator, device, or simulator:
+
+```sh
+dreamer devices
+dreamer run --target android
+dreamer run --target ios --device 8C1F0D2E-1B6A-4C55-9E0B-3F2D7A1C9B44
+```
+
+`dreamer build --target android` produces a debug APK and `dreamer build --target ios`
+produces a simulator `.app`, both under `target/<triple>/debug/` (`release/` with
+`--release`). `dreamer run` also installs the package, launches it, and streams the app's log
+until the app exits; press Ctrl+C to stop following the log. `--device` takes an ID from
+`dreamer devices`; without it, `run` uses the only running device and fails when none or
+several are running. A shut-down iOS simulator named with `--device` is booted first.
+
+An Android build targets the selected device's architecture (`arm64-v8a` or `x86_64`);
+`build` without a device produces an `arm64-v8a` APK. The APK is signed with the debug key in
+`~/.android/debug.keystore`, which is created on first use. iOS apps are built for the arm64
+simulator on Apple silicon Macs and are signed for local use only. Device deployment,
+store signing, and package assets are not supported yet; a package with `assets` builds with a
+warning that the files are not copied.
+
+On a phone, the operating system owns the main thread. A Dream app's `main` returns to the
+platform after starting, and its async work continues between frames: timers, awaited GPU
+presents, and input events resume on the next frame instead of blocking it.
 
 ## Inspect the mobile toolchain
 
@@ -35,12 +56,13 @@ dreamer devices
 ```
 
 For Android, set `ANDROID_HOME` to the installed SDK directory (`ANDROID_SDK_ROOT`
-is used when `ANDROID_HOME` is absent). Install platform-tools, an SDK platform at
-API 26 or newer, build-tools, an NDK, and JDK 21 or newer on `PATH`. Set
+is used when `ANDROID_HOME` is absent). Install platform-tools, the API 35 SDK platform
+(`sdkmanager "platforms;android-35"`; a newer platform also works), build-tools, an NDK,
+and JDK 21 or newer on `PATH`. Apps run on Android 8.0 (API 26) and newer. Set
 `ANDROID_NDK_HOME` to select an NDK explicitly; otherwise the doctor selects the
 newest installed stable NDK. On Apple Silicon it uses the `darwin-arm64` NDK
 prebuilt when that directory is present, and the `darwin-x86_64` prebuilt otherwise. These are prerequisites for the canvas app development
-tooling; the library packager's minimum API remains configurable below.
+builds; the library packager's minimum API remains configurable below.
 
 For iOS, install full Xcode, select its developer directory with `xcode-select`, and
 install an iOS simulator runtime through Xcode Settings > Components. Command-line
@@ -48,8 +70,7 @@ tools alone do not include the iOS SDKs. iOS development requires macOS.
 
 The doctor checks both platform architectures and reports missing target-built
 core, window, GPU, drawing, and app capability libraries. It does not install
-components or qualify GPU rendering. A successful prerequisite check does not
-establish that a canvas app can run: SDK-backed app validation is still required.
+components. `build` and `run` run the same checks first and stop when one fails.
 
 `dreamer devices --target android` lists connected Android devices and emulators,
 including offline or unauthorized devices. Authorize USB debugging on the device
@@ -60,7 +81,37 @@ checks both platforms and reports any unavailable platform separately.
 Add `--json` to either command for structured output. A targeted discovery fails
 when its SDK cannot be queried; unfiltered discovery succeeds when at least one
 platform can be queried, even if no devices are present. The doctor exits with a
-failure when any requirement is missing. Mobile canvas build/run remains unavailable.
+failure when any requirement is missing.
+
+## Build the capability libraries for a phone
+
+A mobile app loads the core, window, GPU, drawing, and app capability libraries built for
+its target. Build them from a Dream checkout with Rust's target support and place them in
+`~/.dream/targets/<triple>/lib/` (or under `DREAM_TARGETS`). For an Android emulator on an
+Apple silicon Mac, using the NDK's macOS prebuilt:
+
+```sh
+rustup target add x86_64-linux-android
+NDK="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64"
+export CC_x86_64_linux_android="$NDK/bin/x86_64-linux-android26-clang"
+export CXX_x86_64_linux_android="$NDK/bin/x86_64-linux-android26-clang++"
+export AR_x86_64_linux_android="$NDK/bin/llvm-ar"
+export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$CC_x86_64_linux_android"
+
+cargo build --release --target x86_64-linux-android \
+  -p dream-host-core -p dream-host-window -p dream-host-gpu \
+  -p dream-host-drawing -p dream-host-app
+
+mkdir -p ~/.dream/targets/x86_64-linux-android/lib
+cp target/x86_64-linux-android/release/libdream_host_*.so \
+  target/x86_64-linux-android/release/NotoSans-OFL.txt \
+  ~/.dream/targets/x86_64-linux-android/lib/
+```
+
+Use `aarch64-linux-android` for phones and arm64 emulators. For the iOS simulator, build
+the same packages with `--target aarch64-apple-ios-sim` and copy `libdream_host_*.dylib`
+and `NotoSans-OFL.txt` into `~/.dream/targets/aarch64-apple-ios-sim/lib/`. Phones draw
+with Vulkan on Android and Metal on iOS.
 
 ## Package a library
 

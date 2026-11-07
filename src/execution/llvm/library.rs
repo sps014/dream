@@ -78,6 +78,10 @@ pub(super) fn shared_flags(
                 out.file_name().unwrap_or_default().to_string_lossy()
             ))
             .arg(format!("-Wl,--version-script={}", list.display()));
+        if spec.is_android() {
+            // Android 15 devices may use 16 KB pages; 4 KB-aligned segments fail to load there.
+            cmd.arg("-Wl,-z,max-page-size=16384");
+        }
         format!("{{ global: {}; local: *; }};\n", public.join("; "))
     };
     std::fs::write(&list, content).map_err(|e| e.to_string())?;

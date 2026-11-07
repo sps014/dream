@@ -25,9 +25,33 @@ foreign queue and entering the platform wait. Closing the last window restores t
 normal wait. A parked scheduler services OS events, but drawing resumes only when its frame loop
 runs again. Desktop modal OS operations can still delay guest execution.
 
-Mobile shell entry points, callback-driven scheduler stepping, lifecycle ordering during surface
-replacement, and SDK-backed presentation remain work for mobile app integration. The portable
-window host alone does not establish mobile app support.
+## Platform-owned loop on Android and iOS
+
+On phones the operating system owns the main thread, so Dream cannot block in
+`dream_run_loop` there. `TargetSpec::hosts_event_loop` selects a different entry: the emitted
+C `main` passes the guest entry and `dream_scheduler_pump` to the window host's
+`dream_window_app_main` (`c_abi::PLATFORM_APP_MAIN`). Emission records that import, so every
+mobile program links the window capability. The guest entry starts `main` and returns instead of
+running the loop.
+
+`dream_window_app_main` enters SDL's main callbacks through `SDL_RunApp`. On Android SDL's
+`SDLActivity` loads the capability libraries and the program's `.so`, then calls its exported
+`main` on SDL's thread; on iOS `SDL_RunApp` starts UIKit. The init callback runs the guest entry;
+each iterate callback runs one pump and ends the app once nothing is pending. The quit callback
+drops the window host. A second call returns 1 without re-entering SDL.
+
+`dream_scheduler_pump` is one bounded pass: it drains foreign completions and callbacks, fires the
+timers that were due when the pass began, and runs the ready queue until it empties. Work made ready
+by completions that arrive during the pass, including GPU presents, resumes on the next pass, so a
+frame loop yields to the platform once per frame. The pump never waits, returns 1 while work is
+outstanding, and returns 1 immediately when called while a pump is already on the stack.
+`dream_run_loop` remains the blocking desktop loop and the loop used by `Task` workers.
+
+SDL's event callback may run inside an SDL call the guest made, so it never calls Dream. It stores
+each event in the host's inbox, and the next `windowPoll` routes inbox events before newly polled
+ones. Android's `JNI_OnLoad` belongs to the window capability: SDL's definition is renamed to
+`dream_sdl_jni_onload` at build time (`.cargo/config.toml`), and the host exports a `JNI_OnLoad`
+that forwards to it. Lifecycle ordering during Android surface replacement is not yet handled.
 
 ## Event wire and coordinates
 
@@ -58,8 +82,11 @@ any pointer.
 
 The ABI identifies AppKit (`NSView*`), Win32 (`HWND` and `HINSTANCE`), Xlib (`Display*`, window id,
 and screen), Wayland (`wl_surface*` and `wl_display*`), Android (`ANativeWindow*`), and UIKit
-(`UIWindow*`). These identifiers describe handles; each renderer must separately support them.
-The pinned GPU library currently presents desktop surfaces on AppKit, Win32, and Xlib. Linux
+(`CAMetalLayer*`). These identifiers describe handles; each renderer must separately support them.
+The pinned GPU library presents on AppKit, Win32, Xlib, Android (Vulkan), and UIKit (Metal). On
+iOS the window host creates an `SDL_Metal_CreateView` for each window and exposes that view's
+layer; patch `0005` lets the GPU library adopt a UIKit layer instead of creating one from an
+AppKit `NSWindow`. Phones build the GPU library without Dawn. Linux
 selects X11 by default, including XWayland sessions, because that library has no Wayland surface
 implementation. An explicit Wayland driver can create a window but GPU surface creation fails.
 
@@ -79,5 +106,7 @@ The `main_thread` harness runs without libtest worker threads. By default it sel
 video driver and checks window sizing, event preservation while parked, cross-thread wakeups,
 closed handles, and worker refusal. `DREAM_WINDOW_DISPLAY_TEST=1` instead verifies a native
 surface. Input unit tests cover logical click coordinates, relative mouse motion, compact touch
-ids, cancellation, UTF-16 text, key codes, and modifiers. The GPU backend harness adds actual
+ids, cancellation, UTF-16 text, key codes, and modifiers. The `app_loop` harness drives
+`dream_window_app_main` with the dummy driver and checks that events recorded by the event
+callback reach `windowPoll` and that the loop ends when the guest finishes. The GPU backend harness adds actual
 surface acquisition and presentation with `DREAM_GPU_SURFACE_TEST=1`.

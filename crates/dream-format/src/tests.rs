@@ -235,7 +235,11 @@ fn cfg_conditions_and_statement_groups_keep_their_shape() {
         "got:\n{}",
         out
     );
-    assert!(out.contains("    @cfg(Target.Wasm)\n    run();"), "got:\n{}", out);
+    assert!(
+        out.contains("    @cfg(Target.Wasm)\n    run();"),
+        "got:\n{}",
+        out
+    );
     assert_idempotent(input);
 }
 

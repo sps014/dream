@@ -1662,7 +1662,11 @@ fn test_self_referential_layouts_need_no_permission() {
         "class A { public b: B; } class B { public a: A; }",
     ] {
         let diagnostics = analyze_code(code);
-        assert!(!diagnostics.has_errors(), "{code}: {:?}", diagnostics.diagnostics);
+        assert!(
+            !diagnostics.has_errors(),
+            "{code}: {:?}",
+            diagnostics.diagnostics
+        );
     }
 }
 
@@ -1674,7 +1678,8 @@ const LINKED_NODE: &str = "enum Option<T> { Some(T), None }
 
 #[test]
 fn test_store_closing_a_cycle_names_it_and_suggests_weak() {
-    let code = format!("{LINKED_NODE} fun main(): void {{ let n = Node(); n.next = Option.Some(n); }}");
+    let code =
+        format!("{LINKED_NODE} fun main(): void {{ let n = Node(); n.next = Option.Some(n); }}");
     let diagnostics = analyze_code(&code);
     let messages: Vec<String> = diagnostics
         .diagnostics

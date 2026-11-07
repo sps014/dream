@@ -2,6 +2,7 @@
 //!
 //! Video and event pumping stay on the process main thread with Dream's scheduler. Only the
 //! wake event can be posted from workers. See `docs/internals/17-window-host.md`.
+pub mod app;
 mod exports;
 mod gamepads;
 pub mod host;

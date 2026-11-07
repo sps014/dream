@@ -47,7 +47,8 @@ impl<'a> Analyzer<'a> {
             if let Some(local) = options_local {
                 self.hir_assign_local_id(local, options);
             }
-            let read_options = |local| HExpr::new(options_id, HExprKind::Var(Binding::Local(local)));
+            let read_options =
+                |local| HExpr::new(options_id, HExprKind::Var(Binding::Local(local)));
             let sb_ty = named("StringBuilder");
             let string_ty = named("string");
             let sb_local = self.hir_alloc_local("__json_sb", &sb_ty);
@@ -467,9 +468,12 @@ impl<'a> Analyzer<'a> {
                 Some(adapter) => {
                     self.hir_set_type_method_call(json_ty, &adapter, vec![value, options], &t_type)
                 }
-                None => {
-                    self.hir_set_type_method_call(t_ty_id, "from_json", vec![value, options], &t_type)
-                }
+                None => self.hir_set_type_method_call(
+                    t_ty_id,
+                    "from_json",
+                    vec![value, options],
+                    &t_type,
+                ),
             }
             return Ok(t_type);
         }

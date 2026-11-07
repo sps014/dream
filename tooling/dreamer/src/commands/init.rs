@@ -187,10 +187,9 @@ pub fn run(
     println!();
     println!("Next steps:");
     if scaffold == Scaffold::Canvas && !targets.contains(&RunTarget::Native) {
-        println!("  dreamer toolchain doctor --target android");
-        println!("  dreamer toolchain doctor --target ios");
+        println!("  dreamer toolchain doctor --target android   # or --target ios");
         println!("  dreamer devices");
-        println!("{}", crate::mobile::CANVAS_UNAVAILABLE);
+        println!("  dreamer run --target android              # or --target ios");
         return Ok(());
     }
     if as_lib {
@@ -202,7 +201,7 @@ pub fn run(
         if scaffold == Scaffold::Canvas {
             println!("  dreamer run             # run the desktop canvas app");
             if targets.contains(&RunTarget::Android) || targets.contains(&RunTarget::Ios) {
-                println!("{}", crate::mobile::CANVAS_UNAVAILABLE);
+                println!("  dreamer run --target android   # or --target ios, on a running device");
             }
             return Ok(());
         }

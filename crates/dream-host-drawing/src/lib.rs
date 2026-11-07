@@ -90,7 +90,8 @@ pub unsafe extern "C" fn drawingRender(
 #[unsafe(no_mangle)]
 pub extern "C" fn drawingPixelsAsync(future: DreamPtr, handle: i32) -> i32 {
     let result = {
-        let table: std::sync::MutexGuard<'_, HandleTable<Surface>> = dream_host_abi::lock(&SURFACES);
+        let table: std::sync::MutexGuard<'_, HandleTable<Surface>> =
+            dream_host_abi::lock(&SURFACES);
         table
             .get(handle)
             .ok_or_else(|| dream_drawing::DrawingError::Invalid("drawing surface is closed".into()))

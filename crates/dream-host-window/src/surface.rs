@@ -19,8 +19,10 @@ pub unsafe extern "C" fn dream_window_surface_v1(window: i32, out: *mut WindowSu
     }
 }
 
-pub(crate) fn native(window: &sdl3::video::Window, vsync: bool) -> Option<WindowSurface> {
+pub(crate) fn native(entry: &crate::host::Entry) -> Option<WindowSurface> {
     use sdl3::sys::{properties, video};
+    let window = &entry.window;
+    let vsync = entry.vsync;
     let metrics = crate::metrics::Metrics::read(window);
     // The SDL window remains owned by the main-thread host for the lifetime of these handles.
     let props = unsafe { video::SDL_GetWindowProperties(window.raw()) };
@@ -101,14 +103,37 @@ pub(crate) fn native(window: &sdl3::video::Window, vsync: bool) -> Option<Window
     }
     #[cfg(target_os = "ios")]
     {
-        out.platform = dream_host_abi::window_surface::WINDOW_PLATFORM_UIKIT;
-        out.window = pointer(video::SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER);
-        if out.window.is_null() {
+        if pointer(video::SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER).is_null() {
             return None;
         }
+        out.platform = dream_host_abi::window_surface::WINDOW_PLATFORM_UIKIT;
+        out.window = entry.metal.layer();
     }
     if out.platform == 0 {
         return None;
     }
     Some(out)
+}
+
+/// The Metal-backed subview UIKit windows draw through; its `CAMetalLayer` is the GPU surface.
+#[cfg(target_os = "ios")]
+pub(crate) struct MetalView(sdl3::sys::metal::SDL_MetalView);
+
+#[cfg(target_os = "ios")]
+impl MetalView {
+    pub(crate) fn create(window: &sdl3::video::Window) -> Option<Self> {
+        let view = unsafe { sdl3::sys::metal::SDL_Metal_CreateView(window.raw()) };
+        (!view.is_null()).then_some(Self(view))
+    }
+
+    fn layer(&self) -> *mut std::ffi::c_void {
+        unsafe { sdl3::sys::metal::SDL_Metal_GetLayer(self.0) }
+    }
+}
+
+#[cfg(target_os = "ios")]
+impl Drop for MetalView {
+    fn drop(&mut self) {
+        unsafe { sdl3::sys::metal::SDL_Metal_DestroyView(self.0) };
+    }
 }

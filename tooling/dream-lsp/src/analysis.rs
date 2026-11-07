@@ -309,14 +309,18 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                 code: d.code,
             })
         })
-        .chain(inactive.iter().filter(|span| span.end <= text.len()).map(|span| {
-            DiagnosticOut {
-                range: line_index.range(span.start, span.end),
-                severity: "hint",
-                message: "inactive code: its '@cfg' condition is false for this build".to_string(),
-                code: Some(INACTIVE_CODE),
-            }
-        }))
+        .chain(
+            inactive
+                .iter()
+                .filter(|span| span.end <= text.len())
+                .map(|span| DiagnosticOut {
+                    range: line_index.range(span.start, span.end),
+                    severity: "hint",
+                    message: "inactive code: its '@cfg' condition is false for this build"
+                        .to_string(),
+                    code: Some(INACTIVE_CODE),
+                }),
+        )
         .collect();
 
     AnalysisOutcome {

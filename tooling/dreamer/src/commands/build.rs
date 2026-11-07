@@ -68,7 +68,7 @@ pub fn compile_target(
         Some(RunTarget::Ios) => Some(crate::mobile::Platform::Ios),
         _ => None,
     } {
-        return crate::mobile::prepare_canvas(platform);
+        return crate::mobile::build_app(workspace, flags, platform, None, false);
     }
     let dream_bin = crate::dream_bin::locate()?;
     let compile_root = workspace.compile_root_path()?;

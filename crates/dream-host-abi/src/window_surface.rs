@@ -21,7 +21,7 @@ pub const WINDOW_PLATFORM_WAYLAND: u32 = 4;
 
 /// `window` is an `ANativeWindow*`; `display` is null.
 pub const WINDOW_PLATFORM_ANDROID: u32 = 5;
-/// `window` is a `UIWindow*`; `display` is null.
+/// `window` is the `CAMetalLayer*` of the window's Metal view; `display` is null.
 pub const WINDOW_PLATFORM_UIKIT: u32 = 6;
 
 /// Raw handles plus the drawable size, sampled at the time of the call. Handles stay valid until

@@ -1699,6 +1699,7 @@ dependencies = [
  "junction",
  "lzma-rs",
  "object 0.37.3",
+ "sdl3-src",
  "semver",
  "serde",
  "serde_json",

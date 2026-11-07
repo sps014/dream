@@ -1,7 +1,11 @@
-//! SDK inspection and device discovery do not install tools or boot devices.
+//! Mobile canvas apps: SDK inspection, device discovery, packaging, and launch. Nothing here
+//! installs SDKs or creates devices; `run` boots an iOS simulator chosen with `--device`.
 
+mod android;
+mod app;
 mod devices;
 mod doctor;
+mod ios;
 mod sdk;
 
 pub use devices::run as devices;
@@ -11,16 +15,7 @@ use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use std::process::Command;
 
-pub(crate) const CANVAS_UNAVAILABLE: &str = "mobile canvas app build/run is not available yet; inspect mobile setup with `dreamer toolchain doctor --target android`, `--target ios`, or `dreamer devices`";
-
-/// Prints the platform prerequisite report, then stops before packaging.
-///
-/// APK and simulator-app assembly is still outstanding. A missing SDK fails here with the
-/// diagnosis instead of compiling a desktop executable.
-pub(crate) fn prepare_canvas(platform: Platform) -> Result<()> {
-    doctor::run(platform, false)?;
-    bail!("{CANVAS_UNAVAILABLE}");
-}
+pub(crate) use app::run as build_app;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]

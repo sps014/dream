@@ -39,6 +39,15 @@ pub(super) struct TokenFlow<'a> {
     pub(super) holds: &'a IndexSet<DefId>,
     pub(super) alias_parent: &'a IndexMap<u32, u32>,
     pub(super) order_parent: &'a IndexMap<u32, u32>,
+    pub(super) riders: &'a IndexMap<u32, Vec<u32>>,
+}
+
+/// A cursor borrows its base's count, so the base's leftover waits until no cursor riding on
+/// it is live on either side of the block.
+fn rider_live(flow: &TokenFlow<'_>, local: u32, live: &[&IndexSet<u32>]) -> bool {
+    flow.riders
+        .get(&local)
+        .is_some_and(|cs| cs.iter().any(|c| live.iter().any(|set| set.contains(c))))
 }
 
 pub(super) fn join_tokens(
@@ -186,6 +195,7 @@ pub(super) fn transfer_block(
         if leftover_waits_for_live_parent(flow.alias_parent, local, &live_in)
             || leftover_waits_for_live_parent(flow.alias_parent, local, &flow.live_out[bi])
             || flow.order_parent.contains_key(&local)
+            || rider_live(flow, local, &[&live_in, &flow.live_out[bi]])
         {
             continue;
         }
@@ -300,6 +310,7 @@ pub(super) fn transfer_block(
         }
         if leftover_waits_for_live_parent(flow.alias_parent, local, &flow.live_out[bi])
             || flow.order_parent.contains_key(&local)
+            || (!clobber && rider_live(flow, local, &[&flow.live_out[bi]]))
         {
             continue;
         }

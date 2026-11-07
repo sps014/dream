@@ -251,6 +251,7 @@ impl TokenAnalysis {
             holds,
             alias_parent: &alias_parent,
             order_parent: &order_parent,
+            riders: &riders,
         };
         let mut start_release = vec![BTreeSet::new(); n];
         let mut end_release = vec![BTreeSet::new(); n];

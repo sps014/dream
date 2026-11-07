@@ -4,3 +4,7 @@
 # Host Rust thread stack for compiling / testing large Dream programs (analyzer mono, e2e).
 # Separate from the WASM guest stack (`DREAM_STACK_SIZE` / `[package.metadata.dream] stack-size`).
 RUST_MIN_STACK = "33554432"
+# SDL's static archive defines JNI_OnLoad, which a Rust cdylib would hide. The window host
+# re-exports it under the JNI name (`crates/dream-host-window/src/app.rs`).
+CFLAGS_aarch64_linux_android = "-DJNI_OnLoad=dream_sdl_jni_onload"
+CFLAGS_x86_64_linux_android = "-DJNI_OnLoad=dream_sdl_jni_onload"

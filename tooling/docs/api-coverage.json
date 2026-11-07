@@ -1,12 +1,151 @@
 [
   {
+    "source": "crates/dream-stdlib/src/system/app/app.dream",
+    "package": "system.app",
+    "page": "reference/api/app-app.md",
+    "declarations": [
+      {
+        "signature": "public static class App",
+        "description": "The lifetime of the whole program: startup, shutdown, and operating-system events such as sleep, session lock, and theme changes.  Wrap the program in `App.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the `stopping` token is cancelled, `on_stop` cleanups run newest first, and `run` returns the exit code for `main` to return. Register hooks for the events you care about; each hook returns a `Subscription` that can remove it.  Hooks run on the program's main scheduler, one event at a time, in registration order. They are not awaited, so they must return promptly; start a task for longer work.",
+        "line": 13,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static async fun run( start: fun(): Future<Result<Unit, Error>>, shutdown_timeout_ms: int = 5000 ): int",
+        "description": "Runs the program. `start` performs startup and may register hooks and cleanups.  After `start` returns `Ok`, the program keeps running until it is asked to stop: by `quit`, Ctrl+C, `SIGTERM`, or an operating-system shutdown that no hook vetoes. `start` may also keep running for the whole program, for example while serving requests, as long as it returns once `stopping` is cancelled. When `start` returns `Err`, the error is printed to standard error, cleanups registered so far run, and the exit code is `1`.  Shutdown cancels `stopping`, waits for `start` to return if it is still running, then runs `on_stop` cleanups in reverse registration order. All of this shares `shutdown_timeout_ms` milliseconds, counted from the start of shutdown: a `start` or cleanup still running when the time is up is cancelled and reported, and the remaining cleanups still run.  Returns the exit code: the value given to `quit`, `130` after Ctrl+C, `143` after `SIGTERM`, `1` after a failed `start`, and `0` otherwise. Calling `run` while another `run` is active prints an error and returns `1`.",
+        "line": 32,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_stop(cleanup: fun(): Future<void>): Result<Subscription, AppError>",
+        "description": "Registers `cleanup` to run during shutdown. Cleanups run newest first, so register each one right after acquiring the resource it releases. A cleanup registered during startup also runs when startup fails or is cancelled.  Returns `Err(AppError)` with code `ESTOPPING` once shutdown has begun, because the cleanup would never run.",
+        "line": 176,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_shutdown_requested(hook: fun(ShutdownRequest): void): Subscription",
+        "description": "Runs `hook` when something asks the program to stop: Ctrl+C, `SIGTERM`, `quit`, an operating-system quit, or the user session ending. Call `ShutdownRequest.veto` to keep running when the request allows it. Only the first accepted request is delivered; later requests are ignored once shutdown begins.",
+        "line": 191,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_sleep(hook: fun(): void): Subscription",
+        "description": "Runs `hook` just before the computer sleeps. Save anything that must survive a power loss, quickly: the operating system waits at most about half a second.",
+        "line": 199,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_wake(hook: fun(int): void): Subscription",
+        "description": "Runs `hook` after the computer wakes, with how long it slept in milliseconds, or `-1` when the platform cannot tell. Measure gaps with this value: wall-clock time can jump across sleep.",
+        "line": 208,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_session_lock(hook: fun(bool): void): Subscription",
+        "description": "Runs `hook` with `true` when the user session is locked, or another user switches in, and with `false` when it is unlocked again. Use it to hide sensitive content. Never fires in browsers, Node, or on Linux.",
+        "line": 217,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_display_power(hook: fun(bool): void): Subscription",
+        "description": "Runs `hook` with `false` when the displays go to sleep and `true` when they turn back on. The computer and the program keep running meanwhile. Never fires in browsers, Node, or on Linux.",
+        "line": 226,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_active(hook: fun(bool): void): Subscription",
+        "description": "Runs `hook` with `true` when the app comes to the foreground and `false` when it goes to the background: when every window lost focus natively, or when the browser tab is hidden. Programs without windows stay active.",
+        "line": 235,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_power_source(hook: fun(PowerSource): void): Subscription",
+        "description": "Runs `hook` when the computer switches between wall power and battery.",
+        "line": 242,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_theme(hook: fun(SystemTheme): void): Subscription",
+        "description": "Runs `hook` when the user changes the system color scheme.",
+        "line": 249,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_locale(hook: fun(): void): Subscription",
+        "description": "Runs `hook` when the user changes the system language or regional formats, so cached formatted text can be rebuilt.",
+        "line": 257,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_low_memory(hook: fun(): void): Subscription",
+        "description": "Runs `hook` when the operating system reports that memory is running low. Drop caches that can be rebuilt. Repeated warnings that arrive together run the hook once.",
+        "line": 265,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get stopping(): CancellationToken",
+        "description": "A token that is cancelled once, when shutdown begins and before any `on_stop` cleanup runs. Loops check `is_cancelled`; waits take it as their `token` argument. Outside `App.run` the token is never cancelled.",
+        "line": 274,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun quit(code: int = 0): void",
+        "description": "Stops the program with exit code `code`. `on_shutdown_requested` hooks see the reason `Requested`, which cannot be vetoed. Does nothing once shutdown has begun or when no `run` is active.",
+        "line": 281,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get phase(): AppPhase",
+        "description": "Where the program is in its lifetime. Intended for diagnostics and tests.",
+        "line": 289,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get is_session_locked(): bool",
+        "description": "True while the user session is locked or switched away from.",
+        "line": 294,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get are_displays_on(): bool",
+        "description": "False while the displays are asleep. True when the platform cannot tell.",
+        "line": 299,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get is_active(): bool",
+        "description": "True while the app is in the foreground. See `on_active`.",
+        "line": 304,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get power_source(): PowerSource",
+        "description": "The current power source. Read when `run` starts and kept current afterwards.",
+        "line": 309,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get theme(): SystemTheme",
+        "description": "The current system color scheme. Read when `run` starts and kept current afterwards.",
+        "line": 314,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun simulate(event: AppEvent): bool",
+        "description": "Delivers `event` as if the operating system had reported it, for tests. Hooks run before `simulate` returns. Returns false when the event was ignored: a duplicate (for example `Woke` while not asleep, or locking an already locked session), any event after shutdown began, or a vetoed shutdown request.",
+        "line": 322,
+        "page": "reference/api/app-app.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/app/app_error.dream",
     "package": "system.app",
     "page": "reference/api/app-app-error.md",
     "declarations": [
       {
         "signature": "public class AppError: Error",
-        "description": "Why an `Application` operation was refused.",
+        "description": "Why an `App` operation was refused.",
         "line": 4,
         "page": "reference/api/app-app-error.md"
       },
@@ -31,7 +170,7 @@
     "declarations": [
       {
         "signature": "public enum AppEvent",
-        "description": "An operating-system event to inject with `Application.simulate` in tests.  Each variant reaches the same hooks, properties, and transition checks as the real event. Programs never receive `AppEvent` values; they register `Application.on_*` hooks.",
+        "description": "An operating-system event to inject with `App.simulate` in tests.  Each variant reaches the same hooks, properties, and transition checks as the real event. Programs never receive `AppEvent` values; they register `App.on_*` hooks.",
         "line": 7,
         "page": "reference/api/app-app-event.md"
       },
@@ -104,13 +243,13 @@
     "declarations": [
       {
         "signature": "public enum AppPhase",
-        "description": "Where the program is in its lifetime, as reported by `Application.phase`.  Normal code does not need the phase: use the `Application.on_*` hooks and `Application.stopping` instead. It exists for diagnostics and tests.",
+        "description": "Where the program is in its lifetime, as reported by `App.phase`.  Normal code does not need the phase: use the `App.on_*` hooks and `App.stopping` instead. It exists for diagnostics and tests.",
         "line": 7,
         "page": "reference/api/app-app-phase.md"
       },
       {
         "signature": "Starting",
-        "description": "`Application.run` is running the `start` function.",
+        "description": "`App.run` is running the `start` function.",
         "line": 9,
         "page": "reference/api/app-app-phase.md"
       },
@@ -128,148 +267,9 @@
       },
       {
         "signature": "Stopping",
-        "description": "Shutdown began. `Application.stopping` is cancelled and `on_stop` cleanups run.",
+        "description": "Shutdown began. `App.stopping` is cancelled and `on_stop` cleanups run.",
         "line": 15,
         "page": "reference/api/app-app-phase.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/app/application.dream",
-    "package": "system.app",
-    "page": "reference/api/app-application.md",
-    "declarations": [
-      {
-        "signature": "public static class Application",
-        "description": "The lifetime of the whole program: startup, shutdown, and operating-system events such as sleep, session lock, and theme changes.  Wrap the program in `Application.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the `stopping` token is cancelled, `on_stop` cleanups run newest first, and `run` returns the exit code for `main` to return. Register hooks for the events you care about; each hook returns a `Subscription` that can remove it.  Hooks run on the program's main scheduler, one event at a time, in registration order. They are not awaited, so they must return promptly; start a task for longer work.",
-        "line": 13,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static async fun run( start: fun(): Future<Result<Unit, Error>>, shutdown_timeout_ms: int = 5000 ): int",
-        "description": "Runs the program. `start` performs startup and may register hooks and cleanups.  After `start` returns `Ok`, the program keeps running until it is asked to stop: by `quit`, Ctrl+C, `SIGTERM`, or an operating-system shutdown that no hook vetoes. `start` may also keep running for the whole program, for example while serving requests, as long as it returns once `stopping` is cancelled. When `start` returns `Err`, the error is printed to standard error, cleanups registered so far run, and the exit code is `1`.  Shutdown cancels `stopping`, waits for `start` to return if it is still running, then runs `on_stop` cleanups in reverse registration order. All of this shares `shutdown_timeout_ms` milliseconds, counted from the start of shutdown: a `start` or cleanup still running when the time is up is cancelled and reported, and the remaining cleanups still run.  Returns the exit code: the value given to `quit`, `130` after Ctrl+C, `143` after `SIGTERM`, `1` after a failed `start`, and `0` otherwise. Calling `run` while another `run` is active prints an error and returns `1`.",
-        "line": 32,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_stop(cleanup: fun(): Future<void>): Result<Subscription, AppError>",
-        "description": "Registers `cleanup` to run during shutdown. Cleanups run newest first, so register each one right after acquiring the resource it releases. A cleanup registered during startup also runs when startup fails or is cancelled.  Returns `Err(AppError)` with code `ESTOPPING` once shutdown has begun, because the cleanup would never run.",
-        "line": 176,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_shutdown_requested(hook: fun(ShutdownRequest): void): Subscription",
-        "description": "Runs `hook` when something asks the program to stop: Ctrl+C, `SIGTERM`, `quit`, an operating-system quit, or the user session ending. Call `ShutdownRequest.veto` to keep running when the request allows it. Only the first accepted request is delivered; later requests are ignored once shutdown begins.",
-        "line": 191,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_sleep(hook: fun(): void): Subscription",
-        "description": "Runs `hook` just before the computer sleeps. Save anything that must survive a power loss, quickly: the operating system waits at most about half a second.",
-        "line": 199,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_wake(hook: fun(int): void): Subscription",
-        "description": "Runs `hook` after the computer wakes, with how long it slept in milliseconds, or `-1` when the platform cannot tell. Measure gaps with this value: wall-clock time can jump across sleep.",
-        "line": 208,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_session_lock(hook: fun(bool): void): Subscription",
-        "description": "Runs `hook` with `true` when the user session is locked, or another user switches in, and with `false` when it is unlocked again. Use it to hide sensitive content. Never fires in browsers, Node, or on Linux.",
-        "line": 217,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_display_power(hook: fun(bool): void): Subscription",
-        "description": "Runs `hook` with `false` when the displays go to sleep and `true` when they turn back on. The computer and the program keep running meanwhile. Never fires in browsers, Node, or on Linux.",
-        "line": 226,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_active(hook: fun(bool): void): Subscription",
-        "description": "Runs `hook` with `true` when the app comes to the foreground and `false` when it goes to the background: when every window lost focus natively, or when the browser tab is hidden. Programs without windows stay active.",
-        "line": 235,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_power_source(hook: fun(PowerSource): void): Subscription",
-        "description": "Runs `hook` when the computer switches between wall power and battery.",
-        "line": 242,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_theme(hook: fun(SystemTheme): void): Subscription",
-        "description": "Runs `hook` when the user changes the system color scheme.",
-        "line": 249,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_locale(hook: fun(): void): Subscription",
-        "description": "Runs `hook` when the user changes the system language or regional formats, so cached formatted text can be rebuilt.",
-        "line": 257,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_low_memory(hook: fun(): void): Subscription",
-        "description": "Runs `hook` when the operating system reports that memory is running low. Drop caches that can be rebuilt. Repeated warnings that arrive together run the hook once.",
-        "line": 265,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get stopping(): CancellationToken",
-        "description": "A token that is cancelled once, when shutdown begins and before any `on_stop` cleanup runs. Loops check `is_cancelled`; waits take it as their `token` argument. Outside `Application.run` the token is never cancelled.",
-        "line": 274,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun quit(code: int = 0): void",
-        "description": "Stops the program with exit code `code`. `on_shutdown_requested` hooks see the reason `Requested`, which cannot be vetoed. Does nothing once shutdown has begun or when no `run` is active.",
-        "line": 281,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get phase(): AppPhase",
-        "description": "Where the program is in its lifetime. Intended for diagnostics and tests.",
-        "line": 289,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get is_session_locked(): bool",
-        "description": "True while the user session is locked or switched away from.",
-        "line": 294,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get are_displays_on(): bool",
-        "description": "False while the displays are asleep. True when the platform cannot tell.",
-        "line": 299,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get is_active(): bool",
-        "description": "True while the app is in the foreground. See `on_active`.",
-        "line": 304,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get power_source(): PowerSource",
-        "description": "The current power source. Read when `run` starts and kept current afterwards.",
-        "line": 309,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get theme(): SystemTheme",
-        "description": "The current system color scheme. Read when `run` starts and kept current afterwards.",
-        "line": 314,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun simulate(event: AppEvent): bool",
-        "description": "Delivers `event` as if the operating system had reported it, for tests. Hooks run before `simulate` returns. Returns false when the event was ignored: a duplicate (for example `Woke` while not asleep, or locking an already locked session), any event after shutdown began, or a vetoed shutdown request.",
-        "line": 322,
-        "page": "reference/api/app-application.md"
       }
     ]
   },
@@ -280,7 +280,7 @@
     "declarations": [
       {
         "signature": "public enum PowerSource",
-        "description": "Where the computer gets its power from, as reported by `Application.power_source`.",
+        "description": "Where the computer gets its power from, as reported by `App.power_source`.",
         "line": 4,
         "page": "reference/api/app-power-source.md"
       },
@@ -329,7 +329,7 @@
       },
       {
         "signature": "OsQuit",
-        "description": "The user quit the app from its menu or Dock. It can be vetoed. No platform reports it yet: Cmd+Q currently arrives as `WindowEvent.CloseRequested` on each window, so deliver it with `Application.simulate` in tests.",
+        "description": "The user quit the app from its menu or Dock. It can be vetoed. No platform reports it yet: Cmd+Q currently arrives as `WindowEvent.CloseRequested` on each window, so deliver it with `App.simulate` in tests.",
         "line": 15,
         "page": "reference/api/app-shutdown-reason.md"
       },
@@ -341,13 +341,13 @@
       },
       {
         "signature": "LastWindowClosed",
-        "description": "The last open window of the app was closed. It can be vetoed. No platform reports it yet, so deliver it with `Application.simulate` in tests.",
+        "description": "The last open window of the app was closed. It can be vetoed. No platform reports it yet, so deliver it with `App.simulate` in tests.",
         "line": 22,
         "page": "reference/api/app-shutdown-reason.md"
       },
       {
         "signature": "Requested",
-        "description": "The program called `Application.quit`. It cannot be vetoed.",
+        "description": "The program called `App.quit`. It cannot be vetoed.",
         "line": 24,
         "page": "reference/api/app-shutdown-reason.md"
       }
@@ -360,7 +360,7 @@
     "declarations": [
       {
         "signature": "public class ShutdownRequest",
-        "description": "A request to stop the program, passed to `Application.on_shutdown_requested` hooks.  Every hook sees the same request. When any hook calls `veto` on a request that allows it, the program keeps running and `Application.stopping` stays uncancelled.",
+        "description": "A request to stop the program, passed to `App.on_shutdown_requested` hooks.  Every hook sees the same request. When any hook calls `veto` on a request that allows it, the program keeps running and `App.stopping` stays uncancelled.",
         "line": 7,
         "page": "reference/api/app-shutdown-request.md"
       },
@@ -372,7 +372,7 @@
       },
       {
         "signature": "public get can_veto(): bool",
-        "description": "True when `veto` can keep the program running. Signals, `Application.quit`, and the final notice that the session is ending cannot be vetoed.",
+        "description": "True when `veto` can keep the program running. Signals, `App.quit`, and the final notice that the session is ending cannot be vetoed.",
         "line": 25,
         "page": "reference/api/app-shutdown-request.md"
       },
@@ -391,7 +391,7 @@
     "declarations": [
       {
         "signature": "public class Subscription",
-        "description": "A registered `Application` hook. Keep it to remove the hook early with `cancel`; a subscription that is ignored stays registered until the program stops.",
+        "description": "A registered `App` hook. Keep it to remove the hook early with `cancel`; a subscription that is ignored stays registered until the program stops.",
         "line": 5,
         "page": "reference/api/app-subscription.md"
       },
@@ -410,7 +410,7 @@
     "declarations": [
       {
         "signature": "public enum SystemTheme",
-        "description": "The color scheme the user chose for the operating system or browser, as reported by `Application.theme`.",
+        "description": "The color scheme the user chose for the operating system or browser, as reported by `App.theme`.",
         "line": 5,
         "page": "reference/api/app-system-theme.md"
       },
@@ -22052,13 +22052,13 @@
       },
       {
         "signature": "public fun run( host: string, port: int, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Listens with the default `ServerConfig` and waits until shutdown or cancellation. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `Application.stopping` is cancelled.",
+        "description": "Listens with the default `ServerConfig` and waits until shutdown or cancellation. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `App.stopping` is cancelled.",
         "line": 419,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun run( host: string, port: int, config: ServerConfig, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `Application.stopping` is cancelled.",
+        "description": "Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `App.stopping` is cancelled.",
         "line": 431,
         "page": "reference/api/webapi-web-app.md"
       },
@@ -22305,7 +22305,7 @@
     "declarations": [
       {
         "signature": "public class Gamepad",
-        "description": "A connected gamepad as of one `Window.poll`, using the standard controller layout.  Native programs map controllers with the SDL game controller database bundled in GLFW; browsers use the Gamepad API's standard mapping. `pressed` and `released` compare this poll with the previous one, so a button tapped entirely between two polls can go unnoticed.",
+        "description": "A connected gamepad as of one `Window.poll`, using the standard controller layout.  Native programs use the SDL3 controller database; browsers use the Gamepad API's standard mapping. `pressed` and `released` compare this poll with the previous one, so a button tapped entirely between two polls can go unnoticed.",
         "line": 9,
         "page": "reference/api/window-gamepad.md"
       },
@@ -22347,8 +22347,8 @@
       },
       {
         "signature": "public fun rumble(low: float, high: float, seconds: float): bool",
-        "description": "Vibrates the controller for `seconds`. `low` drives the strong low-frequency motor and `high` the weak high-frequency motor, each from `0.0` to `1.0`. Returns false when the platform cannot vibrate this controller; native programs built on GLFW currently always return false.",
-        "line": 65,
+        "description": "Vibrates the controller for `seconds`. `low` drives the strong low-frequency motor and `high` the weak high-frequency motor, each from `0.0` to `1.0`. Returns false when the platform or controller does not support vibration.",
+        "line": 64,
         "page": "reference/api/window-gamepad.md"
       }
     ]
@@ -23547,127 +23547,133 @@
       {
         "signature": "public static fun open(options: WindowOptions): Result<Window, WindowError>",
         "description": "Opens a native window configured by `options` and shows it.  In a browser this creates a `<canvas>` of the requested size at the end of the page and uses the title as the page title. Under Node, on a machine without a display, or when called from a `Task` worker, it returns a `WindowError`; see `WindowError.code` for the reasons.",
-        "line": 84,
+        "line": 86,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public static fun canvas(id: string): Result<Window, WindowError>",
         "description": "Uses the page's `<canvas>` element whose `id` attribute is `id` as a window.  The page keeps control of the canvas's layout size; the window follows it and reports changes as `WindowEvent.Resized`. The canvas becomes focusable so it can receive keyboard input after the user clicks it. Returns a `WindowError` with code `ENOTFOUND` when no such canvas exists.",
-        "line": 102,
+        "line": 109,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public static fun headless(options: WindowOptions): Window",
         "description": "Creates a window that exists only in memory. It never appears on screen and receives only the events passed to `simulate`, so tests, replays and servers can run input-driven code on machines without a display. Its pixel size equals its logical size, and simulated `Resized` events change both.",
-        "line": 114,
+        "line": 121,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get is_open(): bool",
         "description": "False once `close` was called or a poll delivered `WindowEvent.CloseRequested`. After a close request the native window stays on screen until `close` is called or the `Window` is released, so the current frame can still finish drawing.",
-        "line": 134,
+        "line": 141,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get title(): string",
         "description": "The title last set by the `WindowOptions` constructor or `set_title`. Canvas windows start with an empty title.",
-        "line": 140,
+        "line": 147,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get is_fullscreen(): bool",
         "description": "True while the window covers a monitor in fullscreen mode.",
-        "line": 145,
+        "line": 152,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get is_focused(): bool",
         "description": "True while the window has keyboard focus.",
-        "line": 153,
+        "line": 160,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get size(): WindowSize",
         "description": "The content area's size in logical pixels, the units of the `WindowOptions` constructor, `set_size` and mouse positions.",
-        "line": 162,
+        "line": 169,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get pixel_size(): WindowSize",
         "description": "The drawable area's size in physical pixels, the size a GPU surface needs. It matches the size carried by the most recent `WindowEvent.Resized`.",
-        "line": 171,
+        "line": 178,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get scale_factor(): float",
         "description": "Physical pixels per logical pixel on the window's current monitor: `1.0` on standard displays and `2.0` on most high-DPI displays. Headless windows start at `1.0` and follow simulated `WindowEvent.ScaleChanged` events.",
-        "line": 181,
+        "line": 188,
+        "page": "reference/api/window-window.md"
+      },
+      {
+        "signature": "public get safe_area(): WindowInsets",
+        "description": "The drawable edges to avoid, in logical pixels. Updated by SafeAreaChanged during poll. Desktop, browser, and headless windows start with zero on every edge; native mobile inset reporting requires a mobile window host.",
+        "line": 201,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get is_minimized(): bool",
         "description": "True between a `WindowEvent.Minimized` and the next `WindowEvent.Restored`, as delivered by `poll`.",
-        "line": 193,
+        "line": 207,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get is_occluded(): bool",
         "description": "True after `poll` delivered `WindowEvent.Occluded(true)`, until it delivers `Occluded(false)`. Stays false on platforms that cannot detect occlusion.",
-        "line": 199,
+        "line": 213,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public get cursor_mode(): CursorMode",
         "description": "The cursor mode last set with `set_cursor_mode`; starts as `CursorMode.Normal`.",
-        "line": 204,
+        "line": 218,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public fun poll(): InputFrame",
         "description": "Pumps the platform's pending events and returns everything that happened since the previous poll. Call it once per frame. Events queued with `simulate` follow the platform's events. A closed window still returns frames, with no platform events.",
-        "line": 220,
+        "line": 234,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public fun simulate(event: WindowEvent): void",
         "description": "Queues `event` as if the platform had reported it. The next `poll` delivers it after the platform's own events and updates the keyboard and mouse state from it. Use it for automated tests, input replays and on-screen controls. Simulated events never move the real cursor or resize the real window.",
-        "line": 266,
+        "line": 283,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public fun close(): void",
         "description": "Closes the window and removes it from the screen. Closing twice does nothing.",
-        "line": 271,
+        "line": 288,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public fun set_title(title: string): void",
         "description": "Changes the title bar text, or the page title for a window made by `open` in a browser.",
-        "line": 280,
+        "line": 297,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public fun set_size(width: int, height: int): void",
         "description": "Resizes the content area to `width` by `height` logical pixels. A `WindowEvent.Resized` follows once the platform applied the change. In browsers this sets the canvas's CSS size, so page styles that fix the canvas size still win. Non-positive sizes are ignored.",
-        "line": 291,
+        "line": 308,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public fun set_fullscreen(enabled: bool): void",
         "description": "Enters or leaves fullscreen. Native windows cover the primary monitor at its current video mode. Browsers only allow fullscreen during a user gesture, such as a key or click handler's frame, and may refuse it.",
-        "line": 305,
+        "line": 322,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public fun set_cursor_mode(mode: CursorMode): void",
         "description": "Shows, hides or captures the cursor while it is over the window.",
-        "line": 313,
+        "line": 330,
         "page": "reference/api/window-window.md"
       },
       {
         "signature": "public fun set_cursor_icon(icon: CursorIcon): void",
         "description": "Changes the cursor's shape while it is over the window. Shapes the platform does not provide fall back to the default arrow.",
-        "line": 322,
+        "line": 339,
         "page": "reference/api/window-window.md"
       }
     ]
@@ -23712,121 +23718,194 @@
         "signature": "public enum WindowEvent",
         "description": "Something that happened to a window since the previous `Window.poll`.  `InputFrame.events` lists events in the order the operating system or browser reported them, followed by events queued with `Window.simulate`.",
         "line": 7,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Resized(size: WindowSize)",
         "description": "The drawable area changed size. The size is in physical pixels, which is the size a GPU surface needs; it differs from `Window.size` on high-DPI displays.",
         "line": 10,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Moved(x: int, y: int)",
         "description": "The window moved; `x` and `y` are the new top-left corner in screen coordinates. Browsers never report this event.",
         "line": 13,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Focused",
         "description": "The window gained keyboard focus.",
         "line": 15,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Unfocused",
         "description": "The window lost keyboard focus. Every held key and mouse button is reported released first, so input never sticks while the window is in the background.",
         "line": 18,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "CloseRequested",
         "description": "The user asked to close the window, for example with its close button. `Window.is_open` is false after the poll that delivers this event.",
         "line": 21,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "KeyDown(key: KeyEvent)",
         "description": "A key went down, or the operating system repeated a held key.",
         "line": 23,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "KeyUp(key: KeyEvent)",
         "description": "A key was released.",
         "line": 25,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Text(text: string)",
         "description": "Text the user typed, after the keyboard layout, dead keys and input-method composition were applied. Consecutive characters arrive as one event.",
         "line": 28,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "MouseMove(position: WindowVector)",
         "description": "The cursor moved to `position`, in window coordinates.",
         "line": 30,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "MouseDown(button: MouseButton)",
         "description": "A mouse button went down.",
         "line": 32,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "MouseUp(button: MouseButton)",
         "description": "A mouse button was released.",
         "line": 34,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Scroll(delta: WindowVector)",
         "description": "The wheel or touchpad scrolled. One wheel notch is `1.0`; positive `y` scrolls up and positive `x` scrolls right.",
         "line": 37,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "GamepadConnected(slot: int)",
         "description": "A gamepad was connected in `slot`. Gamepads already connected when the window opens are reported in the first poll.",
         "line": 40,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "GamepadDisconnected(slot: int)",
         "description": "The gamepad in `slot` was disconnected.",
         "line": 42,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "FileDropped(path: string)",
         "description": "A file was dropped on the window. Native programs receive its full path; browsers only reveal the file name.",
         "line": 45,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Minimized",
         "description": "The window was minimized to the taskbar or dock. Browsers never report this event, because a canvas cannot be minimized.",
         "line": 48,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Restored",
         "description": "A minimized window was restored. Browsers never report this event.",
         "line": 50,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "Occluded(hidden: bool)",
         "description": "The window became completely hidden (`hidden` is true) or visible again, for example behind other windows, on another virtual desktop, or in a background browser tab. Platforms that cannot tell never report it. A hidden window can skip drawing until it is visible again.",
         "line": 55,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
       },
       {
         "signature": "ScaleChanged(factor: float)",
         "description": "The window moved to a monitor with a different `Window.scale_factor`, or the display's scale setting changed. It arrives before the `Resized` event that carries the new physical size, so fonts and layouts can be rebuilt at the new scale first.",
         "line": 60,
-        "page": "reference/api/window-window-event.md"
+        "page": "reference/api/window-window-event-1.md"
+      },
+      {
+        "signature": "TouchDown(id: int, position: WindowVector)",
+        "description": "A finger touched the surface at position, in logical window pixels. The nonnegative id identifies this contact until TouchUp or TouchCancel; it can then be reused.",
+        "line": 64,
+        "page": "reference/api/window-window-event-1.md"
+      },
+      {
+        "signature": "TouchMove(id: int, position: WindowVector)",
+        "description": "An active contact moved. Position uses the same logical coordinates as TouchDown.",
+        "line": 66,
+        "page": "reference/api/window-window-event-1.md"
+      },
+      {
+        "signature": "TouchUp(id: int, position: WindowVector)",
+        "description": "A contact ended normally at position. Release any state associated with its id.",
+        "line": 68,
+        "page": "reference/api/window-window-event-1.md"
+      },
+      {
+        "signature": "TouchCancel(id: int)",
+        "description": "The platform interrupted a contact, for example after focus was lost. Release its state without activating a button or completing a gesture.",
+        "line": 71,
+        "page": "reference/api/window-window-event-1.md"
+      },
+      {
+        "signature": "SafeAreaChanged(insets: WindowInsets)",
+        "description": "The distances to avoid at the drawable edges changed. Window.safe_area holds the latest value after poll; platforms without reported insets start with zero on every edge.",
+        "line": 74,
+        "page": "reference/api/window-window-event-2.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/window/window_insets.dream",
+    "package": "system.window",
+    "page": "reference/api/window-window-insets.md",
+    "declarations": [
+      {
+        "signature": "public struct WindowInsets",
+        "description": "Distances from the drawable area's edges, in logical pixels, that content should avoid.",
+        "line": 4,
+        "page": "reference/api/window-window-insets.md"
+      },
+      {
+        "signature": "public top: float",
+        "description": "Distance below the top edge, such as the area occupied by a display cutout.",
+        "line": 6,
+        "page": "reference/api/window-window-insets.md"
+      },
+      {
+        "signature": "public right: float",
+        "description": "Distance to the left of the right edge.",
+        "line": 9,
+        "page": "reference/api/window-window-insets.md"
+      },
+      {
+        "signature": "public bottom: float",
+        "description": "Distance above the bottom edge, such as a system gesture area.",
+        "line": 12,
+        "page": "reference/api/window-window-insets.md"
+      },
+      {
+        "signature": "public left: float",
+        "description": "Distance to the right of the left edge.",
+        "line": 15,
+        "page": "reference/api/window-window-insets.md"
+      },
+      {
+        "signature": "public constructor( top: float = 0.0f, right: float = 0.0f, bottom: float = 0.0f, left: float = 0.0f )",
+        "description": "Creates edge distances in top, right, bottom, left order. Every distance defaults to zero.",
+        "line": 18,
+        "page": "reference/api/window-window-insets.md"
       }
     ]
   },

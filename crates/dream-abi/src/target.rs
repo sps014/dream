@@ -2,6 +2,9 @@
 
 use target_lexicon::{Architecture, Environment, HOST, OperatingSystem, Triple};
 
+/// The oldest Android API level Dream apps and their capability libraries support.
+pub const ANDROID_MIN_API: u32 = 26;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExecutionEnvironment {
     Native,
@@ -118,6 +121,14 @@ impl TargetSpec {
             } else {
                 (normalized, None)
             };
+        let normalized = match normalized.rsplit_once("-android") {
+            Some((prefix, api))
+                if !api.is_empty() && api.chars().all(|digit| digit.is_ascii_digit()) =>
+            {
+                format!("{prefix}-android")
+            }
+            _ => normalized,
+        };
         let triple = normalized.parse::<Triple>().map_err(|e| e.to_string())?;
         let spec = Self::from_triple(triple)?;
         match ios_version {
@@ -224,11 +235,21 @@ impl TargetSpec {
         self.is_windows() && self.env == Environment::Msvc
     }
 
+    /// Android and iOS own the process main thread. The guest entry starts `main` and returns;
+    /// the platform shell calls `dream_scheduler_pump` between frames instead of `dream_run_loop`.
+    pub fn hosts_event_loop(&self) -> bool {
+        self.is_android() || self.is_ios()
+    }
+
     pub fn is_android(&self) -> bool {
         matches!(self.env, Environment::Android | Environment::Androideabi)
     }
 
     pub fn llvm_triple(&self) -> String {
+        if self.is_android() {
+            // The NDK selects its libc stubs and startup objects by the API level in the triple.
+            return format!("{}{ANDROID_MIN_API}", self.triple);
+        }
         if self.is_ios() {
             let v = self.min_os.expect("iOS target has a deployment version");
             let triple = self.triple.to_string();
@@ -274,6 +295,8 @@ impl TargetSpec {
             symbols.with(TargetSymbol::Ios)
         } else if self.is_apple() {
             symbols.with(TargetSymbol::Macos)
+        } else if self.is_android() {
+            symbols.with(TargetSymbol::Android)
         } else if self.os == OperatingSystem::Linux {
             symbols.with(TargetSymbol::Linux)
         } else {
@@ -377,7 +400,15 @@ mod tests {
             assert!(target.is_android());
             assert_eq!(target.ptr_size, 8);
             assert!(!target.can_link_on_host());
+            assert!(
+                target
+                    .llvm_triple()
+                    .ends_with(&format!("android{ANDROID_MIN_API}"))
+            );
+            assert_eq!(TargetSpec::parse(&target.llvm_triple()).unwrap(), target);
         }
+        let runtime = TargetSpec::parse("aarch64-unknown-linux-android26").unwrap();
+        assert!(runtime.is_android());
         assert!(TargetSpec::parse("arm64-apple-iosgarbage").is_err());
     }
 
@@ -422,11 +453,35 @@ mod tests {
                 .cfg_symbols(release)
                 .key()
         };
-        assert_eq!(key("x86_64-pc-windows-msvc", true), "Release,Windows,Native");
+        assert_eq!(
+            key("x86_64-pc-windows-msvc", true),
+            "Release,Windows,Native"
+        );
         assert_eq!(key("aarch64-apple-darwin", false), "Debug,Macos,Native");
         assert_eq!(key("arm64-apple-ios", false), "Debug,Ios,Native");
         assert_eq!(key("x86_64-unknown-linux-gnu", false), "Debug,Linux,Native");
-        assert_eq!(key("aarch64-linux-android", false), "Debug,Linux,Native");
+        assert_eq!(key("aarch64-linux-android", false), "Debug,Android,Native");
+        assert!(
+            !TargetSpec::parse("aarch64-linux-android")
+                .unwrap()
+                .cfg_symbols(false)
+                .defines(dream_syntax::conditional::TargetSymbol::Linux)
+        );
+        assert!(
+            TargetSpec::parse("aarch64-linux-android")
+                .unwrap()
+                .hosts_event_loop()
+        );
+        assert!(
+            TargetSpec::parse("arm64-apple-ios")
+                .unwrap()
+                .hosts_event_loop()
+        );
+        assert!(
+            !TargetSpec::parse("aarch64-apple-darwin")
+                .unwrap()
+                .hosts_event_loop()
+        );
         assert_eq!(key("wasm32-unknown-unknown", false), "Debug,Wasm,Browser");
         assert_eq!(key("wasm32-wasip2", true), "Release,Wasm,Wasi");
     }

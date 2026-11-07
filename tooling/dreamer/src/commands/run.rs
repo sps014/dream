@@ -1,5 +1,5 @@
 use crate::compile_flags::CompileFlags;
-use crate::manifest::{PackageType, RunTarget, resolve_run_target};
+use crate::manifest::{PackageType, RunTarget};
 use crate::workspace::Workspace;
 use anyhow::{Result, bail};
 use std::path::Path;
@@ -15,7 +15,10 @@ pub fn run(
 ) -> Result<()> {
     run_with(
         start_dir,
-        target,
+        Selection {
+            target,
+            device: None,
+        },
         CompileFlags {
             compile_profile: dream_abi::profile::CompileProfile::from_release(release),
             ..CompileFlags::default()
@@ -26,14 +29,21 @@ pub fn run(
     )
 }
 
+/// The host from `--target` and, for Android and iOS, the device from `--device`.
+pub struct Selection {
+    pub target: Option<String>,
+    pub device: Option<String>,
+}
+
 pub fn run_with(
     start_dir: &Path,
-    target: Option<String>,
+    selection: Selection,
     flags: CompileFlags,
     port: Option<u16>,
     extra_args: &[String],
     package: Option<&str>,
 ) -> Result<()> {
+    let Selection { target, device } = selection;
     super::install::run(start_dir)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
     let pkg = workspace.manifest.package()?;
@@ -48,15 +58,28 @@ pub fn run_with(
         ),
         PackageType::Bin => {}
     }
-    let host = resolve_run_target(&pkg.targets, target.as_deref())?;
-    if !flags.native && host == RunTarget::Native {
+    let host = workspace.manifest.run_target(target.as_deref())?;
+    if !flags.native && !matches!(host, RunTarget::Web | RunTarget::Node) {
         bail!("--wasm is only valid with web/node hosts (native run builds a host binary)");
     }
-
-    match host {
-        RunTarget::Native => run_native(&workspace, &flags, extra_args),
-        RunTarget::Node => run_node(&workspace, &flags, extra_args),
-        RunTarget::Web => run_web(&workspace, &flags, port),
+    let mobile = match host {
+        RunTarget::Android => Some(crate::mobile::Platform::Android),
+        RunTarget::Ios => Some(crate::mobile::Platform::Ios),
+        _ => None,
+    };
+    match mobile {
+        Some(platform) => {
+            if !extra_args.is_empty() {
+                bail!("mobile apps do not take command-line arguments");
+            }
+            crate::mobile::build_app(&workspace, &flags, platform, device.as_deref(), true)
+        }
+        None if device.is_some() => {
+            bail!("--device selects an Android or iOS device; use it with --target android or ios")
+        }
+        None if host == RunTarget::Node => run_node(&workspace, &flags, extra_args),
+        None if host == RunTarget::Web => run_web(&workspace, &flags, port),
+        None => run_native(&workspace, &flags, extra_args),
     }
 }
 
@@ -116,7 +139,7 @@ fn run_web(workspace: &Workspace, flags: &CompileFlags, port: Option<u16>) -> Re
     let index = workspace.root.join("index.html");
     if !index.is_file() {
         bail!(
-            "missing {}; re-run `dreamer init --runtime web` or add an index.html that imports \
+            "missing {}; add an index.html like the `dreamer init web` template that imports \
              the entry's *.web.runtime.js from target/web/",
             index.display()
         );

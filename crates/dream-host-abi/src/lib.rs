@@ -79,7 +79,7 @@ pub fn set_app_activity_sink(sink: Option<extern "C" fn(i32)>) {
     unsafe { dream_host_set_activity_sink(sink) }
 }
 
-/// Reports whether any window of the program has focus, for `Application.on_active`.
+/// Reports whether any window of the program has focus, for `App.on_active`.
 pub fn report_app_activity(active: bool) {
     unsafe { dream_host_report_activity(i32::from(active)) }
 }

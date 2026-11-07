@@ -1,22 +1,22 @@
 ---
 title: Create a project
-summary: Start a new project that runs.
+summary: Choose a project template, then build and run it.
 icon: material/folder-plus-outline
 ---
 
-# Create your first project
+# Create a project
 
-Start with a program that runs. Add packages and choose another environment after this first step works.
-
-## Create and run
+Use `dreamer init [template] [name]` to create a project. With no arguments, it creates
+a console program in the current directory. Supplying a name creates a new directory:
 
 ```sh
-dreamer init hello
+dreamer init console hello
 cd hello
 dreamer run
 ```
 
-`init` creates `dream.toml` for project settings and `src/main.dream` for your program. Open the source file and replace its contents with:
+Edit `src/main.dream` and run `dreamer run` again to rebuild and execute your changes.
+For example:
 
 ```dream
 import system;
@@ -26,57 +26,88 @@ fun main() {
 }
 ```
 
-Run `dreamer run` again. It prints `Hello from my project!`. Use `dreamer build` when you want to build the program without starting it.
+This prints `Hello from my project!`. Use `dreamer build` to compile without starting.
+The [small project tutorial](../learn/first-project.md) adds data, a calculation, and a test.
 
-The [small project tutorial](../learn/first-project.md) adds data, a calculation, and a test. Read [project settings](project-settings.md) to change the entry file or application details.
+## Start a canvas app
 
-## Choose a browser or Node project
-
-```sh
-dreamer init webapp --runtime web,node
-cd webapp
-dreamer run --target node
-dreamer run --target web
-```
-
-Choose a target explicitly when your project supports several environments. Check [environment availability](../learn/environments.md) before adding file or process features.
-
-## Other project shapes
+Choose the platforms when creating the project:
 
 ```sh
-dreamer init mylib --lib                    # a library (static by default)
-dreamer init mylib --lib --output cdylib    # a library built as a shared library
-dreamer init mytests --test                 # a test project
-dreamer init myapp --workspace              # app/ + tests/ in one workspace
+dreamer init desktop counter
 ```
 
-A test project holds `@test` functions and runs with `dreamer test`; see [Test a project](testing.md). A workspace keeps related packages together; see [Workspaces](workspaces.md).
+`desktop` creates a GPU-backed canvas counter for the current desktop OS. Its drawing,
+mouse input, resize handling, and scale handling live in `src/main.dream`. The drawing
+renderer includes Noto Sans, so the starter does not depend on installed fonts.
 
-## `dreamer init` options
+```sh
+cd counter
+dreamer build
+dreamer run
+```
 
-| Option | Effect |
-|---|---|
-| `<name>` | Package name and new folder; defaults to the current folder's name |
-| `--dir <path>` | Create the project in this folder instead of `./<name>` |
-| `--runtime <list>` | Comma-separated hosts for `[package].targets`: `native`, `web`, `node` |
-| `--lib` | Library package (`type = "lib"`); cannot be combined with `--runtime` |
-| `--output <kind>` | With `--lib`: `staticlib` (default) or `cdylib` |
-| `--test` | Test package (`type = "test"`) |
-| `--workspace` | Workspace with an `app/` program and a `tests/` test project |
+The window contains an Add one button. Clicking and releasing inside it increments the
+counter. Rendering failures, including an unavailable GPU, return a readable error from
+`main`. Minimized or hidden windows pause drawing until visible again.
 
-`--lib`, `--test` and `--workspace` are mutually exclusive. A named folder must be empty or missing, and `init` refuses to overwrite an existing `dream.toml`.
+Use `dreamer init mobile phone` for an Android/iOS project, or `dreamer init app counter`
+for a project declaring desktop, Android, and iOS. Without a name, `dreamer init mobile`
+and `dreamer init app` initialize the current directory.
 
-| Shape | Files created |
-|---|---|
-| Program | `dream.toml`, `src/main.dream`, `.gitignore` |
-| Program with `--runtime web` | Also `index.html`, which loads the build from `target/web/` |
-| Program with `--runtime node` | Also `run.mjs`, which loads the build from `target/node/` |
-| `--lib` | `dream.toml` with a `[lib]` table, `src/<name>.dream`, `.gitignore` |
-| `--test` | `dream.toml`, `example.dream`, an empty `fixtures/` asset folder, `.gitignore` |
-| `--workspace` | Root `dream.toml` with `[workspace]`, plus `app/` and `tests/` packages |
+All three templates generate the same canvas source. `app` defaults to desktop for
+`dreamer build` and `dreamer run`. `mobile` requires an explicit target because it declares
+two platforms. `dreamer build --target android` produces a debug APK and
+`dreamer build --target ios` produces a simulator app; `dreamer run` installs and launches
+one on a running device. See [mobile tooling](../deploy/mobile.md) for the SDK prerequisites.
 
-The generated `.gitignore` lists `dream_packages/`, `target/` and `.dream/`. In `src/<name>.dream`, hyphens and dots in the name become underscores.
+The starter handles touch events as well as mouse input, and offsets its content by
+`Window.safe_area`.
 
-## Add reusable code
+## Browser and Node projects
 
-Read [dependencies](dependencies.md) to add a registry package or a local package. `dreamer install` prepares dependencies, and `dreamer tree` shows what is installed. Use [publishing](../deploy/publishing.md) when your package is ready to share, or [packaging](../deploy/index.md) when you want to distribute an application.
+```sh
+dreamer init web browser-app
+cd browser-app
+dreamer run
+```
+
+The browser template includes `index.html`, which loads the build from `target/web/`.
+`dreamer init node server` creates a Node project with `run.mjs` and output under
+`target/node/`. Check [environment availability](../learn/environments.md) before adding
+file or process features. To support both environments, edit `package.targets` in
+`dream.toml` to `["web", "node"]` and select one with `dreamer run --target web` or
+`--target node`; provide an HTML launcher if adding the web target to a Node project.
+
+## Libraries, tests, and workspaces
+
+```sh
+dreamer init lib mylib
+dreamer init lib shared --output cdylib
+dreamer init test mytests
+dreamer init workspace myproject
+```
+
+`lib` creates `src/<name>.dream` and a library manifest. The default output is `staticlib`;
+`--output cdylib` selects a shared library. `--output` is only accepted for `lib`.
+
+`test` creates an example `@test` function and a `fixtures/` asset directory. Run it with
+`dreamer test`; see [testing](testing.md). `workspace` creates an `app/` console program
+and a `tests/` project that imports it; see [workspaces](workspaces.md).
+
+## Directories and existing files
+
+Use `--dir <path>` to choose a destination independently of the package name:
+
+```sh
+dreamer init app counter --dir apps/counter
+```
+
+A named destination must be empty or missing. Initialization refuses to replace an
+existing `dream.toml`, and preserves an existing entry source when initializing in place.
+Builds do not regenerate the starter source, so edits remain yours.
+
+Every template writes `.gitignore` entries for `dream_packages/`, `target/`, `.dream/`,
+and `generated/`. Library source filenames replace hyphens and dots in the package name
+with underscores. See [project settings](project-settings.md) for application identity,
+deployment minimums, and assets.

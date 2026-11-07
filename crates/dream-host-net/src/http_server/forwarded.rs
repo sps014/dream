@@ -20,7 +20,12 @@ impl Trusted {
             let network = entry
                 .parse::<IpNet>()
                 .or_else(|_| entry.parse::<IpAddr>().map(IpNet::from))
-                .map_err(|_| error("EINVAL", format!("invalid forwarded_allow_ips entry {entry}")))?;
+                .map_err(|_| {
+                    error(
+                        "EINVAL",
+                        format!("invalid forwarded_allow_ips entry {entry}"),
+                    )
+                })?;
             networks.push(network);
         }
         Ok(Self::Networks(networks))

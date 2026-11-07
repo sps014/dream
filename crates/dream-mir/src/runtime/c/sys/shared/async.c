@@ -385,6 +385,36 @@ int dream_async_pending(void) {
     return rq_head != NULL || timer_count != 0;
 }
 
+static void run_ready(void) {
+    while (rq_head) {
+        ReadyNode *n = rq_head;
+        dream_ptr f = n->f;
+        rq_head = n->next;
+        if (!rq_head) {
+            rq_tail = NULL;
+        }
+        ready_put(n);
+        i32_at(f, F_QUEUED)[0] = 0;
+        if (status_of(f)) {
+            continue;
+        }
+        int32_t poll = i32_at(f, F_POLL)[0];
+        if (poll > 0) {
+            poll_current = f;
+            poll_drop_start_retain = 0;
+            ((int32_t (*)(dream_ptr))dream_ft_get(poll))(f);
+#ifndef DREAM_WASM32
+            dream_callback_drain();
+#endif
+            poll_current = 0;
+            if (poll_drop_start_retain) {
+                poll_drop_start_retain = 0;
+                dream_release(f);
+            }
+        }
+    }
+}
+
 #ifdef DREAM_WASM32
 DREAM_WASM_EXPORT(DREAM_SYM_RUN_LOOP)
 #endif
@@ -397,35 +427,7 @@ void dream_run_loop(void) {
         foreign_drain();
         dream_callback_drain();
 #endif
-        while (rq_head) {
-            ReadyNode *n = rq_head;
-            dream_ptr f = n->f;
-            rq_head = n->next;
-            if (!rq_head) {
-                rq_tail = NULL;
-            }
-            ready_put(n);
-            i32_at(f, F_QUEUED)[0] = 0;
-            if (status_of(f)) {
-                continue;
-            }
-            {
-                int32_t poll = i32_at(f, F_POLL)[0];
-                if (poll > 0) {
-                    poll_current = f;
-                    poll_drop_start_retain = 0;
-                    ((int32_t (*)(dream_ptr))dream_ft_get(poll))(f);
-#ifndef DREAM_WASM32
-                    dream_callback_drain();
-#endif
-                    poll_current = 0;
-                    if (poll_drop_start_retain) {
-                        poll_drop_start_retain = 0;
-                        dream_release(f);
-                    }
-                }
-            }
-        }
+        run_ready();
 #ifndef DREAM_WASM32
         foreign_drain();
         /* Drain can enqueue waiters onto rq; run them before parking or returning. */
@@ -481,6 +483,60 @@ void dream_run_loop(void) {
         }
     }
 }
+
+#ifndef DREAM_WASM32
+static _Thread_local int pump_active;
+
+/* One bounded pass: completions and timers that land during the pass resume on the next call,
+ * so a frame loop awaiting a present or a zero sleep yields to the platform between frames. */
+int dream_scheduler_pump(void) {
+    if (pump_active) {
+        return 1;
+    }
+    pump_active = 1;
+    dream_callback_set_waker(callback_wake, &sched);
+    int64_t start = timeNowNanos();
+    foreign_drain();
+    dream_callback_drain();
+    while (timer_count && timer_peek()->due <= start) {
+        dream_async_complete(timer_pop(), 0);
+    }
+    run_ready();
+    pump_active = 0;
+    /* A completion queued during this pass stays queued: the next call runs it, which is what
+     * yields a frame. Returning 1 tells the platform loop that work is ready to pace. */
+    if (rq_head) {
+        return 1;
+    }
+    int pending = dream_async_pending();
+    if (!pending) {
+        ready_finish();
+        timer_finish();
+        return 0;
+    }
+#ifdef __ANDROID__
+    /* Nothing is runnable. Waiting here, in the host's event park, is the difference between a
+     * timer and a busy loop; a foreign completion wakes the park. Due timers are left for the
+     * next pass. 2 means this call already waited, so the caller must not add a frame delay. */
+    {
+        int64_t now = timeNowNanos();
+        int64_t due = timer_count ? timer_peek()->due : 0;
+        dream_mutex_lock(&sched.mu);
+        if (!rq_head && !sched.fq_head && !dream_callback_pending()) {
+            if (timer_count && due > now) {
+                scheduler_park(due - now);
+            } else if (!timer_count) {
+                scheduler_park(-1);
+            }
+            dream_mutex_unlock(&sched.mu);
+            return 2;
+        }
+        dream_mutex_unlock(&sched.mu);
+    }
+#endif
+    return 1;
+}
+#endif
 
 /* The heap holds `f` raw: the awaiter owns it, and `dream_cancel` removes the entry. */
 static void timer_arm(dream_ptr f, int32_t ms) {

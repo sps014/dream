@@ -25,6 +25,16 @@ Per host:
   `http://127.0.0.1:8787/index.html` by default (colored log; Ctrl-C to stop). A later
   `dreamer run --target web` restarts that server on the same port. Override with `--port`.
 
+Canvas apps created with `dreamer init app` are an exception to the multi-host rule:
+they select `native` by default. `dreamer init desktop` also selects the desktop host.
+Mobile-only canvas projects require `--target android` or `--target ios`. See
+[Mobile apps](../deploy/mobile.md).
+
+`dreamer build --target web` or `--target node` builds only that host's output. Without
+`--target`, a console/web/Node project keeps its declared build outputs; a canvas app
+builds its default host. Run the command again after edits to rebuild. Watch mode and
+automatic restart are deferred.
+
 Use `dreamer run --release` (optionally with `--target`) so release artifacts feed the same stable
 alias paths the scaffolds already reference.
 

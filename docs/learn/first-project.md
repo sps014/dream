@@ -11,7 +11,7 @@ You have run your first program. Now combine variables, lists, loops, and functi
 ## Create the project
 
 ```sh
-dreamer init shopping
+dreamer init console shopping
 cd shopping
 ```
 

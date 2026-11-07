@@ -116,13 +116,14 @@ impl HostCapability {
     }
 
     /// Shared libraries the capability library loads from its own directory at run time, so
-    /// they ship next to it: the GPU host's Dawn (WebGPU) runtime.
+    /// they ship next to it: the GPU host's Dawn (WebGPU) runtime, which phones do not use.
     pub fn companion_library_names(
         self,
         target: &crate::target::TargetSpec,
     ) -> &'static [&'static str] {
         match self {
             Self::Drawing => &["NotoSans-OFL.txt"],
+            Self::Gpu if target.hosts_event_loop() => &[],
             Self::Gpu if target.is_windows() => &["dawn.dll"],
             Self::Gpu if target.is_apple() => &["libdawn.dylib"],
             Self::Gpu => &["libdawn.so"],

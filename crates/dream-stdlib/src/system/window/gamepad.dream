@@ -2,8 +2,8 @@ module system.window;
 
 /// A connected gamepad as of one `Window.poll`, using the standard controller layout.
 ///
-/// Native programs map controllers with the SDL game controller database bundled in
-/// GLFW; browsers use the Gamepad API's standard mapping. `pressed` and `released`
+/// Native programs use the SDL3 controller database; browsers use the Gamepad API's
+/// standard mapping. `pressed` and `released`
 /// compare this poll with the previous one, so a button tapped entirely between two
 /// polls can go unnoticed.
 public class Gamepad {
@@ -60,8 +60,7 @@ public class Gamepad {
 
     /// Vibrates the controller for `seconds`. `low` drives the strong low-frequency
     /// motor and `high` the weak high-frequency motor, each from `0.0` to `1.0`.
-    /// Returns false when the platform cannot vibrate this controller; native programs
-    /// built on GLFW currently always return false.
+    /// Returns false when the platform or controller does not support vibration.
     public fun rumble(low: float, high: float, seconds: float): bool {
         let ms = (int)(seconds * 1000.0f);
         if ms <= 0 {

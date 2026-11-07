@@ -10,4 +10,4 @@ mod tests;
 #[cfg(test)]
 use package::read_slices;
 pub use package::{Options, run};
-use package::{Slice, command, identifier};
+use package::{Slice, command};

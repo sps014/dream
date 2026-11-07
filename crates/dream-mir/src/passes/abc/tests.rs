@@ -287,7 +287,11 @@ fn const_alloc_len_follows_move_into_local() {
     let mut func = b.finish();
     let blocks_before = func.blocks.len();
     assert!(Abc.run(&mut func, &i));
-    assert_eq!(func.blocks.len(), blocks_before, "proven loop must not be versioned");
+    assert_eq!(
+        func.blocks.len(),
+        blocks_before,
+        "proven loop must not be versioned"
+    );
     match &func.blocks[body.0 as usize].stmts[0] {
         Statement::Assign(_, Rvalue::Use(Operand::Copy(Place::Index { unchecked, .. }))) => {
             assert!(*unchecked);
@@ -1359,7 +1363,10 @@ fn offset_index_is_versioned_with_a_base_guard() {
             )
         })
     });
-    assert!(checks_base && subtracts_base, "guards: base >= 0 and n <= len - base");
+    assert!(
+        checks_base && subtracts_base,
+        "guards: base >= 0 and n <= len - base"
+    );
 }
 
 #[test]

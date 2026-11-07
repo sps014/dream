@@ -3,14 +3,14 @@ module system.app;
 /// The lifetime of the whole program: startup, shutdown, and operating-system events such
 /// as sleep, session lock, and theme changes.
 ///
-/// Wrap the program in `Application.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the
+/// Wrap the program in `App.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the
 /// `stopping` token is cancelled, `on_stop` cleanups run newest first, and `run` returns
 /// the exit code for `main` to return. Register hooks for the events you care about; each
 /// hook returns a `Subscription` that can remove it.
 ///
 /// Hooks run on the program's main scheduler, one event at a time, in registration order.
 /// They are not awaited, so they must return promptly; start a task for longer work.
-public static class Application {
+public static class App {
     /// Runs the program. `start` performs startup and may register hooks and cleanups.
     ///
     /// After `start` returns `Ok`, the program keeps running until it is asked to stop:
@@ -34,23 +34,23 @@ public static class Application {
         shutdown_timeout_ms: int = 5000
     ): int {
         if APP.running {
-            AppHost.report("error: Application.run is already running");
+            AppHost.report("error: App.run is already running");
             return 1;
         }
         AppHost.start(shutdown_timeout_ms);
         APP.begin();
-        let pump = Application.pump();
+        let pump = App.pump();
         Promise.start(pump);
 
         let outcome = StartOutcome();
-        let starting = Application.finish_start(start, outcome);
-        let deadline = Application.expire_after_stop(shutdown_timeout_ms);
+        let starting = App.finish_start(start, outcome);
+        let deadline = App.expire_after_stop(shutdown_timeout_ms);
         let finished = Promise.race([starting, deadline]).await;
         Promise.cancel(starting);
         Promise.cancel(deadline);
         if !finished {
             AppHost.report(
-                "warning: Application.run start did not return within the shutdown timeout "
+                "warning: App.run start did not return within the shutdown timeout "
                     + "and was cancelled"
             );
         } else {
@@ -67,7 +67,7 @@ public static class Application {
             APP.stop_source.token.wait_cancelled().await;
         }
 
-        Application.unwind(shutdown_timeout_ms).await;
+        App.unwind(shutdown_timeout_ms).await;
         AppHost.stop();
         pump.await;
         APP.finish();
@@ -94,7 +94,7 @@ public static class Application {
             if kind == 0 {
                 return;
             }
-            Application.dispatch(kind, AppHost.event_value());
+            App.dispatch(kind, AppHost.event_value());
         }
     }
 
@@ -142,14 +142,14 @@ public static class Application {
     static async fun unwind(budget_ms: int): void {
         while APP.stops.length > 0 {
             let cleanup = APP.stops.pop().unwrap();
-            let work = Application.finish_cleanup(cleanup);
-            let timer = Application.expire(APP.remaining_ms(budget_ms));
+            let work = App.finish_cleanup(cleanup);
+            let timer = App.expire(APP.remaining_ms(budget_ms));
             let finished = Promise.race([work, timer]).await;
             Promise.cancel(work);
             Promise.cancel(timer);
             if !finished {
                 AppHost.report(
-                    "warning: an Application.on_stop cleanup did not finish within "
+                    "warning: an App.on_stop cleanup did not finish within "
                         + budget_ms.to_string()
                         + " ms and was cancelled"
                 );
@@ -270,7 +270,7 @@ public static class Application {
 
     /// A token that is cancelled once, when shutdown begins and before any `on_stop`
     /// cleanup runs. Loops check `is_cancelled`; waits take it as their `token` argument.
-    /// Outside `Application.run` the token is never cancelled.
+    /// Outside `App.run` the token is never cancelled.
     public static get stopping(): CancellationToken {
         return APP.stop_source.token;
     }

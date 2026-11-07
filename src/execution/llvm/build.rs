@@ -83,6 +83,9 @@ fn system_libs(spec: &dream_abi::target::TargetSpec) -> &'static [&'static str] 
         &["-loldnames"]
     } else if spec.is_windows() {
         &[]
+    } else if spec.is_android() {
+        // Bionic's libc provides pthreads; the NDK has no separate libpthread.
+        &["-lm"]
     } else {
         &["-lm", "-lpthread"]
     }
@@ -543,7 +546,7 @@ pub fn compile_llvm(
             version.patch
         ));
     }
-    let export_file = if output_kind == OutputKind::Dylib {
+    let export_file = if output_kind.links_shared(&spec) {
         Some(library::shared_flags(
             &mut lcmd,
             ll_path,

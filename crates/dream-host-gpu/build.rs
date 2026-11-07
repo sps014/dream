@@ -37,9 +37,30 @@ fn main() {
             "macos" => "macos",
             "linux" => "linux",
             "windows" => "windows",
+            "android" => "android",
+            "ios" => "ios",
             other => panic!("dream-host-gpu does not support {other}"),
         },
         if arch == "aarch64" {
+            "aarch64"
+        } else {
+            "x86_64"
+        }
+    );
+    // Phones have no prebuilt Dawn, and their native backends (Vulkan, Metal) cover WebGPU's role.
+    let mobile = matches!(os.as_str(), "android" | "ios");
+    // Only the Slang headers are read, and they are identical in every release archive, so a
+    // cross build uses the archive for the machine running the build.
+    let header_platform = format!(
+        "{}-{}",
+        if cfg!(target_os = "macos") {
+            "macos"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else {
+            "linux"
+        },
+        if cfg!(target_arch = "aarch64") {
             "aarch64"
         } else {
             "x86_64"
@@ -54,13 +75,13 @@ fn main() {
             .and_then(|v| v.as_table())
             .unwrap_or_else(|| panic!("pins.toml has no [{key}]"))
     };
-    let archive_pin = |key: &str| {
+    let archive_pin = |key: &str, platform: &str| {
         let archives = table(key)
             .get("archives")
             .and_then(|v| v.as_table())
             .unwrap_or_else(|| panic!("pins.toml: [{key}] has no archives"));
         let entry = archives
-            .get(&platform)
+            .get(platform)
             .and_then(|v| v.as_table())
             .unwrap_or_else(|| panic!("pins.toml: [{key}] has no archive for {platform}"));
         Pin::from_table(entry, key)
@@ -70,7 +91,12 @@ fn main() {
     // Host tests look for the probe's Vulkan loader and MoltenVK here on macOS.
     println!("cargo:rustc-env=DREAM_GPU_CACHE_DIR={}", cache.display());
     let slang_version = table("slang")["version"].as_str().unwrap();
-    let slang_include = slang_headers(&cache, slang_version, &platform, archive_pin("slang"));
+    let slang_include = slang_headers(
+        &cache,
+        slang_version,
+        &header_platform,
+        archive_pin("slang", &header_platform),
+    );
 
     let rhi = table("slang-rhi");
     let rhi_commit = rhi["commit"].as_str().unwrap();
@@ -104,9 +130,12 @@ fn main() {
         &patches,
     );
 
-    let dawn_pin = archive_pin("dawn");
     let dawn_version = table("dawn")["version"].as_str().unwrap();
-    let dawn_archive = fetch::download(&cache, &dawn_pin, None);
+    let dawn = (!mobile).then(|| {
+        let pin = archive_pin("dawn", &platform);
+        let archive = fetch::download(&cache, &pin, None);
+        (pin, archive)
+    });
     let vulkan_pin = Pin::from_table(table("vulkan-headers"), "vulkan-headers");
     let vulkan_archive = fetch::download(&cache, &vulkan_pin, None);
 
@@ -117,17 +146,22 @@ fn main() {
         .define("DREAM_SLANG_INCLUDE_DIR", &slang_include)
         .define("DREAM_SLANG_RHI_DIR", &rhi_source)
         .define("FETCHCONTENT_FULLY_DISCONNECTED", "OFF")
-        .define("SLANG_RHI_DAWN_URL", file_url(&dawn_archive))
-        .define(
-            "SLANG_RHI_DAWN_URL_HASH",
-            format!("SHA256={}", dawn_pin.sha256),
-        )
         .define("SLANG_RHI_VULKAN_HEADERS_URL", file_url(&vulkan_archive))
         .define(
             "SLANG_RHI_VULKAN_HEADERS_URL_HASH",
             format!("SHA256={}", vulkan_pin.sha256),
         );
-    if os == "macos" {
+    match &dawn {
+        Some((pin, archive)) => {
+            config
+                .define("SLANG_RHI_DAWN_URL", file_url(archive))
+                .define("SLANG_RHI_DAWN_URL_HASH", format!("SHA256={}", pin.sha256));
+        }
+        None => {
+            config.define("SLANG_RHI_ENABLE_WGPU", "OFF");
+        }
+    }
+    if matches!(os.as_str(), "macos" | "ios") {
         let metal_pin = Pin::from_table(table("metal-cpp"), "metal-cpp");
         let metal_archive = fetch::download(&cache, &metal_pin, None);
         config
@@ -163,6 +197,22 @@ fn main() {
                 println!("cargo:rustc-link-lib=framework={framework}");
             }
         }
+        "ios" => {
+            println!("cargo:rustc-link-lib=dylib=c++");
+            println!("cargo:rustc-link-lib=dylib=objc");
+            for framework in ["Foundation", "QuartzCore", "Metal", "UIKit"] {
+                println!("cargo:rustc-link-lib=framework={framework}");
+            }
+        }
+        // Only this capability uses C++, so the NDK's static libc++ keeps libc++_shared.so out
+        // of the app package.
+        "android" => {
+            println!("cargo:rustc-link-lib=static=c++_static");
+            println!("cargo:rustc-link-lib=static=c++abi");
+            println!("cargo:rustc-link-lib=dylib=dl");
+            println!("cargo:rustc-link-lib=dylib=log");
+            println!("cargo:rustc-link-lib=dylib=android");
+        }
         "linux" => {
             println!("cargo:rustc-link-lib=dylib=stdc++");
             println!("cargo:rustc-link-lib=dylib=dl");
@@ -178,15 +228,17 @@ fn main() {
         _ => {}
     }
 
-    let dawn = fetch::extract(
-        &dawn_archive,
-        &cache.join(format!("dawn-{dawn_version}-{platform}")),
-        |path| {
-            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            dawn_library_names().contains(&name)
-        },
-    );
-    stage_dawn(&dawn);
+    if let Some((_, archive)) = &dawn {
+        let extracted = fetch::extract(
+            archive,
+            &cache.join(format!("dawn-{dawn_version}-{platform}")),
+            |path| {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                dawn_library_names().contains(&name)
+            },
+        );
+        stage_dawn(&extracted);
+    }
 
     link_capability("gpu");
 }

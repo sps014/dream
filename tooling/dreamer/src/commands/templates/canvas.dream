@@ -1,0 +1,120 @@
+import system;
+import system.window;
+import system.drawing;
+import system.drawing.gpu;
+import system.gpu;
+
+fun counter_canvas(
+    width: int,
+    height: int,
+    scale: float,
+    safe_area: WindowInsets,
+    count: int
+): Canvas {
+    let canvas = Canvas(width, height);
+    canvas.clear(Color.rgb(24, 30, 48));
+    canvas.scale(scale, scale);
+    canvas.translate(safe_area.left, safe_area.top);
+    canvas.fill_text("Dream canvas", 24, 48, TextStyle(28, Color.white));
+    canvas.fill_text("Count: " + count.to_string(), 24, 104, TextStyle(24, Color.white));
+    canvas.fill_rect(24, 168, 240, 64, Color.rgb(80, 120, 220), 16);
+    canvas.fill_text("Add one", 48, 184, TextStyle(24, Color.white));
+    return canvas;
+}
+
+fun inside_button(point: WindowVector, safe_area: WindowInsets): bool {
+    let x = point.x - safe_area.left;
+    let y = point.y - safe_area.top;
+    return x >= 24 && x <= 264 && y >= 168 && y <= 232;
+}
+
+async fun main(): Result<Unit, string> {
+    let window = Window.open(WindowOptions("Dream canvas", 390, 640))
+        .map_err((error) => error.message())?;
+    let device = GpuDevice.create(GpuBackend.Auto).await.map_err((error) => error.message())?;
+    let screen = device.create_surface(window).map_err((error) => error.message())?;
+    let drawing = DrawingSurface.create(screen.width, screen.height, DrawingBackend.Gpu)
+        .await
+        .map_err((error) => error.message)?;
+    let width = screen.width;
+    let height = screen.height;
+    let count = 0;
+    let armed = false;
+    let active_touch = -1;
+
+    while window.is_open {
+        let input = window.poll();
+        if !window.is_open {
+            break;
+        }
+
+        let pixels = window.pixel_size;
+        if window.is_minimized || window.is_occluded || pixels.width <= 0 || pixels.height <= 0 {
+            armed = false;
+            active_touch = -1;
+            Time.delay(100).await;
+            continue;
+        }
+
+        if pixels.width != width || pixels.height != height {
+            screen.resize(pixels.width, pixels.height).map_err((error) => error.message())?;
+            drawing.close();
+            width = pixels.width;
+            height = pixels.height;
+            drawing = DrawingSurface.create(width, height, DrawingBackend.Gpu)
+                .await
+                .map_err((error) => error.message)?;
+        }
+
+        let safe_area = window.safe_area;
+        let inside = inside_button(input.mouse.position, safe_area);
+        if !window.is_focused {
+            armed = false;
+            active_touch = -1;
+        }
+        if input.mouse.pressed(MouseButton.Left) {
+            armed = inside && window.is_focused;
+        }
+        if input.mouse.released(MouseButton.Left) {
+            if armed && inside {
+                count = count + 1;
+            }
+            armed = false;
+        }
+
+        for (let event in input.events) {
+            switch (event) {
+                WindowEvent.TouchDown(id, point) => {
+                    if active_touch == -1 && window.is_focused {
+                        active_touch = id;
+                        armed = inside_button(point, safe_area);
+                    }
+                }
+                WindowEvent.TouchUp(id, point) => {
+                    if id == active_touch {
+                        if armed && inside_button(point, safe_area) {
+                            count = count + 1;
+                        }
+                        active_touch = -1;
+                        armed = false;
+                    }
+                }
+                WindowEvent.TouchCancel(id) => {
+                    if id == active_touch {
+                        active_touch = -1;
+                        armed = false;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        drawing.render(counter_canvas(width, height, window.scale_factor, safe_area, count))
+            .map_err((error) => error.message)?;
+        drawing.present(screen).await.map_err((error) => error.message)?;
+    }
+
+    drawing.close();
+    window.close();
+    return Result.Ok(Unit());
+}

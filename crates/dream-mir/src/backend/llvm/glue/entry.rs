@@ -4,8 +4,8 @@
 //! JS host, which collects the status later through `__dream_main_report`.
 
 use super::super::fx::{V, align_at};
-use super::super::ir::{GlobalDef, Linkage, Ty, Value};
-use super::super::lcx::Lcx;
+use super::super::ir::{FnTy, GlobalDef, Linkage, Ty, Value};
+use super::super::lcx::{FnSig, Lcx};
 use super::{glue, register};
 use crate::MirFunction;
 use crate::backend::shared::entry::{
@@ -63,6 +63,12 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
         }
     } else {
         register(l, "main", Ty::I32, vec![Ty::I32, Ty::Ptr]);
+        if l.cx.target.spec().hosts_event_loop() {
+            l.host(
+                dream_abi::c_abi::PLATFORM_APP_MAIN,
+                FnSig::plain(FnTy::new(Ty::I32, vec![Ty::I32, Ty::Ptr, Ty::Ptr, Ty::Ptr])),
+            );
+        }
     }
 }
 
@@ -110,6 +116,8 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         if l.cx.leak_checks {
             leak_live(l);
         }
+    } else if l.cx.target.spec().hosts_event_loop() {
+        platform_main(l);
     } else {
         native_main(l);
     }
@@ -168,8 +176,15 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
             .unwrap_or_else(|| crate::internal_error!("async main returned void"));
         fx.call("dream_start", &[mf]);
     }
-    if async_n > 0 {
+    // Android and iOS own this thread's event loop. Blocking in dream_run_loop would take it
+    // from the operating system; the platform loop calls dream_scheduler_pump between frames.
+    if async_n > 0 && !fx.l.cx.target.spec().hosts_event_loop() {
         fx.call("dream_run_loop", &[]);
+    }
+    if fx.l.cx.target.spec().hosts_event_loop() {
+        fx.w.ret(Some(&Value::i32(0)));
+        fx.finish();
+        return;
     }
     if uses_defer {
         fx.call("dream_defer_drain_all", &[]);
@@ -268,6 +283,24 @@ fn leak_live(l: &mut Lcx<'_>) {
         Value::i32(0)
     };
     fx.w.ret(Some(&live));
+    fx.finish();
+}
+
+/// Android loads this from the app's shared library and iOS starts the executable here; the
+/// window host runs the platform loop, calling the guest entry once and the pump every frame.
+fn platform_main(l: &mut Lcx<'_>) {
+    let mut fx = glue(l, "main");
+    let (argc, argv) = (fx.arg(0), fx.arg(1));
+    if fx.l.requirements.process_arguments {
+        fx.call("dream_process_capture_args", &[argc.clone(), argv.clone()]);
+    }
+    let entry = V::s(fx.l.fn_ref(crate::abi::GUEST_ENTRY_FN));
+    let pump = V::s(fx.l.fn_ref("dream_scheduler_pump"));
+    let rc = fx.call_v(
+        dream_abi::c_abi::PLATFORM_APP_MAIN,
+        &[argc, argv, entry, pump],
+    );
+    fx.w.ret(Some(&rc.v));
     fx.finish();
 }
 

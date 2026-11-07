@@ -38,6 +38,11 @@ pub fn run(
             pkg.package_type
         );
     }
+    if workspace.manifest.app.is_some() && !pkg.targets.iter().any(|target| target == "native") {
+        bail!(
+            "pack produces desktop executables; build the mobile app with `dreamer build --target android` or `--target ios`"
+        );
+    }
 
     let triples = resolve_pack_targets(target_args)?;
     flags.relocatable = true;

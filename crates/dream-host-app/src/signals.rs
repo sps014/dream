@@ -1,5 +1,5 @@
 //! Ctrl+C and termination requests. Outside an active run the default behavior is kept, so a
-//! program that finished `Application.run` still stops on Ctrl+C.
+//! program that finished `App.run` still stops on Ctrl+C.
 
 use crate::events;
 use crate::queue;

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/system/app.md) for examples and common task
 
 ## `AppEvent`
 
-An operating-system event to inject with `Application.simulate` in tests.  Each variant reaches the same hooks, properties, and transition checks as the real event. Programs never receive `AppEvent` values; they register `Application.on_*` hooks.
+An operating-system event to inject with `App.simulate` in tests.  Each variant reaches the same hooks, properties, and transition checks as the real event. Programs never receive `AppEvent` values; they register `App.on_*` hooks.
 
 ```dream
 public enum AppEvent

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/system/app.md) for examples and common task
 
 ## `AppError`
 
-Why an `Application` operation was refused.
+Why an `App` operation was refused.
 
 ```dream
 public class AppError: Error

@@ -33,6 +33,11 @@ target_link_libraries(dream-slang-replay PUBLIC dream-slang-headers)
 target_compile_definitions(dream-slang-replay PUBLIC SLANG_STATIC)
 add_library(slang ALIAS dream-slang-replay)
 
+# slang-rhi lists backends per CMAKE_SYSTEM_NAME and has no iOS entry; Metal is the only one.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(SLANG_RHI_HAS_METAL ON)
+endif()
+
 set(SLANG_RHI_BUILD_FROM_SLANG_REPO ON CACHE BOOL "" FORCE)
 set(SLANG_RHI_FETCH_SLANG OFF CACHE BOOL "" FORCE)
 # DXC is a shader compiler; strict AOT never needs it.

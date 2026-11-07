@@ -1,7 +1,7 @@
 module system.app;
 
 /// The color scheme the user chose for the operating system or browser, as reported by
-/// `Application.theme`.
+/// `App.theme`.
 public enum SystemTheme {
     /// Dark text on light backgrounds. This is also the value when the platform does not
     /// report a preference.

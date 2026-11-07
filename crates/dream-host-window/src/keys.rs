@@ -1,70 +1,72 @@
-//! GLFW key tokens to `system.window.KeyCode` values. GLFW names keys by their US-layout
-//! position, which is exactly the physical key the Dream enum describes.
+//! SDL physical scancodes mapped to Dream KeyCode order, independently of keyboard layout.
 
-use glfw::Key;
+use sdl3::keyboard::Scancode;
 
 /// The `KeyCode` value for `key`; `0` (`KeyCode.Unknown`) when the key has no Dream name.
-pub fn key_code(key: Key) -> u8 {
+pub fn key_code(key: Scancode) -> u8 {
     let raw = key as i32;
     match raw {
-        65..=90 => (raw - 65 + 1) as u8,
-        48..=57 => (raw - 48 + 27) as u8,
-        290..=313 => (raw - 290 + 37) as u8,
-        320..=329 => (raw - 320 + 93) as u8,
+        4..=29 => (raw - 4 + 1) as u8,
+        30..=38 => (raw - 30 + 28) as u8,
+        39 => 27,
+        58..=69 => (raw - 58 + 37) as u8,
+        104..=115 => (raw - 104 + 49) as u8,
+        89..=97 => (raw - 89 + 94) as u8,
+        98 => 93,
         _ => named(key),
     }
 }
 
-fn named(key: Key) -> u8 {
+fn named(key: Scancode) -> u8 {
     match key {
-        Key::Escape => 61,
-        Key::Enter => 62,
-        Key::Tab => 63,
-        Key::Backspace => 64,
-        Key::Space => 65,
-        Key::Insert => 66,
-        Key::Delete => 67,
-        Key::Right => 68,
-        Key::Left => 69,
-        Key::Down => 70,
-        Key::Up => 71,
-        Key::PageUp => 72,
-        Key::PageDown => 73,
-        Key::Home => 74,
-        Key::End => 75,
-        Key::CapsLock => 76,
-        Key::ScrollLock => 77,
-        Key::NumLock => 78,
-        Key::PrintScreen => 79,
-        Key::Pause => 80,
-        Key::Minus => 81,
-        Key::Equal => 82,
-        Key::LeftBracket => 83,
-        Key::RightBracket => 84,
-        Key::Backslash => 85,
-        Key::Semicolon => 86,
-        Key::Apostrophe => 87,
-        Key::GraveAccent => 88,
-        Key::Comma => 89,
-        Key::Period => 90,
-        Key::Slash => 91,
-        Key::World1 => 92,
-        Key::KpDecimal => 103,
-        Key::KpDivide => 104,
-        Key::KpMultiply => 105,
-        Key::KpSubtract => 106,
-        Key::KpAdd => 107,
-        Key::KpEnter => 108,
-        Key::KpEqual => 109,
-        Key::LeftShift => 110,
-        Key::LeftControl => 111,
-        Key::LeftAlt => 112,
-        Key::LeftSuper => 113,
-        Key::RightShift => 114,
-        Key::RightControl => 115,
-        Key::RightAlt => 116,
-        Key::RightSuper => 117,
-        Key::Menu => 118,
+        Scancode::Escape => 61,
+        Scancode::Return => 62,
+        Scancode::Tab => 63,
+        Scancode::Backspace => 64,
+        Scancode::Space => 65,
+        Scancode::Insert => 66,
+        Scancode::Delete => 67,
+        Scancode::Right => 68,
+        Scancode::Left => 69,
+        Scancode::Down => 70,
+        Scancode::Up => 71,
+        Scancode::PageUp => 72,
+        Scancode::PageDown => 73,
+        Scancode::Home => 74,
+        Scancode::End => 75,
+        Scancode::CapsLock => 76,
+        Scancode::ScrollLock => 77,
+        Scancode::NumLockClear => 78,
+        Scancode::PrintScreen => 79,
+        Scancode::Pause => 80,
+        Scancode::Minus => 81,
+        Scancode::Equals => 82,
+        Scancode::LeftBracket => 83,
+        Scancode::RightBracket => 84,
+        Scancode::Backslash => 85,
+        Scancode::Semicolon => 86,
+        Scancode::Apostrophe => 87,
+        Scancode::Grave => 88,
+        Scancode::Comma => 89,
+        Scancode::Period => 90,
+        Scancode::Slash => 91,
+        Scancode::NonUsBackslash => 92,
+        Scancode::KpPeriod => 103,
+        Scancode::KpDivide => 104,
+        Scancode::KpMultiply => 105,
+        Scancode::KpMinus => 106,
+        Scancode::KpPlus => 107,
+        Scancode::KpEnter => 108,
+        Scancode::KpEquals => 109,
+        Scancode::LShift => 110,
+        Scancode::LCtrl => 111,
+        Scancode::LAlt => 112,
+        Scancode::LGui => 113,
+        Scancode::RShift => 114,
+        Scancode::RCtrl => 115,
+        Scancode::RAlt => 116,
+        Scancode::RGui => 117,
+        Scancode::Application => 118,
         _ => 0,
     }
 }
@@ -74,21 +76,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ranges_line_up_with_the_dream_enum() {
-        assert_eq!(key_code(Key::A), 1);
-        assert_eq!(key_code(Key::D), 4);
-        assert_eq!(key_code(Key::Z), 26);
-        assert_eq!(key_code(Key::Num0), 27);
-        assert_eq!(key_code(Key::Num9), 36);
-        assert_eq!(key_code(Key::F1), 37);
-        assert_eq!(key_code(Key::F11), 47);
-        assert_eq!(key_code(Key::F24), 60);
-        assert_eq!(key_code(Key::F25), 0);
-        assert_eq!(key_code(Key::Kp0), 93);
-        assert_eq!(key_code(Key::Kp9), 102);
-        assert_eq!(key_code(Key::Escape), 61);
-        assert_eq!(key_code(Key::Menu), 118);
-        assert_eq!(key_code(Key::World2), 0);
-        assert_eq!(key_code(Key::Unknown), 0);
+    fn scancodes_keep_dream_key_order() {
+        for (key, expected) in [
+            (Scancode::A, 1),
+            (Scancode::Z, 26),
+            (Scancode::_0, 27),
+            (Scancode::_9, 36),
+            (Scancode::F1, 37),
+            (Scancode::F12, 48),
+            (Scancode::F13, 49),
+            (Scancode::F24, 60),
+            (Scancode::Kp0, 93),
+            (Scancode::Kp9, 102),
+            (Scancode::Escape, 61),
+            (Scancode::Application, 118),
+            (Scancode::Mute, 0),
+        ] {
+            assert_eq!(key_code(key), expected, "{key:?}");
+        }
     }
 }

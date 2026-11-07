@@ -113,7 +113,9 @@ impl Site {
                     && !self.lost
                     && !self.entered_anywhere =>
             {
-                self.entries.iter().any(|&slot| paths.contains(path.entry(), slot))
+                self.entries
+                    .iter()
+                    .any(|&slot| paths.contains(path.entry(), slot))
             }
             _ => true,
         }
@@ -249,13 +251,14 @@ impl State {
             mine.merge_under(&theirs.under);
             union(&mut mine.untracked, &theirs.untracked);
         }
-        self.known.retain_mut(|k| match other.known(k.target, k.slot) {
-            Some(value) => {
-                union(&mut k.value, value);
-                true
-            }
-            None => false,
-        });
+        self.known
+            .retain_mut(|k| match other.known(k.target, k.slot) {
+                Some(value) => {
+                    union(&mut k.value, value);
+                    true
+                }
+                None => false,
+            });
     }
 
     fn for_each_set(&mut self, mut f: impl FnMut(&mut Atoms)) {
@@ -412,7 +415,9 @@ impl State {
                     insert(
                         set,
                         match atom {
-                            Atom::Param(i, p) if p.is_cut() && root(i) => Atom::Param(i, p.linked()),
+                            Atom::Param(i, p) if p.is_cut() && root(i) => {
+                                Atom::Param(i, p.linked())
+                            }
                             Atom::Param(i, p) if p.is_detached() && root(i) => {
                                 Atom::Param(i, PathId::BENEATH)
                             }

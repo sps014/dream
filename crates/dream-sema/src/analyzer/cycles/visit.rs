@@ -79,10 +79,7 @@ fn stmt(s: &HStmt, f: &mut impl FnMut(&HExpr)) {
             stmts(default, f);
         }
         HStmt::Await { future, .. } => expr(future, f),
-        HStmt::Break(_)
-        | HStmt::Continue(_)
-        | HStmt::DebugLine(_)
-        | HStmt::SourceLine(_) => {}
+        HStmt::Break(_) | HStmt::Continue(_) | HStmt::DebugLine(_) | HStmt::SourceLine(_) => {}
     }
 }
 
@@ -217,4 +214,3 @@ pub(super) fn children(e: &HExpr) -> Children<'_> {
     }
     out
 }
-

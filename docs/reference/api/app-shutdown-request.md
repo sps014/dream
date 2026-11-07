@@ -6,7 +6,7 @@ Read the [usage guide](../../library/system/app.md) for examples and common task
 
 ## `ShutdownRequest`
 
-A request to stop the program, passed to `Application.on_shutdown_requested` hooks.  Every hook sees the same request. When any hook calls `veto` on a request that allows it, the program keeps running and `Application.stopping` stays uncancelled.
+A request to stop the program, passed to `App.on_shutdown_requested` hooks.  Every hook sees the same request. When any hook calls `veto` on a request that allows it, the program keeps running and `App.stopping` stays uncancelled.
 
 ```dream
 public class ShutdownRequest
@@ -22,7 +22,7 @@ public get reason(): ShutdownReason
 
 ## `can_veto`
 
-True when `veto` can keep the program running. Signals, `Application.quit`, and the final notice that the session is ending cannot be vetoed.
+True when `veto` can keep the program running. Signals, `App.quit`, and the final notice that the session is ending cannot be vetoed.
 
 ```dream
 public get can_veto(): bool

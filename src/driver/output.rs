@@ -52,8 +52,14 @@ impl OutputKind {
         matches!(self, Self::Staticlib | Self::Dylib)
     }
 
+    /// Android starts an app by loading its shared library from the APK and calling `main`.
+    pub fn links_shared(self, target: &dream_abi::target::TargetSpec) -> bool {
+        self == Self::Dylib || (self == Self::Executable && target.is_android())
+    }
+
     pub fn artifact_path(self, ll: &Path, target: &dream_abi::target::TargetSpec) -> PathBuf {
         ll.with_extension(match self {
+            Self::Executable if target.is_android() => "so",
             Self::Executable => "bin",
             Self::Staticlib if target.is_msvc() => "lib",
             Self::Staticlib => "a",

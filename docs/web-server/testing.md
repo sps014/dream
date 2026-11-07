@@ -57,7 +57,7 @@ Override external dependencies with a generated replacement class and `app.overr
 | Middleware | Layers run in registration order and can short-circuit. |
 | OpenAPI | `app.openapi()` contains the mounted paths and prefixes you expect. |
 | Resources | Cleanup runs after a client disconnects mid-request. |
-| Startup | A failing `Application.run` start runs the `on_stop` cleanups registered before it failed. |
+| Startup | A failing `App.run` start runs the `on_stop` cleanups registered before it failed. |
 | Session stores | Concurrent refresh consumption and replay revocation, not only sequential success. |
 
 | Testing tool | Use it to |

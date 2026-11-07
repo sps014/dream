@@ -1,9 +1,9 @@
 module system.app;
 
-/// An operating-system event to inject with `Application.simulate` in tests.
+/// An operating-system event to inject with `App.simulate` in tests.
 ///
 /// Each variant reaches the same hooks, properties, and transition checks as the real
-/// event. Programs never receive `AppEvent` values; they register `Application.on_*` hooks.
+/// event. Programs never receive `AppEvent` values; they register `App.on_*` hooks.
 public enum AppEvent {
     /// Something asked the program to stop. `SessionEnding` is simulated as the first,
     /// vetoable request.

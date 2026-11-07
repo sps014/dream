@@ -1,11 +1,15 @@
-//! Native windows and game input on GLFW; guest allocation and binding remain owned by core.
+//! Native windows and game input on SDL3; guest allocation and binding remain owned by core.
 //!
-//! Every GLFW call happens on the process main thread, where Dream's `main` and its async
-//! scheduler run. See `docs/internals/17-window-host.md`.
+//! Video and event pumping stay on the process main thread with Dream's scheduler. Only the
+//! wake event can be posted from workers. See `docs/internals/17-window-host.md`.
+pub mod app;
 mod exports;
+mod gamepads;
 pub mod host;
+mod input;
 mod keys;
-mod occlusion;
+mod metrics;
+mod pump;
 mod surface;
 mod thread;
 pub mod wire;

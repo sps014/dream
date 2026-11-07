@@ -39,6 +39,10 @@ cc = "1"
 which = "8.0.6"
 dunce = "1"
 
+[build-dependencies]
+# Same pinned SDL sources as dream-host-window; supplies the APK's Java activity layer.
+sdl3-src = "=3.4.20"
+
 [dev-dependencies]
 object = { version = "0.37", default-features = false, features = ["read"] }
 

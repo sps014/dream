@@ -4,7 +4,7 @@ Import `system.app` to run a program with a clean startup and shutdown and to re
 
 | API | Purpose |
 | --- | --- |
-| [Application](app-application.md) | Run the program, register shutdown cleanups and operating-system event hooks |
+| [App](app-app.md) | Run the program, register shutdown cleanups and operating-system event hooks |
 | [AppPhase](app-app-phase.md) | Tell whether the program is starting, running, asleep or stopping |
 | [AppEvent](app-app-event.md) | Simulate lifetime events in tests |
 | [ShutdownRequest](app-shutdown-request.md) | Inspect or veto a request to stop |

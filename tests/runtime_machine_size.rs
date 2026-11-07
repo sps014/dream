@@ -61,6 +61,7 @@ fn native_allocations_use_machine_width_without_committing_large_buffers() {
         String::from_utf8_lossy(&build.stderr)
     );
     for mode in [
+        "pump",
         "foreign-start",
         "private",
         "shared",

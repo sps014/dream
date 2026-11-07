@@ -14,10 +14,16 @@ pub fn run(start_dir: &Path, release: bool, package: Option<&str>) -> Result<()>
             ..CompileFlags::default()
         },
         package,
+        None,
     )
 }
 
-pub fn run_with(start_dir: &Path, flags: CompileFlags, package: Option<&str>) -> Result<()> {
+pub fn run_with(
+    start_dir: &Path,
+    flags: CompileFlags,
+    package: Option<&str>,
+    target: Option<&str>,
+) -> Result<()> {
     super::install::run(start_dir)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
     if workspace.is_test() {
@@ -26,7 +32,10 @@ pub fn run_with(start_dir: &Path, flags: CompileFlags, package: Option<&str>) ->
             workspace.manifest.package()?.name
         );
     }
-    compile_entry(&workspace, &flags, None)
+    let selected = target
+        .map(|target| workspace.manifest.run_target(Some(target)))
+        .transpose()?;
+    compile_entry(&workspace, &flags, selected)
 }
 
 /// Compile the package root, optionally restricting JS runtime emission to `only`
@@ -49,6 +58,18 @@ pub fn compile_target(
     only: Option<RunTarget>,
     target: Option<(&str, &Path)>,
 ) -> Result<()> {
+    let only = if only.is_none() && workspace.manifest.app.is_some() {
+        Some(workspace.manifest.run_target(None)?)
+    } else {
+        only
+    };
+    if let Some(platform) = match only {
+        Some(RunTarget::Android) => Some(crate::mobile::Platform::Android),
+        Some(RunTarget::Ios) => Some(crate::mobile::Platform::Ios),
+        _ => None,
+    } {
+        return crate::mobile::build_app(workspace, flags, platform, None, false);
+    }
     let dream_bin = crate::dream_bin::locate()?;
     let compile_root = workspace.compile_root_path()?;
     let pkg = workspace.manifest.package()?;

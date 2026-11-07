@@ -41,13 +41,16 @@ impl<'a> Analyzer<'a> {
             return;
         }
         let intrinsics = || {
-            self.function_table.functions.iter().filter_map(|((def, _), info)| {
-                let op = info
-                    .intrinsic_name
-                    .as_deref()
-                    .and_then(dream_abi::intrinsics::IntrinsicOp::from_key)?;
-                Some((*def, op))
-            })
+            self.function_table
+                .functions
+                .iter()
+                .filter_map(|((def, _), info)| {
+                    let op = info
+                        .intrinsic_name
+                        .as_deref()
+                        .and_then(dream_abi::intrinsics::IntrinsicOp::from_key)?;
+                    Some((*def, op))
+                })
         };
         let builtins = program::Builtins {
             funcbox_new: self.closure_intrinsic("funcbox_new"),
@@ -66,10 +69,15 @@ impl<'a> Analyzer<'a> {
                 .collect(),
             intrinsics: intrinsics()
                 .map(|(def, _)| def)
-                .chain(self.function_table.functions.iter().filter_map(|((def, _), info)| {
-                    // `dream_start` only enqueues the future; it runs once this task suspends.
-                    (info.intrinsic_name.as_deref() == Some("dream_start")).then_some(*def)
-                }))
+                .chain(
+                    self.function_table
+                        .functions
+                        .iter()
+                        .filter_map(|((def, _), info)| {
+                            // `dream_start` only enqueues the future; it runs once this task suspends.
+                            (info.intrinsic_name.as_deref() == Some("dream_start")).then_some(*def)
+                        }),
+                )
                 .collect(),
         };
         let exports: IndexSet<DefId> = node
@@ -88,8 +96,7 @@ impl<'a> Analyzer<'a> {
                     .resolve_from(scope, DefKind::Struct, &d.name.text)
             })
             .collect();
-        let mut program =
-            program::Program::new(graph, functions, interfaces, builtins, managed);
+        let mut program = program::Program::new(graph, functions, interfaces, builtins, managed);
         let findings = program::run(&mut program, globals, &exports);
         self.report_cycles(node, &program.graph, findings, diagnostics);
     }

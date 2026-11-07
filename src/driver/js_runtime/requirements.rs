@@ -165,10 +165,9 @@ impl Requirements {
             }
             for element in &class.body.body {
                 if let ClassElement::MethodDefinition(method) = element
-                    && method
-                        .key
-                        .static_name()
-                        .is_some_and(|name| name.as_str().is_some_and(|name| omitted.contains(name)))
+                    && method.key.static_name().is_some_and(|name| {
+                        name.as_str().is_some_and(|name| omitted.contains(name))
+                    })
                 {
                     spans.push(method.span);
                 }

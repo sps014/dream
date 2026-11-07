@@ -48,9 +48,9 @@ fn bridge_metadata_rejects_invalid_types_names_and_java_packages() {
     functions[0].name = "invalid-name".into();
     assert!(bridge::validate(&functions).is_err());
     for package in ["", ".example", "a.class", "foo;bar", "a._"] {
-        assert!(bridge::java_package(package).is_err());
+        assert!(crate::identifiers::java_package(package).is_err());
     }
-    bridge::java_package("org.example.my_library").unwrap();
+    crate::identifiers::java_package("org.example.my_library").unwrap();
 }
 
 #[test]

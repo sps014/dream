@@ -1566,6 +1566,32 @@ fn test_async_emits_scheduler_runtime_and_poll() {
 }
 
 #[test]
+fn mobile_async_entry_returns_to_the_platform_loop() {
+    let code = format!(
+        "{ASYNC_STUB}
+        async fun delay(): void {{ Time.sleep(0).await; }}
+        async fun main(): void {{ delay().await; }}"
+    );
+    for triple in ["aarch64-linux-android", "arm64-apple-ios"] {
+        let ir = compile_test_pipeline(&code, |hir, interner| {
+            let mir = dream_mir::lower::lower_program(hir, interner);
+            let spec = dream_abi::target::TargetSpec::parse(triple).unwrap();
+            emit_ll_for(&mir, interner, dream_mir::backend::Target::Llvm(spec))
+        });
+        let entry = ir_func_body(&ir, "dream_guest_entry");
+        assert!(!entry.contains("dream_run_loop"), "{triple}");
+        assert!(entry.contains("dream_start"), "{triple}");
+        let main = ir_func_body(&ir, "main");
+        assert!(
+            main.contains("@dream_window_app_main(")
+                && main.contains("ptr @dream_guest_entry")
+                && main.contains("ptr @dream_scheduler_pump"),
+            "{triple}:\n{main}"
+        );
+    }
+}
+
+#[test]
 fn test_interface_call_emits_dynamic_dispatch() {
     let code = "
         interface Animal { fun speak(): string; }

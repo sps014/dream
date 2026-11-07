@@ -180,7 +180,10 @@ impl<'a> Program<'a> {
                 entry.push(index);
             }
         }
-        for (scan, (ifaces, sigs)) in scans.iter_mut().zip(pending_ifaces.into_iter().zip(pending_sigs)) {
+        for (scan, (ifaces, sigs)) in scans
+            .iter_mut()
+            .zip(pending_ifaces.into_iter().zip(pending_sigs))
+        {
             for (iface, slot) in ifaces {
                 scan.callees
                     .extend(self.interface_targets(iface, slot).unwrap_or_default());

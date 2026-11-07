@@ -22,3 +22,10 @@ mod waiter;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn dream_host_gpu_abi_v3() {}
+
+/// Drops every window swapchain. The window host calls this on the window thread before Android
+/// releases the `ANativeWindow` those swapchains were created from.
+#[unsafe(no_mangle)]
+pub extern "C" fn dream_gpu_release_window_surfaces() {
+    surfaces::release_native_surfaces();
+}

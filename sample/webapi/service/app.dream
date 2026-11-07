@@ -15,7 +15,7 @@ async fun main(): int {
         return 1;
     }
     let app = configured.unwrap();
-    return Application.run(async () => {
+    return App.run(async () => {
         app.run("127.0.0.1", 8000).await?;
         return Result.Ok(Unit());
     }).await;

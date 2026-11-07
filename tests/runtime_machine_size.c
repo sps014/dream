@@ -49,6 +49,33 @@ static DREAM_THREAD_PROC(complete_event) {
     return 0;
 }
 
+static void refuse_to_park(int64_t timeout_ns, void *context) {
+    (void)timeout_ns;
+    (void)context;
+    fputs("scheduler pump parked\n", stderr);
+    exit(1);
+}
+
+static void refuse_to_wake(void *context) {
+    refuse_to_park(0, context);
+}
+
+static void check_scheduler_pump(void) {
+    dream_sched_set_park(refuse_to_park, refuse_to_wake, NULL);
+    assert(dream_scheduler_pump() == 0);
+    dream_ptr due = dream_sleep(0);
+    assert(dream_scheduler_pump() == 0);
+    assert(status_of(due) == 1);
+    dream_release(due);
+    dream_ptr later = dream_sleep(60000);
+    assert(dream_scheduler_pump() == 1);
+    assert(status_of(later) == 0);
+    dream_cancel(later);
+    dream_release(later);
+    assert(dream_scheduler_pump() == 0);
+    assert(debug_get_live_objects() == 0);
+}
+
 static void check_foreign_start(void) {
     for (int round = 0; round < 1000; ++round) {
         dream_ptr event = dream_event_new();
@@ -68,7 +95,9 @@ int main(int argc, char **argv) {
     assert(argc == 2 && sizeof(dream_size) == sizeof(size_t));
     size_t bytes = (size_t)400000000 * 8;
     dream_ptr ptr;
-    if (strcmp(argv[1], "foreign-start") == 0) {
+    if (strcmp(argv[1], "pump") == 0) {
+        check_scheduler_pump();
+    } else if (strcmp(argv[1], "foreign-start") == 0) {
         check_foreign_start();
     } else if (strcmp(argv[1], "private") == 0) {
         ptr = dream_malloc(bytes, TAG_ARRAY);

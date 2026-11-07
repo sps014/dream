@@ -69,7 +69,10 @@ pub(crate) fn link_runtime(
         for capability in capabilities {
             args.push(directory.join(capability.library_name(spec)).into());
         }
-        if spec.is_apple() {
+        if spec.is_ios() {
+            // iOS app bundles are flat: the executable sits beside Frameworks/.
+            args.push("-Wl,-rpath,@executable_path/Frameworks".into());
+        } else if spec.is_apple() {
             args.push("-Wl,-rpath,@executable_path".into());
             args.push("-Wl,-rpath,@executable_path/../Frameworks".into());
         } else {

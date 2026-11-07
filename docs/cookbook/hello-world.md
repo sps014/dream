@@ -19,7 +19,7 @@ fun main() {
 Run:
 
 ```bash
-dreamer init hello && cd hello
+dreamer init console hello && cd hello
 # paste into src/main.dream
 dreamer run
 ```

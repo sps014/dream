@@ -24,6 +24,7 @@ public class Window {
     minimized: bool;
     occluded: bool;
     headless_scale: float;
+    safe_insets: WindowInsets;
 
     constructor(handle: int, headless: bool, options: WindowOptions) {
         this.handle = handle;
@@ -39,6 +40,7 @@ public class Window {
         this.minimized = false;
         this.occluded = false;
         this.headless_scale = 1.0f;
+        this.safe_insets = WindowInsets();
     }
 
     @runtime("windowOpen")
@@ -85,7 +87,12 @@ public class Window {
         if options.width <= 0 || options.height <= 0 {
             return Result.Err(WindowError("EINVAL", "window width and height must be positive"));
         }
-        let handle = Window.open_host(options.title, options.width, options.height, options.flags());
+        let handle = Window.open_host(
+            options.title,
+            options.width,
+            options.height,
+            options.flags()
+        );
         if handle <= 0 {
             return Result.Err(Window.last_error());
         }
@@ -188,6 +195,13 @@ public class Window {
         return this.headless_scale;
     }
 
+    /// The drawable edges to avoid, in logical pixels. Updated by SafeAreaChanged during
+    /// poll. Desktop, browser, and headless windows start with zero on every edge; native
+    /// mobile inset reporting requires a mobile window host.
+    public get safe_area(): WindowInsets {
+        return this.safe_insets;
+    }
+
     /// True between a `WindowEvent.Minimized` and the next `WindowEvent.Restored`, as
     /// delivered by `poll`.
     public get is_minimized(): bool {
@@ -231,6 +245,9 @@ public class Window {
             let event = events[i];
             this.tracker.apply(event);
             switch (event) {
+                SafeAreaChanged(insets) => {
+                    this.safe_insets = insets;
+                }
                 Resized(size) => {
                     if this.headless {
                         this.logical = size;

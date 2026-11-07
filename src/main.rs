@@ -139,7 +139,7 @@ struct Cli {
     )]
     runtime_target: Option<TargetArg>,
 
-    /// Minimum macOS version encoded in the LLVM target triple
+    /// Minimum macOS or iOS version encoded in the LLVM target triple
     #[arg(long, value_name = "VERSION", global = true)]
     min_os: Option<dream_abi::target::OsVersion>,
 

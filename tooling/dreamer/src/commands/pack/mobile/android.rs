@@ -48,7 +48,7 @@ pub(super) fn pack(
         .android_package
         .clone()
         .unwrap_or_else(|| format!("dream.generated.{name}"));
-    bridge::java_package(&package)?;
+    crate::identifiers::java_package(&package)?;
     let clang = ndk_clang(options)?;
     let (java, c) = bridge::jni(name, &package, functions);
     let source = stage.join("DreamLibrary.java");

@@ -1,6 +1,6 @@
 module system.app;
 
-/// Why an `Application` operation was refused.
+/// Why an `App` operation was refused.
 public class AppError: Error {
     error_code: string;
     error_message: string;

@@ -36,7 +36,7 @@ If a command cannot be found, use [Troubleshooting](troubleshooting.md).
 ## Create a project
 
 ```sh
-dreamer init hello
+dreamer init console hello
 cd hello
 ```
 

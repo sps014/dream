@@ -8,7 +8,7 @@ Status of the generator-based Slang GPU work on the `feat/slang-gpu-shaders` bra
 |---|---|
 | Generator framework gaps | Data-driven pinned-tool registry (`PINNED_TOOLS`), whole-tree tool fingerprints, per-tool timeouts, module attributes in the snapshot (`modules_with`, `module_of`), `ctx.consume(f, help)`, `@generator_only`, opaque tool outputs with a delta transcript, parallel tool requests, check-only analysis of consumed bodies, LSP hover/definition/code lens inside consumed bodies, binary artifacts, optional tools. |
 | `float16` | Primitive type with `h` literals, widening rules, LLVM `half`, wasm32 through f32, shortest round-trip printing, `@json` support. Rejected across `extern`/`@export`. |
-| `system.window` | Native (GLFW 3.4, main thread) and browser (`window.js`) hosts, keyboard/mouse/gamepad state, `dream_window_surface_v1` C ABI for GPU surfaces. |
+| `system.window` | Native (SDL3, main thread) and browser (`window.js`) hosts, keyboard/mouse/gamepad state, `dream_window_surface_v1` C ABI for GPU surfaces. |
 | AOT proof | Slang 2026.20, slang-rhi `b856e635`, Dawn 138.0.7204.168 pinned with SHA-256 and BLAKE3; precompiled code plus a recorded layout load through a replay library, so the Slang compiler is never loaded at run time. |
 | `system.gpu` | Device, buffers, textures, samplers, render/compute/ray-tracing pipelines, command encoder, surfaces, errors, shader attributes and `@generator_only` built-ins including ray tracing, bindless, subgroups, autodiff and cooperative types. |
 | `system.gpu.shaders` generator | Dream → Slang with source maps, `slangc` + `dream-slang-layout` tool phase, Slang diagnostics mapped to Dream lines, reflection, DGPB bundle, typed `GpuShaders` wrappers. |
@@ -138,7 +138,7 @@ The declarations and generator lowering exist (`@differentiable` → `[Different
 
 ### Window
 
-- Native gamepad rumble returns `false` (GLFW has no force feedback).
+- Native gamepad rumble uses SDL3 and returns `false` when the controller or driver rejects it.
 - Browser frame loops must `await` each frame to receive input; gamepad edges are sampled per poll.
 
 ### Framework

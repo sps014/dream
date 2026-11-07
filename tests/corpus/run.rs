@@ -1,10 +1,10 @@
 use super::{Case, Expectation, cases};
 use dream::driver::compiler::Compiler;
 use dream::driver::test::{TestHost, TestOptions, discover_tests_in_source, run_tests};
-use dream::syntax::conditional::CfgSymbols;
-use dream_abi::target::TargetSpec;
 use dream::driver::toolchain::ToolchainConfig;
 use dream::driver::wasm_opt::OptLevel;
+use dream::syntax::conditional::CfgSymbols;
+use dream_abi::target::TargetSpec;
 use dream_mir::backend::Target;
 use rayon::prelude::*;
 use std::collections::BTreeMap;

@@ -1,6 +1,7 @@
 #include "glue/internal.h"
 
 #if defined(__APPLE__)
+#include <TargetConditionals.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
 #endif
@@ -20,7 +21,12 @@ bool windowHandle(const DgpuWindow& window, WindowHandle& out)
 {
     switch (window.platform)
     {
-#if defined(__APPLE__)
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    case 6:
+        // The patched Metal surface adopts the window host's CAMetalLayer in this slot.
+        out = WindowHandle::fromNSWindow(window.window);
+        return window.window != nullptr;
+#elif defined(__APPLE__)
     case 1:
     {
         // The window host hands out the content NSView; slang-rhi attaches its layer through the
@@ -42,6 +48,11 @@ bool windowHandle(const DgpuWindow& window, WindowHandle& out)
     case 3:
         out = WindowHandle::fromXlibWindow(window.display, uint32_t(window.xlib_window));
         return true;
+#endif
+#if defined(__ANDROID__)
+    case 5:
+        out = WindowHandle::fromAndroidWindow(window.window);
+        return window.window != nullptr;
 #endif
     default:
         return false;

@@ -17,7 +17,7 @@ Dream programs can run on your computer, in a browser, or in Node. Choose an env
 ## Start on your computer
 
 ```sh
-dreamer init hello
+dreamer init console hello
 cd hello
 dreamer run
 ```
@@ -25,12 +25,12 @@ dreamer run
 For a browser or Node project, choose its environment when creating it:
 
 ```sh
-dreamer init hello-web --runtime web
+dreamer init web hello-web
 cd hello-web
 dreamer run --target web
 ```
 
-Use `--runtime node` and `--target node` for Node. A project declaring several environments requires you to choose one when running.
+Use `dreamer init node <name>` for Node. A project declaring several environments requires you to choose one when running.
 
 ## Check a feature before using it
 

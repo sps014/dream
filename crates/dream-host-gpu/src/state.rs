@@ -6,8 +6,8 @@ use crate::backend::Backend;
 use crate::bundle;
 use crate::error::{Code, HostError, HostResult};
 use crate::ffi;
-use dream_host_abi::handles::HandleTable;
 use crate::waiter::{Finish, Job, Waiter};
+use dream_host_abi::handles::HandleTable;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
@@ -184,7 +184,11 @@ pub struct AccelerationStructureEntry {
 }
 
 pub struct SurfaceEntry {
-    pub surface: Surface,
+    /// Present when the native window handle still matches `bound`. Android replaces that
+    /// handle across pauses; the old swapchain is dropped before the new one is created.
+    pub gpu: Option<Surface>,
+    pub window: i32,
+    pub bound: usize,
     pub width: u32,
     pub height: u32,
     pub format: u32,

@@ -1,15 +1,13 @@
-# Application
+# App
 
 **Import:** `import system.app;`
 
-Read the [usage guide](../../library/system/app.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+## `App`
 
-## `Application`
-
-The lifetime of the whole program: startup, shutdown, and operating-system events such as sleep, session lock, and theme changes.  Wrap the program in `Application.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the `stopping` token is cancelled, `on_stop` cleanups run newest first, and `run` returns the exit code for `main` to return. Register hooks for the events you care about; each hook returns a `Subscription` that can remove it.  Hooks run on the program's main scheduler, one event at a time, in registration order. They are not awaited, so they must return promptly; start a task for longer work.
+The lifetime of the whole program: startup, shutdown, and operating-system events such as sleep, session lock, and theme changes.  Wrap the program in `App.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the `stopping` token is cancelled, `on_stop` cleanups run newest first, and `run` returns the exit code for `main` to return. Register hooks for the events you care about; each hook returns a `Subscription` that can remove it.  Hooks run on the program's main scheduler, one event at a time, in registration order. They are not awaited, so they must return promptly; start a task for longer work.
 
 ```dream
-public static class Application
+public static class App
 ```
 
 ## `run`
@@ -113,7 +111,7 @@ public static fun on_low_memory(hook: fun(): void): Subscription
 
 ## `stopping`
 
-A token that is cancelled once, when shutdown begins and before any `on_stop` cleanup runs. Loops check `is_cancelled`; waits take it as their `token` argument. Outside `Application.run` the token is never cancelled.
+A token that is cancelled once, when shutdown begins and before any `on_stop` cleanup runs. Loops check `is_cancelled`; waits take it as their `token` argument. Outside `App.run` the token is never cancelled.
 
 ```dream
 public static get stopping(): CancellationToken

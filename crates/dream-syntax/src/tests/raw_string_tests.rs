@@ -11,10 +11,13 @@ fn initializer<'a>(
     let lexer = Lexer::new(format!("fun main() {{\n    let s = {code};\n}}\n"));
     let mut parser = Parser::new(lexer, arena, &mut diagnostics);
     let init = parser.parse().ok().and_then(|tree| {
-        tree.get_root().functions.first().and_then(|f| match f.body.first() {
-            Some(StatementNode::Declaration(_, _, init, _, _)) => Some(init.clone()),
-            _ => None,
-        })
+        tree.get_root()
+            .functions
+            .first()
+            .and_then(|f| match f.body.first() {
+                Some(StatementNode::Declaration(_, _, init, _, _)) => Some(init.clone()),
+                _ => None,
+            })
     });
     (init, diagnostics)
 }
@@ -177,10 +180,7 @@ fn interpolated_raw_hole_spans_point_at_source() {
         panic!("expected the hole identifier");
     };
     let source = format!("fun main() {{\n    let s = {code};\n}}\n");
-    assert_eq!(
-        &source[name.position.start..name.position.end],
-        "name"
-    );
+    assert_eq!(&source[name.position.start..name.position.end], "name");
 }
 
 #[test]

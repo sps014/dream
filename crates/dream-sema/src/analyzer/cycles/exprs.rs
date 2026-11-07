@@ -198,9 +198,8 @@ impl Walker<'_, '_> {
                 count,
                 ..
             } => {
-                let operands = self.eval_all(
-                    [&**dst, &**dst_off, &**src, &**src_off, &**count].into_iter(),
-                );
+                let operands =
+                    self.eval_all([&**dst, &**dst_off, &**src, &**src_off, &**count].into_iter());
                 let moved = self.read(&operands[2], Slot::Elem(src.ty));
                 let elem = self.elem_of(src.ty);
                 self.store_elem(&operands[0], dst.ty, &moved, elem);
@@ -213,9 +212,8 @@ impl Walker<'_, '_> {
                 right,
                 ..
             } => {
-                let mut operands = self.eval_all(
-                    [&**array, &**left, &**other_array, &**right].into_iter(),
-                );
+                let mut operands =
+                    self.eval_all([&**array, &**left, &**other_array, &**right].into_iter());
                 let second = std::mem::take(&mut operands[2]);
                 let first = std::mem::take(&mut operands[0]);
                 if first == second && first.len() == 1 && self.single_object(first[0]) {
@@ -320,12 +318,18 @@ impl Walker<'_, '_> {
         instance: &[TypeId],
         args: impl Iterator<Item = &'e HExpr>,
     ) {
-        let modes: Option<SmallVec<[ParamMode; 4]>> = self
-            .prog
-            .lookup(def, instance)
-            .map(|index| self.prog.functions[index].params.iter().map(|p| p.mode).collect());
+        let modes: Option<SmallVec<[ParamMode; 4]>> =
+            self.prog.lookup(def, instance).map(|index| {
+                self.prog.functions[index]
+                    .params
+                    .iter()
+                    .map(|p| p.mode)
+                    .collect()
+            });
         let builtins = &self.prog.builtins;
-        if modes.is_none() && (builtins.inspecting.contains(&def) || builtins.allocating.contains(&def)) {
+        if modes.is_none()
+            && (builtins.inspecting.contains(&def) || builtins.allocating.contains(&def))
+        {
             return;
         }
         for (i, arg) in args.enumerate() {

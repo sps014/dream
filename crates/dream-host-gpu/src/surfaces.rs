@@ -1,5 +1,5 @@
 //! Window surfaces. The window host owns the native window and its thread; this host asks it
-//! for raw handles through `dream_window_surface_v1` and never calls GLFW. Every call here runs
+//! for raw handles through `dream_window_surface_v1` and never calls SDL3. Every call here runs
 //! on the guest's main thread, where the window host requires them.
 
 use crate::error::{self, Code, HostError, HostResult, check};
@@ -53,7 +53,7 @@ fn configure(surface: &Surface, width: u32, height: u32, vsync: bool) -> HostRes
     Ok(format)
 }
 
-pub fn surface_create(device: i32, window: i32, vsync: bool) -> HostResult<i32> {
+fn query_window(window: i32) -> HostResult<WindowSurface> {
     let surface_fn = window_surface_fn().ok_or_else(|| {
         HostError::new(
             Code::Surface,
@@ -64,28 +64,102 @@ pub fn surface_create(device: i32, window: i32, vsync: bool) -> HostResult<i32> 
     if unsafe { surface_fn(window, &mut native) } == 0 {
         return Err(HostError::new(
             Code::Surface,
-            "the window is headless or closed, or the call ran off the main thread",
+            "the window has no drawable surface, or the call ran off the main thread",
         ));
     }
-    let mut state = state::lock();
-    let core = state.device(device)?;
-    // `c_ulong` is 32 bits on Windows and 64 bits elsewhere.
+    Ok(native)
+}
+
+fn open_gpu(core: &state::DeviceCore, native: &WindowSurface) -> HostResult<Surface> {
     #[allow(clippy::unnecessary_cast)]
-    let xlib_window = native.xlib_window as u64;
     let desc = ffi::Window {
         platform: native.platform,
         window: native.window,
         display: native.display,
-        xlib_window,
+        xlib_window: native.xlib_window as u64,
     };
     let mut raw = std::ptr::null_mut();
     check(unsafe { ffi::dgpu_surface_create(core.raw(), &desc, &mut raw) })?;
-    let surface = Surface::from_raw(raw);
+    Ok(Surface::from_raw(raw))
+}
+
+/// Drops the swapchain and any acquired image so a replaced native window is not used again.
+fn detach(state: &mut state::State, handle: i32) {
+    let image = {
+        let Ok(surface) = surface_mut(state, handle) else {
+            return;
+        };
+        surface.gpu.take();
+        surface.bound = 0;
+        surface.image.take()
+    };
+    if let Some(image) = image {
+        state.release(image);
+    }
+}
+
+/// Recreates the swapchain when the native window handle has changed, and drops it while the
+/// window has nothing to draw into.
+fn ensure(state: &mut state::State, handle: i32) -> HostResult<()> {
+    let (window, core) = {
+        let entry = state.entry(handle)?;
+        let Kind::Surface(surface) = &entry.kind else {
+            return Err(HostError::invalid(format!(
+                "handle {handle} is a {}, not a surface",
+                entry.kind.name()
+            )));
+        };
+        (surface.window, entry.core.clone())
+    };
+    let native = match query_window(window) {
+        Ok(native) => native,
+        Err(error) => {
+            detach(state, handle);
+            return Err(error);
+        }
+    };
+    let bound = native.window as usize;
+    let current = surface_mut(state, handle)?;
+    if current.gpu.is_some() && current.bound == bound {
+        return Ok(());
+    }
+    let (width, height, vsync) = (current.width.max(1), current.height.max(1), current.vsync);
+    detach(state, handle);
+    let gpu = open_gpu(core.as_ref(), &native)?;
+    let format = configure(&gpu, width, height, vsync)?;
+    let current = surface_mut(state, handle)?;
+    current.gpu = Some(gpu);
+    current.bound = bound;
+    current.format = format;
+    Ok(())
+}
+
+/// Drops every live window swapchain. Called on the window thread before Android frees the
+/// native window the swapchains were created from.
+pub fn release_native_surfaces() {
+    let mut state = state::lock();
+    let handles: Vec<i32> = state
+        .handles
+        .iter()
+        .filter_map(|(handle, entry)| matches!(entry.kind, Kind::Surface(_)).then_some(handle))
+        .collect();
+    for handle in handles {
+        detach(&mut state, handle);
+    }
+}
+
+pub fn surface_create(device: i32, window: i32, vsync: bool) -> HostResult<i32> {
+    let native = query_window(window)?;
+    let mut state = state::lock();
+    let core = state.device(device)?;
+    let gpu = open_gpu(core.as_ref(), &native)?;
     let (width, height) = (native.pixel_width.max(1), native.pixel_height.max(1));
-    let format = configure(&surface, width, height, vsync)?;
+    let format = configure(&gpu, width, height, vsync)?;
     state.insert(Entry {
         kind: Kind::Surface(SurfaceEntry {
-            surface,
+            gpu: Some(gpu),
+            window,
+            bound: native.window as usize,
             width,
             height,
             format,
@@ -115,8 +189,18 @@ pub fn surface_resize(handle: i32, width: i32, height: i32) -> HostResult<()> {
         return Err(HostError::invalid("surface sizes must be positive"));
     }
     let mut state = state::lock();
+    ensure(&mut state, handle)?;
+    let vsync = surface_mut(&mut state, handle)?.vsync;
+    let gpu_format = {
+        let surface = surface_mut(&mut state, handle)?;
+        let gpu = surface
+            .gpu
+            .as_ref()
+            .ok_or_else(|| HostError::new(Code::Surface, "the window has no drawable surface"))?;
+        configure(gpu, width as u32, height as u32, vsync)?
+    };
     let surface = surface_mut(&mut state, handle)?;
-    surface.format = configure(&surface.surface, width as u32, height as u32, surface.vsync)?;
+    surface.format = gpu_format;
     surface.width = width as u32;
     surface.height = height as u32;
     Ok(())
@@ -143,14 +227,19 @@ pub fn acquire(future: usize, handle: i32) {
 
 fn acquire_now(handle: i32) -> HostResult<i32> {
     let mut state = state::lock();
+    ensure(&mut state, handle)?;
     let (device, core) = {
         let entry = state.entry(handle)?;
         (entry.device, entry.core.clone())
     };
     let surface = surface_mut(&mut state, handle)?;
     let previous = surface.image.take();
+    let gpu = surface
+        .gpu
+        .as_ref()
+        .ok_or_else(|| HostError::new(Code::Surface, "the window has no drawable surface"))?;
     let mut raw = std::ptr::null_mut();
-    check(unsafe { ffi::dgpu_surface_acquire(surface.surface.raw(), &mut raw) })?;
+    check(unsafe { ffi::dgpu_surface_acquire(gpu.raw(), &mut raw) })?;
     let texture = Obj::from_raw(raw);
     if let Some(previous) = previous {
         state.release(previous);
@@ -183,6 +272,7 @@ pub fn present(future: usize, handle: i32) {
 
 fn present_now(handle: i32) -> HostResult<()> {
     let mut state = state::lock();
+    ensure(&mut state, handle)?;
     let surface = surface_mut(&mut state, handle)?;
     let Some(image) = surface.image.take() else {
         return Err(HostError::new(
@@ -190,7 +280,11 @@ fn present_now(handle: i32) -> HostResult<()> {
             "present without an acquired image",
         ));
     };
-    let presented = check(unsafe { ffi::dgpu_surface_present(surface.surface.raw()) });
+    let gpu = surface
+        .gpu
+        .as_ref()
+        .ok_or_else(|| HostError::new(Code::Surface, "the window has no drawable surface"))?;
+    let presented = check(unsafe { ffi::dgpu_surface_present(gpu.raw()) });
     state.release(image);
     presented
 }

@@ -1,118 +1,86 @@
 ---
-title: Mobile libraries
-summary: Package Dream libraries as an iOS XCFramework or Android AAR.
+title: Mobile apps and libraries
+summary: Build and run a Dream canvas app on Android or iOS, or package a library as an AAR or XCFramework.
 icon: material/cellphone
 ---
 
-# Mobile library packages
+# Mobile apps and libraries
 
-`dreamer pack` can package target-built Dream libraries as an iOS XCFramework or an Android AAR.
-The input libraries must already include the guest runtime and their target-specific host
-capability dependencies. Cross-target library linking and host builds are separate steps;
-`dream --object --target` emits an unlinked object without a platform SDK. `dream --target` links the library selected in dream.toml and requires the platform SDK and target capability libraries.
+## App
 
-## Compile an interface and object
-
-A mobile package uses `type = "lib"` in `dream.toml` and `@export` functions. For example:
-
-```dream
-@export
-fun add(a: int, b: int): int {
-    return a + b;
-}
+```sh
+dreamer init mobile phone
+dreamer devices
+dreamer run --target android
+dreamer run --target ios
 ```
+
+`mobile` is Android and iOS. `dreamer init app` adds the desktop host and uses it when you omit `--target`. Both start from the same canvas counter.
+
+`dreamer build --target android` writes a debug APK. `dreamer build --target ios` writes a simulator app. Output is under `target/<triple>/debug/`, or `release/` with `--release`. `dreamer run` installs that build, launches it, and follows its log until you press Ctrl+C.
+
+`--device` picks an id from `dreamer devices`. Without it, `run` uses the only running device. Android follows that device's architecture; a build with no device is `arm64-v8a`. iOS builds an arm64 simulator app on Apple silicon. Store signing and install on a physical iPhone are not supported yet.
+
+Put files the app should read in `[package].assets`. The app starts in the folder that contains them, so open them with `File` and the same relative path:
 
 ```toml
 [package]
-name = "demo"
-version = "0.1.0"
-type = "lib"
-
-[lib]
-output-type = "staticlib"
+assets = ["config.json", "images"]
 ```
 
-Use `output-type = "cdylib"` when building a host shared library. Cross emission produces
-an object for either kind; the SDK linker determines the final mobile slice format.
+```dream
+import system.io;
+
+async fun main(): void {
+    let config = (File.read("config.json").await).unwrap_or("");
+    let image = match File.read_bytes("images/hero.png").await {
+        Ok(bytes) => bytes,
+        Err(_) => return,
+    };
+}
+```
+
+On Android that folder is the app's private storage, so `File.write` can save files there too. On iOS it is the app bundle.
+
+`main` returns after startup. Timers, input, and drawing continue on the platform's frame loop. A hidden or replaced Android surface pauses drawing until a surface is available again.
+
+Check the SDK before the first build:
 
 ```sh
-dream --object --target arm64-apple-ios --min-os 13.0 src/lib.dream -o build/device/libdemo.ll
-dream --object --target arm64-apple-ios-simulator --min-os 13.0 src/lib.dream -o build/simulator/libdemo.ll
-dream --object --target aarch64-linux-android src/lib.dream -o build/arm64/libdemo.ll
-dream --object --target x86_64-linux-android src/lib.dream -o build/x64/libdemo.ll
+dreamer toolchain doctor --target android
+dreamer toolchain doctor --target ios
 ```
 
-Create the output directories first. Each command produces `.o`, `.ll`, `.h` and `.abi.json`.
-Compile the guest C runtime and the required capability libraries for the same SDK/target and
-link them with this object, producing `libdemo.a` on iOS or `libdemo.so` on Android. Keep the
-compiler-generated `libdemo.h` and `libdemo.abi.json` next to each final library. Their signatures
-must match across slices. The packager checks target identity and the exported signature inventory.
-A desktop library cannot serve as a mobile slice.
+Android needs `ANDROID_HOME`, platform-tools, an SDK platform (API 35 or newer), build-tools, an NDK, and JDK 21 or newer. Apps run on Android 8.0 and newer. iOS needs full Xcode and a simulator runtime, on a Mac. `doctor` also reports missing Dream libraries for that phone; `build` and `run` stop until those are present.
 
-## `dreamer pack` mobile options
+## Library
 
-| Option | Effect |
-|---|---|
-| `--target ios` / `--target android` | Package a mobile library instead of a desktop executable |
-| `--slice <triple>=<library>` | One target-built library; repeat for every required slice |
-| `--ndk <path>` | Android NDK folder (falls back to `ANDROID_NDK_HOME`) |
-| `--android-api <level>` | Minimum Android API level (default `21`, minimum `21`) |
-| `--android-package <name>` | Java package for the bridge class (default `dream.generated.<name>`) |
-| `-p <name>` / `--package <name>` | Workspace member to package |
-
-Mobile packing requires a `type = "lib"` package whose name is a C identifier once hyphens become underscores. Compilation flags such as `--release` and `-O` are rejected, because the libraries are already built.
-
-| Platform | Required slices | Library file | Result |
-|---|---|---|---|
-| `ios` | `arm64-apple-ios`, `arm64-apple-ios-simulator` | `.a` | `target/pack/<name>.xcframework` |
-| `android` | `aarch64-linux-android`, `x86_64-linux-android` | `.so` | `target/pack/<name>.aar` |
-
-Each library's file name (without extension) must be a C identifier, and its `.h` and `.abi.json` must sit next to it.
-
-## iOS
-
-Full Xcode, with the iPhoneOS and iPhoneSimulator SDKs, is required. The package contains
-arm64 device and arm64 simulator slices; iOS deployment defaults to 13.0 and follows the
-slice's ABI target metadata.
+`dreamer pack --target ios` or `--target android` packages a `type = "lib"` project that is already built for each phone slice. The libraries must contain the guest runtime and their host dependencies. `dream --object --target <triple>` emits the unlinked object, header, and `.abi.json`; you compile and link that object with the platform SDK.
 
 ```sh
 dreamer pack --target ios \
   --slice arm64-apple-ios=build/device/libdemo.a \
   --slice arm64-apple-ios-simulator=build/simulator/libdemo.a
+
+dreamer pack --target android \
+  --slice aarch64-linux-android=build/arm64/libdemo.so \
+  --slice x86_64-linux-android=build/x64/libdemo.so
 ```
 
-The result is `target/pack/demo.xcframework` (using the manifest package name).
-Each slice includes the C header, a module map and the `Dream_demo` Objective-C class.
-The packager compiles its generated Objective-C bridge for that slice, archives it with the
-input library and invokes `xcodebuild -create-xcframework`. Link Foundation in the host app.
-Methods are named `call_<export>`, with `arg1:`, `arg2:`, etc. for additional arguments.
+| Platform | Slices | Result |
+|---|---|---|
+| iOS | `arm64-apple-ios`, `arm64-apple-ios-simulator` (`.a`) | `target/pack/<name>.xcframework` |
+| Android | `aarch64-linux-android`, `x86_64-linux-android` (`.so`) | `target/pack/<name>.aar` |
+
+Each library needs its `.h` and `.abi.json` beside it, and the exported signatures must match across slices. `--ndk` or `ANDROID_NDK_HOME` selects the NDK. `--android-api` defaults to 21. `--android-package` sets the Java package (`dream.generated.<name>` by default).
+
+Call an export on an attached thread, then detach. A borrowed argument does not consume a Dream reference; an owned result is released with `releaseHandle`.
 
 ```objc
 [Dream_demo attach];
 int32_t value = [Dream_demo call_add:20 arg1:22];
 [Dream_demo detach];
 ```
-
-See Apple's [multiplatform binary framework guide](https://developer.apple.com/documentation/xcode/creating-a-multi-platform-binary-framework-bundle).
-
-## Android
-
-An Android NDK and a JDK 9+ are required. Pass the NDK with `--ndk` or set `ANDROID_NDK_HOME`.
-The minimum API defaults to 21 and must be at least 21 for these 64-bit ABIs. Input libraries
-must also support this minimum API and Android's page-size requirements.
-
-```sh
-dreamer pack --target android --ndk /path/to/android-ndk --android-api 21 \
-  --android-package org.example.demo \
-  --slice aarch64-linux-android=build/arm64/libdemo.so \
-  --slice x86_64-linux-android=build/x64/libdemo.so
-```
-
-The result is `target/pack/demo.aar`, with `jni/arm64-v8a/` and `jni/x86_64/`, a compiled
-`classes.jar`, `AndroidManifest.xml`, consumer keep rules and bridge sources. The Java class
-is `org.example.demo.DreamLibrary`; it loads `demo_jni`. Its native methods are also callable
-from Kotlin. The JNI shared libraries link against the supplied library's public C exports;
-their links reject unresolved symbols and use a 16 KiB maximum page size.
 
 ```java
 DreamLibrary.attach();
@@ -123,49 +91,4 @@ try {
 }
 ```
 
-See the NDK's [other build systems guide](https://developer.android.com/ndk/guides/other_build_systems)
-and [Android library archive structure](https://developer.android.com/studio/projects/android-library#aar-contents).
-
-## SDK-equipped sample-app validation
-
-iOS/Android end-to-end validation is **on hold for a future version** (2026-10-04).
-The sample apps and manual workflow are retained; simulator/emulator execution has not
-completed, so mobile release readiness is unverified.
-
-The manual **Mobile sample apps** GitHub Actions workflow is prepared to build the real Rust core and
-Dream static library for both iOS slices and both Android ABIs. It packages an XCFramework
-and an AAR, links the library into the sample apps in `sample/mobile/`, and executes an
-iPhone simulator app and an Android x86_64 emulator app. Each app attaches a thread, calls
-the generated bridge, checks the array-based Dream function returns 42, and detaches.
-The workflow preserves packages, app binaries, runtime evidence and `result.json` reports.
-Device iOS and Android arm64 slices are built; execution is on simulators/emulators.
-
-To repeat the checks on an SDK-equipped machine, first install the pinned LLVM and build
-the compiler and packager:
-
-```sh
-scripts/fetch-dev-llvm.sh
-cargo build --locked -p dream --no-default-features --features native -p dreamer
-python3 scripts/mobile/ios.py # Apple Silicon Mac with Xcode and an iOS simulator
-python3 scripts/mobile/android.py --ndk "$ANDROID_HOME/ndk/28.2.13676358"
-```
-
-Android validation requires a running emulator/device, JDK 21, SDK platform/build-tools 34,
-platform-tools and the NDK; it runs on Linux or macOS. The sample APK uses a generated local
-debug signing key. Both checks write outputs under `target/mobile-validation/`, and fail
-if the app never reports the expected result. Cross-target core capability binaries are
-built from the repository rather than substituted with test stubs.
-
-## Ownership and threading
-
-The bridges forward the generated plain C ABI without a hidden caller location. Scalar types
-map to equivalent Objective-C types and Java primitives. Java `int`/`long` preserve the bits
-of unsigned Dream integers. Managed objects, strings and boxed values stay opaque pointers:
-Objective-C uses `void *`, and Java/Kotlin use `long` handles. There is no automatic conversion
-to NSString, Java String, or managed host objects.
-
-A taken parameter consumes one Dream reference; a borrowed/ref parameter does not. An owning
-result must eventually be released with `releaseHandle`. Handle releases and calls belong on
-an attached thread. Keep a thread attached while its callbacks are live; detach before that
-thread exits. Serialize the first exported call, which initializes module globals. Panics abort
-rather than unwind through Objective-C or JNI. Package-relative panic paths survive packaging.
+Strings and objects cross the bridge as opaque handles (`void *` in Objective-C, `long` in Java), not as `NSString` or `String`. Link Foundation in the iOS host app.

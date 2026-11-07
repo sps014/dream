@@ -1,4 +1,5 @@
 use super::{android, bridge, ios};
+use crate::identifiers::c_identifier;
 use anyhow::{Context, Result, bail};
 use dream_abi::exports::ExportFunction;
 use dream_abi::target::TargetSpec;
@@ -37,7 +38,7 @@ pub fn run(start: &Path, package: Option<&str>, options: Options) -> Result<()> 
     }
     let slices = read_slices(&options.platform, &options.slices)?;
     let name = package.name.replace('-', "_");
-    if !identifier(&name) {
+    if !c_identifier(&name) {
         bail!("mobile package name must be a C identifier (hyphens become underscores)");
     }
     let output = workspace.root.join("target/pack");
@@ -82,7 +83,7 @@ pub(super) fn read_slices(platform: &str, values: &[String]) -> Result<BTreeMap<
             .file_stem()
             .and_then(|s| s.to_str())
             .context("invalid library filename")?;
-        if !identifier(stem) {
+        if !c_identifier(stem) {
             bail!("slice filename must be a C identifier");
         }
         let abi_path = library.with_extension("abi.json");
@@ -143,14 +144,6 @@ pub(super) fn read_slices(platform: &str, values: &[String]) -> Result<BTreeMap<
         }
     }
     Ok(slices)
-}
-
-pub(super) fn identifier(value: &str) -> bool {
-    let mut bytes = value.bytes();
-    bytes
-        .next()
-        .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
-        && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 pub(super) fn command(cmd: &mut Command, action: &str) -> Result<()> {

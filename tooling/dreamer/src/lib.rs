@@ -1,3 +1,4 @@
+pub mod app_config;
 pub mod app_icon;
 pub mod artifact_alias;
 pub mod assets;
@@ -6,8 +7,10 @@ pub mod compile_flags;
 pub mod dream_bin;
 pub mod fetch;
 pub mod git;
+mod identifiers;
 pub mod lockfile;
 pub mod manifest;
+pub mod mobile;
 mod package_fs;
 pub mod process_status;
 pub mod registry;

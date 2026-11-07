@@ -285,8 +285,8 @@ fn emit_tag_names(l: &mut Lcx<'_>) {
     let object = l.cstr("object");
     let mut fx = glue(l, "dream_tag_name");
     let tag = fx.arg(0);
-    let kind =
-        fx.w.bin("and", &tag.v, &Value::i32(abi::TAG_VALUE_MASK as i64));
+    let kind = fx.call_v("dream_tag_kind", &[tag]);
+    let kind = fx.conv(&kind, &Ty::I32);
     let other = fx.w.new_block("other");
     let blocks: Vec<_> = names.iter().map(|_| fx.w.new_block("tag")).collect();
     let cases: Vec<_> = names
@@ -338,7 +338,7 @@ fn emit_itables(l: &mut Lcx<'_>) {
         let mut fx = glue(l, &name);
         let itab = fx.arg(0);
         let this = fx.arg(1);
-        let tag = fx.call_v("dream_object_tag", &[this]);
+        let tag = fx.call_v("dream_object_kind", &[this]);
         let tag = fx.conv(&tag, &Ty::I32);
         let oob = fx.w.icmp("uge", &tag, &Value::i32(ntags as i64));
         fx.if_then(&oob, |fx| {
@@ -530,7 +530,7 @@ fn emit_worker_invoke(l: &mut Lcx<'_>) {
         // Worker bodies cross the string wire; a returned lazy Future is launched here so the JS
         // host's status polling observes progress.
         let r = V::u(r.clone());
-        let tag = fx.call_v("dream_object_tag", std::slice::from_ref(&r));
+        let tag = fx.call_v("dream_object_kind", std::slice::from_ref(&r));
         let tag = fx.conv(&tag, &Ty::I32);
         let fut =
             fx.w.icmp("eq", &tag, &Value::i32(crate::abi::TAG_FUTURE as i64));

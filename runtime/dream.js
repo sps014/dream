@@ -49,6 +49,10 @@ const TAGS = {
   STRUCT_BASE: 14,
   SHARED: 1073741824,
   VALUE_MASK: 1073741823,
+  INDEX_MASK: 268435455,
+  ARRAY_KIND: 268435456,
+  FUTURE_KIND: 536870912,
+  KIND_MASK: 805306368,
   FROM_DATA: 8,
 };
 const HEAP_HEADER_SIZE = 16;
@@ -824,9 +828,12 @@ class DreamInstance {
     this.exports.dream_heap_thread_exit?.();
   }
 
-  /** Heap type tag with `TAG_SHARED` stripped (`HEADER_TAG_OFFSET` is 8 bytes before the payload). */
+  /** Runtime shape, independent of the ownership metadata identity and shared/weak flags. */
   __valueTag(ptr) {
-    return this.i32(ptr - 8) & 0x3fffffff;
+    const tag = this.i32(ptr - TAGS.FROM_DATA) & TAGS.VALUE_MASK;
+    if (tag & TAGS.ARRAY_KIND) return TAGS.ARRAY;
+    if (tag & TAGS.FUTURE_KIND) return TAGS.FUTURE;
+    return tag;
   }
 
   __isFutureFrame(ptr) {

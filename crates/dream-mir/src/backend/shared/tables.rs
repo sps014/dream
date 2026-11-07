@@ -11,7 +11,7 @@ use indexmap::IndexMap as HashMap;
 
 /// Display name the `typeof` tag router returns for each built-in (non-nominal) tag.
 ///
-/// `TAG_ARRAY`, `TAG_FUNCBOX`, and `TAG_FUTURE` are shared by every instantiation of their shape,
+/// Array/Future kinds and `TAG_FUNCBOX` are shared by every instantiation of their shape,
 /// so those names are deliberately coarse — the element/signature/payload type is not recoverable
 /// from the heap header.
 pub(crate) const BUILTIN_TYPE_NAMES: &[(&str, &str)] = &[
@@ -66,6 +66,10 @@ pub(crate) fn struct_tags(mir: &Mir) -> HashMap<TypeId, i32> {
             } else {
                 tag
             };
+            assert!(
+                tag <= crate::abi::TAG_INDEX_MASK,
+                "type metadata identity exhausted"
+            );
             (*ty, tag)
         })
         .collect()

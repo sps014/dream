@@ -536,7 +536,14 @@ pub(super) fn build_future_drop<'a>(
     }
     visit.w.ret(None);
     visit.finish();
-    super::glue::ownership::descriptor(l, &format!("info_{name}"), &visit_name, None, &name);
+    super::glue::ownership::descriptor(
+        l,
+        &format!("info_{name}"),
+        &visit_name,
+        None,
+        &name,
+        crate::abi::TAG_FUTURE,
+    );
     idxs.sort_by_key(|&i| drop_slot_rank(l, body.locals[i].ty));
     let w = l.writer(&name);
     let mut fx = Fx::new(l, body, w);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LEN_PREFIX_SIZE } from "../runtime/src/abi.js";
+import { TAGS, LEN_PREFIX_SIZE } from "../runtime/src/abi.js";
 import { DreamInstance } from "../runtime/src/instance.js";
 import { decodeJsSlots, JS_SLOT } from "../runtime/src/marshal.js";
 
@@ -48,4 +48,18 @@ test("character arrays preserve Unicode without widening byte arrays", () => {
     [...guest.bytes.slice(bytes + LEN_PREFIX_SIZE, bytes + LEN_PREFIX_SIZE + 3)],
     [0, 128, 255],
   );
+});
+
+test("worker Future recognition uses shape bits and ignores shared/weak flags", () => {
+  const guest = instance();
+  const pointer = 96;
+  for (const tag of [TAGS.FUTURE, TAGS.FUTURE_KIND | 42, TAGS.FUTURE_KIND | TAGS.SHARED | 42, (TAGS.FUTURE_KIND | 42) | 0x80000000]) {
+    guest.view.setInt32(pointer - TAGS.FROM_DATA, tag, true);
+    assert.equal(guest.__isFutureFrame(pointer), true);
+  }
+  for (const tag of [TAGS.ARRAY, TAGS.ARRAY_KIND | 42, TAGS.STRING, 42]) {
+    guest.view.setInt32(pointer - TAGS.FROM_DATA, tag, true);
+    assert.equal(guest.__isFutureFrame(pointer), false);
+  }
+  assert.equal(guest.__isFutureFrame(0), false);
 });

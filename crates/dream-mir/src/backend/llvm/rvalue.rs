@@ -369,7 +369,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             Rvalue::IsType(o, ty) => {
                 let tag = runtime_tag(&self.l.cx, *ty);
                 let v = self.operand(o);
-                let t = self.call_v("dream_object_tag", &[v]);
+                let t = self.call_v("dream_object_kind", &[v]);
                 let t = self.conv(&t, &Ty::I32);
                 let c = self.w.icmp("eq", &t, &Value::i32(tag as i64));
                 self.bool_v(&c)
@@ -939,7 +939,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn check_box_tag(&mut self, src: &V, ty: TypeId) -> V {
         let tag = runtime_tag(&self.l.cx, ty);
         let boxed = self.as_ref(src);
-        let t = self.call_v("dream_object_tag", std::slice::from_ref(&boxed));
+        let t = self.call_v("dream_object_kind", std::slice::from_ref(&boxed));
         let t = self.conv(&t, &Ty::I32);
         let bad = self.w.icmp("ne", &t, &Value::i32(tag as i64));
         self.if_then(&bad, |fx| {

@@ -16,9 +16,18 @@ static void clear(dream_ptr p) {
     n->edge = 0;
     dream_release_object(child);
 }
-static const dream_type_info info = { visit, finalize, clear, dream_recycle };
+static const dream_type_info info = { visit, finalize, clear, dream_recycle, TAG_STRUCT_BASE };
+#define ARRAY_INFO_TAG (TAG_ARRAY_KIND | (TAG_FLOAT16 + 1))
+#define FUTURE_INFO_TAG (TAG_FUTURE_KIND | (TAG_FLOAT16 + 2))
+static const dream_type_info array_info = {NULL, NULL, NULL, dream_recycle, ARRAY_INFO_TAG};
+static const dream_type_info future_info = {NULL, NULL, NULL, dream_recycle, FUTURE_INFO_TAG};
 const dream_type_info *dream_type_info_for_tag(int32_t tag) {
-    return tag == TAG_STRUCT_BASE ? &info : dream_builtin_type_info(tag);
+    switch (tag) {
+    case TAG_STRUCT_BASE: return &info;
+    case ARRAY_INFO_TAG: return &array_info;
+    case FUTURE_INFO_TAG: return &future_info;
+    default: return dream_builtin_type_info(tag);
+    }
 }
 void dream_release_object(dream_ptr p) {
     if (p && dream_rc_last(p)) {
@@ -50,6 +59,25 @@ int main(void) {
     assert(!count);
     dream_release_object(parent);
     assert(count == 2 && trace[0] == 1 && trace[1] == 2);
+    assert(debug_get_live_objects() == before);
+
+    dream_ptr typed = dream_malloc(8, TAG_ARRAY);
+    dream_set_type(typed, &array_info);
+    assert(dream_object_tag(typed) == ARRAY_INFO_TAG);
+    assert(dream_object_kind(typed) == TAG_ARRAY);
+    assert(dream_object_info(typed) == &array_info);
+    dream_publish(typed);
+    assert(dream_tag_shared(typed));
+    assert(dream_object_info(typed) == &array_info);
+    dream_release(typed);
+
+    typed = dream_malloc_shared(8, 0);
+    dream_set_type(typed, &future_info);
+    assert(dream_object_tag(typed) == FUTURE_INFO_TAG);
+    assert(dream_object_kind(typed) == TAG_FUTURE);
+    assert(dream_tag_shared(typed));
+    assert(dream_object_info(typed) == &future_info);
+    dream_recycle(typed);
     assert(debug_get_live_objects() == before);
 
     count = 0;

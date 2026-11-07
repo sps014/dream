@@ -104,7 +104,7 @@ void dream_free(dream_ptr ptr) {
      * the cleared state (mirrors core/heap.c). */
     dream_weak_prepare_destroy(ptr);
     dream_str_fini(ptr);
-    if (dream_object_tag(ptr) == TAG_FUTURE) {
+    if (dream_object_kind(ptr) == TAG_FUTURE) {
         dream_future_fini(ptr);
     }
     dream_recycle(ptr);

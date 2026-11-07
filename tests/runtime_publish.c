@@ -65,15 +65,18 @@ static void node_visit(dream_ptr p) {
 }
 static void array_visit(dream_ptr p) {
     for (int32_t i = 0; i < dream_i32(p)[0]; ++i) {
-        dream_ptr child; memcpy(&child, (char *)dream_p(p) + 4 + (size_t)i * sizeof(child), sizeof(child));
+        dream_ptr child; memcpy(&child, (char *)dream_p(p) + LEN_PREFIX_SIZE + (size_t)i * sizeof(child), sizeof(child));
         dream_visit_edge(child);
     }
 }
-static const dream_type_info node_info = {node_visit, NULL, NULL, NULL};
-static const dream_type_info array_info = {array_visit, NULL, NULL, NULL};
+static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, TAG_STRUCT_BASE};
+#define TYPED_ARRAY_TAG (TAG_ARRAY_KIND | (TAG_FLOAT16 + 1))
+static const dream_type_info array_info = {array_visit, NULL, NULL, NULL, TYPED_ARRAY_TAG};
+static const dream_type_info env_info = {array_visit, NULL, NULL, NULL, TAG_CLOSURE_ENV};
 const dream_type_info *dream_type_info_for_tag(int32_t tag) {
     if (tag == TAG_STRUCT_BASE) { return &node_info; }
-    if (tag == TAG_ARRAY || tag == TAG_CLOSURE_ENV) { return &array_info; }
+    if (tag == TYPED_ARRAY_TAG) { return &array_info; }
+    if (tag == TAG_CLOSURE_ENV) { return &env_info; }
     return dream_builtin_type_info(tag);
 }
 
@@ -262,12 +265,12 @@ int main(void) {
     handoff_and_free();
     dream_recycle(old);
 
-    for (int32_t kind = TAG_ARRAY; ; kind = TAG_CLOSURE_ENV) {
+    for (int32_t kind = TYPED_ARRAY_TAG; ; kind = TAG_CLOSURE_ENV) {
         make_nodes(3);
         dream_recycle(nodes[0]);
-        nodes[0] = dream_malloc(4 + 2 * sizeof(dream_ptr), kind);
+        nodes[0] = dream_malloc(LEN_PREFIX_SIZE + 2 * sizeof(dream_ptr), kind);
         dream_i32(nodes[0])[0] = 2;
-        memcpy((char *)dream_p(nodes[0]) + 4, nodes + 1, 2 * sizeof(dream_ptr));
+        memcpy((char *)dream_p(nodes[0]) + LEN_PREFIX_SIZE, nodes + 1, 2 * sizeof(dream_ptr));
         handoff_and_free();
         if (kind == TAG_CLOSURE_ENV) {
             break;

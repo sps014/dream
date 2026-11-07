@@ -157,7 +157,7 @@ void dream_publish(dream_ptr ptr) {
         graph.pending = entry->pending_next;
         int32_t *tag = dream_tag_word(entry->ptr);
         int32_t word = __atomic_load_n(tag, __ATOMIC_RELAXED);
-        int32_t kind = word & TAG_VALUE_MASK;
+        int32_t kind = dream_tag_kind(word);
         if (kind == 0) {
             continue;
         }

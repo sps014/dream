@@ -1793,7 +1793,7 @@ fn nominal_metadata_lookup_checks_bounds_and_reserved_holes() {
         assert!(!body.contains("switch "), "{triple}: {body}");
         let table = ir
             .lines()
-            .find(|line| line.starts_with("@dream_nominal_type_infos ="))
+            .find(|line| line.starts_with("@dream_type_infos ="))
             .unwrap();
         let first = dream_mir::abi::TAG_STRUCT_BASE;
         let entries: Vec<_> = table.split("ptr @dream_type_info_").collect();
@@ -1808,9 +1808,79 @@ fn nominal_metadata_lookup_checks_bounds_and_reserved_holes() {
 }
 
 #[test]
-fn metadata_lookup_without_nominal_types_uses_builtin_fallback() {
+fn metadata_lookup_includes_arrays_without_nominal_types() {
     let (ir, _) = emit_hir_to_ir("fun answer(): int { return 42; }");
     let body = ir_func_body(&ir, "dream_type_info_for_tag");
     assert!(body.contains("@dream_builtin_type_info("));
-    assert!(!ir.contains("@dream_nominal_type_infos ="));
+    let table = ir
+        .lines()
+        .find(|line| line.starts_with("@dream_type_infos ="))
+        .unwrap();
+    assert!(table.contains("ptr @dream_array_info_"));
+}
+
+#[test]
+fn metadata_tags_cover_arrays_poll_frames_and_late_import_bridges() {
+    let code = format!(
+        "{ASYNC_STUB}
+        class Host {{ static extern async fun fetch(): string; }}
+        async fun read(): string {{ return Host.fetch().await; }}
+        async fun main(): void {{ read().await; }}"
+    );
+    for triple in ["arm64-apple-darwin", "wasm32-unknown-unknown"] {
+        let ir = compile_test_pipeline(&code, |hir, interner| {
+            let mir = dream_mir::lower::lower_program(hir, interner);
+            let spec = dream_abi::target::TargetSpec::parse(triple).unwrap();
+            emit_ll_for(&mir, interner, dream_mir::backend::Target::Llvm(spec))
+        });
+        let table = ir
+            .lines()
+            .find(|line| line.starts_with("@dream_type_infos ="))
+            .unwrap();
+        let mut identities = std::collections::BTreeSet::new();
+        let mut arrays = 0;
+        let mut futures = 0;
+        let mut bridges = 0;
+        for line in ir
+            .lines()
+            .filter(|line| line.starts_with('@') && line.contains("ptr @dream_recycle, i32 "))
+        {
+            let name = line[1..].split_whitespace().next().unwrap();
+            let tag: i32 = line
+                .rsplit_once("i32 ")
+                .unwrap()
+                .1
+                .split_whitespace()
+                .next()
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert!(
+                identities.insert(tag & dream_mir::abi::TAG_INDEX_MASK),
+                "{triple}: {line}"
+            );
+            assert!(
+                table.contains(&format!("ptr @{name}")),
+                "{triple}: missing {name}"
+            );
+            if name.starts_with("dream_array_info_") {
+                assert_ne!(tag & dream_mir::abi::TAG_ARRAY_KIND, 0);
+                arrays += 1;
+            }
+            if name.starts_with("info_drop_")
+                || name.starts_with("dream_future_info_")
+                || name.ends_with("_info")
+            {
+                assert_ne!(tag & dream_mir::abi::TAG_FUTURE_KIND, 0);
+                futures += 1;
+                if name.ends_with("_info") {
+                    bridges += 1;
+                }
+            }
+        }
+        assert!(
+            arrays > 0 && futures >= 3 && bridges > 0,
+            "{triple}: arrays={arrays} futures={futures} bridges={bridges}"
+        );
+    }
 }

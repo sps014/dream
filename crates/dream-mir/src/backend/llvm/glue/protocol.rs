@@ -476,7 +476,7 @@ fn union_hash(l: &mut Lcx<'_>, ty: TypeId, fn_name: &str) {
 
 type RouterArm = Box<dyn Fn(&mut Fx<'_, '_>, &V) -> Value>;
 
-/// `switch (dream_object_tag(p))` with one returning arm per case, after a null check that
+/// `switch (dream_object_kind(p))` with one returning arm per case, after a null check that
 /// returns `on_null`.
 fn tag_router(
     l: &mut Lcx<'_>,
@@ -489,7 +489,7 @@ fn tag_router(
     let p = fx.arg(0);
     let z = fx.w.icmp("eq", &p.v, &Value::zero(p.ty().clone()));
     fx.if_then(&z, |fx| fx.w.ret(Some(&on_null)));
-    let tag = fx.call_v("dream_object_tag", std::slice::from_ref(&p));
+    let tag = fx.call_v("dream_object_kind", std::slice::from_ref(&p));
     let tag = fx.conv(&tag, &Ty::I32);
     let other = fx.w.new_block("other");
     let mut cases: Vec<(i128, super::super::ir::BlockRef)> = Vec::new();

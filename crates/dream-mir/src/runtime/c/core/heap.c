@@ -419,7 +419,7 @@ static char *bump(size_t n) {
     }
 }
 
-dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag, const dream_type_info *info) {
+dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag) {
     unsigned cls;
     if (DREAM_LIKELY((size_t)total <= 256u)) {
         cls = (unsigned)(((size_t)total - 1u) >> 4);
@@ -429,7 +429,7 @@ dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag, cons
     } else {
         cls = (unsigned)dream_size_class((uint32_t)total);
     }
-    dream_block_activate_info(block, cls, tag, info);
+    dream_block_activate(block, cls, tag);
     dream_heap_count(&thread_counters()->allocs, UINT64_C(1));
     return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
@@ -654,7 +654,7 @@ void dream_free(dream_ptr ptr) {
     }
     dream_weak_prepare_destroy(ptr);
     dream_str_fini(ptr);
-    if (dream_object_tag(ptr) == TAG_FUTURE) {
+    if (dream_object_kind(ptr) == TAG_FUTURE) {
         dream_future_fini(ptr);
     }
     dream_recycle(ptr);
@@ -696,7 +696,7 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
      * aliases (retained field/index snapshots) may still hold their own +1 on the
      * old block. Release instead of freeing outright so those aliases stay valid;
      * with a single holder this is exactly dream_free. */
-    if (unique && tag == TAG_ARRAY && info) {
+    if (unique && dream_tag_kind(tag) == TAG_ARRAY && info) {
         /* The copied payload owns the transferred edges before the old storage is released. */
         memset(dream_p(ptr), 0, (size_t)copy);
     }

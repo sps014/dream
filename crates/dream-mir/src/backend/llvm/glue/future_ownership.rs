@@ -53,7 +53,7 @@ pub(in super::super) fn info(l: &mut Lcx<'_>, result: TypeId) -> String {
     }
     fx.w.ret(None);
     fx.finish();
-    super::ownership::descriptor(l, &name, &visit, None, &clear);
+    super::ownership::descriptor(l, &name, &visit, None, &clear, crate::abi::TAG_FUTURE);
     name
 }
 
@@ -149,6 +149,6 @@ pub(super) fn bridge(
         fx.w.ret(None);
         fx.finish();
     }
-    super::ownership::descriptor(l, &metadata, &visit, None, &clear);
+    super::ownership::descriptor(l, &metadata, &visit, None, &clear, crate::abi::TAG_FUTURE);
     metadata
 }

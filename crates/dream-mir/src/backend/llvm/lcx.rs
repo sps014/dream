@@ -61,6 +61,8 @@ pub(super) struct Lcx<'a> {
     pub sret: IndexSet<String>,
     /// Indirect callers receive an owned result from a borrowed-result getter.
     pub borrowed_results: IndexSet<String>,
+    pub type_infos: IndexMap<i32, String>,
+    pub next_info_index: i32,
     pub future_infos: IndexSet<dream_types::TypeId>,
     pub future_copies: IndexSet<dream_types::TypeId>,
     /// Library functions taking the caller's panic location as a trailing hidden `ptr`
@@ -91,6 +93,12 @@ impl<'a> Lcx<'a> {
     ) -> Self {
         let cx = Cx::with_leak_checks(mir, interner, target, leak);
         let m = ModuleWriter::new("dream", &sigs.triple, &sigs.datalayout);
+        let next_info_index = cx
+            .tags
+            .values()
+            .copied()
+            .max()
+            .map_or(crate::abi::TAG_STRUCT_BASE, |tag| tag + 1);
         Self {
             cx,
             mir,
@@ -101,6 +109,8 @@ impl<'a> Lcx<'a> {
             own: IndexMap::new(),
             sret: IndexSet::new(),
             borrowed_results: IndexSet::new(),
+            type_infos: IndexMap::new(),
+            next_info_index,
             future_infos: IndexSet::new(),
             future_copies: IndexSet::new(),
             tracked: IndexSet::new(),

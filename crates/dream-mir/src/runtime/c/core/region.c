@@ -69,7 +69,7 @@ static region_state *active_region(void) {
 
 int dream_region_active(void) { return active_region() != NULL; }
 
-static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag, const dream_type_info *info) {
+static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag) {
     if ((size_t)size > DREAM_SIZE_MAX - 63 - sizeof(region_chunk)) {
         region_panic();
         return 0;
@@ -89,7 +89,7 @@ static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag, cons
     char *block = (char *)chunk + chunk->offset;
     chunk->offset += total;
     ++s->allocations;
-    return dream_region_activate(block, (dream_size)total, tag, info);
+    return dream_region_activate(block, (dream_size)total, tag);
 }
 
 dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
@@ -97,8 +97,7 @@ dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
     if (s == NULL || (tag & TAG_SHARED)) {
         return 0;
     }
-    const dream_type_info *info = dream_type_info_for_tag(tag & TAG_VALUE_MASK);
-    return region_bump(s, size, tag, info);
+    return region_bump(s, size, tag);
 }
 
 int dream_region_owns(dream_ptr pointer) {

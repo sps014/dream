@@ -536,7 +536,7 @@ fn tag_dispatch(l: &mut Lcx<'_>, name: &str, destroy: bool) {
         }
     }
     fx.maybe_defer(&p, name);
-    let tag = fx.call_v("dream_object_tag", std::slice::from_ref(&p));
+    let tag = fx.call_v("dream_object_kind", std::slice::from_ref(&p));
     let tag = fx.conv(&tag, &Ty::I32);
     let default = fx.w.new_block("other");
     let blocks: Vec<_> = arms.iter().map(|_| fx.w.new_block("tag")).collect();

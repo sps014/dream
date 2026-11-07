@@ -212,6 +212,7 @@ fn emit_llvm_module_unchecked(
     glue::tables::emit_all(&mut l);
     glue::entry::emit_all(&mut l);
     glue::exports::emit_all(&mut l);
+    glue::ownership::emit_lookup(&mut l);
     let c_shim = if l.cx.target.spec().capabilities.c_interop {
         glue::c_shim::build(&l)
     } else {

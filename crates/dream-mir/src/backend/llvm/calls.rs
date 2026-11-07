@@ -200,7 +200,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             return self.call(&dispatch, &dispatch_args);
         }
         let result = (!ret_ty.is_void()).then(|| self.w.alloca(ret_ty.clone(), 8));
-        let tag = self.call_v("dream_object_tag", &[recv]);
+        let tag = self.call_v("dream_object_kind", &[recv]);
         let tag = self.conv(&tag, &Ty::I32);
         let join = self.w.new_block("iface.join");
         let fallback = self.w.new_block("iface.itable");

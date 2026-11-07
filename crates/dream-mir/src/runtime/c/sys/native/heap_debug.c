@@ -25,9 +25,9 @@ struct dream_leak_type {
 };
 
 __attribute__((weak)) const char *dream_tag_name(int32_t tag) {
-    switch (tag & TAG_VALUE_MASK) {
+    switch (dream_tag_kind(tag)) {
     case 0:
-        return "future";
+        return "untagged";
     case TAG_STRING:
         return "string";
     case TAG_ARRAY:

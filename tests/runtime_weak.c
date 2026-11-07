@@ -25,7 +25,7 @@ typedef struct {
 static int destroyed[ROUNDS];
 
 static void node_visit(dream_ptr ptr) { dream_visit_edge(((Node *)dream_p(ptr))->child); }
-static const dream_type_info node_info = {node_visit, NULL, NULL, NULL};
+static const dream_type_info node_info = {node_visit, NULL, NULL, NULL, TAG_STRUCT_BASE};
 const dream_type_info *dream_type_info_for_tag(int32_t tag) {
     return tag == TAG_STRUCT_BASE ? &node_info : dream_builtin_type_info(tag);
 }

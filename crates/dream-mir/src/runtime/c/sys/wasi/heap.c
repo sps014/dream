@@ -178,19 +178,18 @@ static void priv_class_push(int32_t idx, int32_t block) {
     table[idx] = block;
 }
 
-DREAM_ALWAYS_INLINE dream_ptr activate_block(int32_t block, int32_t tag, const dream_type_info *info, int32_t account) {
+DREAM_ALWAYS_INLINE dream_ptr activate_block(int32_t block, int32_t tag, int32_t account) {
     dream_i32(block + (int32_t)HEADER_TAG_OFFSET)[0] = tag;
     dream_i32(block + (int32_t)HEADER_REFCOUNT_OFFSET)[0] = dream_rc_init(tag);
     if (account) {
         account_alloc();
     }
     dream_ptr ptr = (dream_ptr)(block + (int32_t)HEAP_HEADER_SIZE);
-    dream_set_type(ptr, info);
     return ptr;
 }
 
 static dream_ptr finish_block_ex(int32_t block, int32_t tag, int32_t account) {
-    return activate_block(block, tag, NULL, account);
+    return activate_block(block, tag, account);
 }
 
 static dream_ptr finish_block(int32_t block, int32_t tag) {
@@ -295,11 +294,10 @@ dream_ptr dream_region_backing_malloc(int32_t size) {
     return dream_malloc_shared(size, 0);
 }
 
-dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag, const dream_type_info *info) {
+dream_ptr dream_region_activate(char *block, int32_t total, int32_t tag) {
     int32_t address = (int32_t)(uintptr_t)block;
     dream_i32(address)[0] = total;
     dream_ptr ptr = finish_block(address, tag);
-    dream_set_type(ptr, info);
     return ptr;
 }
 
@@ -360,7 +358,7 @@ dream_ptr dream_malloc(int32_t size, int32_t tag) {
         int32_t block = table[idx];
         if (DREAM_LIKELY(block != 0)) {
             table[idx] = blk_next(block);
-            return activate_block(block, tag, dream_type_info_for_tag(tag & TAG_VALUE_MASK), 1);
+            return activate_block(block, tag, 1);
         }
     }
     return malloc_slow(size, tag);
@@ -370,13 +368,11 @@ static __attribute__((noinline)) dream_ptr malloc_slow(int32_t size, int32_t tag
     if ((tag & TAG_VALUE_MASK) == 0 || (tag & TAG_SHARED)) {
         return dream_malloc_shared(size, tag);
     }
-    /* A region allocation already carries its descriptor. */
     dream_ptr pointer = dream_region_try_malloc(size, tag);
     if (pointer != 0) {
         return pointer;
     }
     pointer = malloc_private(size, tag);
-    dream_set_type(pointer, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
     return pointer;
 }
 
@@ -388,7 +384,6 @@ dream_ptr dream_malloc_shared(int32_t size, int32_t tag) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     p = malloc_locked(size, tag, 1);
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
-    dream_set_type(p, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
     return p;
 }
 
@@ -488,7 +483,7 @@ static void recycle_locked(dream_ptr ptr, int account) {
         return;
     }
     __atomic_store_n(dream_rc_word(ptr), 0, __ATOMIC_RELAXED);
-    dream_set_type(ptr, NULL);
+    *dream_tag_word(ptr) = 0;
     if (account) { account_free_n(1); }
     free_list_head = block_start;
     idx = size_class(sz);
@@ -516,7 +511,7 @@ void dream_recycle(dream_ptr ptr) {
     if (DREAM_LIKELY(table != NULL && (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED)) == 0
                      && (uint32_t)(sz - 16) <= (uint32_t)(PRIV_SMALL_TOTAL - 16) && (sz & (sz - 1)) == 0)) {
         __atomic_store_n(dream_rc_word(ptr), 0, __ATOMIC_RELAXED);
-        dream_set_type(ptr, NULL);
+        *dream_tag_word(ptr) = 0;
         account_free_n(1);
         int32_t idx = size_class(sz);
         blk_set_next(block, table[idx]);
@@ -548,7 +543,7 @@ static __attribute__((noinline)) void recycle_slow(dream_ptr ptr) {
         return;
     }
     __atomic_store_n(dream_rc_word(ptr), 0, __ATOMIC_RELAXED);
-    dream_set_type(ptr, NULL);
+    *dream_tag_word(ptr) = 0;
     account_free_n(1);
     idx = size_class(sz);
     if (idx <= 12 && sz == class_bytes(idx)) {
@@ -592,7 +587,7 @@ dream_ptr dream_realloc(dream_ptr ptr, int32_t new_size, int32_t tag) {
         copy = new_size;
     }
     memcpy(dream_p(np), dream_p(ptr), (size_t)copy);
-    if (unique && tag == TAG_ARRAY && info) {
+    if (unique && dream_tag_kind(tag) == TAG_ARRAY && info) {
         /* The copied payload owns the transferred edges before the old storage is released. */
         memset(dream_p(ptr), 0, (size_t)copy);
     }

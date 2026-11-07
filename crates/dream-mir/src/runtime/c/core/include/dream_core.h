@@ -144,7 +144,7 @@ DREAM_ALWAYS_INLINE uint8_t *dream_array_bytes(dream_ptr array) {
 #if UINTPTR_MAX == 0xffffffffu
 #define DREAM_WORD_MASK UINTPTR_MAX
 #else
-/* User-space addresses (type info, heap maps) fit in 56 bits on every supported host; the top
+/* User-space addresses (free-list links, heap maps) fit in 56 bits on every supported host; the top
  * byte of a native header's first word is the block's size class. */
 #define DREAM_WORD_MASK (((uintptr_t)1 << 56) - 1u)
 #endif
@@ -259,8 +259,7 @@ DREAM_ALWAYS_INLINE int32_t *dream_tag_word(dream_ptr ptr) {
 
 DREAM_ALWAYS_INLINE int dream_tag_shared(dream_ptr ptr) {
     int32_t t = ((int32_t *)((char *)dream_p(ptr) - TAG_FROM_DATA))[0];
-    /* Tag 0 is Future / untyped frames — concurrently refcounted, bit left clear so JS
-     * `tag === 0` still recognizes a Future. */
+    /* Untyped runtime storage uses shared reference counts. */
     if ((t & TAG_VALUE_MASK) == 0) {
         return 1;
     }
@@ -465,17 +464,12 @@ DREAM_ALWAYS_INLINE int dream_block_fits(char *block, size_t need) {
 }
 
 /* Every allocation path knows the class it carved, so the first word is written whole. */
-DREAM_ALWAYS_INLINE void dream_block_activate_info(char *block, unsigned cls, int32_t tag,
-                                                   const dream_type_info *info) {
+DREAM_ALWAYS_INLINE void dream_block_activate(char *block, unsigned cls, int32_t tag) {
     dream_heap_header *header = (dream_heap_header *)block;
-    dream_block_set_class_word(block, cls, (uintptr_t)info);
+    dream_block_set_class_word(block, cls, 0);
     DREAM_UNPOISON(block + NATIVE_HEAP_HEADER_SIZE, dream_block_total(block) - NATIVE_HEAP_HEADER_SIZE);
     header->tag = tag;
     header->rc = dream_rc_init(tag);
-}
-
-DREAM_ALWAYS_INLINE void dream_block_activate(char *block, unsigned cls, int32_t tag) {
-    dream_block_activate_info(block, cls, tag, dream_type_info_for_tag(tag & TAG_VALUE_MASK));
 }
 
 DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c, uint64_t n) {
@@ -1324,7 +1318,11 @@ DREAM_ALWAYS_INLINE int32_t dream_object_tag(dream_ptr p) {
     if (p == 0) {
         return 0;
     }
-    return ((int32_t *)((char *)dream_p(p) - TAG_FROM_DATA))[0] & TAG_VALUE_MASK;
+    return __atomic_load_n(dream_tag_word(p), __ATOMIC_RELAXED) & TAG_VALUE_MASK;
+}
+
+DREAM_ALWAYS_INLINE int32_t dream_object_kind(dream_ptr p) {
+    return dream_tag_kind(dream_object_tag(p));
 }
 
 DREAM_ALWAYS_INLINE void dream_str_fini(dream_ptr p) {

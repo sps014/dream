@@ -408,9 +408,12 @@ export class DreamInstance {
     this.exports.dream_heap_thread_exit?.();
   }
 
-  /** Heap type tag with `TAG_SHARED` stripped (`HEADER_TAG_OFFSET` is 8 bytes before the payload). */
+  /** Runtime shape, independent of the ownership metadata identity and shared/weak flags. */
   __valueTag(ptr) {
-    return this.i32(ptr - 8) & 0x3fffffff;
+    const tag = this.i32(ptr - TAGS.FROM_DATA) & TAGS.VALUE_MASK;
+    if (tag & TAGS.ARRAY_KIND) return TAGS.ARRAY;
+    if (tag & TAGS.FUTURE_KIND) return TAGS.FUTURE;
+    return tag;
   }
 
   __isFutureFrame(ptr) {

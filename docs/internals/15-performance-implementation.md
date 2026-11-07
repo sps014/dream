@@ -424,6 +424,22 @@ The indexed timer deadline heap has shipped (`sys/shared/timer_heap.h`). It orde
 frame for cancellation. Sixteen entries stay inline; larger heaps release spill storage
 when the run loop drains. Timers remain raw references owned by their awaiters.
 
+### Tag-indexed ownership metadata
+
+Each emitted nominal, managed-array and Future ownership descriptor has a unique tag. The low
+28 bits index a deterministic module table; bits 28 and 29 identify typed arrays and Future
+frames. Shared and weak-target flags remain independent. Runtime-created arrays and futures
+without typed ownership edges retain their basic kind tags. C, generated protocol/interface
+routers, worker dispatch, publication, reallocation and the JS host recognize shape independently
+of the descriptor identity.
+
+`dream_object_info` resolves metadata from the tag. `dream_set_type` installs the descriptor's
+tag while preserving allocation flags, including the implicit sharing of previously untyped
+storage. There is no per-object metadata pointer. Native allocation keeps its size class in the
+first header word; wasm32 keeps its block size and reserved word. Both headers remain 16 bytes.
+Slab side metadata and the 8-byte header migration are still pending; this step alone makes no
+claim about reduced allocation sizes or RSS.
+
 ## Validation status
 
 The heap-effects/worklist checkpoint passes workspace build, strict workspace Clippy, workspace

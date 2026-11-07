@@ -51,7 +51,7 @@ static void string_visit(dream_ptr p) {
         dream_visit_edge(parent);
     }
 }
-static const dream_type_info string_info = { string_visit, NULL, NULL, NULL};
+static const dream_type_info string_info = { string_visit, NULL, NULL, NULL, TAG_STRING};
 static dream_ptr closure_edge(dream_ptr p) {
     dream_ptr child; memcpy(&child, (char *)dream_p(p) + 8, sizeof(child)); return child;
 }
@@ -78,8 +78,8 @@ static void environment_clear(dream_ptr p) {
         dream_release_object(child);
     }
 }
-static const dream_type_info closure_info = { closure_visit, NULL, closure_clear, dream_recycle};
-static const dream_type_info environment_info = { environment_visit, NULL, environment_clear, dream_recycle};
+static const dream_type_info closure_info = { closure_visit, NULL, closure_clear, dream_recycle, TAG_FUNCBOX};
+static const dream_type_info environment_info = { environment_visit, NULL, environment_clear, dream_recycle, TAG_CLOSURE_ENV};
 const dream_type_info *dream_builtin_type_info(int32_t tag) {
     switch (tag) {
     case TAG_STRING: return &string_info;

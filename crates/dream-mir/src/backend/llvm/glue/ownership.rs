@@ -44,7 +44,33 @@ pub(in super::super) fn descriptor(
     visit: &str,
     finalize: Option<&str>,
     clear: &str,
+    kind: i32,
 ) {
+    let tag = if kind == crate::abi::TAG_ARRAY || kind == crate::abi::TAG_FUTURE {
+        let index = l.next_info_index;
+        let index = if (crate::abi::TAG_FUTURE..=crate::abi::TAG_FLOAT16).contains(&index) {
+            crate::abi::TAG_FLOAT16 + 1
+        } else {
+            index
+        };
+        assert!(
+            index <= crate::abi::TAG_INDEX_MASK,
+            "type metadata identity exhausted"
+        );
+        l.next_info_index = index + 1;
+        index
+            | if kind == crate::abi::TAG_ARRAY {
+                crate::abi::TAG_ARRAY_KIND
+            } else {
+                crate::abi::TAG_FUTURE_KIND
+            }
+    } else {
+        kind
+    };
+    assert!(
+        l.type_infos.insert(tag, name.to_owned()).is_none(),
+        "duplicate metadata tag"
+    );
     for f in [Some(visit), finalize, Some(clear), Some("dream_recycle")]
         .into_iter()
         .flatten()
@@ -61,10 +87,10 @@ pub(in super::super) fn descriptor(
             unnamed_addr: false,
             ty: Ty::Struct {
                 packed: false,
-                fields: vec![Ty::Ptr, Ty::Ptr, Ty::Ptr, Ty::Ptr],
+                fields: vec![Ty::Ptr, Ty::Ptr, Ty::Ptr, Ty::Ptr, Ty::I32],
             },
             init: Some(format!(
-                "{{ ptr @{visit}, ptr {fin}, ptr @{clear}, ptr @dream_recycle }}"
+                "{{ ptr @{visit}, ptr {fin}, ptr @{clear}, ptr @dream_recycle, i32 {tag} }}"
             )),
             align: l.cx.target.spec().ptr_align,
         },
@@ -108,6 +134,7 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
             &symbol(*ty, "visit"),
             destructor.map(|_| symbol(*ty, "finalize")).as_deref(),
             &symbol(*ty, "clear"),
+            l.cx.type_tag(*ty),
         );
     }
     for elem in glue_array_elems(&l.cx) {
@@ -139,28 +166,27 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
             &symbol(elem, "array_visit"),
             None,
             &symbol(elem, "array_clear"),
+            crate::abi::TAG_ARRAY,
         );
     }
-    emit_lookup(l, &types);
 }
 
-fn emit_lookup(l: &mut Lcx<'_>, types: &[TypeId]) {
+pub(in super::super) fn emit_lookup(l: &mut Lcx<'_>) {
     let first = crate::abi::TAG_STRUCT_BASE;
-    let count = types
-        .iter()
-        .filter_map(|ty| l.cx.tags.get(ty))
+    let count = l
+        .type_infos
+        .keys()
+        .map(|tag| tag & crate::abi::TAG_INDEX_MASK)
         .max()
-        .map_or(0, |&last| (last - first + 1) as usize);
+        .map_or(0, |last| (last - first + 1) as usize);
     let mut entries = vec![None; count];
-    for ty in types {
-        if let Some(&tag) = l.cx.tags.get(ty) {
-            entries[(tag - first) as usize] = Some(info(*ty));
-        }
+    for (&tag, name) in &l.type_infos {
+        entries[((tag & crate::abi::TAG_INDEX_MASK) - first) as usize] = Some(name.clone());
     }
     if !entries.is_empty() {
         let (ty, init) = super::tables::ptr_array(&entries);
         l.global(
-            "dream_nominal_type_infos",
+            "dream_type_infos",
             GlobalDef {
                 linkage: Linkage::Internal,
                 thread_local: false,
@@ -175,14 +201,18 @@ fn emit_lookup(l: &mut Lcx<'_>, types: &[TypeId]) {
     let mut fx = glue(l, "dream_type_info_for_tag");
     let tag = fx.arg(0);
     if count != 0 {
-        let index = fx.w.bin("sub", &tag.v, &Value::i32(first as i64));
+        let identity = fx.w.bin(
+            "and",
+            &tag.v,
+            &Value::i32(crate::abi::TAG_INDEX_MASK as i64),
+        );
+        let index = fx.w.bin("sub", &identity, &Value::i32(first as i64));
         let valid = fx.w.icmp("ult", &index, &Value::i32(count as i64));
         fx.if_then(&valid, |fx| {
             let index = fx.conv(&V::s(index), &Ty::I64);
             let abi = fx.l.cx.target.abi();
             let offset = fx.w.bin("mul", &index, &Value::i64(abi.ptr_size as i64));
-            let address =
-                fx.w.gep_i8(&Value::global("dream_nominal_type_infos"), &offset);
+            let address = fx.w.gep_i8(&Value::global("dream_type_infos"), &offset);
             let metadata = fx.w.load(Ty::Ptr, &address, abi.ptr_align, &[]);
             let present = fx.w.icmp("ne", &metadata, &Value::null());
             fx.if_then(&present, |fx| fx.w.ret(Some(&metadata)));

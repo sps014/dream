@@ -6,6 +6,7 @@ typedef struct dream_type_info {
     void (*finalize)(dream_ptr);
     void (*clear)(dream_ptr);
     void (*reclaim)(dream_ptr);
+    int32_t tag;
 } dream_type_info;
 
 const dream_type_info *dream_builtin_type_info(int32_t tag);
@@ -56,26 +57,25 @@ DREAM_ALWAYS_INLINE void dream_count(dream_counter k, uint64_t n) {
 }
 int64_t debug_get_runtime_counter(int32_t id);
 
-#ifdef DREAM_WASM32
+DREAM_ALWAYS_INLINE int32_t dream_tag_kind(int32_t tag) {
+    tag &= TAG_VALUE_MASK;
+    if (tag & TAG_ARRAY_KIND) { return TAG_ARRAY; }
+    if (tag & TAG_FUTURE_KIND) { return TAG_FUTURE; }
+    return tag;
+}
+
 DREAM_ALWAYS_INLINE const dream_type_info *dream_object_info(dream_ptr p) {
-    const dream_type_info *info;
-    memcpy(&info, (char *)dream_p(p) - DREAM_BLOCK_HEADER + sizeof(dream_size), sizeof(info));
-    return info;
+    return p ? dream_type_info_for_tag(__atomic_load_n(dream_tag_word(p), __ATOMIC_RELAXED) & TAG_VALUE_MASK) : NULL;
 }
 
 DREAM_ALWAYS_INLINE void dream_set_type(dream_ptr ptr, const dream_type_info *info) {
-    uintptr_t header = (uintptr_t)dream_p(ptr) - DREAM_BLOCK_HEADER;
-    memcpy((void *)(header + sizeof(dream_size)), &info, sizeof(info));
+    if (!info) { return; }
+    int32_t *word = dream_tag_word(ptr);
+    int32_t tag = __atomic_load_n(word, __ATOMIC_RELAXED);
+    if ((tag & TAG_VALUE_MASK) == info->tag) { return; }
+    /* New identities are installed before publication; reallocating existing storage keeps
+     * its identity. Shared/weak flags belong to the allocation, not its descriptor. */
+    if ((tag & TAG_VALUE_MASK) == 0) { tag |= TAG_SHARED; }
+    __atomic_store_n(word, (tag & ~TAG_VALUE_MASK) | info->tag, __ATOMIC_RELAXED);
 }
-#else
-DREAM_ALWAYS_INLINE const dream_type_info *dream_object_info(dream_ptr p) {
-    uintptr_t word = *(const uintptr_t *)((char *)dream_p(p) - DREAM_BLOCK_HEADER);
-    return (const dream_type_info *)(word & DREAM_WORD_MASK);
-}
-
-DREAM_ALWAYS_INLINE void dream_set_type(dream_ptr ptr, const dream_type_info *info) {
-    uintptr_t *word = (uintptr_t *)((char *)dream_p(ptr) - DREAM_BLOCK_HEADER);
-    *word = (*word & ~DREAM_WORD_MASK) | (uintptr_t)info;
-}
-#endif
 #endif

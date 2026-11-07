@@ -1,5 +1,19 @@
 use crate::host;
 use dream_host_abi::{DreamPtr, alloc_f32s, alloc_string, read_string};
+use std::ffi::{c_char, c_int};
+
+/// # Safety
+/// `argv` must be the process argument vector, and both functions must be the guest's
+/// `dream_guest_entry` and `dream_scheduler_pump`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn dream_window_app_main(
+    argc: c_int,
+    argv: *mut *mut c_char,
+    entry: extern "C" fn() -> c_int,
+    pump: extern "C" fn() -> c_int,
+) -> c_int {
+    unsafe { crate::app::dream_window_app_main(argc, argv, entry, pump) }
+}
 
 /// # Safety
 /// The title must be a readable guest string for the duration of this call.

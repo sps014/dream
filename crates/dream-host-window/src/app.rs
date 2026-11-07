@@ -40,7 +40,6 @@ pub(crate) fn take_recorded() -> impl Iterator<Item = Event> {
 /// # Safety
 /// `argv` must be the process argument vector, and both functions must be the guest's
 /// `dream_guest_entry` and `dream_scheduler_pump`.
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn dream_window_app_main(
     argc: c_int,
     argv: *mut *mut c_char,

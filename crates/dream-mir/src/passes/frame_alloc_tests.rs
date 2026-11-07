@@ -115,7 +115,7 @@ fn constant_length_scalar_array_is_built_in_the_frame() {
     assert!(frame_alloc::run(&mut mir, &ctx.interner));
     assert_eq!(
         mir.frame_objects.values().copied().collect::<Vec<_>>(),
-        vec![4 + 64 * 4]
+        vec![8 + 64 * 4]
     );
     assert!(
         mir.functions[0]

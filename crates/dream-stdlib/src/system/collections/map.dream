@@ -1,6 +1,7 @@
 module system.collections;
 
 /// A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
+// `state` packs the occupancy stamp with a hash fragment; see `hash_epoch_initial`.
 @slot_walk("capacity", "slot_entry", "slot_occupied")
 public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     slots: MapSlot<K, V>[];
@@ -41,7 +42,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     }
 
     fun bump_epoch(): void {
-        let e = this.epoch + 1;
+        let e = this.epoch + 256;
         if e <= 0 {
             let i = 0;
             while i < this.cap {
@@ -73,29 +74,23 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = mix_hash(hash) & (cap - 1);
-        let result = -1;
-        let done = false;
-        while done == false {
+        let mixed = mix_hash(hash);
+        let want = epoch | hash_fragment(mixed);
+        let idx = mixed & (cap - 1);
+        while true {
             let s = slots[idx].state;
-            if (s != epoch) && (s != tomb) {
-                done = true;
-            } else {
-                if s == epoch {
-                    if slots[idx].key == key {
-                        result = idx;
-                        done = true;
-                    }
+            if s == want {
+                if slots[idx].key == key {
+                    return idx;
                 }
-                if done == false {
-                    idx = idx + 1;
-                    if idx == cap {
-                        idx = 0;
-                    }
-                }
+            } else if ((s & hash_stamp_mask()) != epoch) && (s != tomb) {
+                return -1;
+            }
+            idx = idx + 1;
+            if idx == cap {
+                idx = 0;
             }
         }
-        return result;
     }
 
     @inline
@@ -104,14 +99,17 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = mix_hash(key.hash_code()) & (cap - 1);
+        let mixed = mix_hash(key.hash_code());
+        let want = epoch | hash_fragment(mixed);
+        let idx = mixed & (cap - 1);
         while true {
             let s = slots[idx].state;
-            if (s != epoch) && (s != tomb) {
+            if s == want {
+                if slots[idx].key.matches_span(key) {
+                    return idx;
+                }
+            } else if ((s & hash_stamp_mask()) != epoch) && (s != tomb) {
                 return -1;
-            }
-            if (s == epoch) && slots[idx].key.matches_span(key) {
-                return idx;
             }
             idx = idx + 1;
             if idx == cap {
@@ -125,26 +123,28 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = mix_hash(hash) & (cap - 1);
+        let mixed = mix_hash(hash);
+        let want = epoch | hash_fragment(mixed);
+        let idx = mixed & (cap - 1);
         let first_tomb = -1;
         let done = false;
         while done == false {
             let s = slots[idx].state;
-            if (s != epoch) && (s != tomb) {
+            if ((s & hash_stamp_mask()) != epoch) && (s != tomb) {
                 let target = idx;
                 if first_tomb >= 0 {
                     target = first_tomb;
                 }
                 slots[target].key = key;
                 slots[target].value = value;
-                slots[target].state = epoch;
+                slots[target].state = want;
                 this.count = this.count + 1;
                 if first_tomb < 0 {
                     this.used = this.used + 1;
                 }
                 done = true;
             } else {
-                if (s == epoch) && (slots[idx].key == key) {
+                if (s == want) && (slots[idx].key == key) {
                     slots[idx].value = value;
                     done = true;
                 } else {
@@ -172,11 +172,11 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let can_transfer = CollectionStorage.owners(old) == 1;
         let i = 0;
         while i < old_cap {
-            if old[i].state == this.epoch {
+            if (old[i].state & hash_stamp_mask()) == this.epoch {
                 let hash = old[i].key.hash_code();
                 if can_transfer {
                     let target = mix_hash(hash) & (new_cap - 1);
-                    while this.slots[target].state == this.epoch {
+                    while this.slots[target].state != 0 {
                         target = (target + 1) & (new_cap - 1);
                     }
                     this.slots[target] = CollectionStorage.take<MapSlot<K, V>>(old, i);
@@ -200,15 +200,17 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
                 this.rehash(hash_capacity_for(this.cap + 1));
             }
         }
-        let idx = mix_hash(hash) & (this.cap - 1);
+        let mixed = mix_hash(hash);
+        let idx = mixed & (this.cap - 1);
         let slot_state = this.slots[idx].state;
         let epoch = this.epoch;
-        if slot_state == epoch && this.slots[idx].key == key {
+        let want = epoch | hash_fragment(mixed);
+        if slot_state == want && this.slots[idx].key == key {
             this.slots[idx].value = value;
-        } else if slot_state != epoch && slot_state != (0 - epoch) {
+        } else if (slot_state & hash_stamp_mask()) != epoch && slot_state != (0 - epoch) {
             this.slots[idx].key = key;
             this.slots[idx].value = value;
-            this.slots[idx].state = epoch;
+            this.slots[idx].state = want;
             this.count = this.count + 1;
             this.used = this.used + 1;
         } else {
@@ -306,7 +308,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let result = List<KeyValuePair<K, V>>(this.count);
         let i = 0;
         while i < this.cap {
-            if this.slots[i].state == this.epoch {
+            if (this.slots[i].state & hash_stamp_mask()) == this.epoch {
                 result.push(KeyValuePair<K, V>(this.slots[i].key, this.slots[i].value));
             }
             i = i + 1;
@@ -344,7 +346,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let zv = CollectionStorage.zero<V>();
         let i = 0;
         while i < c {
-            if this.slots[i].state == e {
+            if (this.slots[i].state & hash_stamp_mask()) == e {
                 this.slots[i].key = zk;
                 this.slots[i].value = zv;
             }
@@ -368,7 +370,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let result = List<K>(this.count);
         let i = 0;
         while i < this.cap {
-            if this.slots[i].state == this.epoch {
+            if (this.slots[i].state & hash_stamp_mask()) == this.epoch {
                 result.push(this.slots[i].key);
             }
             i = i + 1;
@@ -381,7 +383,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let result = List<V>(this.count);
         let i = 0;
         while i < this.cap {
-            if this.slots[i].state == this.epoch {
+            if (this.slots[i].state & hash_stamp_mask()) == this.epoch {
                 result.push(this.slots[i].value);
             }
             i = i + 1;
@@ -401,7 +403,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     }
 
     internal fun slot_occupied(i: int): bool {
-        return this.slots[i].state == this.epoch;
+        return (this.slots[i].state & hash_stamp_mask()) == this.epoch;
     }
 
     @borrowed_result
@@ -421,7 +423,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         let n = 0;
         let i = 0;
         while i < this.cap {
-            if this.slots[i].state == this.epoch {
+            if (this.slots[i].state & hash_stamp_mask()) == this.epoch {
                 if n > 0 {
                     sb.append(", ");
                 }

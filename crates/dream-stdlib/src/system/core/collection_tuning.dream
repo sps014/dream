@@ -24,9 +24,22 @@ internal fun hash_min_capacity(): int {
     return 8;
 }
 
-// First occupancy stamp stored in `Map`/`Set` probe slots (`0` remains empty).
+// First occupancy stamp stored in `Map`/`Set` probe slots (`0` remains empty). Stamps are
+// multiples of 256: an occupied slot stores `stamp | hash_fragment(mixed)`, a tombstone stores
+// `-stamp`, and `clear` advances the stamp by 256 so every older state reads as empty.
 internal fun hash_epoch_initial(): int {
-    return 1;
+    return 256;
+}
+
+// Mask selecting the stamp part of a probe-slot state.
+internal fun hash_stamp_mask(): int {
+    return -256;
+}
+
+// Top byte of a mixed hash. Slot indices come from the low bits, so these bits still tell
+// colliding keys apart and let probes skip most key comparisons.
+internal fun hash_fragment(mixed: int): int {
+    return (mixed >> 24) & 255;
 }
 
 // `Set`/`Map` grow when `(used + 1) * hash_load_factor_denom() >= capacity * hash_load_factor_num()`,

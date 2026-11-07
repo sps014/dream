@@ -564,6 +564,7 @@ mod tests {
                         })
                         .collect(),
                     packed: dream_abi::attributes::has_packed_attr(&decl.attributes),
+                    keep_order: false,
                     destructor: None,
                 }
             })

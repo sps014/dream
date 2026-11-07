@@ -98,14 +98,14 @@ int main(void) {
         while (!fileOperationDone(reads[i])) { dream_thread_yield(); }
         dream_ptr bytes = fileOperationBytes(reads[i]);
         assert(dream_i32(bytes)[0] == 4);
-        assert(!memcmp((char *)bytes + 4, "\0ABC", 4));
+        assert(!memcmp(dream_array_bytes(bytes), "\0ABC", 4));
         free(bytes);
         fileOperationRelease(reads[i]);
     }
     dream_ptr data = dream_array_new(3, 1);
-    memcpy((char *)data + 4, "ABC", 3);
+    memcpy(dream_array_bytes(data), "ABC", 3);
     uintptr_t write = fileOperationStart(2, 7, 0, 0, 3, data, 0);
-    memset((char *)data + 4, 0, 3);
+    memset(dream_array_bytes(data), 0, 3);
     free(data);
     while (!fileOperationDone(write)) { dream_thread_yield(); }
     assert(fileOperationResult(write) == 2);

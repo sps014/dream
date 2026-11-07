@@ -84,7 +84,7 @@ static void check_utf8_roundtrip(void) {
     assert(dream_str_len(decoded) == count);
     assert(memcmp(dream_str_units(decoded), expected, (size_t)count * 2) == 0);
     dream_ptr bytes = dream_array_new(sizeof(text) - 1, 1);
-    memcpy((char *)dream_p(bytes) + 4, text, sizeof(text) - 1);
+    memcpy(dream_array_bytes(bytes), text, sizeof(text) - 1);
     dream_ptr full = string_from_utf8(bytes);
     dream_ptr prefix = string_from_utf8_prefix(bytes, sizeof(text) - 2);
     assert(dream_str_len(full) == count);

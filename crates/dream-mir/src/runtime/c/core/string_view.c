@@ -227,7 +227,7 @@ int32_t string_view_rfind_char(dream_ptr s, int32_t off, int32_t n, int32_t c) {
 }
 
 /* A slice string over the first `len` payload bytes of a `StringBuilder` buffer (units start
- * after the array length word and the builder's 4-byte pad, as in `string_from_builder`). The
+ * at the array payload, as in `string_from_builder`). The
  * slice retains the buffer; the builder never rewrites viewed units in place (growth copies
  * into a new block, and `clear` swaps buffers once viewed), so the view is a stable snapshot. */
 dream_ptr string_builder_view(dream_ptr bytes, int32_t len) {
@@ -237,7 +237,7 @@ dream_ptr string_builder_view(dream_ptr bytes, int32_t len) {
         return dream_string_alloc(0);
     }
     p = dream_malloc(DREAM_SLICE_BYTES, TAG_STRING);
-    dream_slice_fill(p, bytes, n, (const uint16_t *)((char *)dream_p(bytes) + 8));
+    dream_slice_fill(p, bytes, n, (const uint16_t *)dream_array_bytes(bytes));
     dream_slice_retain_parent(bytes);
     return p;
 }

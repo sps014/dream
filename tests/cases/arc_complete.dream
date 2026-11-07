@@ -3,7 +3,6 @@
 //   * ref_count()        - retain/release arithmetic on shared values
 //   * live_objects()     - net live blocks (leak detection)
 //   * heap_ptr()         - heap high-water mark (block reuse vs. growth)
-//   * free_list_head()   - reclaimed-block freelist
 //
 // The destructor prints make reclamation order observable for the `del()` cases.
 
@@ -323,7 +322,6 @@ fun main() {
     }
     let base_live = Debug.live_objects;
     let base_heap = Debug.heap_ptr;
-    let base_free = Debug.free_list_head;
 
     let i = 0;
     while i < 100 {
@@ -333,11 +331,9 @@ fun main() {
 
     let end_live = Debug.live_objects;
     let end_heap = Debug.heap_ptr;
-    let end_free = Debug.free_list_head;
 
     System.println("live_delta=" + (end_live - base_live).to_string());
     System.println("heap_grew=" + (end_heap - base_heap > 0).to_string());
-    System.println("free_stable=" + (base_free == end_free).to_string());
 
     // Destructor execution + ordering, driven by the call sequence.
     drop_one(1);

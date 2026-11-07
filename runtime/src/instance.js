@@ -1,4 +1,4 @@
-import { TAGS, elementSize, stripSuffix, parseFunType, jsToWasm, wasmToJs } from "./core.js";
+import { TAGS, LEN_PREFIX_SIZE, elementSize, stripSuffix, parseFunType, jsToWasm, wasmToJs } from "./core.js";
 import { HAS_ASYNC_MAIN, HAS_ASYNC_IMPORTS, HAS_JS_HANDLES, HAS_CALLBACKS, HAS_WORKERS } from "./features.js";
 
 const WORKER_STACK_BYTES = 65536;
@@ -229,41 +229,41 @@ export class DreamInstance {
   /**
    * Allocates a Dream array from a JS array (or typed array) of `elemType`, returning its data
    * pointer, so JS-implemented externs can return arrays (e.g. `byte[]` process output) back into
-   * Dream. Layout: [count:i32] followed by `count` elements. Requires the module to export `malloc`.
+   * Dream. Layout: [count:i32][pad:i32] followed by `count` elements. Requires the module to export `malloc`.
    */
   writeArray(arr, elemType = "int") {
     const elem = stripSuffix(elemType);
     const size = elementSize(elem);
     const count = arr.length;
-    const ptr = this.guestMalloc(4 + count * size, TAGS.ARRAY);
+    const ptr = this.guestMalloc(LEN_PREFIX_SIZE + count * size, TAGS.ARRAY);
     this.view.setInt32(ptr, count, true);
     if (elem === "byte") {
       // Bulk copy for the common byte-array case.
-      this.bytes.set(Uint8Array.from(arr), ptr + 4);
+      this.bytes.set(Uint8Array.from(arr), ptr + LEN_PREFIX_SIZE);
     } else if (elem === "float" && arr instanceof Float32Array) {
-      new Float32Array(this.memory.buffer, ptr + 4, count).set(arr);
+      new Float32Array(this.memory.buffer, ptr + LEN_PREFIX_SIZE, count).set(arr);
     } else {
       for (let i = 0; i < count; i++) {
-        this._writeElement(ptr + 4 + i * size, elem, arr[i]);
+        this._writeElement(ptr + LEN_PREFIX_SIZE + i * size, elem, arr[i]);
       }
     }
     return ptr;
   }
 
   /**
-   * Reads a Dream array at data pointer `ptr` into a JS array. Layout: [count:i32] followed by
-   * `count` elements of `elemType`.
+   * Reads a Dream array at data pointer `ptr` into a JS array. Layout: [count:i32][pad:i32] followed
+   * by `count` elements of `elemType`.
    */
   readArray(ptr, elemType = "int") {
     if (!ptr) return [];
     const count = this.i32(ptr);
     if (elemType === "byte") {
-      return Array.from(new Uint8Array(this.memory.buffer, ptr + 4, count));
+      return Array.from(new Uint8Array(this.memory.buffer, ptr + LEN_PREFIX_SIZE, count));
     }
     const size = elementSize(elemType);
     const out = new Array(count);
     for (let i = 0; i < count; i++) {
-      out[i] = this._readElement(ptr + 4 + i * size, elemType);
+      out[i] = this._readElement(ptr + LEN_PREFIX_SIZE + i * size, elemType);
     }
     return out;
   }
@@ -279,21 +279,26 @@ export class DreamInstance {
     const size = elementSize(elemType);
     const out = new Array(count);
     for (let i = 0; i < count; i++) {
-      out[i] = this._readElement(itemsPtr + 4 + i * size, elemType);
+      out[i] = this._readElement(itemsPtr + LEN_PREFIX_SIZE + i * size, elemType);
     }
     return out;
   }
 
   /**
-   * Reads a struct at data pointer `ptr` using a schema describing its fields in declaration
-   * order. Schema entries are `{ name, type }`; offsets are derived from element sizes.
+   * Reads a class instance at data pointer `ptr` using a schema describing its fields in
+   * declaration order. Schema entries are `{ name, type }`. Offsets follow the compiler's class
+   * layout: fields are placed widest first (ties keep declaration order), each aligned to its size.
    */
   readStruct(ptr, schema) {
     const out = {};
+    const order = schema
+      .map((field, index) => ({ field, index, size: elementSize(field.type) }))
+      .sort((a, b) => b.size - a.size || a.index - b.index);
     let offset = 0;
-    for (const field of schema) {
+    for (const { field, size } of order) {
+      offset = Math.ceil(offset / size) * size;
       out[field.name] = this._readElement(ptr + offset, field.type);
-      offset += elementSize(field.type);
+      offset += size;
     }
     return out;
   }

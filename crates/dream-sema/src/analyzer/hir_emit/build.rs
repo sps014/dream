@@ -150,6 +150,12 @@ impl<'a> Analyzer<'a> {
                     dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, ty)
                 )
             };
+            let keep_order = self.type_ctx.interner.is_value_type(ty)
+                && self.type_id_satisfies_kind(
+                    ty,
+                    dream_syntax::nodes::ConstraintKind::Unmanaged,
+                    &mut indexmap::IndexSet::new(),
+                );
             struct_defs.push(StructLayoutDef {
                 ty,
                 name,
@@ -163,6 +169,7 @@ impl<'a> Analyzer<'a> {
                     })
                     .collect(),
                 packed,
+                keep_order,
                 destructor,
             });
         }
@@ -196,6 +203,7 @@ impl<'a> Analyzer<'a> {
                     })
                     .collect(),
                 packed: false,
+                keep_order: false,
                 destructor: None,
             });
         }

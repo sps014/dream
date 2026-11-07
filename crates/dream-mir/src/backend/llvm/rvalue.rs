@@ -680,7 +680,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     fn emit_array_lit(&mut self, elem_ty: TypeId, elems: &[Operand]) -> V {
         let es = elem_size(&self.l.cx, elem_ty) as i64;
         let n = elems.len() as i64;
-        let size = 4 + es * n;
+        let size = crate::abi::LEN_PREFIX_SIZE as i64 + es * n;
         let m = mem_ty(&self.l.cx, elem_ty);
         let vals: Vec<V> = elems.iter().map(|e| self.operand(e)).collect();
         let is_val = self.is_value(elem_ty);

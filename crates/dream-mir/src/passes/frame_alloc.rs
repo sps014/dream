@@ -251,7 +251,9 @@ fn array_payload(
     }
     let n = u32::try_from(const_int(f, len)?).ok()?;
     let (size, _) = layouts.size_align(interner, elem);
-    size.max(1).checked_mul(n)?.checked_add(4)
+    size.max(1)
+        .checked_mul(n)?
+        .checked_add(crate::abi::LEN_PREFIX_SIZE)
 }
 
 /// The value of an integer literal operand, or of a non-parameter local whose only definition is one.
@@ -293,43 +295,55 @@ fn unmanaged(ty: TypeId, interner: &TypeInterner, layouts: &LayoutTable, depth: 
 
 fn apply(f: &mut MirFunction, plans: &[Plan]) {
     let mut drop: BTreeSet<(usize, usize)> = BTreeSet::new();
-    let mut deaths: BTreeMap<(usize, usize), (Local, &RefFields)> = BTreeMap::new();
+    let mut deaths: BTreeMap<(usize, usize), (Local, TypeId, &RefFields)> = BTreeMap::new();
     for p in plans {
         drop.extend(p.life.rc_ops.iter().copied());
+        let class = f.locals[p.object.0 as usize].ty;
         for &(bi, si, m) in &p.life.deaths {
-            deaths.insert((bi, si), (m, &p.fields));
+            deaths.insert((bi, si), (m, class, &p.fields));
         }
     }
     let mut temps: BTreeMap<TypeId, Local> = BTreeMap::new();
     for &(_, ty) in plans.iter().flat_map(|p| &p.fields) {
-        temps.entry(ty).or_insert_with(|| {
-            f.locals.push(LocalDecl {
-                ty,
-                name: None,
-                is_ref: false,
-                is_take: false,
-                is_cursor: false,
-                manual_drop: false,
-                borrows_refs: false,
-            });
-            Local(f.locals.len() as u32 - 1)
-        });
+        temps.entry(ty).or_insert_with(|| push_temp(f, ty));
     }
+    // A death may be reached through an alias typed `Option<Class>`; field offsets come from the
+    // class layout, so such deaths project through a temporary of the class type.
+    let mut views: BTreeMap<TypeId, Local> = BTreeMap::new();
+    let aliased: Vec<TypeId> = deaths
+        .values()
+        .filter(|&&(m, class, _)| f.locals[m.0 as usize].ty != class)
+        .map(|&(_, class, _)| class)
+        .collect();
+    for class in aliased {
+        views.entry(class).or_insert_with(|| push_temp(f, class));
+    }
+    let local_tys: Vec<TypeId> = f.locals.iter().map(|l| l.ty).collect();
     for (bi, block) in f.blocks.iter_mut().enumerate() {
         let old = std::mem::take(&mut block.stmts);
         for (si, s) in old.into_iter().enumerate() {
             if drop.contains(&(bi, si)) {
                 continue;
             }
-            let Some(&(m, fields)) = deaths.get(&(bi, si)) else {
+            let Some(&(m, class, fields)) = deaths.get(&(bi, si)) else {
                 block.stmts.push(s);
                 continue;
+            };
+            let base = if local_tys[m.0 as usize] == class {
+                m
+            } else {
+                let view = views[&class];
+                block.stmts.push(Statement::Assign(
+                    Place::Local(view),
+                    Rvalue::Use(Operand::Copy(Place::Local(m))),
+                ));
+                view
             };
             for &(field, ty) in fields {
                 let t = temps[&ty];
                 block.stmts.push(Statement::Assign(
                     Place::Local(t),
-                    Rvalue::Use(Operand::Copy(Place::Field { base: m, field })),
+                    Rvalue::Use(Operand::Copy(Place::Field { base, field })),
                 ));
                 block
                     .stmts
@@ -337,4 +351,17 @@ fn apply(f: &mut MirFunction, plans: &[Plan]) {
             }
         }
     }
+}
+
+fn push_temp(f: &mut MirFunction, ty: TypeId) -> Local {
+    f.locals.push(LocalDecl {
+        ty,
+        name: None,
+        is_ref: false,
+        is_take: false,
+        is_cursor: false,
+        manual_drop: false,
+        borrows_refs: false,
+    });
+    Local(f.locals.len() as u32 - 1)
 }

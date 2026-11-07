@@ -9,7 +9,7 @@
 //!
 //! Availability is a forward dataflow to a fixpoint. Loop headers meet the preheader *and* the
 //! latch; a single RPO pass would ignore the not-yet-visited back edge and treat a bump pointer as
-//! still equal to `arr + 4` in a later loop (see `does_not_cse_add_across_loop_back_edge`).
+//! still equal to `arr + LEN_PREFIX_SIZE` in a later loop (see `does_not_cse_add_across_loop_back_edge`).
 
 use super::MirPass;
 use crate::{

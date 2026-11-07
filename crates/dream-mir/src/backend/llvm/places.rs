@@ -18,7 +18,8 @@ use crate::{Const, Global, Local, Operand, Place, Rvalue};
 use dream_abi::names::THIS_NAME;
 use dream_types::{TyKind, TypeId};
 
-/// Array payload elements sit at `data + 4 + i * es`, so nothing wider than 4 is guaranteed.
+/// Shared by array elements and value-struct fields inside them, whose offsets within an
+/// element only guarantee 4.
 pub(super) const ELEM_ALIGN: u32 = 4;
 
 impl<'l, 'a> Fx<'l, 'a> {

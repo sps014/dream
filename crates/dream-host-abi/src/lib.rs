@@ -143,11 +143,11 @@ unsafe fn read_elements<T: Copy>(reference: DreamPtr) -> Vec<T> {
         return Vec::new();
     }
     let n = unsafe { dream_host_length(reference) } as usize;
+    if n == 0 {
+        return Vec::new();
+    }
     let data = unsafe { dream_host_data(reference, dream_abi::guest_contract::GUEST_ARRAY) };
-    // Array payloads need not align 64-bit elements on every native target.
-    (0..n)
-        .map(|i| unsafe { data.cast::<T>().add(i).read_unaligned() })
-        .collect()
+    unsafe { std::slice::from_raw_parts(data.cast::<T>(), n) }.to_vec()
 }
 
 pub fn alloc_string(s: &str) -> DreamPtr {

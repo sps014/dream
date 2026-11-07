@@ -1,5 +1,5 @@
 use crate::compile_flags::CompileFlags;
-use crate::manifest::{PackageType, RunTarget, resolve_run_target};
+use crate::manifest::{PackageType, RunTarget};
 use crate::workspace::Workspace;
 use anyhow::{Result, bail};
 use std::path::Path;
@@ -48,8 +48,8 @@ pub fn run_with(
         ),
         PackageType::Bin => {}
     }
-    let host = resolve_run_target(&pkg.targets, target.as_deref())?;
-    if !flags.native && host == RunTarget::Native {
+    let host = workspace.manifest.run_target(target.as_deref())?;
+    if !flags.native && !matches!(host, RunTarget::Web | RunTarget::Node) {
         bail!("--wasm is only valid with web/node hosts (native run builds a host binary)");
     }
 
@@ -57,6 +57,7 @@ pub fn run_with(
         RunTarget::Native => run_native(&workspace, &flags, extra_args),
         RunTarget::Node => run_node(&workspace, &flags, extra_args),
         RunTarget::Web => run_web(&workspace, &flags, port),
+        RunTarget::Android | RunTarget::Ios => bail!("{}", crate::mobile::CANVAS_UNAVAILABLE),
     }
 }
 
@@ -116,7 +117,7 @@ fn run_web(workspace: &Workspace, flags: &CompileFlags, port: Option<u16>) -> Re
     let index = workspace.root.join("index.html");
     if !index.is_file() {
         bail!(
-            "missing {}; re-run `dreamer init --runtime web` or add an index.html that imports \
+            "missing {}; add an index.html like the `dreamer init web` template that imports \
              the entry's *.web.runtime.js from target/web/",
             index.display()
         );

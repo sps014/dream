@@ -1,6 +1,6 @@
 // Browser windows for `system.window`: a canvas plus keyboard, pointer, wheel, Pointer Lock and
 // Gamepad API input. `windowPoll` returns the same `[kind, length, payload...]` float records
-// as the native GLFW host (crates/dream-host-window/src/wire.rs), decoded by
+// as the native SDL3 host (crates/dream-host-window/src/wire.rs), decoded by
 // crates/dream-stdlib/src/system/window/input_wire.dream.
 
 const RESIZED = 1;
@@ -19,6 +19,10 @@ const FILE_DROPPED = 15;
 const GAMEPAD_SAMPLE = 16;
 const OCCLUDED = 19;
 const SCALE_CHANGED = 20;
+const TOUCH_DOWN = 21;
+const TOUCH_MOVE = 22;
+const TOUCH_UP = 23;
+const TOUCH_CANCEL = 24;
 
 const FLAG_FULLSCREEN = 2;
 const CURSOR_CAPTURED = 2;
@@ -98,6 +102,44 @@ function releaseHeld(state) {
   for (const button of state.buttons) push(state, MOUSE_UP, [button]);
   state.keys.clear();
   state.buttons.clear();
+  for (const [pointer, id] of state.touches) {
+    state.touches.delete(pointer);
+    push(state, TOUCH_CANCEL, [id]);
+    if (state.canvas.hasPointerCapture?.(pointer)) state.canvas.releasePointerCapture(pointer);
+  }
+}
+
+function touchPosition(state, e) {
+  const rect = state.canvas.getBoundingClientRect();
+  return [e.clientX - rect.left, e.clientY - rect.top];
+}
+
+function touchDown(state, e) {
+  if (e.pointerType !== "touch" || state.touches.has(e.pointerId)) return;
+  e.preventDefault?.();
+  state.canvas.focus?.();
+  // Browser pointer ids are not constrained to the integers f32 can carry exactly.
+  const used = new Set(state.touches.values());
+  let id = 0;
+  while (used.has(id)) id++;
+  state.touches.set(e.pointerId, id);
+  push(state, TOUCH_DOWN, [id, ...touchPosition(state, e)]);
+  try {
+    state.canvas.setPointerCapture?.(e.pointerId);
+  } catch (_) {
+    // Focus handlers can detach the canvas before pointer capture is established.
+    touchEnd(state, e, true);
+  }
+}
+
+function touchEnd(state, e, cancelled) {
+  const id = state.touches.get(e.pointerId);
+  if (id === undefined) return;
+  e.preventDefault?.();
+  state.touches.delete(e.pointerId);
+  if (cancelled) push(state, TOUCH_CANCEL, [id]);
+  else push(state, TOUCH_UP, [id, ...touchPosition(state, e)]);
+  if (state.canvas.hasPointerCapture?.(e.pointerId)) state.canvas.releasePointerCapture(e.pointerId);
 }
 
 function pointerPosition(state, e) {
@@ -141,6 +183,7 @@ function syncOcclusion(state) {
   const hidden = globalThis.document?.visibilityState === "hidden" || !state.intersecting;
   if (hidden !== state.hidden) {
     state.hidden = hidden;
+    if (hidden) releaseHeld(state);
     push(state, OCCLUDED, [hidden ? 1 : 0]);
   }
 }
@@ -175,6 +218,7 @@ function attach(canvas, owns) {
   const state = {
     canvas, owns, queue: [], keys: new Set(), buttons: new Set(), pads: new Set(),
     listeners: [], x: 0, y: 0, cursorMode: 0, icon: 0, pixels: [0, 0],
+    touches: new Map(), touchAction: canvas.style.touchAction,
     ratio: pixelRatio(), hidden: false, intersecting: true, observer: null,
   };
   if (typeof globalThis.IntersectionObserver === "function") {
@@ -188,6 +232,7 @@ function attach(canvas, owns) {
     state.listeners.push([target, type, handler, options]);
   };
   if (!(canvas.tabIndex >= 0)) canvas.tabIndex = 0;
+  canvas.style.touchAction = "none";
   syncSize(state, false);
   listen(canvas, "keydown", e => {
     const code = KEY_CODES[e.code] || 0;
@@ -206,7 +251,20 @@ function attach(canvas, owns) {
   listen(canvas, "compositionend", e => {
     if (e.data) push(state, TEXT, [], e.data);
   });
-  listen(canvas, "pointermove", e => pointerPosition(state, e));
+  listen(canvas, "pointerdown", e => touchDown(state, e));
+  listen(canvas, "pointermove", e => {
+    if (e.pointerType !== "touch") {
+      pointerPosition(state, e);
+      return;
+    }
+    const id = state.touches.get(e.pointerId);
+    if (id === undefined) return;
+    e.preventDefault?.();
+    push(state, TOUCH_MOVE, [id, ...touchPosition(state, e)]);
+  });
+  listen(canvas, "pointerup", e => touchEnd(state, e, false));
+  listen(canvas, "pointercancel", e => touchEnd(state, e, true));
+  listen(canvas, "lostpointercapture", e => touchEnd(state, e, true));
   // Mouse events report each chorded button; pointerdown/up only bracket the whole chord.
   listen(canvas, "mousedown", e => {
     canvas.focus?.();
@@ -301,6 +359,8 @@ export function makeWindowHost() {
       for (const [target, type, handler, options] of state.listeners) {
         target.removeEventListener(type, handler, options);
       }
+      releaseHeld(state);
+      state.canvas.style.touchAction = state.touchAction;
       state.observer?.disconnect();
       if (locked(state)) globalThis.document.exitPointerLock?.();
       if (state.owns) state.canvas.remove?.();

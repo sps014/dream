@@ -67,6 +67,9 @@ pub fn uninstall(component: String) -> Result<()> {
 }
 
 pub fn doctor(target: Option<&str>, json: bool) -> Result<()> {
+    if let Some(target @ ("android" | "ios")) = target {
+        return crate::mobile::doctor(crate::mobile::Platform::parse(target)?, json);
+    }
     let mut command = std::process::Command::new(crate::dream_bin::locate()?);
     command.arg("toolchain-doctor");
     if let Some(target) = target {

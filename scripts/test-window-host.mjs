@@ -15,6 +15,7 @@ class FakeCanvas extends EventTarget {
     this.cssWidth = 400;
     this.cssHeight = 200;
     this.removed = false;
+    this.captures = new Set();
   }
   getBoundingClientRect() { return { left: 10, top: 20, width: this.cssWidth, height: this.cssHeight }; }
   focus() {
@@ -23,6 +24,12 @@ class FakeCanvas extends EventTarget {
     this.dispatchEvent(new Event('focus'));
   }
   requestPointerLock() { globalThis.document.pointerLockElement = this; }
+  setPointerCapture(id) { this.captures.add(id); }
+  hasPointerCapture(id) { return this.captures.has(id); }
+  releasePointerCapture(id) {
+    this.captures.delete(id);
+    fire(this, 'lostpointercapture', { pointerId: id });
+  }
   remove() { this.removed = true; }
 }
 
@@ -71,6 +78,86 @@ test('without a DOM, windows fail with ENODISPLAY instead of throwing', () => {
   assert.deepEqual(host.windowPoll(1), []);
   assert.deepEqual(host.windowQuery(1), []);
   assert.equal(host.windowGamepadRumble(0, 1, 1, 100), false);
+});
+
+test('touch contacts keep distinct exact ids and logical coordinates without mouse events', () => {
+  const page = installDom();
+  try {
+    const host = makeWindowHost();
+    const id = host.windowCanvas('game', 5);
+    page.focus();
+    host.windowPoll(id);
+    const first = { pointerType: 'touch', pointerId: 16777217, clientX: 30, clientY: 60 };
+    const second = { pointerType: 'touch', pointerId: 16777218, clientX: 50, clientY: 80 };
+    assert.equal(fire(page, 'pointerdown', first).defaultPrevented, true);
+    fire(page, 'pointerdown', second);
+    fire(page, 'pointermove', { ...first, clientX: 40 });
+    fire(page, 'pointerup', first);
+    fire(page, 'pointercancel', second);
+    assert.deepEqual(records(host.windowPoll(id)), [
+      [21, 0, 20, 40], [21, 1, 40, 60], [22, 0, 30, 40], [23, 0, 20, 40], [24, 1],
+    ]);
+    assert.equal(page.captures.size, 0);
+    fire(page, 'pointerdown', first);
+    assert.deepEqual(records(host.windowPoll(id)), [[21, 0, 20, 40]]);
+    host.windowClose(id);
+  } finally { uninstallDom(); }
+});
+
+test('blur, capture loss, and page hiding cancel contacts exactly once', () => {
+  const page = installDom();
+  try {
+    const host = makeWindowHost();
+    const id = host.windowCanvas('game', 5);
+    page.focus();
+    host.windowPoll(id);
+    const pointer = { pointerType: 'touch', pointerId: 10, clientX: 20, clientY: 30 };
+    fire(page, 'pointerdown', pointer);
+    host.windowPoll(id);
+    fire(page, 'blur');
+    fire(page, 'pointerup', pointer);
+    assert.deepEqual(records(host.windowPoll(id)), [[24, 0], [4]]);
+    fire(page, 'pointerdown', pointer);
+    host.windowPoll(id);
+    page.releasePointerCapture(10);
+    fire(page, 'pointercancel', pointer);
+    assert.deepEqual(records(host.windowPoll(id)), [[24, 0]]);
+    fire(page, 'pointerdown', pointer);
+    host.windowPoll(id);
+    document.visibilityState = 'hidden';
+    assert.deepEqual(records(host.windowPoll(id)), [[24, 0], [19, 1]]);
+    host.windowClose(id);
+  } finally { uninstallDom(); }
+});
+
+test('a pointer capture failure cancels the contact without throwing', () => {
+  const page = installDom();
+  try {
+    const host = makeWindowHost();
+    const id = host.windowCanvas('game', 5);
+    page.focus();
+    host.windowPoll(id);
+    page.setPointerCapture = () => { throw new Error('canvas detached'); };
+    fire(page, 'pointerdown', { pointerType: 'touch', pointerId: 1, clientX: 20, clientY: 30 });
+    assert.deepEqual(records(host.windowPoll(id)), [[21, 0, 10, 10], [24, 0]]);
+    host.windowClose(id);
+  } finally { uninstallDom(); }
+});
+
+test('closing a borrowed canvas releases touches and restores its touch behavior', () => {
+  const page = installDom();
+  page.style.touchAction = 'pan-y';
+  try {
+    const host = makeWindowHost();
+    const id = host.windowCanvas('game', 5);
+    assert.equal(page.style.touchAction, 'none');
+    fire(page, 'pointerdown', { pointerType: 'touch', pointerId: 1, clientX: 20, clientY: 30 });
+    host.windowClose(id);
+    assert.equal(page.captures.size, 0);
+    assert.equal(page.style.touchAction, 'pan-y');
+    fire(page, 'pointerdown', { pointerType: 'touch', pointerId: 2, clientX: 20, clientY: 30 });
+    assert.equal(page.captures.size, 0);
+  } finally { uninstallDom(); }
 });
 
 test('canvas lookup reports missing and non-canvas elements', () => {

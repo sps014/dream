@@ -1,7 +1,7 @@
 //! The native window description `dream-host-window` exports for GPU surface creation.
 //!
 //! A GPU capability links `dream_host_window` and calls [`WINDOW_SURFACE_SYMBOL`] with the
-//! guest's window handle. It never calls GLFW: the window host owns the window and its thread.
+//! guest's window handle. It never calls SDL3: the window host owns the window and its thread.
 
 use std::ffi::{c_ulong, c_void};
 
@@ -18,6 +18,11 @@ pub const WINDOW_PLATFORM_WIN32: u32 = 2;
 pub const WINDOW_PLATFORM_XLIB: u32 = 3;
 /// `window` is a `wl_surface*`; `display` is `wl_display*`.
 pub const WINDOW_PLATFORM_WAYLAND: u32 = 4;
+
+/// `window` is an `ANativeWindow*`; `display` is null.
+pub const WINDOW_PLATFORM_ANDROID: u32 = 5;
+/// `window` is a `UIWindow*`; `display` is null.
+pub const WINDOW_PLATFORM_UIKIT: u32 = 6;
 
 /// Raw handles plus the drawable size, sampled at the time of the call. Handles stay valid until
 /// the guest closes the window; re-query after every `Resized` event.

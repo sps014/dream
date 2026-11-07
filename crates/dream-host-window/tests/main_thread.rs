@@ -1,6 +1,6 @@
-//! Runs on the process main thread (`harness = false`), the only thread GLFW may use.
+//! Runs on the process main thread (`harness = false`), the only thread SDL3 may use.
 //!
-//! GLFW's Null platform needs no display, so these checks drive real GLFW windows and its event
+//! SDL3's dummy driver needs no display, so these checks drive real SDL3 windows and its event
 //! queue on every CI runner. A display-backed window is opened as well when one is available.
 
 use dream_host_abi::window_surface::{WINDOW_PLATFORM_APPKIT, WindowSurface};
@@ -19,7 +19,7 @@ fn records(values: &[f32]) -> Vec<(u8, Vec<f32>)> {
 }
 
 fn null_platform_pump() {
-    host::initialize(glfw::Platform::Null).expect("GLFW Null platform starts without a display");
+    host::initialize().expect("SDL3 dummy driver starts without a display");
     let id = host::open("null", 320, 200, 1 | 4).expect("null window");
     let query = host::query(id);
     assert_eq!(&query[..4], &[320.0, 200.0, 320.0, 200.0], "{query:?}");
@@ -51,7 +51,7 @@ fn null_platform_pump() {
     assert_eq!(
         unsafe { dream_window_surface_v1(id, &mut surface) },
         0,
-        "the Null platform has no native surface to hand to a GPU host"
+        "the dummy driver has no native surface to hand to a GPU host"
     );
     assert_eq!(
         unsafe { dream_window_surface_v1(id, std::ptr::null_mut()) },
@@ -59,6 +59,7 @@ fn null_platform_pump() {
     );
 
     park_and_wake(id);
+    route_events(id);
 
     host::close(id);
     assert!(host::poll(id).is_empty());
@@ -69,6 +70,7 @@ fn null_platform_pump() {
 /// The scheduler's idle wait runs `host::park`, so it must return promptly on a wake from another
 /// thread, honor its timeout, and leave the events it pumped for the next poll.
 fn park_and_wake(id: i32) {
+    host::poll(id);
     let waker = std::thread::spawn(|| {
         std::thread::sleep(Duration::from_millis(50));
         host::wake();
@@ -82,6 +84,7 @@ fn park_and_wake(id: i32) {
         "a wake from another thread ends an indefinite park ({woke:?})"
     );
 
+    host::poll(id);
     host::wake();
     let started = Instant::now();
     host::park(-1);
@@ -90,9 +93,13 @@ fn park_and_wake(id: i32) {
         "a wake posted before parking is not lost"
     );
 
+    host::poll(id);
     let started = Instant::now();
     host::park(20_000_000);
-    assert!(started.elapsed() < Duration::from_secs(5), "park honors its timeout");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "park honors its timeout"
+    );
 
     host::poll(id);
     host::set_size(id, 300, 200);
@@ -130,11 +137,13 @@ fn assert_on_main_thread() {}
 
 fn main() {
     assert_on_main_thread();
-    // GLFW keeps the platform chosen at first initialization for the whole process, so the
+    // SDL3 keeps its video driver for the whole process, so the
     // display-backed surface check replaces the Null run when a desktop session is available.
     if std::env::var_os("DREAM_WINDOW_DISPLAY_TEST").is_some() {
         display_surface();
     } else {
+        // No SDL or other threads exist yet, so configuring the process driver is safe.
+        unsafe { std::env::set_var("SDL_VIDEO_DRIVER", "dummy") };
         null_platform_pump();
     }
     worker_threads_are_refused();
@@ -152,4 +161,58 @@ fn display_surface() {
         assert_eq!(surface.platform, WINDOW_PLATFORM_APPKIT);
     }
     host::close(id);
+}
+
+fn route_events(first: i32) {
+    use sdl3::{
+        event::Event,
+        sys::{
+            stdinc::SDL_free,
+            video::{SDL_GetWindowID, SDL_GetWindows},
+        },
+    };
+    let second = host::open("second", 100, 100, 0).expect("second window");
+    host::poll(first);
+    host::poll(second);
+    let mut count = 0;
+    // SDL owns the windows; only the temporary pointer array belongs to this caller.
+    let windows = unsafe { SDL_GetWindows(&mut count) };
+    assert!(!windows.is_null());
+    assert_eq!(count, 2);
+    let native_ids: Vec<_> = unsafe { std::slice::from_raw_parts(windows, count as usize) }
+        .iter()
+        .map(|window| unsafe { SDL_GetWindowID(*window).0 })
+        .collect();
+    unsafe { SDL_free(windows.cast()) };
+    let sdl = sdl3::init().expect("existing SDL");
+    let events = sdl.event().expect("existing event subsystem");
+    for id in &native_ids {
+        events
+            .push_event(Event::Window {
+                timestamp: 0,
+                window_id: *id,
+                win_event: sdl3::event::WindowEvent::Moved(17, 29),
+            })
+            .unwrap();
+    }
+    assert!(records(&host::poll(first)).contains(&(kind::MOVED, vec![17.0, 29.0])));
+    assert!(records(&host::poll(second)).contains(&(kind::MOVED, vec![17.0, 29.0])));
+    assert!(
+        !records(&host::poll(second))
+            .iter()
+            .any(|(kind, _)| *kind == kind::MOVED)
+    );
+    push_lifecycle(sdl3::sys::events::SDL_EVENT_WILL_ENTER_BACKGROUND);
+    assert!(records(&host::poll(first)).contains(&(kind::OCCLUDED, vec![1.0])));
+    assert!(records(&host::poll(second)).contains(&(kind::OCCLUDED, vec![1.0])));
+    push_lifecycle(sdl3::sys::events::SDL_EVENT_DID_ENTER_FOREGROUND);
+    assert!(records(&host::poll(first)).contains(&(kind::OCCLUDED, vec![0.0])));
+    host::close(second);
+}
+
+fn push_lifecycle(kind: sdl3::sys::events::SDL_EventType) {
+    let mut event = sdl3::sys::events::SDL_Event::default();
+    event.r#type = kind.0;
+    // Lifecycle events use only the common header, whose other fields are zero-initialized.
+    assert!(unsafe { sdl3::sys::events::SDL_PushEvent(&mut event) });
 }

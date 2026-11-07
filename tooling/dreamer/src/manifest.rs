@@ -50,6 +50,8 @@ pub enum RunTarget {
     Native,
     Web,
     Node,
+    Android,
+    Ios,
 }
 
 impl RunTarget {
@@ -58,6 +60,8 @@ impl RunTarget {
             RunTarget::Native => "native",
             RunTarget::Web => "web",
             RunTarget::Node => "node",
+            RunTarget::Android => "android",
+            RunTarget::Ios => "ios",
         }
     }
 
@@ -66,8 +70,10 @@ impl RunTarget {
             "native" => Ok(RunTarget::Native),
             "web" => Ok(RunTarget::Web),
             "node" => Ok(RunTarget::Node),
+            "android" => Ok(RunTarget::Android),
+            "ios" => Ok(RunTarget::Ios),
             other => bail!(
-                "unknown target '{}': expected one of native, web, node",
+                "unknown target '{}': expected one of native, web, node, android, ios",
                 other
             ),
         }
@@ -95,7 +101,7 @@ pub fn parse_target_list(spec: &str) -> Result<Vec<RunTarget>> {
         }
     }
     if out.is_empty() {
-        bail!("target list must include at least one of native, web, node");
+        bail!("target list must include at least one of native, web, node, android, ios");
     }
     Ok(out)
 }
@@ -169,6 +175,8 @@ pub struct WorkspaceMeta {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<crate::app_config::AppConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lib: Option<dream_abi::library::LibraryConfig>,
     /// Present on package manifests; absent on a virtual workspace root (`[workspace]` only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -223,7 +231,7 @@ pub struct PackageMeta {
     /// Search keywords published into the registry catalog (`dreamer search` / catalog.json).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
-    /// Optional host list (`native`, `web`, `node`). Empty means no preference — `dreamer run`
+    /// Optional host list (`native`, `web`, `node`, `android`, `ios`). Empty means no preference — `dreamer run`
     /// defaults to native execution.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub targets: Vec<String>,
@@ -417,6 +425,7 @@ pub fn validate_relative_asset_path(path: &str, field: &str) -> Result<()> {
 impl Manifest {
     fn empty(package: Option<PackageMeta>) -> Self {
         Manifest {
+            app: None,
             lib: None,
             package,
             workspace: None,
@@ -526,6 +535,16 @@ impl Manifest {
         })
     }
 
+    /// Canvas apps default to their desktop target when present; mobile-only apps need a target.
+    pub fn run_target(&self, explicit: Option<&str>) -> Result<RunTarget> {
+        let targets = &self.package()?.targets;
+        let desktop = self.app.is_some() && targets.iter().any(|target| target == "native");
+        resolve_run_target(
+            targets,
+            explicit.or(if desktop { Some("native") } else { None }),
+        )
+    }
+
     pub fn is_workspace_root(&self) -> bool {
         self.workspace.is_some()
     }
@@ -589,6 +608,9 @@ impl Manifest {
             }
         }
         let Some(pkg) = &self.package else {
+            if self.app.is_some() {
+                bail!("[app] requires a bin package");
+            }
             if self.lib.is_some() {
                 bail!("[lib] requires [package].type = \"lib\"");
             }
@@ -598,6 +620,28 @@ impl Manifest {
             return Ok(());
         };
         validate_package_name(&pkg.name)?;
+        if let Some(app) = &self.app {
+            if pkg.package_type != PackageType::Bin {
+                bail!("[app] requires [package].type = \"bin\"");
+            }
+            app.validate()?;
+            if pkg.targets.is_empty()
+                || pkg
+                    .targets
+                    .iter()
+                    .any(|target| !matches!(target.as_str(), "native" | "android" | "ios"))
+            {
+                bail!("[app] requires package.targets containing native, android, or ios");
+            }
+        } else if pkg
+            .targets
+            .iter()
+            .any(|target| matches!(target.as_str(), "android" | "ios"))
+        {
+            bail!(
+                "mobile application targets require an [app] table; create a project with `dreamer init mobile` or `dreamer init app`"
+            );
+        }
         Version::parse(&pkg.version).with_context(|| {
             format!(
                 "package '{}' has invalid version '{}' (expected semver, e.g. '1.2.3')",
@@ -663,7 +707,7 @@ impl Manifest {
             let mut seen = Vec::new();
             for t in &test.targets {
                 let parsed = RunTarget::parse(t)?;
-                if parsed == RunTarget::Web {
+                if !matches!(parsed, RunTarget::Native | RunTarget::Node) {
                     bail!(
                         "[test].targets supports native and node (web has no process to run tests in)"
                     );
@@ -772,6 +816,31 @@ impl Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_configuration_round_trips_and_mobile_targets_require_it() {
+        let mut manifest = Manifest::new("counter".into(), "0.1.0".into(), "src/main.dream".into());
+        manifest.package_mut().unwrap().targets =
+            vec!["native".into(), "android".into(), "ios".into()];
+        assert!(manifest.validate().is_err());
+        manifest.app = Some(crate::app_config::AppConfig::new("counter"));
+        manifest.validate().unwrap();
+        assert_eq!(manifest.run_target(None).unwrap(), RunTarget::Native);
+        assert_eq!(manifest.run_target(Some("ios")).unwrap(), RunTarget::Ios);
+        let text = toml::to_string(&manifest).unwrap();
+        let loaded: Manifest = toml::from_str(&text).unwrap();
+        loaded.validate().unwrap();
+        assert_eq!(loaded.app, manifest.app);
+        manifest.package_mut().unwrap().targets = vec!["web".into()];
+        assert!(manifest.validate().is_err());
+        manifest.package_mut().unwrap().targets = vec!["android".into(), "ios".into()];
+        assert!(manifest.run_target(None).is_err());
+        manifest.package_mut().unwrap().package_type = PackageType::Lib;
+        assert!(manifest.validate().is_err());
+        let mut virtual_workspace = Manifest::new_workspace(vec!["app".into()]);
+        virtual_workspace.app = loaded.app;
+        assert!(virtual_workspace.validate().is_err());
+    }
 
     #[test]
     fn native_library_output_round_trips_and_rejects_arrays() {
@@ -999,7 +1068,13 @@ frameworks = ["Security"]
             test.test_targets().unwrap(),
             vec![RunTarget::Node, RunTarget::Native]
         );
-        for bad in [vec!["web"], vec!["node", "node"], vec!["deno"]] {
+        for bad in [
+            vec!["web"],
+            vec!["android"],
+            vec!["ios"],
+            vec!["node", "node"],
+            vec!["deno"],
+        ] {
             test.test = Some(TestConfig {
                 targets: bad.iter().map(|s| s.to_string()).collect(),
             });

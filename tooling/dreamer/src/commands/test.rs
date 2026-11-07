@@ -175,7 +175,7 @@ fn select_suites(start_dir: &Path, package: Option<&str>) -> Result<Vec<Suite>> 
         Some(suite) => Ok(vec![suite]),
         None => bail!(
             "package '{}' is not a type = \"test\" package and has no tests/ directory \
-             (create tests/*.dream with @test functions, or `dreamer init --test`)",
+             (create tests/*.dream with @test functions, or `dreamer init test`)",
             ws.manifest.package()?.name
         ),
     }

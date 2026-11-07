@@ -1,16 +1,11 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
+mod init_cli;
+
+use clap::{Args, Parser, Subcommand};
 use dreamer::commands;
 use dreamer::compile_flags::CompileFlags;
 use std::fmt::Display;
-use std::path::PathBuf;
 use std::process::ExitCode;
 use yansi::Paint;
-
-#[derive(Clone, Copy, Debug, ValueEnum)]
-enum LibOutput {
-    Staticlib,
-    Cdylib,
-}
 
 /// Same `--release` / `-O` / `--wasm` tokens as `dream`.
 #[derive(Args, Clone, Debug, Default)]
@@ -56,8 +51,8 @@ impl OptFlags {
     name = "dreamer",
     version,
     about = "Package manager for the Dream language",
-    after_help = "Examples:\n  dreamer init my-app --runtime web\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install binaryen",
-    after_long_help = "Examples:\n  dreamer init my-app --runtime web     scaffold a new project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack                          relocatable native executable (default --release / -O3)\n  dreamer toolchain install binaryen    WASM optimizer for release WASM builds"
+    after_help = "Examples:\n  dreamer init\n  dreamer init mobile phone\n  dreamer init app counter\n  dreamer init web my-app\n  dreamer add system.testing\n  dreamer run --release\n  dreamer test --filter math\n  dreamer toolchain install binaryen",
+    after_long_help = "Examples:\n  dreamer init                          scaffold a console project here\n  dreamer init mobile phone             scaffold an Android/iOS canvas project\n  dreamer init app counter              scaffold a desktop + mobile canvas project\n  dreamer init desktop counter          scaffold a desktop canvas app\n  dreamer init web my-app               scaffold a browser project\n  dreamer add system.testing            add a dependency from the registry\n  dreamer add ./local/pkg --path        add a path dependency\n  dreamer run --release                 install deps, build, and run\n  dreamer test --filter math            run @test suites under tests/\n  dreamer pack                          relocatable native executable (default --release / -O3)\n  dreamer toolchain install binaryen    WASM optimizer for release WASM builds"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -66,34 +61,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Scaffold a new dream.toml + source stub. A name creates that subdirectory (`dreamer init hello && cd hello`).
-    Init {
-        /// Project name (also the new directory unless `--dir` is set). Defaults to the directory name.
-        name: Option<String>,
-        /// Directory to create the project in (created if missing). Defaults to `./<name>` or cwd.
+    /// List Android devices and available iOS simulators without booting them.
+    Devices {
+        /// Restrict discovery to android or ios.
         #[arg(long)]
-        dir: Option<PathBuf>,
-        /// Comma-separated hosts to declare in dream.toml and scaffold for (`native`, `web`, `node`).
-        #[arg(long, value_name = "TARGETS")]
-        runtime: Option<String>,
-        /// Scaffold a library package (`type = "lib"`, no entry / main).
-        #[arg(long, conflicts_with_all = ["test", "workspace"])]
-        lib: bool,
-        /// Native library kind a `--lib` package builds as (`staticlib` or `cdylib`).
-        #[arg(
-            long,
-            value_name = "KIND",
-            requires = "lib",
-            default_value = "staticlib"
-        )]
-        output: LibOutput,
-        /// Scaffold a test project (`type = "test"`, an example @test and `fixtures/` assets).
-        #[arg(long, conflicts_with = "workspace")]
-        test: bool,
-        /// Scaffold a workspace: an `app/` program and a `tests/` test project that imports it.
+        target: Option<String>,
         #[arg(long)]
-        workspace: bool,
+        json: bool,
     },
+    /// Create a console, desktop, mobile, app, web, node, lib, test, or workspace project.
+    Init(init_cli::InitArgs),
     /// Add a dependency to dream.toml, then resolve and install it.
     Add {
         name: String,
@@ -131,6 +108,9 @@ enum Cmd {
     },
     /// Install dependencies, then compile the project's entry point.
     Build {
+        /// Build for native, web, node, android, or ios (mobile canvas packaging is pending).
+        #[arg(long)]
+        target: Option<String>,
         #[command(flatten)]
         opt: OptFlags,
         #[arg(short = 'p', long = "package", value_name = "NAME")]
@@ -138,7 +118,7 @@ enum Cmd {
     },
     /// Install dependencies, then run the project on the resolved host from dream.toml.
     Run {
-        /// Host to run when package.targets lists more than one (`native`, `web`, or `node`).
+        /// Select native, web, node, android, or ios; mobile canvas execution is pending.
         #[arg(long, value_name = "HOST")]
         target: Option<String>,
         #[command(flatten)]
@@ -249,36 +229,8 @@ fn main() -> ExitCode {
     };
 
     let result = match cli.command {
-        Cmd::Init {
-            name,
-            dir,
-            runtime,
-            lib,
-            output,
-            test,
-            workspace,
-        } => match commands::init::prepare_project_dir(&cwd, name.as_deref(), dir.as_deref()) {
-            Ok(dest) => {
-                use commands::init::Scaffold;
-                let scaffold = if lib {
-                    Scaffold::Lib(match output {
-                        LibOutput::Staticlib => dream_abi::library::LibraryKind::Staticlib,
-                        LibOutput::Cdylib => dream_abi::library::LibraryKind::Cdylib,
-                    })
-                } else if test {
-                    Scaffold::Test
-                } else if workspace {
-                    Scaffold::Workspace
-                } else {
-                    Scaffold::Bin
-                };
-                commands::init::run(&dest, name, runtime, scaffold)
-            }
-            Err(e) => {
-                print_error(format!("{e:#}"));
-                return ExitCode::FAILURE;
-            }
-        },
+        Cmd::Devices { target, json } => dreamer::mobile::devices(target.as_deref(), json),
+        Cmd::Init(args) => args.run(&cwd),
         Cmd::Add {
             name,
             version,
@@ -304,8 +256,14 @@ fn main() -> ExitCode {
         Cmd::Remove { name, package } => commands::remove::run(&cwd, &name, package.as_deref()),
         Cmd::Install => commands::install::run(&cwd),
         Cmd::Update { name } => commands::update::run(&cwd, name),
-        Cmd::Build { opt, package } => match opt.into_compile_flags() {
-            Ok(flags) => commands::build::run_with(&cwd, flags, package.as_deref()),
+        Cmd::Build {
+            opt,
+            package,
+            target,
+        } => match opt.into_compile_flags() {
+            Ok(flags) => {
+                commands::build::run_with(&cwd, flags, package.as_deref(), target.as_deref())
+            }
             Err(e) => {
                 print_error(e);
                 return ExitCode::FAILURE;

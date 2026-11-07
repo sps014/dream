@@ -117,6 +117,56 @@ While the cursor is captured it is hidden and locked to the window, and `delta` 
 movement without limit. Browsers only grant the lock after a user gesture, so the canvas captures
 the cursor on its next click when the first request is refused.
 
+## Touch input and safe areas
+
+Touch events use logical window pixels, like mouse positions. A contact starts with
+`TouchDown(id, position)` and keeps the same ID through `TouchMove` until `TouchUp`
+or `TouchCancel`. IDs may be reused after a contact ends. Cancellation means the action
+was interrupted, so discard its state without activating a button.
+
+This headless example can run on desktop or Node without a display:
+
+```dream
+import system;
+import system.window;
+
+fun main(): void {
+    let window = Window.headless(WindowOptions("Touch example", 390, 640));
+    window.simulate(WindowEvent.SafeAreaChanged(WindowInsets(44, 0, 34, 0)));
+    window.simulate(WindowEvent.TouchDown(0, WindowVector(24, 80)));
+    window.simulate(WindowEvent.TouchUp(0, WindowVector(24, 80)));
+
+    let input = window.poll();
+    for (let event in input.events) {
+        switch (event) {
+            WindowEvent.TouchUp(id, point) => {
+                System.println("contact " + id.to_string());
+                System.println("content y: " + (point.y - window.safe_area.top).to_string());
+            }
+            WindowEvent.TouchCancel(id) => {
+                System.println("cancelled: " + id.to_string());
+            }
+            _ => {}
+        }
+    }
+
+    window.close();
+}
+```
+
+It prints `contact 0` and `content y: 36`. `safe_area` contains top, right, bottom, and
+left distances to avoid at the drawable edges. Offset drawing and hit testing by the
+same distances. Insets are in logical pixels; multiply by `scale_factor` only when
+converting to physical pixels. Insets start at zero and change after a
+`SafeAreaChanged` event is delivered by `poll`.
+
+Browser canvases capture touch pointers and cancel contacts on focus loss, page hiding,
+or capture loss. Touch input is delivered separately from mouse state. The canvas
+disables browser touch scrolling while attached and restores its previous touch behavior
+when closed. Desktop, browser, and headless windows report zero safe-area insets unless
+an inset event is simulated. Native Android/iOS touch and inset delivery still require
+the mobile window host; the canvas scaffold alone does not enable them.
+
 ## Testing input without a display
 
 `Window.headless` creates a window that only exists in memory. Combined with `simulate`, it lets
@@ -148,7 +198,7 @@ next poll, which is useful for on-screen controls.
 
 ## Windows, threads and browsers
 
-Native windows use GLFW and belong to the program's main thread. `main` and its `async` code run
+Native windows use SDL3 and belong to the program's main thread. `main` and its `async` code run
 on that thread, so a normal game loop needs no extra setup. Calls from a `Task` worker do not
 reach the window: `Window.open` returns a `WindowError` with code `ETHREAD`, and the other methods
 do nothing.
@@ -160,7 +210,8 @@ into its own `async` function that stores its result in an object the frame loop
 with `Promise.start`, and let the frame loop `await` only per-frame work such as presenting a frame
 or `Time.delay(16)`.
 
-On macOS, live-resizing a window still pauses the program until the resize ends.
+Desktop operating-system operations such as live resizing can delay drawing until control
+returns to the frame loop.
 
 In a browser, use `Window.canvas` with the `id` of a `<canvas>` element on the page.
 `Window.open` also works there: it adds a canvas of the requested size to the page. The browser
@@ -170,7 +221,7 @@ on every frame, such as presenting a GPU frame or `Time.delay(16)`.
 Platform differences:
 
 - Gamepads use the SDL controller database natively and the standard Gamepad API mapping in
-  browsers. `Gamepad.rumble` currently works only in browsers that support vibration.
+  browsers. `Gamepad.rumble` works when the controller and platform support vibration.
 - `WindowEvent.FileDropped` carries a full path natively and only the file name in browsers.
 - Browsers never report `WindowEvent.Moved`, and they only allow fullscreen and cursor capture
   during a user gesture.

@@ -19,5 +19,6 @@ Import `system.window`. See the [windows and game input guide](../../library/sys
 - [WindowOptions](window-window-options.md)
 - [WindowError](window-window-error.md)
 - [WindowEvent](window-window-event.md)
+- [WindowInsets](window-window-insets.md)
 - [WindowSize](window-window-size.md)
 - [WindowVector](window-window-vector.md)

@@ -38,6 +38,9 @@ pub fn run(
             pkg.package_type
         );
     }
+    if workspace.manifest.app.is_some() && !pkg.targets.iter().any(|target| target == "native") {
+        bail!("{}", crate::mobile::CANVAS_UNAVAILABLE);
+    }
 
     let triples = resolve_pack_targets(target_args)?;
     flags.relocatable = true;

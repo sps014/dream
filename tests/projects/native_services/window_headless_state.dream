@@ -3,6 +3,58 @@ import system;
 import system.window;
 
 @test
+fun window_touch_and_safe_area_events(): void {
+    let window = Window.headless(WindowOptions("touch", 390, 640));
+    Assert.eq(window.safe_area.top, 0.0f);
+    Assert.eq(window.safe_area.left, 0.0f);
+    window.simulate(WindowEvent.ScaleChanged(2.0f));
+    window.simulate(WindowEvent.SafeAreaChanged(WindowInsets(44, 0, 34, 4)));
+    window.simulate(WindowEvent.TouchDown(7, WindowVector(24, 60)));
+    window.simulate(WindowEvent.TouchDown(8, WindowVector(90, 100)));
+    window.simulate(WindowEvent.TouchMove(7, WindowVector(25, 62)));
+    window.simulate(WindowEvent.TouchUp(7, WindowVector(26, 64)));
+    window.simulate(WindowEvent.TouchCancel(8));
+
+    let frame = window.poll();
+    Assert.eq(window.safe_area.top, 44.0f);
+    Assert.eq(window.safe_area.bottom, 34.0f);
+    Assert.eq(window.safe_area.left, 4.0f);
+    Assert.eq(window.scale_factor, 2.0f);
+    Assert.is_false(frame.mouse.pressed(MouseButton.Left));
+    let order = "";
+    for (let event in frame.events) {
+        switch (event) {
+            WindowEvent.TouchDown(id, point) => {
+                order = order + "down:" + id.to_string() + ";";
+                if id == 7 {
+                    Assert.eq(point.x, 24.0f);
+                    Assert.eq(point.y, 60.0f);
+                }
+            }
+            WindowEvent.TouchMove(id, point) => {
+                Assert.eq(id, 7);
+                Assert.eq(point.x, 25.0f);
+                order = order + "move;";
+            }
+            WindowEvent.TouchUp(id, point) => {
+                Assert.eq(id, 7);
+                Assert.eq(point.y, 64.0f);
+                order = order + "up;";
+            }
+            WindowEvent.TouchCancel(id) => {
+                Assert.eq(id, 8);
+                order = order + "cancel;";
+            }
+            _ => {}
+        }
+    }
+    Assert.eq(order, "down:7;down:8;move;up;cancel;");
+    Assert.eq(window.poll().events.length, 0);
+    Assert.eq(window.safe_area.top, 44.0f);
+    window.close();
+}
+
+@test
 @timeout(180000)
 fun window_headless_state(): void {
     let window = Window.headless(WindowOptions("state", 320, 200).fullscreen(true).vsync(false));

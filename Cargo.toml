@@ -112,9 +112,9 @@ debug = "line-tables-only"
 [profile.dev.package.blake3]
 opt-level = 3
 
-# At opt-level 0 the cmake crate builds GLFW as a CMake `Debug` config, which links the debug
+# At opt-level 0 the cmake crate uses a CMake `Debug` config, which links the debug
 # MSVC CRT (`MSVCRTD`) while Rust links the release CRT, and `link.exe` warns (LNK4098).
-[profile.dev.package.glfw-sys]
+[profile.dev.package.sdl3-sys]
 opt-level = 1
 
 [profile.test]

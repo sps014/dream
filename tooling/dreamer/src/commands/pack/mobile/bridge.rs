@@ -1,4 +1,4 @@
-use super::identifier;
+use crate::identifiers::c_identifier;
 use anyhow::{Result, bail};
 use dream_abi::exports::{ExportFunction, ExportKind as K, ExportType};
 use std::collections::BTreeSet;
@@ -21,7 +21,7 @@ fn c_type(kind: &K) -> &'static str {
 pub(super) fn validate(functions: &[ExportFunction]) -> Result<()> {
     let mut names = BTreeSet::new();
     for f in functions {
-        if !identifier(&f.name) || !names.insert(&f.name) {
+        if !c_identifier(&f.name) || !names.insert(&f.name) {
             bail!("invalid or duplicate export {}", f.name);
         }
         for ty in std::iter::once(&f.ret).chain(f.params.iter().map(|p| &p.ty)) {
@@ -91,72 +91,6 @@ fn jni_type(ty: &ExportType) -> &'static str {
 
 fn jni_name(name: &str) -> String {
     name.replace('_', "_1").replace('.', "_")
-}
-
-pub(super) fn java_package(value: &str) -> Result<()> {
-    let keywords = [
-        "class",
-        "package",
-        "public",
-        "private",
-        "protected",
-        "static",
-        "native",
-        "void",
-        "int",
-        "long",
-        "float",
-        "double",
-        "boolean",
-        "char",
-        "byte",
-        "short",
-        "return",
-        "if",
-        "else",
-        "switch",
-        "case",
-        "default",
-        "while",
-        "for",
-        "do",
-        "break",
-        "continue",
-        "new",
-        "this",
-        "super",
-        "extends",
-        "implements",
-        "interface",
-        "enum",
-        "abstract",
-        "final",
-        "try",
-        "catch",
-        "finally",
-        "throw",
-        "throws",
-        "synchronized",
-        "volatile",
-        "transient",
-        "instanceof",
-        "import",
-        "assert",
-        "const",
-        "goto",
-        "strictfp",
-        "true",
-        "false",
-        "null",
-        "_",
-    ];
-    if value
-        .split('.')
-        .any(|v| !identifier(v) || keywords.contains(&v))
-    {
-        bail!("invalid Java package {value}");
-    }
-    Ok(())
 }
 
 pub(super) fn jni(name: &str, package: &str, functions: &[ExportFunction]) -> (String, String) {

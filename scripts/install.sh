@@ -289,4 +289,4 @@ echo
 echo "Open a new terminal (or: . ${PREFIX}/env.sh), then:"
 echo "  dream --help"
 echo "  dreamer --help"
-echo "  dreamer init hello && cd hello && dreamer run"
+echo "  dreamer init console hello && cd hello && dreamer run"

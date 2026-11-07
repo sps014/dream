@@ -1,4 +1,4 @@
-//! `dreamer init --test` and `dreamer init --workspace` scaffolds.
+//! `dreamer init test` and `dreamer init workspace` scaffolds.
 
 use super::init::{Scaffold, write_gitignore};
 use crate::manifest::{
@@ -20,7 +20,10 @@ pub fn test_package(
     runtime: &[RunTarget],
     depends_on: Option<(&str, &str)>,
 ) -> Result<()> {
-    if runtime.contains(&RunTarget::Web) {
+    if runtime
+        .iter()
+        .any(|target| !matches!(target, RunTarget::Native | RunTarget::Node))
+    {
         bail!("test projects run on native and node hosts (web has no process to run tests in)");
     }
     let mut manifest = Manifest::new_test(name.to_string(), "0.1.0".to_string());
@@ -88,7 +91,7 @@ pub fn workspace(dir: &Path, name: &str, runtime_spec: Option<String>) -> Result
     std::fs::create_dir_all(&tests)?;
     let hosts: Vec<RunTarget> = runtime
         .into_iter()
-        .filter(|t| *t != RunTarget::Web)
+        .filter(|t| matches!(t, RunTarget::Native | RunTarget::Node))
         .collect();
     test_package(
         &tests,

@@ -11,7 +11,7 @@ const GITIGNORE_ENTRIES: &[&str] = &["dream_packages/", "target/", ".dream/", "g
 const HELLO_MAIN: &str =
     "import system;\n\nfun main() {\n    System.println(\"Hello, world!\");\n}\n";
 
-/// `dreamer init hello` creates `./hello`. `dreamer init` (no name) uses the current directory.
+/// `dreamer init console hello` creates `./hello`. No name uses the current directory.
 /// `--dir` wins over the name-as-subdirectory rule.
 pub fn resolve_project_dir(cwd: &Path, name: Option<&str>, dir: Option<&Path>) -> PathBuf {
     if let Some(d) = dir {
@@ -58,6 +58,8 @@ pub fn prepare_project_dir(cwd: &Path, name: Option<&str>, dir: Option<&Path>) -
 pub enum Scaffold {
     /// A runnable program (`type = "bin"`, `src/main.dream`).
     Bin,
+    /// A GPU canvas program with application identity and platform minimums.
+    Canvas,
     /// A library (`type = "lib"`, `src/<name>.dream`) built as this native library kind.
     Lib(LibraryKind),
     /// A test project (`type = "test"`): `@test` files plus a `fixtures/` asset directory.
@@ -92,7 +94,7 @@ pub fn run(
     validate_package_name(&name)?;
 
     if as_lib && runtime_spec.is_some() {
-        bail!("--lib cannot be combined with --runtime (libraries are not runnable hosts)");
+        bail!("library projects cannot declare runnable hosts");
     }
     if scaffold == Scaffold::Workspace {
         return super::init_scaffold::workspace(dir, &name, runtime_spec);
@@ -128,6 +130,8 @@ pub fn run(
                 "import system;\n\n// Library root for `import {};`\n\npublic fun hello(): string {{\n    return \"hello\";\n}}\n",
                 import_segment(&name)
             )
+        } else if scaffold == Scaffold::Canvas {
+            include_str!("templates/canvas.dream").to_string()
         } else {
             HELLO_MAIN.to_string()
         };
@@ -144,6 +148,9 @@ pub fn run(
         _ => Manifest::new(name.clone(), "0.1.0".to_string(), source_rel.clone()),
     };
     manifest.package_mut()?.targets = targets.iter().map(|t| t.as_str().to_string()).collect();
+    if scaffold == Scaffold::Canvas {
+        manifest.app = Some(crate::app_config::AppConfig::new(&name));
+    }
     debug_assert_eq!(
         manifest.package().unwrap().package_type,
         if as_lib {
@@ -152,6 +159,7 @@ pub fn run(
             PackageType::Bin
         }
     );
+    manifest.validate()?;
     manifest.save(&manifest_path)?;
 
     write_gitignore(dir)?;
@@ -178,12 +186,26 @@ pub fn run(
     }
     println!();
     println!("Next steps:");
+    if scaffold == Scaffold::Canvas && !targets.contains(&RunTarget::Native) {
+        println!("  dreamer toolchain doctor --target android");
+        println!("  dreamer toolchain doctor --target ios");
+        println!("  dreamer devices");
+        println!("{}", crate::mobile::CANVAS_UNAVAILABLE);
+        return Ok(());
+    }
     if as_lib {
         println!("  dreamer build           # typecheck the library root");
         println!("  # depend on this package from another project via path/registry");
     } else {
         println!("  dreamer add <package>   # add a dependency");
         println!("  dreamer build           # compile the entry point");
+        if scaffold == Scaffold::Canvas {
+            println!("  dreamer run             # run the desktop canvas app");
+            if targets.contains(&RunTarget::Android) || targets.contains(&RunTarget::Ios) {
+                println!("{}", crate::mobile::CANVAS_UNAVAILABLE);
+            }
+            return Ok(());
+        }
         match targets.len() {
             0 => println!("  dreamer run             # install deps and run (native)"),
             1 => println!(

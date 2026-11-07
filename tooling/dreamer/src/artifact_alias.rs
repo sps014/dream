@@ -94,7 +94,7 @@ pub fn node_runner_source(stem: &str) -> String {
 }
 
 /// Write `run.mjs` when missing so `dreamer run --target node` works after `"node"` is added to
-/// `package.targets` without re-running `dreamer init --runtime node`.
+/// `package.targets` without re-running `dreamer init node`.
 pub fn ensure_node_runner(project_root: &Path, stem: &str) -> Result<()> {
     let path = project_root.join("run.mjs");
     if path.is_file() {

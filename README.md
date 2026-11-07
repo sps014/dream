@@ -30,7 +30,7 @@ irm https://sps014.github.io/dream/install.ps1 | iex
 Open a new terminal, then create and run a project:
 
 ```sh
-dreamer init hello
+dreamer init console hello
 cd hello
 dreamer run
 ```

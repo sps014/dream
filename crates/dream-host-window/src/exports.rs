@@ -63,8 +63,7 @@ pub extern "C" fn windowSetCursorIcon(window: i32, icon: i32) {
     host::set_cursor_icon(window, icon);
 }
 
-// GLFW exposes no force-feedback API, so native rumble is reported as unsupported.
 #[unsafe(no_mangle)]
-pub extern "C" fn windowGamepadRumble(_slot: i32, _low: f32, _high: f32, _ms: i32) -> i32 {
-    0
+pub extern "C" fn windowGamepadRumble(slot: i32, low: f32, high: f32, ms: i32) -> i32 {
+    i32::from(host::rumble(slot, low, high, ms))
 }

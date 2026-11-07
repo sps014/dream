@@ -58,4 +58,18 @@ public enum WindowEvent {
     /// carries the new physical size, so fonts and layouts can be rebuilt at the new
     /// scale first.
     ScaleChanged(factor: float),
+
+    /// A finger touched the surface at position, in logical window pixels. The nonnegative
+    /// id identifies this contact until TouchUp or TouchCancel; it can then be reused.
+    TouchDown(id: int, position: WindowVector),
+    /// An active contact moved. Position uses the same logical coordinates as TouchDown.
+    TouchMove(id: int, position: WindowVector),
+    /// A contact ended normally at position. Release any state associated with its id.
+    TouchUp(id: int, position: WindowVector),
+    /// The platform interrupted a contact, for example after focus was lost. Release its
+    /// state without activating a button or completing a gesture.
+    TouchCancel(id: int),
+    /// The distances to avoid at the drawable edges changed. Window.safe_area holds the
+    /// latest value after poll; platforms without reported insets start with zero on every edge.
+    SafeAreaChanged(insets: WindowInsets),
 }

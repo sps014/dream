@@ -6,6 +6,63 @@ icon: material/cellphone
 
 # Mobile library packages
 
+## Canvas application projects
+
+```sh
+dreamer init mobile phone
+dreamer init app counter
+```
+
+`mobile` declares Android and iOS; `app` also declares the desktop host and selects it by
+default. Both generate a shared GPU canvas counter, including touch-event handling,
+scale handling, and safe-area offsets. The renderer includes its default Noto Sans font.
+Edit the source and `[app]` identity in `dream.toml` as described in
+[Create a project](../tooling/create-project.md).
+
+The canvas scaffold is available, but Android/iOS window, presentation, lifecycle, and
+application-shell integration are not complete. `build` and `run` report that limitation
+for mobile targets; they do not produce APKs or simulator apps yet. Desktop canvas builds,
+browser touch delivery, and headless touch/inset simulations can be tested independently.
+
+## Inspect the mobile toolchain
+
+Before building mobile libraries, check the installed SDKs and discover devices:
+
+```sh
+dreamer toolchain doctor --target android
+dreamer toolchain doctor --target ios
+dreamer devices
+```
+
+For Android, set `ANDROID_HOME` to the installed SDK directory (`ANDROID_SDK_ROOT`
+is used when `ANDROID_HOME` is absent). Install platform-tools, an SDK platform at
+API 26 or newer, build-tools, an NDK, and JDK 21 or newer on `PATH`. Set
+`ANDROID_NDK_HOME` to select an NDK explicitly; otherwise the doctor selects the
+newest installed stable NDK. These are prerequisites for the canvas app development
+tooling; the library packager's minimum API remains configurable below.
+
+For iOS, install full Xcode, select its developer directory with `xcode-select`, and
+install an iOS simulator runtime through Xcode Settings > Components. Command-line
+tools alone do not include the iOS SDKs. iOS development requires macOS.
+
+The doctor checks both platform architectures and reports missing target-built
+core, window, GPU, drawing, and app capability libraries. It does not install
+components or qualify GPU rendering. A successful prerequisite check does not
+establish that a canvas app can run: SDK-backed app validation is still required.
+
+`dreamer devices --target android` lists connected Android devices and emulators,
+including offline or unauthorized devices. Authorize USB debugging on the device
+before using it. `dreamer devices --target ios` lists available iOS simulators,
+including shut-down simulators, without booting them. With no target, discovery
+checks both platforms and reports any unavailable platform separately.
+
+Add `--json` to either command for structured output. A targeted discovery fails
+when its SDK cannot be queried; unfiltered discovery succeeds when at least one
+platform can be queried, even if no devices are present. The doctor exits with a
+failure when any requirement is missing. Mobile canvas build/run remains unavailable.
+
+## Package a library
+
 `dreamer pack` can package target-built Dream libraries as an iOS XCFramework or an Android AAR.
 The input libraries must already include the guest runtime and their target-specific host
 capability dependencies. Cross-target library linking and host builds are separate steps;

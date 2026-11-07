@@ -1,5 +1,5 @@
 //! Window surfaces. The window host owns the native window and its thread; this host asks it
-//! for raw handles through `dream_window_surface_v1` and never calls GLFW. Every call here runs
+//! for raw handles through `dream_window_surface_v1` and never calls SDL3. Every call here runs
 //! on the guest's main thread, where the window host requires them.
 
 use crate::error::{self, Code, HostError, HostResult, check};
@@ -64,7 +64,7 @@ pub fn surface_create(device: i32, window: i32, vsync: bool) -> HostResult<i32> 
     if unsafe { surface_fn(window, &mut native) } == 0 {
         return Err(HostError::new(
             Code::Surface,
-            "the window is headless or closed, or the call ran off the main thread",
+            "the window has no drawable surface, or the call ran off the main thread",
         ));
     }
     let mut state = state::lock();

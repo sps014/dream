@@ -59,7 +59,7 @@ targets = ["native", "node"]    # hosts to run on (default: native)
 
 `[test]` holds only `targets`, which accepts `native` and `node`. Test packages cannot be built, run, packed or published; use `dreamer test` or `dream test`.
 
-Create one with `dreamer init my_tests --test`, or create a program together with its test project with `dreamer init myapp --workspace`.
+Create one with `dreamer init test my_tests`, or create a program together with its test project with `dreamer init workspace myapp`.
 
 A package that is not a test package can keep its tests in `tests/`. `dreamer test` inside it runs that folder as its test project.
 

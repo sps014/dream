@@ -92,6 +92,14 @@ Physical pixels per logical pixel on the window's current monitor: `1.0` on stan
 public get scale_factor(): float
 ```
 
+## `safe_area`
+
+The drawable edges to avoid, in logical pixels. Updated by SafeAreaChanged during poll. Desktop, browser, and headless windows start with zero on every edge; native mobile inset reporting requires a mobile window host.
+
+```dream
+public get safe_area(): WindowInsets
+```
+
 ## `is_minimized`
 
 True between a `WindowEvent.Minimized` and the next `WindowEvent.Restored`, as delivered by `poll`.

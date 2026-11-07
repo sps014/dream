@@ -85,14 +85,14 @@ greeter_tests` runs one; inside a member, `dreamer test` runs that member's test
 | Anywhere, with `-p <name>` | That member's tests |
 | Inside a member folder | That member's tests |
 
-`dreamer init myapp --workspace` scaffolds this layout: a root `[workspace]`, an `app/` program
+`dreamer init workspace myapp` scaffolds this layout: a root `[workspace]`, an `app/` program
 and a `tests/` test project that depends on it.
 
 **Runtime host** vs **pack triple** vs **compiler target**:
 
 | Setting | Values | Chooses |
 |---|---|---|
-| `[package].targets`, `dreamer run --target` | `native`, `web`, `node` | Which host runs the app |
+| `[package].targets`, `dreamer run --target` | `native`, `web`, `node`, `android`, `ios` | Which host runs the app; mobile canvas execution is pending |
 | `dreamer pack --target` | `linux-x64`, `macos-arm64`, … or `all` | Which OS/arch executable to package; see [CLI packaging](../deploy/desktop.md) |
 | `dream --runtime-target` | `native`, `web`, `node` | Which runtime's API availability is checked |
 | `dream --target` | An LLVM target triple, such as `aarch64-unknown-linux-gnu` | What the compiler compiles and links for |

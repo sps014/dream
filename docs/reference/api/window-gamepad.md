@@ -6,7 +6,7 @@ Read the [usage guide](../../library/system/window.md) for examples and common t
 
 ## `Gamepad`
 
-A connected gamepad as of one `Window.poll`, using the standard controller layout.  Native programs map controllers with the SDL game controller database bundled in GLFW; browsers use the Gamepad API's standard mapping. `pressed` and `released` compare this poll with the previous one, so a button tapped entirely between two polls can go unnoticed.
+A connected gamepad as of one `Window.poll`, using the standard controller layout.  Native programs use the SDL3 controller database; browsers use the Gamepad API's standard mapping. `pressed` and `released` compare this poll with the previous one, so a button tapped entirely between two polls can go unnoticed.
 
 ```dream
 public class Gamepad
@@ -62,7 +62,7 @@ public fun axis(axis: GamepadAxis): float
 
 ## `rumble`
 
-Vibrates the controller for `seconds`. `low` drives the strong low-frequency motor and `high` the weak high-frequency motor, each from `0.0` to `1.0`. Returns false when the platform cannot vibrate this controller; native programs built on GLFW currently always return false.
+Vibrates the controller for `seconds`. `low` drives the strong low-frequency motor and `high` the weak high-frequency motor, each from `0.0` to `1.0`. Returns false when the platform or controller does not support vibration.
 
 ```dream
 public fun rumble(low: float, high: float, seconds: float): bool

@@ -164,7 +164,7 @@ DREAM_BIN=$BinDir\dream$Ext
     Write-Host "  $BinDir\dreamer$Ext"
     Write-Host "  $BinDir\dream-lsp$Ext"
     Write-Host ""
-    Write-Host "Open a new terminal, then: dreamer init hello"
+    Write-Host "Open a new terminal, then: dreamer init console hello"
 } finally {
     Remove-Item -Recurse -Force $Work -ErrorAction SilentlyContinue
 }

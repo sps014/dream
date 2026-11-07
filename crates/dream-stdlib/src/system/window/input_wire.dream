@@ -95,6 +95,24 @@ internal static class InputWire {
             events.push(WindowEvent.Occluded(wire[at] != 0.0f));
         } else if kind == 20 && length >= 1 && wire[at] > 0.0f {
             events.push(WindowEvent.ScaleChanged(wire[at]));
+        } else if kind >= 21 && kind <= 23 && length >= 3 && wire[at] >= 0.0f {
+            let id = (int)wire[at];
+            let position = WindowVector(wire[at + 1], wire[at + 2]);
+            if kind == 21 {
+                events.push(WindowEvent.TouchDown(id, position));
+            } else if kind == 22 {
+                events.push(WindowEvent.TouchMove(id, position));
+            } else {
+                events.push(WindowEvent.TouchUp(id, position));
+            }
+        } else if kind == 24 && length >= 1 && wire[at] >= 0.0f {
+            events.push(WindowEvent.TouchCancel((int)wire[at]));
+        } else if kind == 25 && length >= 4 {
+            events.push(
+                WindowEvent.SafeAreaChanged(
+                    WindowInsets(wire[at], wire[at + 1], wire[at + 2], wire[at + 3])
+                )
+            );
         } else if kind == 16 && length >= 2 + InputTracker.AXIS_COUNT {
             let axes = Buffer.alloc<float>(InputTracker.AXIS_COUNT);
             for (let i = 0; i < InputTracker.AXIS_COUNT; i = i + 1) {

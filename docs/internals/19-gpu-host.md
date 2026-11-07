@@ -280,5 +280,5 @@ sampler heap, expects a recoverable error, then verifies subsequent valid submis
 - Vertex attribute locations must be dense (`0..n-1`): slang-rhi's Vulkan, Metal and WebGPU
   backends take attribute `i` as shader location `i`. D3D binds by the generator's `LOCATION<n>`
   semantics.
-- Wayland windows have no slang-rhi surface. GLFW runs them through XWayland, which gives an Xlib
+- Wayland windows have no slang-rhi surface. SDL3 runs them through XWayland, which gives an Xlib
   handle.

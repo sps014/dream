@@ -45,6 +45,33 @@ default = "https://raw.githubusercontent.com/sps014/dream-registry/main"
 
 ## Sections
 
+Canvas templates add an `[app]` table and declare their platforms in `package.targets`:
+
+```toml
+[package]
+name = "counter"
+version = "0.1.0"
+type = "bin"
+entry = "src/main.dream"
+targets = ["native", "android", "ios"]
+
+[app]
+id = "org.example.appcounter"
+android-min-sdk = 26
+ios-min-os = "16.0"
+```
+
+Change `app.id` to an identifier for your application. It needs at least two dot-separated
+segments, each beginning with a letter and containing letters or digits; Java reserved
+words are not valid segments. The generated identifier is a placeholder. Android's
+minimum SDK must be at least 26; iOS's minimum OS must be at least 16.0. These two fields
+default to the values shown when omitted. App configuration is only valid for a `bin`
+package targeting `native`, `android`, or `ios`; mobile targets require this table.
+
+An app that lists `native` selects it by default for build/run. Mobile-only apps need a
+target choice. Mobile app packaging and execution still require the mobile host port;
+declaring these targets does not enable execution yet. See [Create a project](create-project.md).
+
 A manifest needs `[package]`, `[workspace]`, or both.
 
 | Section | Purpose |
@@ -73,7 +100,7 @@ A manifest needs `[package]`, `[workspace]`, or both.
 | `description` | no | none | One-line summary, published and searched |
 | `license` | no | none | License identifier, published to the registry |
 | `keywords` | no | `[]` | Search words for `dreamer search` and the registry site |
-| `targets` | no | `[]` | Hosts: `native`, `web`, `node`; not allowed on `test` |
+| `targets` | no | `[]` | Hosts: `native`, `web`, `node`; canvas projects can also declare `android` and `ios` (execution pending). Not allowed on `test`. |
 | `icon` | no | none | PNG app icon path; not allowed on `test` |
 | `assets` | no | `[]` | Files and folders copied next to the output; not allowed on `lib` |
 | `links` | no | none | Name of the native library this package provides; see [C interop](../language/interop/c.md) |
@@ -131,9 +158,12 @@ A dependency is a bare version requirement string, or a table with these keys:
     `target/node/`.
 - `[package].targets` is an optional list of hosts this project supports: `native`
   (`dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
+  Canvas projects with `[app]` can declare `android` and `ios` as well; mobile canvas
+  execution remains unavailable.
   - Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
     native.
-  - Combinations are allowed; see `dreamer run` below for how the host is chosen.
+  - Canvas projects listing `native` select it by default. Other combinations need an
+    explicit run target; see [Build and run](build-run.md).
 - `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory). It is
   the only place an app icon is configured.
   - `dreamer build`, `run` and `pack` compile it into native binaries, so no file is read at run

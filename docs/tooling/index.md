@@ -10,7 +10,7 @@ hide: [toc]
 `dreamer` helps you create, run, test, and share Dream projects. Run its commands from your project folder. It reads your `dream.toml` settings and installs the packages your project needs.
 
 ```sh
-dreamer init hello
+dreamer init console hello
 cd hello
 dreamer run
 ```

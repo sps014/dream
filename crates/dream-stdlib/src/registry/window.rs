@@ -6,6 +6,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/window/window_insets.dream",
+            include_str!("../system/window/window_insets.dream"),
+        ),
+        (
             "<std>/system/window/key_code.dream",
             include_str!("../system/window/key_code.dream"),
         ),

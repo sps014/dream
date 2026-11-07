@@ -1,0 +1,29 @@
+module system.window;
+
+/// Distances from the drawable area's edges, in logical pixels, that content should avoid.
+public struct WindowInsets {
+    /// Distance below the top edge, such as the area occupied by a display cutout.
+    public top: float;
+
+    /// Distance to the left of the right edge.
+    public right: float;
+
+    /// Distance above the bottom edge, such as a system gesture area.
+    public bottom: float;
+
+    /// Distance to the right of the left edge.
+    public left: float;
+
+    /// Creates edge distances in top, right, bottom, left order. Every distance defaults to zero.
+    public constructor(
+        top: float = 0.0f,
+        right: float = 0.0f,
+        bottom: float = 0.0f,
+        left: float = 0.0f
+    ) {
+        this.top = top;
+        this.right = right;
+        this.bottom = bottom;
+        this.left = left;
+    }
+}

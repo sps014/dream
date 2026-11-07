@@ -728,6 +728,11 @@ DREAM_ALWAYS_INLINE int dream_str_can_hold(dream_ptr p, int32_t units) {
     if (!dream_str_unique_owned(p)) {
         return 0;
     }
+    /* An owned string's block already holds its current length, so only growth needs the
+     * allocator's block size. */
+    if (DREAM_LIKELY(units <= dream_i32(p)[0])) {
+        return 1;
+    }
     char *block = (char *)dream_p(p) - HEAP_HEADER_SIZE;
     size_t need = HEAP_HEADER_SIZE + (size_t)dream_string_bytes(units);
     return dream_block_fits(block, need);

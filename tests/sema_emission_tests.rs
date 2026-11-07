@@ -1766,3 +1766,51 @@ fn range_foreach_emits_counted_loop_without_allocation() {
         );
     }
 }
+
+#[test]
+fn nominal_metadata_lookup_checks_bounds_and_reserved_holes() {
+    let mut code = String::new();
+    for i in 0..300 {
+        code.push_str(&format!("class Node{i} {{ public value: int; }}\n"));
+        code.push_str(&format!(
+            "fun read{i}(n: Node{i}): int {{ return n.value; }}\n"
+        ));
+    }
+    for triple in ["arm64-apple-darwin", "wasm32-unknown-unknown"] {
+        let ir = compile_test_pipeline(&code, |hir, interner| {
+            let mir = dream_mir::lower::lower_program(hir, interner);
+            let spec = dream_abi::target::TargetSpec::parse(triple).unwrap();
+            emit_ll_for(&mir, interner, dream_mir::backend::Target::Llvm(spec))
+        });
+        let body = ir_func_body(&ir, "dream_type_info_for_tag");
+        assert!(body.contains("icmp ult i32"), "{triple}: {body}");
+        assert!(body.contains("load ptr"), "{triple}: {body}");
+        assert!(body.contains("icmp ne ptr"), "{triple}: {body}");
+        assert!(
+            body.contains("@dream_builtin_type_info("),
+            "{triple}: {body}"
+        );
+        assert!(!body.contains("switch "), "{triple}: {body}");
+        let table = ir
+            .lines()
+            .find(|line| line.starts_with("@dream_nominal_type_infos ="))
+            .unwrap();
+        let first = dream_mir::abi::TAG_STRUCT_BASE;
+        let entries: Vec<_> = table.split("ptr @dream_type_info_").collect();
+        assert_eq!(entries.len(), 301, "{triple}: {table}");
+        let hole = (dream_mir::abi::TAG_FUTURE - first) as usize;
+        let values = table.split("[ptr ").nth(1).unwrap();
+        let values: Vec<_> = values.split(", ptr ").collect();
+        for (offset, value) in values.iter().skip(hole).take(4).enumerate() {
+            assert_eq!(*value, "null", "{triple}: reserved offset {offset}");
+        }
+    }
+}
+
+#[test]
+fn metadata_lookup_without_nominal_types_uses_builtin_fallback() {
+    let (ir, _) = emit_hir_to_ir("fun answer(): int { return 42; }");
+    let body = ir_func_body(&ir, "dream_type_info_for_tag");
+    assert!(body.contains("@dream_builtin_type_info("));
+    assert!(!ir.contains("@dream_nominal_type_infos ="));
+}

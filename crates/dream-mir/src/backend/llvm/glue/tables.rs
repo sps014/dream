@@ -132,7 +132,7 @@ pub(in super::super) fn emit_globals(l: &mut Lcx<'_>) {
     }
 }
 
-fn ptr_array(entries: &[Option<String>]) -> (Ty, String) {
+pub(super) fn ptr_array(entries: &[Option<String>]) -> (Ty, String) {
     let ty = Ty::Array(entries.len() as u64, Box::new(Ty::Ptr));
     let body = entries
         .iter()

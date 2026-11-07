@@ -58,7 +58,16 @@ pub(crate) fn struct_tags(mir: &Mir) -> HashMap<TypeId, i32> {
         .keys()
         .chain(mir.layouts.unions.keys())
         .enumerate()
-        .map(|(i, ty)| (*ty, TAG_STRUCT_BASE + i as i32))
+        .map(|(i, ty)| {
+            let tag = TAG_STRUCT_BASE + i as i32;
+            // Runtime shape tags occupy a fixed range inside the nominal namespace.
+            let tag = if tag >= crate::abi::TAG_FUTURE {
+                tag + crate::abi::TAG_FLOAT16 - crate::abi::TAG_FUTURE + 1
+            } else {
+                tag
+            };
+            (*ty, tag)
+        })
         .collect()
 }
 
@@ -426,3 +435,7 @@ fn strings_in_op(o: &Operand, out: &mut Vec<String>) {
         Operand::Copy(_) | Operand::Const(_) => {}
     }
 }
+
+#[cfg(test)]
+#[path = "tables_tests.rs"]
+mod tests;

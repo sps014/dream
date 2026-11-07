@@ -141,27 +141,53 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
             &symbol(elem, "array_clear"),
         );
     }
-    let arms: Vec<_> = types
+    emit_lookup(l, &types);
+}
+
+fn emit_lookup(l: &mut Lcx<'_>, types: &[TypeId]) {
+    let first = crate::abi::TAG_STRUCT_BASE;
+    let count = types
         .iter()
-        .filter_map(|ty| l.cx.tags.get(ty).map(|tag| (*tag as i128, info(*ty))))
-        .collect();
+        .filter_map(|ty| l.cx.tags.get(ty))
+        .max()
+        .map_or(0, |&last| (last - first + 1) as usize);
+    let mut entries = vec![None; count];
+    for ty in types {
+        if let Some(&tag) = l.cx.tags.get(ty) {
+            entries[(tag - first) as usize] = Some(info(*ty));
+        }
+    }
+    if !entries.is_empty() {
+        let (ty, init) = super::tables::ptr_array(&entries);
+        l.global(
+            "dream_nominal_type_infos",
+            GlobalDef {
+                linkage: Linkage::Internal,
+                thread_local: false,
+                constant: true,
+                unnamed_addr: false,
+                ty,
+                init: Some(init),
+                align: l.cx.target.spec().ptr_align,
+            },
+        );
+    }
     let mut fx = glue(l, "dream_type_info_for_tag");
     let tag = fx.arg(0);
-    let default = fx.w.new_block("builtin");
-    let blocks: Vec<_> = arms
-        .iter()
-        .map(|(tag, name)| (*tag, fx.w.new_block("type"), name))
-        .collect();
-    let switch: Vec<_> = blocks
-        .iter()
-        .map(|(tag, block, _)| (*tag, *block))
-        .collect();
-    fx.w.switch(&tag.v, default, &switch);
-    for (_, block, name) in blocks {
-        fx.w.switch_to(block);
-        fx.w.ret(Some(&Value::global(name)));
+    if count != 0 {
+        let index = fx.w.bin("sub", &tag.v, &Value::i32(first as i64));
+        let valid = fx.w.icmp("ult", &index, &Value::i32(count as i64));
+        fx.if_then(&valid, |fx| {
+            let index = fx.conv(&V::s(index), &Ty::I64);
+            let abi = fx.l.cx.target.abi();
+            let offset = fx.w.bin("mul", &index, &Value::i64(abi.ptr_size as i64));
+            let address =
+                fx.w.gep_i8(&Value::global("dream_nominal_type_infos"), &offset);
+            let metadata = fx.w.load(Ty::Ptr, &address, abi.ptr_align, &[]);
+            let present = fx.w.icmp("ne", &metadata, &Value::null());
+            fx.if_then(&present, |fx| fx.w.ret(Some(&metadata)));
+        });
     }
-    fx.w.switch_to(default);
     let builtin = fx.call_v("dream_builtin_type_info", &[tag]);
     fx.w.ret(Some(&builtin.v));
     fx.finish();

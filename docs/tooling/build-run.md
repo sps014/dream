@@ -27,9 +27,8 @@ Per host:
 
 Canvas apps created with `dreamer init app` are an exception to the multi-host rule:
 they select `native` by default. `dreamer init desktop` also selects the desktop host.
-Mobile-only canvas projects require `--target android` or `--target ios`, but mobile app
-execution and packaging are not available yet. These targets report a clear limitation
-instead of compiling or launching a desktop executable.
+Mobile-only canvas projects require `--target android` or `--target ios`. See
+[Mobile apps](../deploy/mobile.md).
 
 `dreamer build --target web` or `--target node` builds only that host's output. Without
 `--target`, a console/web/Node project keeps its declared build outputs; a canvas app

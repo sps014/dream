@@ -68,9 +68,8 @@ minimum SDK must be at least 26; iOS's minimum OS must be at least 16.0. These t
 default to the values shown when omitted. App configuration is only valid for a `bin`
 package targeting `native`, `android`, or `ios`; mobile targets require this table.
 
-An app that lists `native` selects it by default for build/run. Mobile-only apps need a
-target choice. Mobile app packaging and execution still require the mobile host port;
-declaring these targets does not enable execution yet. See [Create a project](create-project.md).
+An app that lists `native` selects it by default for build/run. Mobile-only apps need
+`--target android` or `--target ios`. See [Mobile apps](../deploy/mobile.md).
 
 A manifest needs `[package]`, `[workspace]`, or both.
 
@@ -137,14 +136,10 @@ A dependency is a bare version requirement string, or a table with these keys:
 
     `[test]` accepts only `targets`, and only on test packages. See [Test a project](testing.md).
 - `[package].assets` lists files and folders, relative to the `dream.toml` directory, that the
-  program reads at run time. Allowed on `bin` and `test` packages (an error on `lib`).
-  - They are copied into the output folder: `target/debug` or `target/release` for native,
-    `target/web` and `target/node` for wasm, `target/test/debug`, `target/test/release` or
-    `target/test/node` for test runners, and next
-    to the executable in `dreamer pack` output.
-  - A program with assets runs with its output folder as the working directory, so it opens them
-    with the same relative paths it uses in the project (`FileHandle.open("data/words.txt", FileMode.Read)`).
-  - Paths must stay inside the project: no absolute paths and no `..`.
+  program reads at run time. Allowed on `bin` and `test` packages (an error on `lib`). They are
+  copied next to the program, and the program starts in that folder, so
+  `File.read("data/words.txt").await` opens the same path on desktop and mobile. Paths must stay
+  inside the project: no absolute paths and no `..`.
 - `[package].entry` is the file `dreamer build` / `dreamer run` compile (**bin only**).
 - Package builds emit wasm under `target/web/` (debug and `--release` share that folder) and native
   binaries under `target/debug/` or `target/release/`.
@@ -158,8 +153,8 @@ A dependency is a bare version requirement string, or a table with these keys:
     `target/node/`.
 - `[package].targets` is an optional list of hosts this project supports: `native`
   (`dream run`), `web` (browser + `*.web.runtime.js`), and/or `node` (Node ≥ 18 + `*.node.runtime.js`).
-  Canvas projects with `[app]` can declare `android` and `ios` as well; mobile canvas
-  execution remains unavailable.
+  Canvas projects with `[app]` can also declare `android` and `ios`. See
+  [Mobile apps](../deploy/mobile.md).
   - Omit the field (or leave it empty) for today's free-choice behavior — `dreamer run` defaults to
     native.
   - Canvas projects listing `native` select it by default. Other combinations need an

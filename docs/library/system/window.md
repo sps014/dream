@@ -164,8 +164,8 @@ Browser canvases capture touch pointers and cancel contacts on focus loss, page 
 or capture loss. Touch input is delivered separately from mouse state. The canvas
 disables browser touch scrolling while attached and restores its previous touch behavior
 when closed. Desktop, browser, and headless windows report zero safe-area insets unless
-an inset event is simulated. Native Android/iOS touch and inset delivery still require
-the mobile window host; the canvas scaffold alone does not enable them.
+an inset event is simulated. A mobile app receives touch and insets when it runs on
+Android or iOS.
 
 ## Testing input without a display
 

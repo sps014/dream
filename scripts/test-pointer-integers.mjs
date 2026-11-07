@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { LEN_PREFIX_SIZE } from "../runtime/src/abi.js";
 import { DreamInstance } from "../runtime/src/instance.js";
 import { decodeJsSlots, JS_SLOT } from "../runtime/src/marshal.js";
 
@@ -41,7 +42,10 @@ test("character arrays preserve Unicode without widening byte arrays", () => {
   const chars = [0x41, 0x3a9, 0x754c, 0x1f600];
   const pointer = guest.writeArray(chars, "char");
   assert.deepEqual(guest.readArray(pointer, "char"), chars);
-  assert.equal(guest.view.getInt32(pointer + 4 + 3 * 4, true), 0x1f600);
+  assert.equal(guest.view.getInt32(pointer + LEN_PREFIX_SIZE + 3 * 4, true), 0x1f600);
   const bytes = guest.writeArray([0, 128, 255], "byte");
-  assert.deepEqual([...guest.bytes.slice(bytes + 4, bytes + 7)], [0, 128, 255]);
+  assert.deepEqual(
+    [...guest.bytes.slice(bytes + LEN_PREFIX_SIZE, bytes + LEN_PREFIX_SIZE + 3)],
+    [0, 128, 255],
+  );
 });

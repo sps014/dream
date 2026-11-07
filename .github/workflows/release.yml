@@ -56,7 +56,7 @@ jobs:
           apt-get install -y --no-install-recommends \
             ca-certificates curl git xz-utils build-essential pkg-config \
             cmake ninja-build python3 clang libclang-dev \
-            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxss-dev libfontconfig1-dev
+            libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxss-dev libxtst-dev libfontconfig1-dev
 
       - uses: actions/checkout@v7
 

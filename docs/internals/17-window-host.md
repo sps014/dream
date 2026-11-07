@@ -99,8 +99,8 @@ cached across a surface replacement.
 
 Cargo pins the Rust bindings and SDL source version. SDL is built from source with CMake and
 linked statically into the window capability. Linux needs the development packages for its
-selected SDL video and input backends, including `libxss-dev`: SDL refuses to configure X11
-when the XScreenSaver headers are missing. Desktop GPU presentation uses X11/XWayland.
+selected SDL video and input backends, including `libxss-dev` and `libxtst-dev`: SDL refuses to configure X11
+when the XScreenSaver or XTest headers are missing. Desktop GPU presentation uses X11/XWayland.
 
 The `main_thread` harness runs without libtest worker threads. By default it selects SDL's dummy
 video driver and checks window sizing, event preservation while parked, cross-thread wakeups,

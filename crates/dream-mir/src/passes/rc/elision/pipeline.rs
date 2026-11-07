@@ -32,11 +32,11 @@ impl MirPass for RcElision {
     fn transform(
         &self,
         func: &mut MirFunction,
-        _interner: &TypeInterner,
-        _layouts: &dream_hir::LayoutTable,
+        interner: &TypeInterner,
+        layouts: &dream_hir::LayoutTable,
         analyses: &mut crate::passes::FunctionAnalyses,
     ) -> bool {
-        let mut changed = super::literals::elide_literal_rc(func);
+        let mut changed = super::literals::elide_literal_rc(func, interner, layouts);
         // Fixpoint: diamond/loop/postdom elision can expose new Goto-chain pairs and vice versa.
         const MAX_ROUNDS: usize = 8;
         for iteration in 0..MAX_ROUNDS {

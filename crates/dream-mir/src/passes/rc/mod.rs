@@ -220,7 +220,8 @@ pub(crate) fn is_borrowed_copy(rvalue: &Rvalue, interner: &TypeInterner) -> bool
         | Rvalue::Use(Operand::Const(crate::Const::Str(_)))
         | Rvalue::UnionField { .. } => true,
         Rvalue::Cast(Operand::Copy(_), from, to) => {
-            if !interner.is_rc_tracked(*to) {
+            if !interner.is_rc_tracked(*to) || crate::rc_store::boxes_into_object(interner, rvalue)
+            {
                 return false;
             }
             interner.is_rc_tracked(*from)

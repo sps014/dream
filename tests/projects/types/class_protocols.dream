@@ -121,3 +121,26 @@ fun class_property(): void {
     t.fahrenheit = 98.6f;
     Assert.approx((double)t.fahrenheit, 98.6d, 0.00001d);
 }
+
+@noinline
+fun boxed_identity_value(value: int): object {
+    return (object)value;
+}
+
+@noinline
+fun check_boxed_scalar_identity(): void {
+    let first = boxed_identity_value(7);
+    let second = boxed_identity_value(7);
+    let alias = first;
+    Assert.is_false(first == second);
+    Assert.is_true(first == alias);
+    Assert.eq((int)first, (int)second);
+}
+
+@test
+@timeout(180000)
+fun boxed_scalars_keep_distinct_identity(): void {
+    let before = Debug.live_objects;
+    check_boxed_scalar_identity();
+    Assert.eq(Debug.live_objects - before, 0);
+}

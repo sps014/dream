@@ -97,8 +97,12 @@ fn literal_only_local_drops_its_retain_and_release() {
 
 #[test]
 fn local_with_a_non_literal_definition_keeps_its_rc() {
-    let (mut f, _) = literal_rc_function(true);
-    assert!(super::literals::elide_literal_rc(&mut f));
+    let (mut f, i) = literal_rc_function(true);
+    assert!(super::literals::elide_literal_rc(
+        &mut f,
+        &i,
+        &Default::default()
+    ));
     assert_eq!(rc_ops(&f), 2, "only the bare literal retain goes");
 }
 

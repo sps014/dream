@@ -910,3 +910,61 @@ fn rc_golden_stdlib_slot_walks_avoid_element_retains() {
         assert!(!f.body.contains("Iterator"), "{}: {}", f.name, f.body);
     }
 }
+
+#[test]
+fn rc_golden_split_span_literal_sources_are_rc_free() {
+    use dream::driver::compiler::Compiler;
+    use dream::driver::wasm_opt::OptLevel;
+    use dream::execution::llvm::Toolchain;
+    use dream_mir::backend::Target;
+    use std::sync::Arc;
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("split_span.dream");
+    let output = dir.path().join("split_span.ll");
+    std::fs::write(
+        &source,
+        r#"
+        import system;
+
+        @noinline
+        fun split_span(iters: int): int {
+            let line = "alpha,beta,gamma,delta";
+            let total = 0;
+            let i = 0;
+            while i < iters {
+                let pieces = line.span().split_iter(',');
+                while pieces.move_next() {
+                    total = total + pieces.current.length;
+                }
+                i = i + 1;
+            }
+            return total;
+        }
+        fun main(): void {
+            System.println(split_span(3));
+        }
+    "#,
+    )
+    .unwrap();
+    Compiler::new(Target::native())
+        .with_release(true)
+        .with_llvm(Arc::new(Toolchain {
+            config: Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+            opt: OptLevel::O3,
+            debug: false,
+        }))
+        .compile(&source.display().to_string(), &output.display().to_string())
+        .unwrap();
+    let ir = std::fs::read_to_string(output).unwrap();
+    let body = ir_func_defs(&ir)
+        .into_iter()
+        .find(|f| f.name == "split_span")
+        .unwrap();
+    assert_eq!(
+        count_in(&body.body, "@dream_retain(") + count_in(&body.body, "@dream_rc_last("),
+        0,
+        "literal-backed split iteration needs no RC:\n{}",
+        body.body
+    );
+}

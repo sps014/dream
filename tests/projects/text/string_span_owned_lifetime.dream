@@ -141,3 +141,51 @@ async fun c224_run(s: string): int {
 async fun string_span_await_ok(): void {
     Assert.eq(c224_run(" bc").await, 2);
 }
+
+struct LiteralTextView {
+    public source: string;
+
+    public constructor(borrow source: string) {
+        this.source = source;
+    }
+}
+
+struct NestedLiteralTextView {
+    public view: LiteralTextView;
+
+    public constructor(view: LiteralTextView) {
+        this.view = view;
+    }
+}
+
+@noinline
+fun replace_literal_text_view(ref view: LiteralTextView, borrow suffix: string): void {
+    view.source = "heap:" + suffix;
+}
+
+@noinline
+fun check_literal_view_aliases(borrow suffix: string): int {
+    let original = LiteralTextView("literal");
+    let copy = original;
+    let nested = NestedLiteralTextView(original);
+    replace_literal_text_view(ref nested.view, suffix);
+
+    let i = 0;
+    while i < 20 {
+        let scratch = "scratch:" + i.to_string();
+        Assert.is_true(scratch.length >= 9);
+        i = i + 1;
+    }
+
+    Assert.eq(original.source, "literal");
+    Assert.eq(copy.source, "literal");
+    Assert.eq(nested.view.source, "heap:" + suffix);
+    return copy.source.length + nested.view.source.length;
+}
+
+@test
+fun literal_view_aliases_keep_dynamic_ownership(): void {
+    let before = Debug.live_objects;
+    Assert.eq(check_literal_view_aliases("value"), 17);
+    Assert.eq(Debug.live_objects - before, 0);
+}

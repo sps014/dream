@@ -348,10 +348,9 @@ After the round, `go_report.py --rounds 3` reports Go faster on 2 micro rows: `s
 (1.18–1.24x across runs) and `nbody` (a tie to 1.24x across runs). Go fuses `x*y+z` into one
 instruction, which Dream's strict IEEE semantics do not allow. Paired against the pre-round
 compiler, `split_span` is 0.97x and no row regresses. Each `split_span` piece runs an
-inline scan with no ARC. Each outer iteration still releases the iterator's two span sources.
-Those are literals, but they arrive through value-struct fields, which the literal elision does
-not follow. The remaining relaxed loads of literal counts come from runtime span helpers inlined
-with a value LLVM only later proves to be a literal.
+inline scan with no ARC. At that checkpoint each outer iteration still released the iterator's
+two literal-backed span sources: the literal proof did not follow their value-struct fields.
+The field/copy extension below addresses that missed proof.
 
 Suspension-aware `RcElision` stays a design, not an implementation. Each owning local live across
 an `Await` is a frame slot the scheduler may drop through the future's drop function on
@@ -359,6 +358,50 @@ cancellation. Elision may pair a retain and release only within one suspension-f
 `Await` on any path between them), and a slot live across a suspension keeps its token until the
 resume block or the drop function discharges it exactly once. The facts are per-region liveness
 of owning slots, computed from the same block graph the poll backend spills from.
+
+### Literal field and copy proofs
+
+Literal RC elision follows copies, moves and selections through a dependency worklist. Every
+possible definition must be a literal, null or another proven slot. An unknown input poisons
+its dependent slots, including copy cycles; a cycle without a constant source cannot seed a proof.
+
+Private inline structs can carry those facts through nested strong fields. Whole-value copies
+are merged conservatively because compiler temporaries can alias their source storage. Opaque
+calls, escaping value storage, parameters, weak/unowned fields and user destructors reject the
+field proof. Class fields are not tracked. A fully immortal value uses the existing borrowing
+annotation and loses its copy/drop RC; existing interior aliases keep their storage mode.
+Individual proven fields can still feed literal-only locals when another field is dynamic.
+
+The `split_span` golden checks zero `dream_retain`/`dream_rc_last` calls in the emitted loop.
+Unit coverage includes copy cycles, unknown selection arms, nested aliases, opaque mutation,
+parameters, class fields and destructors. The ownership corpus also checks that replacing a
+nested literal field with a heap string preserves independent value copies and frees the heap
+string normally.
+
+Final paired measurements on macOS arm64 use 10 measured rounds, two warm-up rounds and
+five passes per process, against the retained future-frame compiler (88-byte native prefix).
+Both arms use the same C runtime sources. The complete micro and macro suites pass the 10%
+regression gate. `split_span` has a paired current/baseline ratio of 0.82 [0.77, 0.88], about
+18% faster; its process medians are 34.46 versus 27.95 ns per iteration. The representative
+optimized LLVM function falls from 45 atomic loads to zero. Peak RSS stays at 66.4 MB for
+micro and 4.8 MB for macro; this run establishes a speed gain, not a process-memory gain.
+Raw samples and provenance are retained in `target/literal-perf-micro/` and
+`target/literal-perf-macro/`.
+
+Workspace build, strict Clippy, workspace tests, documentation checks, all 516 MIR tests,
+23 ARC goldens and the compiler properties pass. The ownership and boxing regressions pass
+on native and Node in Release; the boxing regression also passes in Debug. Nine targeted
+native tests pass under ASan/UBSan. The full Release corpus is still running at this
+checkpoint; it must not be described as a completed native/Node corpus run.
+
+The boxed-scalar cache is rejected on semantics. Two independently boxed integers with value 7
+compare unequal as `object`, while a box and its alias compare equal. Object equality lowers to
+pointer comparison, so sharing immortal cache entries would change the result. The
+`boxed_scalars_keep_distinct_identity` assertion preserves that contract. This is a failed
+prerequisite, not a performance rejection; no cache or new boxing path was added. The test
+also exposed an extra retain on integer boxes returned by a function. Scalar boxing creates
+an owning result; removing its borrowed-copy classification frees those boxes normally. The
+regression checks both distinct identities and zero live-object growth after their scope exits.
 
 ### Runtime layout follow-up
 

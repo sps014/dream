@@ -84,6 +84,8 @@ fn every_native_dream_host_fn_is_declared_in_the_prelude() {
     for src in HOST_SOURCES {
         registered.extend(c_abi_fn_names(src));
     }
+    // The compiler links this entry directly. It is not a guest `@runtime` function.
+    registered.retain(|name| name != dream_abi::c_abi::PLATFORM_APP_MAIN);
 
     assert!(
         !registered.is_empty(),

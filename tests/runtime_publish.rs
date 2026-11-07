@@ -31,6 +31,8 @@ fn publishes_cyclic_diamond_and_million_node_task_graphs() {
         "heap.c",
         "ownership.c",
         "heap_maps.c",
+        "heap_slabs.c",
+        "heap_large.c",
         "heap_debug.c",
         "publish.c",
         "region.c",

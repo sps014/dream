@@ -37,10 +37,12 @@ TAG_STRUCT_BASE: i32 = 14 => "TAG_STRUCT_BASE";
 /// Header tag high bit: object is concurrently refcounted (`@shared` / published worker
 /// env and wire / foreign futures). Mask with [`TAG_VALUE_MASK`] before comparing type tags.
 TAG_SHARED: i32 = 1 << 30 => "TAG_SHARED";
-TAG_VALUE_MASK: i32 = TAG_SHARED - 1 => "TAG_VALUE_MASK";
-/// Metadata identity occupies the low 28 bits. Shape bits let erased C/JS consumers
+/// Region allocations are reclaimed with their chunk rather than individually.
+TAG_REGION: i32 = 1 << 27 => "TAG_REGION";
+TAG_VALUE_MASK: i32 = (TAG_SHARED - 1) & !TAG_REGION => "TAG_VALUE_MASK";
+/// Metadata identity occupies the low 27 bits. Shape bits let erased C/JS consumers
 /// recognize typed arrays and Future frames without loading their ownership descriptor.
-TAG_INDEX_MASK: i32 = (1 << 28) - 1 => "TAG_INDEX_MASK";
+TAG_INDEX_MASK: i32 = TAG_REGION - 1 => "TAG_INDEX_MASK";
 TAG_ARRAY_KIND: i32 = 1 << 28 => "TAG_ARRAY_KIND";
 TAG_FUTURE_KIND: i32 = 1 << 29 => "TAG_FUTURE_KIND";
 TAG_KIND_MASK: i32 = TAG_ARRAY_KIND | TAG_FUTURE_KIND => "TAG_KIND_MASK";
@@ -71,8 +73,8 @@ STRING_SCALAR_LEN_OFFSET: u32 = 4 => "STRING_SCALAR_LEN_OFFSET";
 DREAM_STR_PAD_INLINE: i32 = 0 => "DREAM_STR_PAD_INLINE";
 /// Pad value marking a fat slice (parent + external units pointer).
 DREAM_STR_SLICE: i32 = 1 => "DREAM_STR_SLICE";
-/// Native malloc header `[class|reserved:usize][tag:i32][rc:i32]` (32-bit hosts keep the class
-/// in a separate word after the reserved word). WASM uses [`HEAP_HEADER_SIZE`].
+/// Native malloc header `[reserved:8][tag:i32][rc:i32]`; slab metadata owns the size class.
+/// WASM uses [`HEAP_HEADER_SIZE`].
 NATIVE_HEAP_HEADER_SIZE: u32 = 16 => "NATIVE_HEAP_HEADER_SIZE";
 /// `data_ptr - RC_FROM_DATA` is the refcount word ([`HEADER_REFCOUNT_OFFSET`] from block start).
 RC_FROM_DATA: u32 = HEAP_HEADER_SIZE - HEADER_REFCOUNT_OFFSET => "RC_FROM_DATA";

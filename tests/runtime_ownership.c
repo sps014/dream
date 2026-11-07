@@ -51,8 +51,56 @@ static void edge(dream_ptr owner, dream_ptr target) {
     n->edge = target;
     dream_release_object(old);
 }
+#ifdef DREAM_ASAN
+int __asan_address_is_poisoned(const void *address);
+#endif
+static void slab_layouts(void) {
+    for (uint32_t total = 1; total <= DREAM_MAX_CLASS_BYTES; ++total) {
+        int cls = dream_size_class(total);
+        assert(cls >= 0 && cls < DREAM_NCLASS);
+        assert((uint32_t)dream_class_bytes(cls) >= total);
+        assert(cls == 0 || (uint32_t)dream_class_bytes(cls - 1) < total);
+    }
+    int saw_eight_alignment = 0;
+    for (int cls = dream_size_class(NATIVE_HEAP_HEADER_SIZE + 8); cls < DREAM_NCLASS; ++cls) {
+        dream_ptr values[3];
+        for (int i = 0; i < 3; ++i) {
+            values[i] = dream_malloc((size_t)dream_class_bytes(cls) - NATIVE_HEAP_HEADER_SIZE, TAG_ARRAY);
+            char *block = (char *)dream_p(values[i]) - NATIVE_HEAP_HEADER_SIZE;
+            assert((uintptr_t)values[i] % 8 == 0);
+            saw_eight_alignment |= (uintptr_t)values[i] % 16 != 0;
+            assert(dream_block_class(block) == (unsigned)cls);
+            memset(block, 0xa5, 8);
+            assert(dream_block_total(block) == (size_t)dream_class_bytes(cls));
+            assert(dream_heap_is_live(values[i]));
+        }
+        for (int i = 0; i < 3; ++i) { dream_release(values[i]); }
+        assert(!dream_heap_is_live(values[0]));
+#ifdef DREAM_ASAN
+        assert(__asan_address_is_poisoned(dream_p(values[0])));
+        assert(__asan_address_is_poisoned((char *)dream_p(values[0]) + 7));
+#endif
+    }
+    assert(saw_eight_alignment);
+    dream_region_enter();
+    dream_ptr p = dream_malloc(19, TAG_ARRAY);
+    assert(*dream_tag_word(p) & TAG_REGION);
+    size_t total = dream_block_total((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE);
+    memset((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE, 0xa5, 8);
+    assert(dream_block_total((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE) == total);
+    dream_set_type(p, &array_info);
+    assert(*dream_tag_word(p) & TAG_REGION);
+    assert(dream_object_info(p) == &array_info);
+    assert(dream_object_kind(p) == TAG_ARRAY);
+    assert(dream_heap_is_live(p));
+    dream_region_leave();
+    assert(!dream_heap_is_live(p));
+}
+
 int main(void) {
     int64_t before = debug_get_live_objects();
+    slab_layouts();
+    assert(debug_get_live_objects() == before);
     dream_ptr parent = node(1), child = node(2);
     edge(parent, child);
     dream_release_object(child);

@@ -7,30 +7,10 @@
 #include <stddef.h>
 
 #define NCLASS DREAM_NCLASS
-#define CHUNK (1u << 22)
+static dream_heap_span *shared_slabs[NCLASS];
 
 static dream_ptr freelist[NCLASS];
 static int shared_available[NCLASS];
-/* First-fit list for blocks larger than the biggest size class (64KiB), matching
- * wasm `$malloc`'s huge list. Oversized HTTP bodies / `byte[]`s must not be stuffed
- * into the top class or bump-allocated past a 4MiB mmap. */
-static dream_ptr large_freelist;
-/* Free large blocks keep their pages up to this many bytes. Past it, blocks that stayed unclaimed
- * for LARGE_RELEASE_AGE hand their interior pages back to the OS. Wall-clock age decides, because
- * refaulting a buffer that a loop frees and reallocates costs far more than its idle pages. */
-#define IDLE_LARGE_RETAIN ((size_t)16u << 20)
-/* Ticks of 2^20 ns; 1024 ticks is about one second. */
-#define LARGE_RELEASE_AGE ((uintptr_t)1024u)
-/* A free large block's prefix word is either its free-time tick tagged LARGE_RESIDENT or the
- * page-aligned count of released bytes tagged LARGE_RELEASED. */
-enum { LARGE_RESIDENT = 1, LARGE_RELEASED = 2 };
-#define LARGE_TICK_MASK (UINTPTR_MAX >> 2)
-static size_t idle_large_bytes;
-static uint64_t released_bytes;
-static uintptr_t large_swept_tick;
-static char *arena;
-static size_t arena_off;
-static size_t arena_len;
 /* Registry of every thread's counters (see `dream_heap_counters`); guarded by the platform heap lock.
  * `pinned` counts immortal singletons that left `Debug.live_objects` without being freed. */
 static dream_heap_counters *counters_head;
@@ -50,9 +30,6 @@ _Thread_local dream_heap_tls dream_heap;
  * and each distinct `_Thread_local` is its own TLV lookup on macOS. */
 typedef struct {
     dream_heap_counters *counters;
-    char *arena;
-    size_t arena_off;
-    size_t arena_len;
     int region_active;
     /* The mapping that last answered native_block_in_heap; valid forever since maps only grow. */
     uintptr_t hit_base;
@@ -63,10 +40,9 @@ static _Thread_local heap_thread th;
 typedef struct HeapRecord {
     dream_heap_counters counters;
     struct HeapRecord *next;
-    char *tail;
-    size_t tail_size;
+    dream_heap_span *slabs[NCLASS];
 } HeapRecord;
-static HeapRecord *retired_arenas;
+static HeapRecord *retired_heaps;
 
 static void heap_lock(void) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
@@ -94,12 +70,10 @@ static dream_heap_counters *thread_counters(void) {
         return c;
     }
     heap_lock();
-    HeapRecord *record = retired_arenas;
+    HeapRecord *record = retired_heaps;
     if (record) {
-        retired_arenas = record->next;
-        th.arena = record->tail;
-        th.arena_off = 0;
-        th.arena_len = record->tail_size;
+        retired_heaps = record->next;
+        memcpy(dream_heap.slabs, record->slabs, sizeof(record->slabs));
     }
     heap_unlock();
     if (!record) {
@@ -177,12 +151,6 @@ __attribute__((noinline)) int dream_release_nonlast_slow(int32_t *rc, int32_t v)
     return v == DREAM_RC_IMMORTAL;
 }
 
-static void note_heap_map(char *p, size_t n) {
-    heap_lock();
-    dream_heap_map_add_locked(p, n);
-    heap_unlock();
-}
-
 static int native_block_in_heap(char *block) {
     uintptr_t offset = (uintptr_t)block - th.hit_base;
     if (offset < th.hit_len && NATIVE_HEAP_HEADER_SIZE <= th.hit_len - offset) {
@@ -200,17 +168,11 @@ static int native_block_in_heap(char *block) {
     return found;
 }
 
-static void *map_chunk(size_t n) { return dream_platform_current->map(n); }
-
 static void *block_next(char *block) {
-    void *next = (void *)dream_block_word(block);
-    return next == (void *)block ? NULL : next;
+    void *next = dream_block_next(block);
+    return next == block ? NULL : next;
 }
-
-static void block_set_next(char *block, void *next) {
-    *dream_block_tag(block) = DREAM_TAG_FREED;
-    dream_block_set_word(block, (uintptr_t)next);
-}
+static void block_set_next(char *block, void *next) { dream_block_link(block, next); }
 
 void dream_heap_thread_exit(void) {
     HeapRecord *record = (HeapRecord *)th.counters;
@@ -232,26 +194,13 @@ void dream_heap_thread_exit(void) {
     *link = record->counters.next;
     retired_allocs += record->counters.allocs;
     retired_frees += record->counters.frees;
-    /* Live published objects belong to their mappings, not to this thread's counters or tail. */
-    record->tail_size = th.arena_len - th.arena_off;
-    if (record->tail_size >= NATIVE_HEAP_HEADER_SIZE) {
-        record->tail = th.arena + th.arena_off;
-        record->next = retired_arenas;
-        retired_arenas = record;
-        record = NULL;
-    }
+    /* The mapping outlives both the originating thread and any published objects. */
+    memcpy(record->slabs, dream_heap.slabs, sizeof(record->slabs));
+    record->next = retired_heaps;
+    retired_heaps = record;
     heap_unlock();
-    if (record) { dream_platform_current->deallocate(record); }
     memset(&dream_heap, 0, sizeof(dream_heap));
     memset(&th, 0, sizeof(th));
-}
-
-/* Lays out a large block of `bytes`, prefix included, at `p`. */
-static char *carve_large(char *p, size_t bytes) {
-    dream_block_init(p, DREAM_CLASS_LARGE_PREFIX);
-    p += DREAM_LARGE_PREFIX;
-    *dream_large_size(p) = bytes - DREAM_LARGE_PREFIX;
-    return p;
 }
 
 static void activate(char *block, unsigned cls, int32_t tag) {
@@ -267,169 +216,13 @@ static void account_frees(uint32_t n) {
 /* Re-arm the inline fast path once the thread is registered and no region is open. */
 static void heap_refresh_fast(void);
 
-static uintptr_t large_tick(void) {
-    return ((uintptr_t)((uint64_t)dream_platform_current->now() >> 20)) & LARGE_TICK_MASK;
-}
-
-/* Unlinks resident blocks idle for LARGE_RELEASE_AGE until the resident total fits the budget.
- * They stay off the list while their pages are released, so no thread can claim one mid-release. */
-static char *take_stale_large_locked(uintptr_t now) {
-    char *stale = NULL;
-    dream_ptr prev = 0;
-    dream_ptr curr = large_freelist;
-    while (curr != 0 && idle_large_bytes > IDLE_LARGE_RETAIN) {
-        char *block = (char *)dream_p(curr);
-        dream_ptr next = (dream_ptr)block_next(block);
-        uintptr_t state = dream_block_word(block - DREAM_LARGE_PREFIX);
-        if ((state & LARGE_RESIDENT) && ((now - (state >> 2)) & LARGE_TICK_MASK) >= LARGE_RELEASE_AGE) {
-            if (prev == 0) {
-                large_freelist = next;
-            } else {
-                block_set_next((char *)dream_p(prev), dream_p(next));
-            }
-            idle_large_bytes -= *dream_large_size(block);
-            block_set_next(block, stale);
-            stale = block;
-        } else {
-            prev = curr;
-        }
-        curr = next;
-    }
-    return stale;
-}
-
-/* Releasing pages costs a system call and a fault on reuse, so it runs outside the heap lock and
- * at most once per LARGE_RELEASE_AGE. */
-static void release_stale_large(char *stale) {
-    char *head = stale;
-    size_t released = 0;
-    for (char *block = stale; block != NULL; block = block_next(block)) {
-        size_t sz = *dream_large_size(block);
-        size_t bytes = dream_platform_current->release(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
-        dream_block_set_word(block - DREAM_LARGE_PREFIX, (uintptr_t)bytes | LARGE_RELEASED);
-        released += bytes;
-    }
-    heap_lock();
-    released_bytes += released;
-    /* First fit scans from the head, so resident blocks ahead of released ones are reused first. */
-    if (large_freelist == 0) {
-        large_freelist = (dream_ptr)head;
-    } else {
-        char *last = (char *)dream_p(large_freelist);
-        while (block_next(last) != NULL) {
-            last = block_next(last);
-        }
-        block_set_next(last, head);
-    }
-    heap_unlock();
-}
-
-static void free_large(char *block) {
-    char *stale = NULL;
-    uintptr_t now = large_tick();
-    heap_lock();
-    dream_block_set_word(block - DREAM_LARGE_PREFIX, (now << 2) | LARGE_RESIDENT);
-    idle_large_bytes += *dream_large_size(block);
-    block_set_next(block, dream_p(large_freelist));
-    large_freelist = (dream_ptr)block;
-    if (idle_large_bytes > IDLE_LARGE_RETAIN && ((now - large_swept_tick) & LARGE_TICK_MASK) >= LARGE_RELEASE_AGE) {
-        large_swept_tick = now;
-        stale = take_stale_large_locked(now);
-    }
-    heap_unlock();
-    if (stale != NULL) {
-        release_stale_large(stale);
-    }
-}
-
-static void claim_large(char *block) {
-    char *prefix = block - DREAM_LARGE_PREFIX;
-    uintptr_t state = dream_block_word(prefix);
-    if (state & LARGE_RELEASED) {
-        released_bytes -= state & ~(uintptr_t)(LARGE_RESIDENT | LARGE_RELEASED);
-    } else {
-        idle_large_bytes -= *dream_large_size(block);
-    }
-    dream_block_set_word(prefix, 0);
-}
-
-uint64_t dream_heap_released_bytes(void) {
-    heap_lock();
-    uint64_t bytes = released_bytes;
-    heap_unlock();
-    return bytes;
-}
-
-static char *large_try_take(size_t need) {
-    dream_ptr prev = 0;
-    dream_ptr curr = large_freelist;
-    while (curr != 0) {
-        char *block = (char *)dream_p(curr);
-        void *next = block_next(block);
-        if (*dream_large_size(block) >= need) {
-            if (prev == 0) {
-                large_freelist = (dream_ptr)next;
-            } else {
-                block_set_next((char *)dream_p(prev), next);
-            }
-            claim_large(block);
-            return block;
-        }
-        prev = curr;
-        curr = (dream_ptr)next;
-    }
-    return NULL;
-}
-
-static char *tls_bump(size_t n) {
-    size_t aligned = (n + 15u) & ~(size_t)15u;
-    if (th.arena == NULL || aligned > th.arena_len || th.arena_off > th.arena_len - aligned) {
-        size_t map_len = aligned > (size_t)CHUNK ? aligned : (size_t)CHUNK;
-        th.arena = (char *)map_chunk(map_len);
-        th.arena_off = 0;
-        th.arena_len = map_len;
-        if (th.arena == NULL) {
-            DREAM_PANIC_LITERAL(u"panic: out of memory mapping the private heap");
-        }
-        note_heap_map(th.arena, map_len);
-    }
-    {
-        char *p = th.arena + th.arena_off;
-        th.arena_off += aligned;
-        return p;
-    }
-}
-
-static char *bump(size_t n) {
-    size_t aligned = (n + 15u) & ~(size_t)15u;
-    if (arena == NULL || aligned > arena_len || arena_off > arena_len - aligned) {
-        size_t map_len = aligned > (size_t)CHUNK ? aligned : (size_t)CHUNK;
-        arena = (char *)map_chunk(map_len);
-        arena_off = 0;
-        arena_len = map_len;
-        if (arena == NULL) {
-            DREAM_PANIC_LITERAL(u"panic: out of memory mapping the shared heap");
-        }
-        dream_heap_map_add_locked(arena, map_len);
-    }
-    {
-        char *p = arena + arena_off;
-        arena_off += aligned;
-        return p;
-    }
-}
-
-dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag) {
-    unsigned cls;
-    if (DREAM_LIKELY((size_t)total <= 256u)) {
-        cls = (unsigned)(((size_t)total - 1u) >> 4);
-    } else if ((size_t)total > DREAM_MAX_CLASS_BYTES) {
-        cls = DREAM_CLASS_LARGE;
-        block = carve_large(block, (size_t)total);
-    } else {
-        cls = (unsigned)dream_size_class((uint32_t)total);
-    }
-    dream_block_activate(block, cls, tag);
+dream_ptr dream_region_activate(char *prefix, dream_size total, int32_t tag) {
+    *(size_t *)prefix = (size_t)total - DREAM_REGION_PREFIX;
+    char *block = prefix + DREAM_REGION_PREFIX;
+    DREAM_UNPOISON(block, (size_t)total - DREAM_REGION_PREFIX);
+    dream_heap_header *header = (dream_heap_header *)block;
+    header->tag = tag | TAG_REGION;
+    header->rc = dream_rc_init(tag);
     dream_heap_count(&thread_counters()->allocs, UINT64_C(1));
     return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
 }
@@ -454,7 +247,8 @@ static size_t allocation_total(size_t size) {
     if (size > PTRDIFF_MAX - NATIVE_HEAP_HEADER_SIZE - 15) {
         DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
     }
-    return ((size + 15u) & ~(size_t)15u) + NATIVE_HEAP_HEADER_SIZE;
+    if (size < 8u) { size = 8u; }
+    return ((size + 7u) & ~(size_t)7u) + NATIVE_HEAP_HEADER_SIZE;
 }
 
 static dream_ptr malloc_general(dream_size size, int32_t tag) {
@@ -463,7 +257,6 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
     unsigned cls;
     char *block = NULL;
     size_t alloc_size;
-    size_t footprint;
     total = allocation_total(size);
     heap_refresh_fast();
     idx = size_class(total);
@@ -497,7 +290,7 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
         /* `dream_recycle_slow` returns every large block, private or shared, to the
          * process-wide list; bump-allocating past it would never reuse freed buffers. */
         heap_lock();
-        block = large_try_take(alloc_size);
+        block = dream_large_take_locked(alloc_size);
         heap_unlock();
         if (block != NULL) {
             activate(block, cls, tag);
@@ -505,10 +298,9 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
         }
     }
     if (cls == DREAM_CLASS_LARGE) {
-        footprint = alloc_size + DREAM_LARGE_PREFIX;
-        block = carve_large(tls_bump(footprint), footprint);
+        block = dream_large_map(alloc_size, 0);
     } else {
-        block = tls_bump(alloc_size);
+        block = dream_slab_bump(&dream_heap.slabs[idx], (unsigned)idx, 0);
     }
     activate(block, cls, tag);
     return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
@@ -529,7 +321,6 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
     unsigned cls;
     char *block = NULL;
     size_t alloc_size;
-    size_t footprint;
     total = allocation_total(size);
     idx = size_class(total);
     cls = idx < NCLASS ? (unsigned)idx : DREAM_CLASS_LARGE;
@@ -539,7 +330,7 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
     }
     heap_lock();
     if (idx >= NCLASS) {
-        block = large_try_take(alloc_size);
+        block = dream_large_take_locked(alloc_size);
     } else {
         while (freelist[idx] != 0) {
             block = (char *)dream_p(freelist[idx]);
@@ -555,10 +346,9 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
     }
     if (block == NULL) {
         if (cls == DREAM_CLASS_LARGE) {
-            footprint = alloc_size + DREAM_LARGE_PREFIX;
-            block = carve_large(bump(footprint), footprint);
+            block = dream_large_map(alloc_size, 1);
         } else {
-            block = bump(alloc_size);
+            block = dream_slab_bump(&shared_slabs[idx], (unsigned)idx, 1);
         }
     }
     heap_unlock();
@@ -574,6 +364,14 @@ int dream_heap_is_live(dream_ptr ptr) {
     block = (char *)dream_p(ptr) - (int)NATIVE_HEAP_HEADER_SIZE;
     if (!native_block_in_heap(block)) {
         return 0;
+    }
+    dream_heap_span *span = (dream_heap_span *)th.hit_base;
+    if (span->cls == DREAM_CLASS_LARGE) {
+        if (block != (char *)span + DREAM_SLAB_PREFIX + DREAM_LARGE_PREFIX && !dream_region_owns(ptr)) { return 0; }
+    } else {
+        uintptr_t offset = (uintptr_t)block - (uintptr_t)span - DREAM_SLAB_PREFIX;
+        size_t bytes = span->block_bytes;
+        if (!bytes || offset / bytes >= __atomic_load_n(&span->used, __ATOMIC_ACQUIRE) || offset % bytes != 0) { return 0; }
     }
     return *dream_block_tag(block) != DREAM_TAG_FREED;
 }
@@ -598,7 +396,17 @@ int32_t debug_get_ref_count(dream_ptr ptr) {
 static int32_t saturate_i32(uint64_t value) {
     return value > (uint64_t)INT32_MAX ? INT32_MAX : (int32_t)value;
 }
-int32_t debug_get_heap_ptr(void) { return saturate_i32((uint64_t)arena_off); }
+int32_t debug_get_heap_ptr(void) {
+    uint64_t bytes = 0;
+    heap_lock();
+    for (size_t i = 0; i < dream_heap_map_count_locked(); ++i) {
+        size_t size, mapped;
+        (void)dream_heap_map_at_locked(i, &size, &mapped);
+        bytes += mapped;
+    }
+    heap_unlock();
+    return saturate_i32(bytes);
+}
 int32_t debug_get_free_list_head(void) {
     uint64_t a;
     uint64_t f;
@@ -621,7 +429,7 @@ void dream_recycle_slow(dream_ptr ptr) {
         dream_weak_clear_all(ptr);
     }
     block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
-    if (dream_region_owns(ptr)) {
+    if (*dream_tag_word(ptr) & TAG_REGION) {
         return;
     }
     idx = dream_block_class(block);
@@ -633,7 +441,7 @@ void dream_recycle_slow(dream_ptr ptr) {
     DREAM_POISON(block + NATIVE_HEAP_HEADER_SIZE, sz - NATIVE_HEAP_HEADER_SIZE);
     account_frees(1);
     if (idx >= NCLASS) {
-        free_large(block);
+        dream_large_recycle(block);
         return;
     }
     if (shared) {
@@ -652,6 +460,7 @@ void dream_free(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
+    if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) { return; }
     dream_weak_prepare_destroy(ptr);
     dream_str_fini(ptr);
     if (dream_object_kind(ptr) == TAG_FUTURE) {
@@ -675,6 +484,7 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
     if (ptr == 0) {
         return dream_malloc(new_size, tag);
     }
+    if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) { DREAM_PANIC_LITERAL(u"panic: cannot resize immortal storage"); }
     block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
     old_total = dream_block_total(block);
     if (new_total <= old_total) {

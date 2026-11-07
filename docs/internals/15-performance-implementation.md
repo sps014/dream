@@ -427,18 +427,39 @@ when the run loop drains. Timers remain raw references owned by their awaiters.
 ### Tag-indexed ownership metadata
 
 Each emitted nominal, managed-array and Future ownership descriptor has a unique tag. The low
-28 bits index a deterministic module table; bits 28 and 29 identify typed arrays and Future
-frames. Shared and weak-target flags remain independent. Runtime-created arrays and futures
+27 bits index a deterministic module table; bit 27 marks region storage, and bits 28 and 29
+identify typed arrays and Future frames. Shared and weak-target flags remain independent. Runtime-created arrays and futures
 without typed ownership edges retain their basic kind tags. C, generated protocol/interface
 routers, worker dispatch, publication, reallocation and the JS host recognize shape independently
 of the descriptor identity.
 
 `dream_object_info` resolves metadata from the tag. `dream_set_type` installs the descriptor's
 tag while preserving allocation flags, including the implicit sharing of previously untyped
-storage. There is no per-object metadata pointer. Native allocation keeps its size class in the
-first header word; wasm32 keeps its block size and reserved word. Both headers remain 16 bytes.
-Slab side metadata and the 8-byte header migration are still pending; this step alone makes no
-claim about reduced allocation sizes or RSS.
+storage. There is no per-object metadata pointer. Native allocation uses the slab metadata
+described below; wasm32 keeps its block size and reserved word. Both headers remain 16 bytes. The 8-byte header migration remains pending.
+
+### Native slab metadata
+
+Native small allocations come from homogeneous 256 KiB aligned slabs. Class and initialized-slot
+count live in a 64-byte slab prefix; no object header stores a size class. Freed blocks link
+through their payloads, with allocator-only unpoisoning during ASan accesses. Heap walks visit
+initialized slots by slab, and live-pointer checks reject unused tails and interior addresses.
+Large allocations have a dedicated mapping and retain their size/aging prefix. Idle-page release
+preserves the payload link. Mapping gauges include the extra address space reserved to meet slab
+alignment through the injected platform's 16-byte-aligned map hook.
+
+Size classes advance in 8-byte steps through 128 bytes and then use eight classes per doubling
+through 64 KiB. Managed native payloads are 8-byte aligned; the currently supported heap field
+layouts require at most 8-byte alignment. Frame buffers and explicitly aligned raw allocations
+retain their separate alignment rules. Region blocks keep their byte size in a prefix outside
+the guest header and carry the independent region flag. Immortal frames and literals stay off
+the slab free path. Thread exit returns free blocks to process lists and retains partial slabs
+for the next thread record, while published objects continue to belong to their mappings.
+
+Native object headers still contain eight reserved bytes before tag/count. Wasm allocation and
+literal/debug layouts have not yet migrated to slab metadata or the 8-byte header. Returning
+completely empty slabs to the OS also remains pending; this migration keeps span metadata valid
+for the process lifetime.
 
 ## Validation status
 
@@ -477,8 +498,8 @@ at the user's request. No local result establishes native x86-64 or other-platfo
 
 ### Bounded, minimal runtime
 
-- Add side metadata for slab lifetime. Account for live objects, TLS/process free-list references,
-  cross-thread frees, published objects and arena tails before reclaiming a slab. Remove heap-map
+- Extend slab metadata with lifetime accounting for live objects and TLS/process free-list references,
+  cross-thread frees, published objects and partial slabs before reclaiming a slab. Remove heap-map
   and debug-enumeration entries before releasing storage.
 - Add mapping release to the platform ABI and migrate every native, wasm, injected-test and
   embedding implementation together. Bound retained idle slabs without slowing private allocation;

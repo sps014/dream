@@ -2,6 +2,11 @@
 
 #define REGION_MAX_DEPTH 8u
 #define REGION_PAYLOAD (4u << 20)
+#ifdef DREAM_WASM32
+#define REGION_ALIGNMENT 16u
+#else
+#define REGION_ALIGNMENT 8u
+#endif
 
 typedef struct region_chunk {
     struct region_chunk *previous;
@@ -74,10 +79,10 @@ static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag) {
         region_panic();
         return 0;
     }
-    size_t total = dream_region_block_bytes(((size_t)size + DREAM_BLOCK_HEADER + 15u) & ~(size_t)15u);
+    size_t total = dream_region_block_bytes(((size_t)size + DREAM_BLOCK_HEADER + REGION_ALIGNMENT - 1u) & ~(size_t)(REGION_ALIGNMENT - 1u));
     region_chunk *chunk = s->chunk;
     if (chunk == NULL || total > chunk->capacity - chunk->offset) {
-        size_t prefix = (sizeof(region_chunk) + 15u) & ~(size_t)15u;
+        size_t prefix = (sizeof(region_chunk) + REGION_ALIGNMENT - 1u) & ~(size_t)(REGION_ALIGNMENT - 1u);
         size_t capacity = prefix + (total > REGION_PAYLOAD ? total : REGION_PAYLOAD);
         dream_ptr pointer = dream_region_backing_malloc((dream_size)capacity);
         chunk = (region_chunk *)dream_p(pointer);

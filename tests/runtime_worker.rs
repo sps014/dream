@@ -43,6 +43,8 @@ fn worker_registry_grows_and_cleans_up_failed_starts() {
         "heap.c",
         "ownership.c",
         "heap_maps.c",
+        "heap_slabs.c",
+        "heap_large.c",
         "publish.c",
         "region.c",
         "weak.c",

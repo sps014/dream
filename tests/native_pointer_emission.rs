@@ -174,7 +174,7 @@ fn wasm_reference_boundary_remains_a_linear_memory_offset() {
 }
 
 #[test]
-fn string_literal_padding_uses_the_target_heap_header() {
+fn string_literal_block_starts_with_the_heap_header() {
     for target in [Target::native(), Target::wasm32()] {
         compile_test_pipeline_for(
             "fun literal(): string { return \"hello\"; }",
@@ -182,19 +182,12 @@ fn string_literal_padding_uses_the_target_heap_header() {
             |hir, types| {
                 let mir = dream_mir::lower::lower_program(hir, types);
                 let ir = emit_ll_for(&mir, types, target.clone());
-                let abi = dream_mir::abi::TargetAbi::for_target(target.spec());
-                let padding = abi.heap_header_size - abi.ptr_size - dream_mir::abi::TAG_FROM_DATA;
                 assert!(
                     ir.contains(&format!(
-                        "{{ i{}, [{} x i8], i32, i32, i32, i32,",
-                        abi.ptr_size * 8,
-                        padding
+                        "{{ i32, i32, i32, i32, [5 x i16] }} {{ i32 {}, i32 {}, i32 5,",
+                        dream_mir::abi::TAG_STRING,
+                        dream_mir::abi::DREAM_RC_IMMORTAL
                     )),
-                    "{}",
-                    ir
-                );
-                assert!(
-                    ir.contains(&format!("[{padding} x i8] zeroinitializer")),
                     "{}",
                     ir
                 );

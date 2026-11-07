@@ -21,7 +21,7 @@ fn frame_budget_includes_headers_and_alignment() {
     );
     let mut b = FunctionBuilder::new("wide", ctx.interner.void());
     let mut objects = Vec::new();
-    for _ in 0..40 {
+    for _ in 0..80 {
         let object = b.new_local(ty, None);
         b.assign(
             Place::Local(object),
@@ -42,8 +42,8 @@ fn frame_budget_includes_headers_and_alignment() {
     assert!(frame_alloc::run(&mut mir, &ctx.interner));
     assert_eq!(
         mir.frame_objects.len(),
-        32,
-        "forty 32-byte buffers exceed 1024 bytes"
+        64,
+        "eighty 16-byte buffers exceed 1024 bytes"
     );
 }
 

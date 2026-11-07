@@ -301,10 +301,10 @@ that validated table. A missing entry rejects the stale runtime cache before any
   word (`HEADER_LOCK_WORD_SIZE`), and retain/release for them use the atomic runtime helpers.
   Native allocation byte sizes and heap-header sizes use unsigned pointer-width `dream_size`
   (`size_t`); wasm32 keeps its i32 allocation ABI. Generated allocation operands are widened
-  before runtime-call coercion, so native sizes never pass through an i32 truncation. Native
-  headers are 16 bytes, with type information and the size class packed into the leading word;
-  large blocks store their size in a prefix. Tag/RC offsets relative to the payload are
-  unchanged. Array/string element counts remain language `int`.
+  before runtime-call coercion, so native sizes never pass through an i32 truncation. The heap
+  header is 8 bytes, `[tag:i32][rc:i32]`, on every target (`HEAP_HEADER_SIZE`); size classes and
+  block sizes live in allocator metadata outside it. String literals and frame buffers emit the
+  same header. Array/string element counts remain language `int`.
 - **Locks** pass the object identity to the native runtime's per-object registry, whose entry is
   removed before heap recycling. WASM passes the address of the in-object lock word instead.
 - **Managed stores** publish new children before installing them in shared fields or arrays.

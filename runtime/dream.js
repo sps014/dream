@@ -56,7 +56,7 @@ const TAGS = {
   KIND_MASK: 805306368,
   FROM_DATA: 8,
 };
-const HEAP_HEADER_SIZE = 16;
+const HEAP_HEADER_SIZE = 8;
 const LEN_PREFIX_SIZE = 8;
 
 // ----- core.js -----

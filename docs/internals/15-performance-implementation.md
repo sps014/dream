@@ -435,8 +435,10 @@ of the descriptor identity.
 
 `dream_object_info` resolves metadata from the tag. `dream_set_type` installs the descriptor's
 tag while preserving allocation flags, including the implicit sharing of previously untyped
-storage. There is no per-object metadata pointer. Native allocation uses the slab metadata
-described below; wasm32 keeps its block size and reserved word. Both headers remain 16 bytes. The 8-byte header migration remains pending.
+storage. There is no per-object metadata pointer. Every target uses the same 8-byte
+`[tag:i32][rc:i32]` heap header, so string literals, frame buffers and the JS host share one
+layout. The tag bits are fully assigned, which is why allocator metadata (size class, block
+size, free links) lives outside the header, as described below.
 
 ### Native slab metadata
 
@@ -456,10 +458,20 @@ the guest header and carry the independent region flag. Immortal frames and lite
 the slab free path. Thread exit returns free blocks to process lists and retains partial slabs
 for the next thread record, while published objects continue to belong to their mappings.
 
-Native object headers still contain eight reserved bytes before tag/count. Wasm allocation and
-literal/debug layouts have not yet migrated to slab metadata or the 8-byte header. Returning
-completely empty slabs to the OS also remains pending; this migration keeps span metadata valid
-for the process lifetime.
+Returning completely empty slabs to the OS remains pending; span metadata stays valid for the
+process lifetime.
+
+### Wasm32 span and page metadata
+
+Wasm32 uses the native size-class table. A one-byte-per-64 KiB-page map in the runtime metadata
+area records each page as unused, a span of one class, or a large block. Class spans are
+homogeneous, at least 64 KiB, and aligned to their own power-of-two size, so a block's class and
+slot boundary follow from its address. Large blocks carry an 8-byte prefix holding their size and
+free-list link, and free large blocks sit on an address-ordered list that merges neighbours on
+release. Padding skipped to align a span becomes a free large block. Each thread pops from a
+private per-class free list; shared and locked allocations use the process lists, and thread
+exit hands its free blocks and unused span tails back to them. Region blocks use the same 8-byte
+size prefix as native.
 
 ## Validation status
 

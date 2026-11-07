@@ -11,13 +11,9 @@ dream_ptr dream_region_activate(char *block, dream_size total, int32_t tag);
 void dream_region_account_free(uint32_t count);
 void dream_region_heap_mode(int active);
 
-/* The native prefix is outside the guest header and is owned by the surrounding region. */
+/* The size prefix is outside the guest header and is owned by the surrounding region. */
 static inline size_t dream_region_block_bytes(size_t total) {
-#ifdef DREAM_WASM32
-    return total;
-#else
     return total + DREAM_REGION_PREFIX;
-#endif
 }
 
 #ifdef DREAM_WASM32

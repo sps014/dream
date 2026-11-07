@@ -52,8 +52,8 @@ static void dream_combinator_progress(dream_ptr w, dream_ptr child) { (void)w; (
 #include "../crates/dream-mir/src/runtime/c/sys/native/foreign_queue.h"
 
 static dream_ptr frame(void) {
-    void *p = calloc(1, NATIVE_HEAP_HEADER_SIZE + F_SLOTS); assert(p);
-    dream_ptr f = (dream_ptr)((char *)p + NATIVE_HEAP_HEADER_SIZE);
+    void *p = calloc(1, HEAP_HEADER_SIZE + F_SLOTS); assert(p);
+    dream_ptr f = (dream_ptr)((char *)p + HEAP_HEADER_SIZE);
     *dream_rc_word(f) = 2;
     *dream_tag_word(f) = TAG_FUTURE;
     i32_at(f, F_POLL)[0] = 1;
@@ -70,7 +70,7 @@ static void frame_free(dream_ptr f) {
     if (i32_at(f, F_NEXT)[0] == 1) { scheduler_drop_start_retain(f); }
     if (i32_at(f, F_POLL)[0]) { assert(dream_rc_last_raw(f)); }
     assert(__atomic_load_n(dream_rc_word(f), __ATOMIC_RELAXED) == 0);
-    free((char *)dream_p(f) - NATIVE_HEAP_HEADER_SIZE);
+    free((char *)dream_p(f) - HEAP_HEADER_SIZE);
 }
 
 struct batch { dream_ptr frames[8]; };

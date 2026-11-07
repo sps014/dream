@@ -56,14 +56,14 @@ void dream_release_object(dream_ptr object) {
     if (--*rc == 0) {
         dream_callback_unregister(object);
         destroyed += 1;
-        free(dream_p(object - NATIVE_HEAP_HEADER_SIZE));
+        free(dream_p(object - HEAP_HEADER_SIZE));
     }
 }
 
 static dream_ptr callback_new(void) {
-    char *block = (char *)calloc(1, NATIVE_HEAP_HEADER_SIZE + 8);
+    char *block = (char *)calloc(1, HEAP_HEADER_SIZE + 8);
     assert(block);
-    dream_ptr object = (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
+    dream_ptr object = (dream_ptr)(block + HEAP_HEADER_SIZE);
     *dream_rc_word(object) = 1;
     dream_callback_register(object);
     return object;

@@ -434,8 +434,10 @@ fn rc_golden_frame_object_buffer_fits_the_constructed_class() {
         })
         .collect();
     assert!(
-        sizes.iter().any(|&bytes| bytes >= 16 + 4),
-        "the frame buffer must hold the 16-byte header and the int field, \
+        sizes
+            .iter()
+            .any(|&bytes| bytes >= u64::from(dream_mir::abi::HEAP_HEADER_SIZE) + 4),
+        "the frame buffer must hold the heap header and the int field, \
          not just the header an `object` local declares:\n{}",
         main.body
     );

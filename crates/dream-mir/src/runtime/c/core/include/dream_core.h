@@ -92,12 +92,6 @@ dream_ptr dream_g0_get(void);
 void dream_g0_set(dream_ptr v);
 int32_t dream_instance_tid(void);
 int32_t dream_next_tid(void);
-int32_t dream_priv_slab_get(void);
-void dream_priv_slab_set(int32_t v);
-int32_t dream_priv_off_get(void);
-void dream_priv_off_set(int32_t v);
-int32_t dream_priv_cap_get(void);
-void dream_priv_cap_set(int32_t v);
 int32_t dream_priv_table_get(void);
 void dream_priv_table_set(int32_t v);
 int32_t dream_priv_fast_get(void);
@@ -137,12 +131,14 @@ DREAM_ALWAYS_INLINE uint8_t *dream_array_bytes(dream_ptr array) {
     return (uint8_t *)dream_p(array) + LEN_PREFIX_SIZE;
 }
 
-#ifdef DREAM_WASM32
-#define DREAM_BLOCK_HEADER HEAP_HEADER_SIZE
-#else
-#define DREAM_BLOCK_HEADER NATIVE_HEAP_HEADER_SIZE
-
-#endif
+/* Every target's guest header. Allocator metadata lives outside it. */
+typedef struct {
+    int32_t tag;
+    int32_t rc;
+} dream_heap_header;
+_Static_assert(sizeof(dream_heap_header) == HEAP_HEADER_SIZE, "heap header size");
+_Static_assert(offsetof(dream_heap_header, tag) == HEAP_HEADER_SIZE - TAG_FROM_DATA, "heap tag offset");
+_Static_assert(offsetof(dream_heap_header, rc) == HEAP_HEADER_SIZE - RC_FROM_DATA, "heap reference-count offset");
 
 
 #ifndef DREAM_STR_SLICE
@@ -324,30 +320,54 @@ DREAM_ALWAYS_INLINE dream_ptr dream_singleton_get(dream_ptr *slot) {
 }
 
 int dream_region_active(void);
+/* Eight-byte classes through 128 bytes, then eight classes per doubling through 64KiB. */
+#define DREAM_NCLASS 88
+#define DREAM_MAX_CLASS_BYTES 65536
+/* Region blocks keep their byte size in a prefix outside the guest header, because one chunk
+ * holds mixed classes. */
+#define DREAM_REGION_PREFIX 8u
+
+/* `total` includes the header, so it is never zero. */
+DREAM_ALWAYS_INLINE int dream_size_class(uint32_t total) {
+    uint32_t k;
+    if (total <= 128u) {
+        return (int)((total - 1u) >> 3);
+    }
+    k = 31u - (uint32_t)__builtin_clz(total - 1u);
+    return (int)(16u + (k - 7u) * 8u + ((total - 1u) >> (k - 3u)) - 8u);
+}
+
+DREAM_ALWAYS_INLINE int32_t dream_class_bytes(int idx) {
+    uint32_t j;
+    if (idx < 16) {
+        return (idx + 1) << 3;
+    }
+    j = (uint32_t)idx - 16u;
+    return (int32_t)((9u + (j & 7u)) << (4u + (j >> 3)));
+}
+
+/* Block bytes for a payload of `size`: payloads round to eight bytes and hold at least a
+ * free-list link. */
+DREAM_ALWAYS_INLINE size_t dream_block_need(size_t size) {
+    return (((size < 8u ? 8u : size) + 7u) & ~(size_t)7u) + HEAP_HEADER_SIZE;
+}
+
+DREAM_ALWAYS_INLINE int32_t *dream_block_tag(char *block) { return &((dream_heap_header *)block)->tag; }
+
 #ifdef DREAM_WASM32
 dream_ptr dream_malloc(dream_size size, int32_t tag);
 /* Recycle a live block without `dream_str_fini`. Typed `destroy_*` for classes/arrays/unions
  * uses this; string destroy still goes through `dream_free`. */
 void dream_recycle(dream_ptr ptr);
+/* Bytes from the header to the end of the block; zero outside the managed heap. */
+size_t dream_block_total(char *block);
 #else
-/* Eight-byte classes through 128 bytes, then eight classes per doubling through 64KiB. */
-#define DREAM_NCLASS 88
-#define DREAM_MAX_CLASS_BYTES 65536
 #define DREAM_CLASS_LARGE 0xffu
 #define DREAM_LARGE_PREFIX 16u
-#define DREAM_REGION_PREFIX 8u
 #define DREAM_SLAB_BYTES (1u << 18)
 #define DREAM_SLAB_PREFIX 64u
 #define DREAM_TAG_FREED 0x7fffffff
 
-typedef struct {
-    unsigned char reserved[8];
-    int32_t tag;
-    int32_t rc;
-} dream_heap_header;
-_Static_assert(sizeof(dream_heap_header) == NATIVE_HEAP_HEADER_SIZE, "native header size");
-_Static_assert(offsetof(dream_heap_header, tag) == NATIVE_HEAP_HEADER_SIZE - TAG_FROM_DATA, "native tag offset");
-_Static_assert(offsetof(dream_heap_header, rc) == NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA, "native reference-count offset");
 
 typedef struct dream_heap_span {
     uint32_t cls;
@@ -360,23 +380,22 @@ DREAM_ALWAYS_INLINE dream_heap_span *dream_block_span(const char *block) {
     return (dream_heap_span *)((uintptr_t)block & ~(uintptr_t)(DREAM_SLAB_BYTES - 1u));
 }
 DREAM_ALWAYS_INLINE unsigned dream_block_class(const char *block) { return dream_block_span(block)->cls; }
-DREAM_ALWAYS_INLINE int32_t *dream_block_tag(char *block) { return &((dream_heap_header *)block)->tag; }
 DREAM_ALWAYS_INLINE size_t *dream_large_size(char *block) { return (size_t *)(block - DREAM_LARGE_PREFIX + 8); }
 DREAM_ALWAYS_INLINE uintptr_t *dream_large_state(char *block) { return (uintptr_t *)(block - DREAM_LARGE_PREFIX); }
 
 /* Links stay poisoned outside allocator accesses, including the first word of a freed payload. */
 DREAM_ALWAYS_INLINE char *dream_block_next(char *block) {
     char *next;
-    DREAM_UNPOISON(block + NATIVE_HEAP_HEADER_SIZE, 8);
-    memcpy(&next, block + NATIVE_HEAP_HEADER_SIZE, sizeof(next));
-    DREAM_POISON(block + NATIVE_HEAP_HEADER_SIZE, 8);
+    DREAM_UNPOISON(block + HEAP_HEADER_SIZE, 8);
+    memcpy(&next, block + HEAP_HEADER_SIZE, sizeof(next));
+    DREAM_POISON(block + HEAP_HEADER_SIZE, 8);
     return next;
 }
 DREAM_ALWAYS_INLINE void dream_block_link(char *block, char *next) {
     *dream_block_tag(block) = DREAM_TAG_FREED;
-    DREAM_UNPOISON(block + NATIVE_HEAP_HEADER_SIZE, 8);
-    memcpy(block + NATIVE_HEAP_HEADER_SIZE, &next, sizeof(next));
-    DREAM_POISON(block + NATIVE_HEAP_HEADER_SIZE, 8);
+    DREAM_UNPOISON(block + HEAP_HEADER_SIZE, 8);
+    memcpy(block + HEAP_HEADER_SIZE, &next, sizeof(next));
+    DREAM_POISON(block + HEAP_HEADER_SIZE, 8);
 }
 
 char *dream_slab_bump(dream_heap_span **current, unsigned cls, int locked);
@@ -406,36 +425,15 @@ extern _Thread_local dream_heap_tls dream_heap;
 dream_ptr dream_malloc_slow(dream_size size, int32_t tag);
 void dream_recycle_slow(dream_ptr ptr);
 
-/* `total` includes the header, so it is never zero. */
-DREAM_ALWAYS_INLINE int dream_size_class(uint32_t total) {
-    uint32_t k;
-    if (total <= 128u) {
-        return (int)((total - 1u) >> 3);
-    }
-    k = 31u - (uint32_t)__builtin_clz(total - 1u);
-    return (int)(16u + (k - 7u) * 8u + ((total - 1u) >> (k - 3u)) - 8u);
-}
-
-DREAM_ALWAYS_INLINE int32_t dream_class_bytes(int idx) {
-    uint32_t j;
-    if (idx < 16) {
-        return (idx + 1) << 3;
-    }
-    j = (uint32_t)idx - 16u;
-    return (int32_t)((9u + (j & 7u)) << (4u + (j >> 3)));
-}
-
-/* Region blocks use an explicit size prefix because one chunk can contain mixed classes. */
 DREAM_ALWAYS_INLINE size_t dream_block_total(char *block) {
     if (*dream_block_tag(block) & TAG_REGION) { return *(size_t *)(block - DREAM_REGION_PREFIX); }
     dream_heap_span *span = dream_block_span(block);
     return span->cls < DREAM_NCLASS ? span->block_bytes : *dream_large_size(block);
 }
-DREAM_ALWAYS_INLINE int dream_block_fits(char *block, size_t need) { return dream_block_total(block) >= need; }
 
 DREAM_ALWAYS_INLINE void dream_block_activate(char *block, unsigned cls, int32_t tag) {
     size_t total = cls < DREAM_NCLASS ? (size_t)dream_class_bytes((int)cls) : *dream_large_size(block);
-    DREAM_UNPOISON(block + NATIVE_HEAP_HEADER_SIZE, total - NATIVE_HEAP_HEADER_SIZE);
+    DREAM_UNPOISON(block + HEAP_HEADER_SIZE, total - HEAP_HEADER_SIZE);
     dream_heap_header *header = (dream_heap_header *)block;
     header->tag = tag;
     header->rc = dream_rc_init(tag);
@@ -454,14 +452,14 @@ DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c, uint64_t n) {
 DREAM_ALWAYS_INLINE dream_ptr dream_malloc(dream_size size, int32_t tag) {
     dream_heap_tls *h = &dream_heap;
     dream_heap_counters *c = h->fast;
-    if (DREAM_LIKELY(c != NULL && size <= DREAM_MAX_CLASS_BYTES - NATIVE_HEAP_HEADER_SIZE)) {
-        int idx = dream_size_class(((((uint32_t)size < 8u ? 8u : (uint32_t)size) + 7u) & ~7u) + NATIVE_HEAP_HEADER_SIZE);
+    if (DREAM_LIKELY(c != NULL && size <= DREAM_MAX_CLASS_BYTES - HEAP_HEADER_SIZE)) {
+        int idx = dream_size_class((uint32_t)dream_block_need((size_t)size));
         char *block = h->free[idx];
         if (DREAM_LIKELY(block != NULL)) {
             h->free[idx] = dream_block_next(block);
             dream_block_activate(block, (unsigned)idx, tag);
             dream_heap_count(&c->allocs, UINT64_C(1));
-            return (dream_ptr)(block + NATIVE_HEAP_HEADER_SIZE);
+            return (dream_ptr)(block + HEAP_HEADER_SIZE);
         }
     }
     return dream_malloc_slow(size, tag);
@@ -480,7 +478,7 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
     }
     h = &dream_heap;
     c = h->fast;
-    block = (char *)dream_p(ptr) - NATIVE_HEAP_HEADER_SIZE;
+    block = (char *)dream_p(ptr) - HEAP_HEADER_SIZE;
     if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) { return; }
     tag = *dream_block_tag(block);
     if (DREAM_UNLIKELY(c == NULL || (tag & (DREAM_TAG_WEAK_TARGET | TAG_SHARED | TAG_REGION)) != 0)) {
@@ -493,26 +491,25 @@ DREAM_ALWAYS_INLINE void dream_recycle(dream_ptr ptr) {
         return;
     }
     *dream_block_tag(block) = DREAM_TAG_FREED;
-    DREAM_POISON(block + NATIVE_HEAP_HEADER_SIZE, (size_t)dream_class_bytes((int)idx) - NATIVE_HEAP_HEADER_SIZE);
+    DREAM_POISON(block + HEAP_HEADER_SIZE, (size_t)dream_class_bytes((int)idx) - HEAP_HEADER_SIZE);
     dream_heap_count(&c->frees, UINT64_C(1));
     dream_block_link(block, h->free[idx]);
     h->free[idx] = block;
 }
 #endif
 
+DREAM_ALWAYS_INLINE int dream_block_fits(char *block, size_t need) { return dream_block_total(block) >= need; }
+
 /* A class instance the compiler proved never outlives its function, built in a frame buffer of
- * `DREAM_BLOCK_HEADER + size` bytes (16-aligned): a live header with an immortal count, so
+ * `HEAP_HEADER_SIZE + size` bytes (8-aligned): a live header with an immortal count, so
  * retains and releases on it are no-ops and nothing frees it. The compiler releases its strong
  * fields where its count would have reached zero. */
 DREAM_ALWAYS_INLINE dream_ptr dream_frame_object(void *block, dream_size size, int32_t tag) {
     char *b = (char *)block;
-    memset(b, 0, (size_t)DREAM_BLOCK_HEADER + (size_t)size);
-#ifdef DREAM_WASM32
-    *(dream_size *)b = DREAM_BLOCK_HEADER + size;
-#endif
-    *(int32_t *)(b + DREAM_BLOCK_HEADER - TAG_FROM_DATA) = tag;
-    *(int32_t *)(b + DREAM_BLOCK_HEADER - RC_FROM_DATA) = DREAM_RC_IMMORTAL;
-    return (dream_ptr)(b + DREAM_BLOCK_HEADER);
+    memset(b, 0, (size_t)HEAP_HEADER_SIZE + (size_t)size);
+    *(int32_t *)(b + HEAP_HEADER_SIZE - TAG_FROM_DATA) = tag;
+    *(int32_t *)(b + HEAP_HEADER_SIZE - RC_FROM_DATA) = DREAM_RC_IMMORTAL;
+    return (dream_ptr)(b + HEAP_HEADER_SIZE);
 }
 
 /* Nonzero while a `defer` scope is open on this thread and no drain is running: the only
@@ -638,7 +635,7 @@ DREAM_ALWAYS_INLINE int32_t dream_string_count_add(int32_t a, int32_t b) {
 
 DREAM_ALWAYS_INLINE dream_size dream_string_bytes(int32_t units) {
     if (DREAM_UNLIKELY(units < 0 ||
-        (size_t)units > (DREAM_SIZE_MAX - DREAM_BLOCK_HEADER - 23u) / 2u)) {
+        (size_t)units > (DREAM_SIZE_MAX - HEAP_HEADER_SIZE - 23u) / 2u)) {
         DREAM_PANIC_LITERAL(u"panic: string size exceeds the supported limit");
     }
     return (dream_size)units * 2 + STRING_HEADER_SIZE;
@@ -731,13 +728,9 @@ DREAM_ALWAYS_INLINE int dream_str_can_hold(dream_ptr p, int32_t units) {
     if (!dream_str_unique_owned(p)) {
         return 0;
     }
-    char *block = (char *)dream_p(p) - DREAM_BLOCK_HEADER;
-    size_t need = DREAM_BLOCK_HEADER + (size_t)dream_string_bytes(units);
-#ifdef DREAM_WASM32
-    return *(dream_size *)block >= need;
-#else
+    char *block = (char *)dream_p(p) - HEAP_HEADER_SIZE;
+    size_t need = HEAP_HEADER_SIZE + (size_t)dream_string_bytes(units);
     return dream_block_fits(block, need);
-#endif
 }
 
 DREAM_ALWAYS_INLINE void dream_concat_fill(dream_ptr p, dream_ptr a, dream_ptr b, int32_t sc1,

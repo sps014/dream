@@ -27,5 +27,5 @@ export const TAGS = {
   KIND_MASK: 805306368,
   FROM_DATA: 8,
 };
-export const HEAP_HEADER_SIZE = 16;
+export const HEAP_HEADER_SIZE = 8;
 export const LEN_PREFIX_SIZE = 8;

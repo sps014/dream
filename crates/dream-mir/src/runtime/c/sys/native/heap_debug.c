@@ -112,7 +112,7 @@ static void walk_heap(block_visitor visit, void *context) {
 }
 
 static int32_t block_rc(char *block) {
-    return *(int32_t *)(block + NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA);
+    return *(int32_t *)(block + HEAP_HEADER_SIZE - RC_FROM_DATA);
 }
 
 static void tally_leak(void *context, char *block, size_t sz) {
@@ -126,7 +126,7 @@ static void tally_leak(void *context, char *block, size_t sz) {
         int32_t tag = raw_tag & TAG_VALUE_MASK;
         dream_leak_tally(scan, tag, 1, (uint64_t)sz);
         if (tag == TAG_STRING) {
-            save_string(scan, block + NATIVE_HEAP_HEADER_SIZE);
+            save_string(scan, block + HEAP_HEADER_SIZE);
         }
     }
 }

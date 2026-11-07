@@ -62,15 +62,14 @@ static void slab_layouts(void) {
         assert(cls == 0 || (uint32_t)dream_class_bytes(cls - 1) < total);
     }
     int saw_eight_alignment = 0;
-    for (int cls = dream_size_class(NATIVE_HEAP_HEADER_SIZE + 8); cls < DREAM_NCLASS; ++cls) {
+    for (int cls = dream_size_class(HEAP_HEADER_SIZE + 8); cls < DREAM_NCLASS; ++cls) {
         dream_ptr values[3];
         for (int i = 0; i < 3; ++i) {
-            values[i] = dream_malloc((size_t)dream_class_bytes(cls) - NATIVE_HEAP_HEADER_SIZE, TAG_ARRAY);
-            char *block = (char *)dream_p(values[i]) - NATIVE_HEAP_HEADER_SIZE;
+            values[i] = dream_malloc((size_t)dream_class_bytes(cls) - HEAP_HEADER_SIZE, TAG_ARRAY);
+            char *block = (char *)dream_p(values[i]) - HEAP_HEADER_SIZE;
             assert((uintptr_t)values[i] % 8 == 0);
             saw_eight_alignment |= (uintptr_t)values[i] % 16 != 0;
             assert(dream_block_class(block) == (unsigned)cls);
-            memset(block, 0xa5, 8);
             assert(dream_block_total(block) == (size_t)dream_class_bytes(cls));
             assert(dream_heap_is_live(values[i]));
         }
@@ -85,9 +84,7 @@ static void slab_layouts(void) {
     dream_region_enter();
     dream_ptr p = dream_malloc(19, TAG_ARRAY);
     assert(*dream_tag_word(p) & TAG_REGION);
-    size_t total = dream_block_total((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE);
-    memset((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE, 0xa5, 8);
-    assert(dream_block_total((char *)dream_p(p) - NATIVE_HEAP_HEADER_SIZE) == total);
+    assert(dream_block_total((char *)dream_p(p) - HEAP_HEADER_SIZE) >= 19 + HEAP_HEADER_SIZE);
     dream_set_type(p, &array_info);
     assert(*dream_tag_word(p) & TAG_REGION);
     assert(dream_object_info(p) == &array_info);

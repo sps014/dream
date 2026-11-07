@@ -31,8 +31,7 @@ fn data_global(l: &mut Lcx<'_>, name: &str, ty: Ty, init: String, constant: bool
     );
 }
 
-/// Immortal string blocks use the target's heap header,
-/// then `{ len, hash, units }`.
+/// Immortal string blocks are the heap header `{ tag, rc }`, then `{ len, hash, units }`.
 /// They are `constant`: the runtime never writes an immortal block (retain/release skip the
 /// immortal rc, the hash is precomputed, in-place rebuilds require a unique owner), so LLVM may
 /// fold a literal's length, slice flag and units.
@@ -46,11 +45,7 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
         let units: Vec<u16> = s.encode_utf16().collect();
         let n = units.len().max(1) as u64;
         let arr = Ty::Array(n, Box::new(Ty::I16));
-        let size_ty = l.word();
-        let abi = l.cx.target.abi();
-        let padding =
-            Ty::bytes((abi.heap_header_size - abi.ptr_size - crate::abi::TAG_FROM_DATA) as u64);
-        let ty = string_block_type(abi, arr.clone());
+        let ty = string_block_type(arr.clone());
         let elems = if units.is_empty() {
             "i16 0".to_string()
         } else {
@@ -61,7 +56,7 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
                 .join(", ")
         };
         let init = format!(
-            "{{ {size_ty} 0, {padding} zeroinitializer, i32 {}, i32 {}, i32 {}, i32 {}, {arr} [{elems}] }}",
+            "{{ i32 {}, i32 {}, i32 {}, i32 {}, {arr} [{elems}] }}",
             abi::TAG_STRING,
             i32::MIN,
             units.len(),
@@ -71,12 +66,10 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
     }
 }
 
-fn string_block_type(abi: crate::abi::TargetAbi, units: Ty) -> Ty {
+fn string_block_type(units: Ty) -> Ty {
     Ty::Struct {
         packed: false,
         fields: vec![
-            Ty::Int(abi.ptr_size * 8),
-            Ty::bytes((abi.heap_header_size - abi.ptr_size - crate::abi::TAG_FROM_DATA) as u64),
             Ty::I32,
             Ty::I32,
             Ty::I32,
@@ -571,27 +564,13 @@ mod string_layout_tests {
     use super::*;
 
     #[test]
-    fn literal_headers_follow_selected_pointer_width() {
-        for triple in [
-            "i686-unknown-linux-gnu",
-            "x86_64-unknown-linux-gnu",
-            "wasm32-unknown-unknown",
-        ] {
-            let target = dream_abi::target::TargetSpec::parse(triple).unwrap();
-            let abi = crate::abi::TargetAbi::for_target(&target);
-            let Ty::Struct { fields, .. } = string_block_type(abi, Ty::Array(1, Box::new(Ty::I16)))
-            else {
-                unreachable!()
-            };
-            let Ty::Array(padding, _) = &fields[1] else {
-                unreachable!()
-            };
-            assert_eq!(
-                abi.ptr_size as u64 + *padding + crate::abi::TAG_FROM_DATA as u64,
-                abi.heap_header_size as u64
-            );
-            assert_eq!(fields[0], Ty::Int(target.ptr_size * 8));
-            assert_eq!(fields[2..6], vec![Ty::I32; 4]);
-        }
+    fn literal_header_is_the_heap_header() {
+        let Ty::Struct { fields, .. } = string_block_type(Ty::Array(1, Box::new(Ty::I16))) else {
+            unreachable!()
+        };
+        assert_eq!(fields[..4], vec![Ty::I32; 4]);
+        assert_eq!(crate::abi::HEAP_HEADER_SIZE, 8);
+        assert_eq!(crate::abi::TAG_FROM_DATA, 8);
+        assert_eq!(crate::abi::RC_FROM_DATA, 4);
     }
 }

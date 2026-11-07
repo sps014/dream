@@ -36,8 +36,8 @@ void dream_panic(dream_ptr message) {
 static void check_block(dream_ptr ptr, size_t payload) {
     assert(ptr && (uintptr_t)ptr % 8 == 0);
     assert(dream_heap_is_live(ptr));
-    assert(dream_block_total((char *)dream_p(ptr) - DREAM_BLOCK_HEADER) >=
-           payload + DREAM_BLOCK_HEADER);
+    assert(dream_block_total((char *)dream_p(ptr) - HEAP_HEADER_SIZE) >=
+           payload + HEAP_HEADER_SIZE);
     char *bytes = dream_p(ptr);
     bytes[8] = 17;
     bytes[payload - 1] = 29;

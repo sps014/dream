@@ -57,8 +57,8 @@ static void release_stale_large(char *stale) {
     size_t released = 0;
     for (char *block = stale; block != NULL; block = dream_block_next(block)) {
         size_t sz = *dream_large_size(block);
-        char *start = block + NATIVE_HEAP_HEADER_SIZE + 8;
-        size_t length = sz - NATIVE_HEAP_HEADER_SIZE - 8;
+        char *start = block + HEAP_HEADER_SIZE + 8;
+        size_t length = sz - HEAP_HEADER_SIZE - 8;
         /* Injected release hooks may overwrite the span whose contents they discard. */
         DREAM_UNPOISON(start, length);
         size_t bytes = dream_platform_current->release(start, length);

@@ -42,14 +42,14 @@ void dream_future_fini(dream_ptr f) {
     /* The context is a CancellationToken: its last owner must run the typed glue that
      * releases the token's source, which a bare free skips. */
     dream_release_object(context);
-    if (i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_CHILDREN)[0]) {
-        dream_cancellation_release((uintptr_t)ptr_at(f, F_CHILDREN)[0]);
-        ptr_at(f, F_CHILDREN)[0] = 0;
+    if (i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_SOURCE)[0]) {
+        dream_cancellation_release((uintptr_t)ptr_at(f, F_SOURCE)[0]);
+        ptr_at(f, F_SOURCE)[0] = 0;
     }
     int32_t kind = i32_at(f, F_KIND)[0];
     if (kind == KIND_ALL || kind == KIND_RACE) {
-        dream_ptr children = ptr_at(f, F_CHILDREN)[0];
-        int32_t count = i32_at(f, F_COUNT)[0];
+        dream_ptr children = combinator_state(f)->children;
+        int32_t count = combinator_state(f)->count;
         for (int32_t i = 0; children && i < count; ++i) {
             dream_ptr child = arr_get(children, i);
             if (child && ptr_at(child, F_WAKER)[0] == f) {
@@ -107,8 +107,8 @@ void dream_start(dream_ptr f) {
     if (kind == KIND_ALL || kind == KIND_RACE) {
         /* Combinators are passive (no poll fn); starting one starts its members. Members that
          * are themselves combinators recurse through dream_start above. */
-        dream_ptr kids = ptr_at(f, F_CHILDREN)[0];
-        int32_t n = i32_at(f, F_COUNT)[0];
+        dream_ptr kids = combinator_state(f)->children;
+        int32_t n = combinator_state(f)->count;
         int32_t i;
         for (i = 0; i < n; i++) {
             dream_start(arr_get(kids, i));
@@ -165,14 +165,14 @@ void dream_task_attach(dream_ptr future, dream_ptr token) {
 }
 
 int32_t dream_task_is_protected(dream_ptr future) {
-    return future && i32_at(future, F_KIND)[0] == 0 && ptr_at(future, F_CHILDREN)[0] != 0;
+    return future && i32_at(future, F_KIND)[0] == 0 && ptr_at(future, F_SOURCE)[0] != 0;
 }
 
 void dream_task_protect(dream_ptr owner) {
     uintptr_t source = *(uintptr_t *)dream_p(owner);
-    if (!poll_current || ptr_at(poll_current, F_CHILDREN)[0]) { return; }
+    if (!poll_current || ptr_at(poll_current, F_SOURCE)[0]) { return; }
     dream_cancellation_retain(source);
-    ptr_at(poll_current, F_CHILDREN)[0] = (dream_ptr)source;
+    ptr_at(poll_current, F_SOURCE)[0] = (dream_ptr)source;
 }
 
 /* An event is registered synchronously, before a caller can abandon its wait. */
@@ -272,8 +272,8 @@ static int awaited_child_unshared(dream_ptr child) {
 void dream_cancel(dream_ptr f) {
     int in_flight = 0;
     /* Scoped futures remain schedulable until every owned child has settled. */
-    if (f && !status_of(f) && i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_CHILDREN)[0]) {
-        dream_cancellation_cancel((uintptr_t)ptr_at(f, F_CHILDREN)[0]);
+    if (f && !status_of(f) && i32_at(f, F_KIND)[0] == 0 && ptr_at(f, F_SOURCE)[0]) {
+        dream_cancellation_cancel((uintptr_t)ptr_at(f, F_SOURCE)[0]);
         return;
     }
     if (!f) {

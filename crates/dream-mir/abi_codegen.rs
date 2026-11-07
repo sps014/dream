@@ -47,21 +47,17 @@ const FIELDS: &[&str] = &[
     "WAKER",
     "AWAITING",
     "KIND",
-    "CHILDREN",
-    "COUNT",
-    "REMAINING",
+    "SOURCE",
+    "TIMER_INDEX",
     "SCHEDULER",
     "NEXT",
     "QUEUED",
-    "ESIZE",
     "WIDE",
     "CONTEXT",
     "SLOTS",
 ];
 
 fn write_layout(out: &mut String, suffix: &str, f: registry::FutureLayout) {
-    // wasm32 reuses the wide slot for its combinator element size.
-    let esize = if suffix == "WASM" { f.wide } else { f.esize };
     let values = [
         f.state,
         f.status,
@@ -70,13 +66,11 @@ fn write_layout(out: &mut String, suffix: &str, f: registry::FutureLayout) {
         f.waker,
         f.awaiting,
         f.kind,
-        f.children,
-        f.count,
-        f.remaining,
+        f.source,
+        f.timer_index,
         f.scheduler,
         f.next,
         f.queued,
-        esize,
         f.wide,
         f.context,
         f.slots,
@@ -125,8 +119,8 @@ mod tests {
         let h = header();
         assert!(h.contains("#if UINTPTR_MAX == UINT64_MAX"));
         assert!(h.contains("#elif UINTPTR_MAX == UINT32_MAX"));
-        assert!(h.contains("#define F_SLOTS_NATIVE 96"));
-        assert!(h.contains("#define F_SLOTS_NATIVE 72"));
-        assert!(h.contains("#define F_SLOTS_WASM 72"));
+        assert!(h.contains("#define F_SLOTS_NATIVE 88"));
+        assert!(h.contains("#define F_SLOTS_NATIVE 64"));
+        assert!(h.contains("#define F_SLOTS_WASM 64"));
     }
 }

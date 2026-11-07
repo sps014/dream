@@ -182,3 +182,33 @@ async fun async_duplicate_host(): void {
     second_delay(1).await;
     Time.delay(1).await;
 }
+
+async fun frame_text(value: string): string {
+    Time.sleep(1).await;
+    return value;
+}
+
+async fun frame_long(value: long): long {
+    Time.sleep(1).await;
+    return value;
+}
+
+@test
+@timeout(180000)
+async fun async_combinator_trailing_state(): void {
+    let left = Promise.all([frame_text("left"), frame_text("right")]);
+    let right = Promise.all([frame_text("third")]);
+    let nested = Promise.all([left, right]).await;
+    Assert.eq(nested[0][0], "left");
+    Assert.eq(nested[0][1], "right");
+    Assert.eq(nested[1][0], "third");
+
+    let wide = Promise.all([frame_long(4294967297L), frame_long(8589934594L)]).await;
+    Assert.eq(wide[0], 4294967297L);
+    Assert.eq(wide[1], 8589934594L);
+    let winner = Promise.race([frame_long(4294967297L), frame_long(8589934594L)]).await;
+    Assert.eq(winner, 4294967297L);
+
+    let empty: Future<string>[] = [];
+    Assert.eq(Promise.all(empty).await.length, 0);
+}

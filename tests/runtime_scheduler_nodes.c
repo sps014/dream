@@ -50,7 +50,7 @@ static void timer_heap_order(unsigned count) {
     }
     for (unsigned i = 0; i < count; i += 3) { timer_cancel(frame(i)); }
     for (unsigned i = 0; i < count; i += 3) {
-        assert(i32_at(frame(i), F_REMAINING)[0] == 0);
+        assert(i32_at(frame(i), F_TIMER_INDEX)[0] == 0);
         timer_cancel(frame(i));
     }
     int64_t last_due = -1;
@@ -58,7 +58,7 @@ static void timer_heap_order(unsigned count) {
     while (timer_peek()) {
         dream_ptr f = timer_pop();
         unsigned i = frame_index(f);
-        assert(i % 3 != 0 && i32_at(f, F_REMAINING)[0] == 0);
+        assert(i % 3 != 0 && i32_at(f, F_TIMER_INDEX)[0] == 0);
         assert(dues[i] > last_due || (dues[i] == last_due && i > last_index));
         last_due = dues[i];
         last_index = i;

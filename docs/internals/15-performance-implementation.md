@@ -360,6 +360,27 @@ cancellation. Elision may pair a retain and release only within one suspension-f
 resume block or the drop function discharges it exactly once. The facts are per-region liveness
 of owning slots, computed from the same block graph the poll backend spills from.
 
+### Runtime layout follow-up
+
+Combinators keep their children array, child count, remaining count and element size in
+`CombinatorState` after `F_SLOTS`, alongside their result-copy callbacks. Ordinary futures
+have an 88-byte fixed prefix on 64-bit native targets (previously 96), and a 64-byte prefix
+on wasm32 and 32-bit native targets (previously 72). These sizes exclude the heap header
+and saved locals. The common prefix still needs a protected task's cancellation source,
+its inherited context and the timer-heap index. Moving combinator data does not remove
+those independent lifetime obligations.
+
+Combinators grow from 120 to 136 payload bytes on 64-bit native targets and from 84 to 92
+on wasm32. Allocation-class rounding can absorb the ordinary prefix savings, so an 8-byte
+layout reduction is not a claim that every allocation or process RSS shrinks. Generated
+ownership descriptors visit and clear the children array only for combinator kinds; the
+runtime finalizer releases a protected task's raw cancellation source separately.
+
+The indexed timer deadline heap has shipped (`sys/shared/timer_heap.h`). It orders by
+`(due, seq)`, preserves arming order for equal deadlines, and stores an index in each armed
+frame for cancellation. Sixteen entries stay inline; larger heaps release spill storage
+when the run loop drains. Timers remain raw references owned by their awaiters.
+
 ## Validation status
 
 The heap-effects/worklist checkpoint passes workspace build, strict workspace Clippy, workspace
@@ -403,8 +424,6 @@ at the user's request. No local result establishes native x86-64 or other-platfo
 - Add mapping release to the platform ABI and migrate every native, wasm, injected-test and
   embedding implementation together. Bound retained idle slabs without slowing private allocation;
   wasm must return storage to its guest heap. Do not add a tracing collector.
-- Replace the linear timer list with an indexed deadline heap with stable equal-deadline ordering,
-  efficient cancellation, correct raw-frame lifetime and protected small-timer overhead.
 - Prove completion/cancellation lifetime so result publication can leave the global claim critical
   section safely. Queueing and the owner wake already run outside it. Measure multiple schedulers
   and keep exactly-once claiming and owner resumption.

@@ -4,7 +4,7 @@
 
 /* Per-thread binary min-heap of armed timers keyed by (due, seq). `seq` grows monotonically,
  * so equal deadlines fire in arming order. Each armed frame stores its heap index + 1 in
- * F_REMAINING, which only combinators otherwise use and combinators are never armed. */
+ * F_TIMER_INDEX; task state and combinator counters are independent. */
 typedef struct TimerEntry {
     int64_t due;
     uint64_t seq;
@@ -27,7 +27,7 @@ static inline int timer_before(const TimerEntry *a, const TimerEntry *b) {
 
 static inline void timer_place(TimerEntry *heap, uint32_t i, TimerEntry entry) {
     heap[i] = entry;
-    i32_at(entry.f, F_REMAINING)[0] = (int32_t)(i + 1);
+    i32_at(entry.f, F_TIMER_INDEX)[0] = (int32_t)(i + 1);
 }
 
 static void timer_sift_up(TimerEntry *heap, uint32_t i) {
@@ -77,7 +77,7 @@ static inline const TimerEntry *timer_peek(void) { return timer_count ? &timer_e
 
 static void timer_remove_at(uint32_t i) {
     TimerEntry *heap = timer_entries();
-    i32_at(heap[i].f, F_REMAINING)[0] = 0;
+    i32_at(heap[i].f, F_TIMER_INDEX)[0] = 0;
     if (i == --timer_count) { return; }
     heap[i] = heap[timer_count];
     timer_sift_down(heap, i);
@@ -93,7 +93,7 @@ static dream_ptr timer_pop(void) {
 static void timer_cancel(dream_ptr f) {
     int32_t kind = i32_at(f, F_KIND)[0];
     if (kind == FUTURE_KIND_ALL || kind == FUTURE_KIND_RACE) { return; }
-    int32_t slot = i32_at(f, F_REMAINING)[0];
+    int32_t slot = i32_at(f, F_TIMER_INDEX)[0];
     if (slot > 0 && (uint32_t)slot <= timer_count && timer_entries()[slot - 1].f == f) {
         timer_remove_at((uint32_t)slot - 1);
     }

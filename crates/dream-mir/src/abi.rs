@@ -49,7 +49,7 @@ impl TargetAbi {
 }
 
 /// Byte offsets of the `Future` frame header. WASM uses packed i32 fields ([`FutureLayout::WASM32`]);
-/// native packs the same fields with host pointer size so `F_WIDE` never aliases `F_REMAINING`.
+/// native packs the same fields with host pointer size so `F_WIDE` never aliases `F_TIMER_INDEX`.
 impl FutureLayout {
     pub fn for_target(spec: &dream_abi::target::TargetSpec) -> Self {
         Self::compute(
@@ -222,17 +222,15 @@ mod abi_h_lockstep {
         assert_eq!(w.waker, 16);
         assert_eq!(w.awaiting, 20);
         assert_eq!(w.kind, 24);
-        assert_eq!(w.children, 28);
-        assert_eq!(w.count, 32);
-        assert_eq!(w.remaining, 36);
-        assert_eq!(w.scheduler, 40);
-        assert_eq!(w.next, 44);
-        assert_eq!(w.queued, 48);
-        assert_eq!(w.wide, 56);
-        assert_eq!(w.context, 64);
-        assert_eq!(w.slots, 72);
-        assert_eq!(w.esize, 0);
-        assert_ne!(w.wide, w.remaining);
+        assert_eq!(w.source, 28);
+        assert_eq!(w.timer_index, 32);
+        assert_eq!(w.scheduler, 36);
+        assert_eq!(w.next, 40);
+        assert_eq!(w.queued, 44);
+        assert_eq!(w.wide, 48);
+        assert_eq!(w.context, 56);
+        assert_eq!(w.slots, 64);
+        assert_ne!(w.wide, w.timer_index);
         for (name, want) in [
             ("F_STATE_WASM", w.state),
             ("F_STATUS_WASM", w.status),
@@ -241,9 +239,8 @@ mod abi_h_lockstep {
             ("F_WAKER_WASM", w.waker),
             ("F_AWAITING_WASM", w.awaiting),
             ("F_KIND_WASM", w.kind),
-            ("F_CHILDREN_WASM", w.children),
-            ("F_COUNT_WASM", w.count),
-            ("F_REMAINING_WASM", w.remaining),
+            ("F_SOURCE_WASM", w.source),
+            ("F_TIMER_INDEX_WASM", w.timer_index),
             ("F_SCHEDULER_WASM", w.scheduler),
             ("F_NEXT_WASM", w.next),
             ("F_QUEUED_WASM", w.queued),
@@ -255,9 +252,9 @@ mod abi_h_lockstep {
         let n = FutureLayout::for_target(
             &dream_abi::target::TargetSpec::parse("x86_64-unknown-linux-gnu").unwrap(),
         );
-        assert_ne!(n.wide, n.remaining);
+        assert_eq!(n.slots, 88);
+        assert_ne!(n.wide, n.timer_index);
         assert!(n.wide + 8 <= n.slots);
-        assert!(n.esize + 4 <= n.wide || n.wide + 8 <= n.esize);
         for (name, want) in [
             ("F_STATE_NATIVE", n.state),
             ("F_STATUS_NATIVE", n.status),
@@ -266,13 +263,11 @@ mod abi_h_lockstep {
             ("F_WAKER_NATIVE", n.waker),
             ("F_AWAITING_NATIVE", n.awaiting),
             ("F_KIND_NATIVE", n.kind),
-            ("F_CHILDREN_NATIVE", n.children),
-            ("F_COUNT_NATIVE", n.count),
-            ("F_REMAINING_NATIVE", n.remaining),
+            ("F_SOURCE_NATIVE", n.source),
+            ("F_TIMER_INDEX_NATIVE", n.timer_index),
             ("F_SCHEDULER_NATIVE", n.scheduler),
             ("F_NEXT_NATIVE", n.next),
             ("F_QUEUED_NATIVE", n.queued),
-            ("F_ESIZE_NATIVE", n.esize),
             ("F_WIDE_NATIVE", n.wide),
             ("F_SLOTS_NATIVE", n.slots),
         ] {

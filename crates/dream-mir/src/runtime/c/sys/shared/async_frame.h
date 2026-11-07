@@ -14,7 +14,6 @@ static inline dream_result *result_at(dream_ptr p) {
     return (dream_result *)((char *)dream_p(p) + F_RESULT);
 }
 
-/* The 4-byte length prefix leaves native 8-byte elements only 4-aligned. */
 static inline dream_ptr arr_get(dream_ptr arr, int32_t i) {
     dream_ptr element;
     memcpy(&element, (char *)dream_p(arr) + LEN_PREFIX_SIZE + (size_t)i * sizeof(dream_ptr), sizeof(element));
@@ -37,6 +36,20 @@ static inline void status_store(dream_ptr f, int32_t status) {
 #else
     __atomic_store_n(i32_at(f, F_STATUS), status, __ATOMIC_RELEASE);
 #endif
+}
+
+typedef struct {
+    dream_ptr children;
+    int32_t count;
+    int32_t remaining;
+    int32_t esize;
+    void (*copy)(dream_ptr, dream_ptr);
+    dream_result (*clone)(dream_result);
+    const dream_type_info *array_info;
+} CombinatorState;
+
+static inline CombinatorState *combinator_state(dream_ptr f) {
+    return (CombinatorState *)((char *)dream_p(f) + F_SLOTS);
 }
 
 void dream_combinator_progress(dream_ptr parent, dream_ptr child);

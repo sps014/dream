@@ -83,9 +83,9 @@ fn android(checks: &mut Vec<Check>) -> Option<PathBuf> {
     checks.push(Check::new(
         "development-host",
         match std::env::consts::OS {
-            "macos" | "linux" => Ok(std::env::consts::OS.into()),
-            _ => Err(anyhow::anyhow!(
-                "use macOS or Linux for Android app development"
+            "macos" | "linux" | "windows" => Ok(std::env::consts::OS.into()),
+            os => Err(anyhow::anyhow!(
+                "Android app development is not supported on {os}"
             )),
         },
     ));

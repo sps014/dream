@@ -67,19 +67,29 @@ pub(super) fn ndk(root: &Path) -> Result<PathBuf> {
     }
 }
 
-/// The NDK's LLVM prebuilt directory for this development machine.
-///
-/// Apple Silicon NDKs ship `darwin-arm64`. Older NDKs only ship `darwin-x86_64`, which still
-/// runs under Rosetta, so that directory is the fallback.
-pub(super) fn ndk_prebuilt(root: &Path) -> Result<PathBuf> {
-    let hosts: &[&str] = match (std::env::consts::OS, std::env::consts::ARCH) {
+/// Host directories the NDK ships under `toolchains/llvm/prebuilt`, preferred first.
+fn ndk_hosts() -> &'static [&'static str] {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
         ("macos", "aarch64") => &["darwin-arm64", "darwin-x86_64"],
         ("macos", _) => &["darwin-x86_64", "darwin-arm64"],
         ("linux", _) => &["linux-x86_64"],
-        (os, _) => {
-            bail!("mobile app development on {os} is not supported; use macOS or Linux")
-        }
-    };
+        ("windows", _) => &["windows-x86_64"],
+        _ => &[],
+    }
+}
+
+/// The NDK's LLVM prebuilt directory for this development machine.
+///
+/// Apple Silicon NDKs ship `darwin-arm64`. Older NDKs only ship `darwin-x86_64`, which still
+/// runs under Rosetta, so that directory is the fallback. Windows uses `windows-x86_64`.
+pub(super) fn ndk_prebuilt(root: &Path) -> Result<PathBuf> {
+    let hosts = ndk_hosts();
+    if hosts.is_empty() {
+        bail!(
+            "mobile app development on {} is not supported",
+            std::env::consts::OS
+        );
+    }
     for host in hosts {
         let prebuilt = root.join("toolchains/llvm/prebuilt").join(host);
         if prebuilt.join("bin").join(executable("clang")).is_file() {
@@ -156,16 +166,8 @@ mod tests {
     #[test]
     fn ndk_prebuilt_prefers_the_native_host_and_falls_back() {
         let root = tempfile::tempdir().unwrap();
-        let hosts: &[&str] = match (std::env::consts::OS, std::env::consts::ARCH) {
-            ("macos", "aarch64") => &["darwin-arm64", "darwin-x86_64"],
-            ("macos", _) => &["darwin-x86_64", "darwin-arm64"],
-            ("linux", _) => &["linux-x86_64"],
-            _ => {
-                let error = ndk_prebuilt(root.path()).unwrap_err().to_string();
-                assert!(error.contains("not supported"));
-                return;
-            }
-        };
+        let hosts = ndk_hosts();
+        assert!(!hosts.is_empty(), "this host has no NDK prebuilt");
         let native = hosts[0];
         let fallback = *hosts.last().unwrap();
         let clang = root

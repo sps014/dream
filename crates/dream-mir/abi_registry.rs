@@ -48,10 +48,11 @@ UNOWNED_POISON: i32 = -165764356 => "DREAM_UNOWNED_POISON";
 HEADER_TAG_OFFSET: u32 = 8 => "HEADER_TAG_OFFSET";
 /// Byte offset (from the block start) of the reference-count word in the heap header.
 HEADER_REFCOUNT_OFFSET: u32 = 12 => "HEADER_REFCOUNT_OFFSET";
-/// Byte size of the length/count prefix preceding an array's elements at the data pointer
-/// (`[count:i32][payload...]`); the payload starts at `ptr + LEN_PREFIX_SIZE`. Also the size of the
-/// first word of a string (`unit_len`); UTF-16 payload starts at `ptr + STRING_UNITS_OFFSET`.
-LEN_PREFIX_SIZE: u32 = 4 => "LEN_PREFIX_SIZE";
+/// Byte size of the prefix preceding an array's elements at the data pointer
+/// (`[count:i32][pad:i32][payload...]`); the payload starts at `ptr + LEN_PREFIX_SIZE`. The pad
+/// keeps 8-byte elements (`long`, `double`, native pointers) naturally aligned, including for C
+/// code that receives the payload pointer directly.
+LEN_PREFIX_SIZE: u32 = 8 => "LEN_PREFIX_SIZE";
 /// Byte size of a string's data header `[unit_len:i32][pad:i32]` before UTF-16 LE units.
 STRING_HEADER_SIZE: u32 = 8 => "STRING_HEADER_SIZE";
 /// Offset of UTF-16 LE units from the string data pointer when the pad word is inline (`0`).
@@ -227,6 +228,9 @@ impl FutureLayout {
     pub const WASM32: Self = Self::compute(4, 4, false);
 
     pub const fn compute(ptr_size: u32, ptr_align: u32, native: bool) -> Self {
+        if native {
+            return Self::compute_native(ptr_size, ptr_align);
+        }
         let mut c = 0u32;
         let state = place(&mut c, 4, 4);
         let status = place(&mut c, 4, 4);
@@ -241,7 +245,49 @@ impl FutureLayout {
         let scheduler = place(&mut c, ptr_size, ptr_align);
         let next = place(&mut c, ptr_size, ptr_align);
         let queued = place(&mut c, 4, 4);
-        let esize = if native { place(&mut c, 4, 4) } else { 0 };
+        let esize = 0;
+        let wide = place(&mut c, 8, 8);
+        let context = place(&mut c, ptr_size, ptr_align);
+        let slots = align_up(c, 8);
+        Self {
+            state,
+            status,
+            result,
+            poll,
+            waker,
+            awaiting,
+            kind,
+            children,
+            count,
+            remaining,
+            scheduler,
+            next,
+            queued,
+            esize,
+            wide,
+            context,
+            slots,
+        }
+    }
+
+    /// Native frames group the 4-byte words ahead of the pointer-sized ones, so 64-bit hosts pay
+    /// no interior padding before the saved locals.
+    const fn compute_native(ptr_size: u32, ptr_align: u32) -> Self {
+        let mut c = 0u32;
+        let state = place(&mut c, 4, 4);
+        let status = place(&mut c, 4, 4);
+        let poll = place(&mut c, 4, 4);
+        let kind = place(&mut c, 4, 4);
+        let count = place(&mut c, 4, 4);
+        let remaining = place(&mut c, 4, 4);
+        let queued = place(&mut c, 4, 4);
+        let esize = place(&mut c, 4, 4);
+        let result = place(&mut c, ptr_size, ptr_align);
+        let waker = place(&mut c, ptr_size, ptr_align);
+        let awaiting = place(&mut c, ptr_size, ptr_align);
+        let children = place(&mut c, ptr_size, ptr_align);
+        let scheduler = place(&mut c, ptr_size, ptr_align);
+        let next = place(&mut c, ptr_size, ptr_align);
         let wide = place(&mut c, 8, 8);
         let context = place(&mut c, ptr_size, ptr_align);
         let slots = align_up(c, 8);

@@ -1,5 +1,5 @@
 //! Induction-variable strength reduction: `arr[idx]` in a counted `idx += 1` loop becomes a bump
-//! pointer ([`Place::Deref`]) so emit does not recompute `base + 4 + idx * esize` each iteration.
+//! pointer ([`Place::Deref`]) so emit does not recompute `base + LEN_PREFIX_SIZE + idx * esize` each iteration.
 
 use super::MirPass;
 use crate::{
@@ -76,7 +76,7 @@ fn rewrite_loop(
                 Rvalue::Binary(
                     BinOp::Add,
                     Operand::Copy(Place::Local(arr)),
-                    Operand::Const(Const::Int(4)),
+                    Operand::Const(Const::Int(crate::abi::LEN_PREFIX_SIZE as i64)),
                 ),
             ),
             Statement::Assign(

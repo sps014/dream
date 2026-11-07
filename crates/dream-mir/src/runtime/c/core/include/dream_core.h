@@ -132,9 +132,9 @@ DREAM_ALWAYS_INLINE int32_t dream_permit_take(int32_t *permits) {
     return 0;
 }
 
-/* An array's elements follow its int32 element count. */
+/* An array's elements follow its int32 element count and a pad word. */
 DREAM_ALWAYS_INLINE uint8_t *dream_array_bytes(dream_ptr array) {
-    return (uint8_t *)dream_p(array) + 4;
+    return (uint8_t *)dream_p(array) + LEN_PREFIX_SIZE;
 }
 
 #ifdef DREAM_WASM32
@@ -1393,10 +1393,10 @@ DREAM_ALWAYS_INLINE const void *dream_str_units_fast(dream_ptr s) {
     return (const char *)dream_p(s) + STRING_UNITS_OFFSET;
 }
 
-/* Byte capacity a push of `n` units needs (payload plus the 4-byte pad the builder keeps). Widened
- * so one compare against `cap` also sends an unrepresentable length to the grow path, which traps. */
+/* Byte capacity a push of `n` units needs. Widened so one compare against `cap` also sends an
+ * unrepresentable length to the grow path, which traps. */
 DREAM_ALWAYS_INLINE int64_t dream_sb_need(int32_t count, int32_t n) {
-    return (int64_t)count + (int64_t)n * 2 + 4;
+    return (int64_t)count + (int64_t)n * 2;
 }
 
 DREAM_ALWAYS_INLINE void dream_sb_push(dream_ptr sb, dream_ptr text) {
@@ -1427,7 +1427,7 @@ DREAM_ALWAYS_INLINE void dream_sb_push(dream_ptr sb, dream_ptr text) {
         cap = s->cap;
     }
     src = (const char *)dream_str_units_fast(text);
-    dst = (char *)dream_p(bytes) + STRING_UNITS_OFFSET + (size_t)(uint32_t)count;
+    dst = (char *)dream_array_bytes(bytes) + (size_t)(uint32_t)count;
     memcpy(dst, src, (size_t)nbytes);
     s->count = count + nbytes;
 }
@@ -1453,7 +1453,7 @@ DREAM_ALWAYS_INLINE void dream_sb_push_units(dream_ptr sb, const void *src, int3
         bytes = dream_sb_grow_bytes(s, bytes, need);
         cap = s->cap;
     }
-    dst = (char *)dream_p(bytes) + STRING_UNITS_OFFSET + (size_t)(uint32_t)count;
+    dst = (char *)dream_array_bytes(bytes) + (size_t)(uint32_t)count;
     memcpy(dst, src, (size_t)(uint32_t)nbytes);
     s->count = count + nbytes;
 }

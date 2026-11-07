@@ -22,7 +22,7 @@ fn reference_path_has_no_integer_round_trip(ir: &str, function: &str) {
 fn native_aliasing_fields_use_pointer_values_and_plain_gep() {
     let ir = emit_hir_to_module(
         r#"
-        class Cell { public value: int; public label: string; }
+        class Cell { public value: int; public owner: string; public label: string; }
         fun alias(a: Cell, b: Cell): int {
             a.value = a.value + 1;
             return b.value;

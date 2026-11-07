@@ -97,8 +97,9 @@ pub fn javascript() -> String {
     }
     writeln!(
         out,
-        "}};\nexport const HEAP_HEADER_SIZE = {};",
-        registry::HEAP_HEADER_SIZE
+        "}};\nexport const HEAP_HEADER_SIZE = {};\nexport const LEN_PREFIX_SIZE = {};",
+        registry::HEAP_HEADER_SIZE,
+        registry::LEN_PREFIX_SIZE
     )
     .unwrap();
     out
@@ -124,7 +125,7 @@ mod tests {
         let h = header();
         assert!(h.contains("#if UINTPTR_MAX == UINT64_MAX"));
         assert!(h.contains("#elif UINTPTR_MAX == UINT32_MAX"));
-        assert!(h.contains("#define F_SLOTS_NATIVE 104"));
+        assert!(h.contains("#define F_SLOTS_NATIVE 96"));
         assert!(h.contains("#define F_SLOTS_NATIVE 72"));
         assert!(h.contains("#define F_SLOTS_WASM 72"));
     }

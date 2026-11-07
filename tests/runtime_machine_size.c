@@ -122,8 +122,8 @@ int main(int argc, char **argv) {
         dream_free(ptr);
     } else if (strcmp(argv[1], "array") == 0) {
         ptr = dream_array_new(400000000, 8);
-        assert(zeroed_bytes == bytes + 4 && dream_i32(ptr)[0] == 400000000);
-        check_block(ptr, bytes + 4);
+        assert(zeroed_bytes == bytes + LEN_PREFIX_SIZE && dream_i32(ptr)[0] == 400000000);
+        check_block(ptr, bytes + LEN_PREFIX_SIZE);
         dream_free(ptr);
     } else if (strcmp(argv[1], "from-bytes") == 0) {
         ptr = dream_from_bytes(0, bytes, TAG_ARRAY);

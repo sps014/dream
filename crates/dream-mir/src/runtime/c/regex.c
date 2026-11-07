@@ -201,7 +201,7 @@ dream_ptr regex_find(uintptr_t h, dream_ptr input, int32_t pos) {
     pairs = (int32_t)pcre2_get_ovector_count(md);
     ov = pcre2_get_ovector_pointer(md);
     out = dream_array_i32(pairs * 2);
-    dst = dream_i32s(out) + 1;
+    dst = dream_array_i32s(out);
     for (i = 0; i < pairs; i++) {
         PCRE2_SIZE a = ov[2 * i];
         PCRE2_SIZE b = ov[2 * i + 1];
@@ -260,7 +260,7 @@ dream_ptr regex_find_all(uintptr_t h, dream_ptr input) {
         }
     }
     out = dream_array_i32(count);
-    if (count) { memcpy(dream_i32s(out) + 1, offsets, (size_t)count * sizeof(*offsets)); }
+    if (count) { memcpy(dream_array_i32s(out), offsets, (size_t)count * sizeof(*offsets)); }
     if (offsets != local) { free(offsets); }
     pcre2_match_data_free(md);
     return out;

@@ -23,3 +23,4 @@ export const TAGS = {
   FROM_DATA: 8,
 };
 export const HEAP_HEADER_SIZE = 16;
+export const LEN_PREFIX_SIZE = 8;

@@ -38,10 +38,10 @@ dream_ptr dream_string_alloc(int32_t units) {
 /* Counts remain Dream int values; byte sizes use the target's allocation width. */
 static dream_size array_bytes(int32_t len, int32_t esize) {
     if (len < 0 || esize < 1 ||
-        (size_t)len > (DREAM_SIZE_MAX - DREAM_BLOCK_HEADER - 19u) / (size_t)esize) {
+        (size_t)len > (DREAM_SIZE_MAX - DREAM_BLOCK_HEADER - 15u - LEN_PREFIX_SIZE) / (size_t)esize) {
         DREAM_PANIC_LITERAL(u"panic: array size exceeds the supported limit");
     }
-    return (dream_size)len * esize + 4;
+    return (dream_size)len * esize + LEN_PREFIX_SIZE;
 }
 
 static dream_ptr array_new_with(int32_t len, int32_t esize, int shared, int32_t tag) {
@@ -298,7 +298,7 @@ dream_ptr string_from_builder(dream_ptr bytes, int32_t len, int32_t scalars) {
     p = dream_malloc((dream_size)len + 8, TAG_STRING);
     dream_i32(p)[0] = scalars;
     dream_str_init_owned(p);
-    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_p(bytes) + 8, (size_t)len);
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, (char *)dream_array_bytes(bytes), (size_t)len);
     return p;
 }
 

@@ -114,7 +114,7 @@ def _array_summary(struct_value, depth=0):
     esize = elem_ty.GetByteSize() or 8
     ename = (elem_ty.GetName() or "").replace("const ", "").strip()
     err = lldb.SBError()
-    base = struct_value.AddressOf().GetValueAsUnsigned() + 4
+    base = elems.GetLoadAddress()
     process = struct_value.GetProcess()
     global _process
     _process = process

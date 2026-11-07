@@ -32,6 +32,9 @@ pub struct StructLayoutDef {
     pub name: String,
     pub fields: Vec<LayoutFieldDef>,
     pub packed: bool,
+    /// Lay fields out in declaration order. Blittable value structs need this: C reads them in
+    /// place through `ref` parameters and arrays, using its own declaration-order layout.
+    pub keep_order: bool,
     pub destructor: Option<DefId>,
 }
 
@@ -106,6 +109,7 @@ fn direct_layout(
             })
             .collect(),
         packed,
+        keep_order: false,
     };
     LayoutTable::build(TargetLayout::default(), interner, vec![def], vec![])
         .structs
@@ -201,22 +205,40 @@ impl LayoutTable {
         let mut offset = 0;
         // Heap objects can carry a trailing atomic lock word, which requires word alignment.
         let mut max_align = if interner.is_value_type(ty) { 1 } else { 4 };
-        let mut fields = Vec::with_capacity(def.fields.len());
-        for field in &def.fields {
-            let (size, align) = self.size_align_inner(field.ty, interner, structs, unions, active);
+        let shapes: Vec<(u32, u32)> = def
+            .fields
+            .iter()
+            .map(|field| self.size_align_inner(field.ty, interner, structs, unions, active))
+            .collect();
+        // Placing wider fields first removes interior padding; the stable sort keeps declaration
+        // order among equally aligned fields, so the layout stays deterministic. `fields` itself
+        // stays in declaration order with the reordered offsets.
+        let mut order: Vec<usize> = (0..def.fields.len()).collect();
+        if !def.packed && !def.keep_order {
+            order.sort_by_key(|&i| std::cmp::Reverse(shapes[i].1));
+        }
+        let mut offsets = vec![0; def.fields.len()];
+        for i in order {
+            let (size, align) = shapes[i];
             if !def.packed {
                 offset = align_up(offset, align);
                 max_align = max_align.max(align);
             }
-            fields.push(FieldLayout {
+            offsets[i] = offset;
+            offset += size;
+        }
+        let fields = def
+            .fields
+            .iter()
+            .zip(offsets)
+            .map(|(field, offset)| FieldLayout {
                 offset,
                 ty: field.ty,
                 name: field.name.clone(),
                 is_weak: field.is_weak,
                 is_unowned: field.is_unowned,
-            });
-            offset += size;
-        }
+            })
+            .collect();
         active.shift_remove(&ty);
         let align = if def.packed { 1 } else { max_align };
         let layout = TypeLayout {
@@ -378,6 +400,7 @@ mod tests {
                     is_unowned: false,
                 }],
                 packed: false,
+                keep_order: false,
                 destructor: None,
             }],
             vec![],
@@ -401,6 +424,7 @@ mod tests {
                 is_unowned: false,
             }],
             packed: false,
+            keep_order: false,
             destructor: None,
         };
         let narrow = LayoutTable::build(

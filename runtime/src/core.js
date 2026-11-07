@@ -1,6 +1,6 @@
-import { TAGS, HEAP_HEADER_SIZE } from "./abi.js";
+import { TAGS, HEAP_HEADER_SIZE, LEN_PREFIX_SIZE } from "./abi.js";
 import { HAS_JS_HANDLES } from "./features.js";
-export { TAGS, HEAP_HEADER_SIZE };
+export { TAGS, HEAP_HEADER_SIZE, LEN_PREFIX_SIZE };
 
 export function elementSize(typeName) {
   if (typeName === "bool" || typeName === "byte") return 1;

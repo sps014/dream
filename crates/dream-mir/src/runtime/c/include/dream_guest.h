@@ -11,8 +11,8 @@ static inline int32_t dream_array_len(dream_ptr p) {
     return p ? dream_i32(p)[0] : 0;
 }
 
-static inline int32_t *dream_i32s(dream_ptr p) {
-    return dream_i32(p);
+static inline int32_t *dream_array_i32s(dream_ptr p) {
+    return (int32_t *)dream_array_bytes(p);
 }
 
 static inline dream_ptr dream_str_from_units(const uint16_t *u, int32_t n) {
@@ -51,8 +51,8 @@ static inline int32_t dream_array_len(dream_ptr p) {
     return p ? i32_load(p) : 0;
 }
 
-static inline int32_t *dream_i32s(dream_ptr p) {
-    return (int32_t *)(uintptr_t)(uint32_t)p;
+static inline int32_t *dream_array_i32s(dream_ptr p) {
+    return (int32_t *)(uintptr_t)(uint32_t)(p + (int32_t)LEN_PREFIX_SIZE);
 }
 
 static inline int32_t dream_str_len(dream_ptr s) {

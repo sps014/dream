@@ -23,9 +23,9 @@ public class StringBuilder {
         if c < sequence_min_capacity() {
             c = sequence_min_capacity();
         }
-        this.bytes = StringBuilder.new_buffer(c + 4);
+        this.bytes = StringBuilder.new_buffer(c);
         this.count = 0;
-        this.cap = c + 4;
+        this.cap = c;
     }
 
     /// Number of UTF-16 code units appended so far (`count` is always even).
@@ -49,7 +49,7 @@ public class StringBuilder {
 
     @inline
     fun ensure(extra: int): void {
-        let need = this.count + extra + 4;
+        let need = this.count + extra;
         if need > this.cap {
             this.grow(need);
         }
@@ -58,7 +58,7 @@ public class StringBuilder {
     @inline
     fun write_unit(u: int): void {
         this.ensure(2);
-        Buffer.store16(this.bytes, this.count + 4, u);
+        Buffer.store16(this.bytes, this.count, u);
         this.count = this.count + 2;
     }
 
@@ -122,7 +122,7 @@ public class StringBuilder {
             System.panic("StringBuilder slice out of bounds");
         }
         this.ensure(byte_len);
-        string.copy_utf8(this.bytes, this.count + 4, text, start, byte_len);
+        string.copy_utf8(this.bytes, this.count, text, start, byte_len);
         this.count = this.count + byte_len;
     }
 

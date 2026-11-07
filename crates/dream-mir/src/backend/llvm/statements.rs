@@ -341,7 +341,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.store(place, rv, r);
     }
 
-    /// `(char *)dream_p(base) + 4 + off * es`.
+    /// `(char *)dream_p(base) + LEN_PREFIX_SIZE + off * es`.
     fn elem_addr(&mut self, base: &V, off: &V, es: i64) -> Value {
         let o = self.conv(off, &Ty::I64);
         let scaled = self.w.bin("mul", &o, &Value::i64(es));

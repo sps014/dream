@@ -96,7 +96,7 @@ impl<'a> Lcx<'a> {
         self.dbg_views.insert(name.clone(), r);
         let (members, bytes) = match interner.kind(ty) {
             TyKind::Prim(_) => (self.str_members(r), 8),
-            TyKind::Array(elem) => (self.arr_members(r, *elem), 4),
+            TyKind::Array(elem) => (self.arr_members(r, *elem), crate::abi::LEN_PREFIX_SIZE),
             TyKind::Struct(..) | TyKind::Tuple(_) => {
                 let layout = self.cx.nstruct(ty)?;
                 let size = layout.size;
@@ -235,14 +235,14 @@ impl<'a> Lcx<'a> {
         ]
     }
 
-    /// Elements sit at offset 4, packed after the length word.
+    /// Elements sit after the length word and its pad.
     fn arr_members(&mut self, scope: MdRef, elem: TypeId) -> Vec<MdRef> {
         let i32_ = self.di_basic("int", 32, "DW_ATE_signed");
         let e = self.di_local_ty(elem);
         let elems = self.zero_len_array(e);
         vec![
             self.member(scope, "len", i32_, 32, 0),
-            self.member(scope, "elems", elems, 0, 4),
+            self.member(scope, "elems", elems, 0, crate::abi::LEN_PREFIX_SIZE),
         ]
     }
 

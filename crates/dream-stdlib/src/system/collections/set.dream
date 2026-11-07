@@ -1,6 +1,7 @@
 module system.collections;
 
 /// A generic open-addressing hash set.
+// `states` pack the occupancy stamp with a hash fragment; see `hash_epoch_initial`.
 @slot_walk("capacity", "slot_key", "slot_occupied")
 public class Set<T>: Collection<T> {
     keys: T[];
@@ -43,7 +44,7 @@ public class Set<T>: Collection<T> {
     }
 
     fun bump_epoch(): void {
-        let e = this.epoch + 1;
+        let e = this.epoch + 256;
         if e <= 0 {
             Buffer.elems_fill<int>(this.states, 0, this.cap);
             e = hash_epoch_initial();
@@ -72,29 +73,23 @@ public class Set<T>: Collection<T> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = mix_hash(hash) & (cap - 1);
-        let result = -1;
-        let done = false;
-        while done == false {
+        let mixed = mix_hash(hash);
+        let want = epoch | hash_fragment(mixed);
+        let idx = mixed & (cap - 1);
+        while true {
             let s = states[idx];
-            if (s != epoch) && (s != tomb) {
-                done = true;
-            } else {
-                if s == epoch {
-                    if keys[idx] == value {
-                        result = idx;
-                        done = true;
-                    }
+            if s == want {
+                if keys[idx] == value {
+                    return idx;
                 }
-                if done == false {
-                    idx = idx + 1;
-                    if idx == cap {
-                        idx = 0;
-                    }
-                }
+            } else if ((s & hash_stamp_mask()) != epoch) && (s != tomb) {
+                return -1;
+            }
+            idx = idx + 1;
+            if idx == cap {
+                idx = 0;
             }
         }
-        return result;
     }
 
     // Probe and insert without checking load factor. Used by `add` and `rehash` so those two are
@@ -105,19 +100,21 @@ public class Set<T>: Collection<T> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = mix_hash(hash) & (cap - 1);
+        let mixed = mix_hash(hash);
+        let want = epoch | hash_fragment(mixed);
+        let idx = mixed & (cap - 1);
         let first_tomb = -1;
         let added = false;
         let done = false;
         while done == false {
             let s = states[idx];
-            if (s != epoch) && (s != tomb) {
+            if ((s & hash_stamp_mask()) != epoch) && (s != tomb) {
                 let target = idx;
                 if first_tomb >= 0 {
                     target = first_tomb;
                 }
                 keys[target] = value;
-                states[target] = epoch;
+                states[target] = want;
                 this.count = this.count + 1;
                 if first_tomb < 0 {
                     this.used = this.used + 1;
@@ -125,7 +122,7 @@ public class Set<T>: Collection<T> {
                 added = true;
                 done = true;
             } else {
-                if s == epoch {
+                if s == want {
                     if keys[idx] == value {
                         done = true;
                     }
@@ -159,15 +156,15 @@ public class Set<T>: Collection<T> {
         let can_transfer = CollectionStorage.owners(old_keys) == 1;
         let i = 0;
         while i < old_cap {
-            if old_states[i] == this.epoch {
+            if (old_states[i] & hash_stamp_mask()) == this.epoch {
                 let hash = old_keys[i].hash_code();
                 if can_transfer {
                     let target = mix_hash(hash) & (new_cap - 1);
-                    while this.states[target] == this.epoch {
+                    while this.states[target] != 0 {
                         target = (target + 1) & (new_cap - 1);
                     }
                     this.keys[target] = CollectionStorage.take<T>(old_keys, i);
-                    this.states[target] = this.epoch;
+                    this.states[target] = old_states[i];
                     this.count = this.count + 1;
                     this.used = this.used + 1;
                 } else {
@@ -203,14 +200,17 @@ public class Set<T>: Collection<T> {
         let cap = this.cap;
         let epoch = this.epoch;
         let tomb = 0 - epoch;
-        let idx = mix_hash(value.hash_code()) & (cap - 1);
+        let mixed = mix_hash(value.hash_code());
+        let want = epoch | hash_fragment(mixed);
+        let idx = mixed & (cap - 1);
         while true {
             let s = states[idx];
-            if (s != epoch) && (s != tomb) {
+            if s == want {
+                if keys[idx].matches_span(value) {
+                    return true;
+                }
+            } else if ((s & hash_stamp_mask()) != epoch) && (s != tomb) {
                 return false;
-            }
-            if (s == epoch) && keys[idx].matches_span(value) {
-                return true;
             }
             idx = idx + 1;
             if idx == cap {
@@ -283,7 +283,7 @@ public class Set<T>: Collection<T> {
         let z = CollectionStorage.zero<T>();
         let i = 0;
         while i < c {
-            if this.states[i] == e {
+            if (this.states[i] & hash_stamp_mask()) == e {
                 this.keys[i] = z;
             }
             i = i + 1;
@@ -306,7 +306,7 @@ public class Set<T>: Collection<T> {
         let i = 0;
         let j = 0;
         while i < this.cap {
-            if this.states[i] == this.epoch {
+            if (this.states[i] & hash_stamp_mask()) == this.epoch {
                 result[j] = this.keys[i];
                 j = j + 1;
             }
@@ -320,7 +320,7 @@ public class Set<T>: Collection<T> {
         let result = Set<T>(this.count + other.length);
         let i = 0;
         while i < this.cap {
-            if this.states[i] == this.epoch {
+            if (this.states[i] & hash_stamp_mask()) == this.epoch {
                 result.add(this.keys[i]);
             }
             i = i + 1;
@@ -336,7 +336,7 @@ public class Set<T>: Collection<T> {
         let result = Set<T>();
         let i = 0;
         while i < this.cap {
-            if this.states[i] == this.epoch {
+            if (this.states[i] & hash_stamp_mask()) == this.epoch {
                 if other.contains(this.keys[i]) {
                     result.add(this.keys[i]);
                 }
@@ -351,7 +351,7 @@ public class Set<T>: Collection<T> {
         let result = Set<T>();
         let i = 0;
         while i < this.cap {
-            if this.states[i] == this.epoch {
+            if (this.states[i] & hash_stamp_mask()) == this.epoch {
                 if other.contains(this.keys[i]) == false {
                     result.add(this.keys[i]);
                 }
@@ -365,7 +365,7 @@ public class Set<T>: Collection<T> {
     public fun is_subset(borrow other: Set<T>): bool {
         let i = 0;
         while i < this.cap {
-            if this.states[i] == this.epoch {
+            if (this.states[i] & hash_stamp_mask()) == this.epoch {
                 if other.contains(this.keys[i]) == false {
                     return false;
                 }
@@ -379,7 +379,7 @@ public class Set<T>: Collection<T> {
     public fun is_disjoint(borrow other: Set<T>): bool {
         let i = 0;
         while i < this.cap {
-            if this.states[i] == this.epoch {
+            if (this.states[i] & hash_stamp_mask()) == this.epoch {
                 if other.contains(this.keys[i]) {
                     return false;
                 }
@@ -396,7 +396,7 @@ public class Set<T>: Collection<T> {
 
     // Slot helpers for `SetIterator` (same-module).
     internal fun slot_occupied(i: int): bool {
-        return this.states[i] == this.epoch;
+        return (this.states[i] & hash_stamp_mask()) == this.epoch;
     }
 
     @borrowed_result
@@ -411,7 +411,7 @@ public class Set<T>: Collection<T> {
         let n = 0;
         let i = 0;
         while i < this.cap {
-            if this.states[i] == this.epoch {
+            if (this.states[i] & hash_stamp_mask()) == this.epoch {
                 if n > 0 {
                     sb.append(", ");
                 }

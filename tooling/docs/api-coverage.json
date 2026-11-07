@@ -4799,31 +4799,31 @@
       {
         "signature": "public class Map<K, V>: Collection<KeyValuePair<K, V>>",
         "description": "A generic open-addressing hash map. Slots are packed `{key, value, state}` records.",
-        "line": 5,
+        "line": 6,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Creates an empty map, reserving space based on `capacity` (8 by default).",
-        "line": 13,
+        "line": 14,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<Unit, CapacityError>",
         "description": "Reserves additional live entries, accounting for load factor and reclaiming tombstones.",
-        "line": 23,
+        "line": 24,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 57,
+        "line": 58,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Number of elements that fit before storage must grow.",
-        "line": 63,
+        "line": 64,
         "page": "reference/api/collections-map.md"
       },
       {
@@ -4835,109 +4835,109 @@
       {
         "signature": "public fun contains(borrow key: K): bool",
         "description": "Returns whether `key` is present.",
-        "line": 220,
+        "line": 222,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun set_all(borrow keys: K[], borrow values: V[]): void",
         "description": "Inserts corresponding entries from `keys` and `values`; the arrays must have equal lengths.",
-        "line": 226,
+        "line": 228,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public constructor(borrow keys: K[], borrow values: V[])",
         "description": "Creates a map by pairing keys and values up to the shorter array length; later duplicate keys replace earlier values.",
-        "line": 239,
+        "line": 241,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when absent.",
-        "line": 252,
+        "line": 254,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey",
         "description": "Value for the `string` key equal to `key`, without building a `string`.",
-        "line": 262,
+        "line": 264,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun contains(borrow key: ReadOnlySpan<char>): bool where K: StringKey",
         "description": "Returns whether `key` is present.",
-        "line": 271,
+        "line": 273,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 277,
+        "line": 279,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V",
         "description": "Returns the existing value, or inserts and returns the result of `factory` when absent. The key is borrowed for the lookup and copied only on a miss.",
-        "line": 287,
+        "line": 289,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun merge(borrow other: Map<K, V>): void",
         "description": "Copies entries from `other`, replacing values with matching keys.",
-        "line": 298,
+        "line": 300,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun entries(): List<KeyValuePair<K, V>>",
         "description": "Returns a new list of key/value pairs.",
-        "line": 305,
+        "line": 307,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "Removes `key` and its value; returns whether the key was present.",
-        "line": 318,
+        "line": 320,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "Returns whether there are no elements.",
-        "line": 334,
+        "line": 336,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 340,
+        "line": 342,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun clear(): void where K: unmanaged, V: unmanaged",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 360,
+        "line": 362,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun keys(): List<K>",
         "description": "Returns a new list of the keys, in the map's iteration order.",
-        "line": 367,
+        "line": 369,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun values(): List<V>",
         "description": "Returns a new list of the values, in the map's iteration order.",
-        "line": 380,
+        "line": 382,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun iterator(): MapIterator<K, V>",
         "description": "Creates a cursor over the sequence. Close it when iteration ends early.",
-        "line": 393,
+        "line": 395,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 418,
+        "line": 420,
         "page": "reference/api/collections-map.md"
       }
     ]
@@ -5263,49 +5263,49 @@
       {
         "signature": "public class Set<T>: Collection<T>",
         "description": "A generic open-addressing hash set.",
-        "line": 5,
+        "line": 6,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public constructor(capacity: int = 8)",
         "description": "Allocates an empty set with an initial capacity (defaults to 8, rounded up to power of 2).",
-        "line": 14,
+        "line": 15,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<Unit, CapacityError>",
         "description": "Reserves additional live entries, accounting for load factor and reclaiming tombstones.",
-        "line": 25,
+        "line": 26,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Number of elements currently stored.",
-        "line": 55,
+        "line": 56,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 60,
+        "line": 61,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add(value: T): bool",
         "description": "Inserts a value into the set. Returns true if it was newly added, false if already present.",
-        "line": 182,
+        "line": 179,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if the set contains the value.",
-        "line": 194,
+        "line": 191,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: ReadOnlySpan<char>): bool where T: StringKey",
         "description": "True when the set holds the `string` equal to `value`, without building a `string`.",
-        "line": 200,
+        "line": 197,
         "page": "reference/api/collections-set.md"
       },
       {

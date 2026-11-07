@@ -41,7 +41,7 @@ Continue with the [quickstart](docs/learn/quickstart.md), [language tour](docs/l
 
 ## A first taste
 
-```dream
+```typescript
 import system;
 import system.json;
 

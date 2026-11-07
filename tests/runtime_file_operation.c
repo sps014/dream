@@ -18,7 +18,7 @@ char *dream_str_utf8(dream_ptr p) {
     return copy;
 }
 dream_ptr dream_array_new(int32_t count, int32_t size) {
-    int32_t *p = calloc(1, 4 + (size_t)count * size);
+    int32_t *p = calloc(1, LEN_PREFIX_SIZE + (size_t)count * size);
     assert(p);
     *p = count;
     return (dream_ptr)p;

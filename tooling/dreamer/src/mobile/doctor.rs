@@ -105,22 +105,14 @@ fn android(checks: &mut Vec<Check>) -> Option<PathBuf> {
     ));
     checks.push(Check::new("android-platform", android_platform(&root)));
     checks.push(Check::new("android-build-tools", build_tools(&root)));
-    let ndk = sdk::ndk(&root).and_then(|path| sdk::ndk_clang(&path).map(|_| path));
+    let ndk = sdk::ndk(&root).and_then(|path| sdk::ndk_prebuilt(&path));
     checks.push(Check::new(
         "android-ndk",
         ndk.as_ref()
             .map(|path| path.display().to_string())
             .map_err(|e| anyhow::anyhow!("{e:#}")),
     ));
-    ndk.ok().map(|path| {
-        path.join("toolchains/llvm/prebuilt")
-            .join(if cfg!(target_os = "macos") {
-                "darwin-x86_64"
-            } else {
-                "linux-x86_64"
-            })
-            .join("sysroot")
-    })
+    ndk.ok().map(|path| path.join("sysroot"))
 }
 
 fn jdk_version() -> Result<String> {

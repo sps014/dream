@@ -67,17 +67,28 @@ pub(super) fn ndk(root: &Path) -> Result<PathBuf> {
     }
 }
 
-pub(super) fn ndk_clang(root: &Path) -> Result<PathBuf> {
-    let host = match std::env::consts::OS {
-        "macos" => "darwin-x86_64",
-        "linux" => "linux-x86_64",
-        other => bail!("mobile app development on {other} is not supported; use macOS or Linux"),
+/// The NDK's LLVM prebuilt directory for this development machine.
+///
+/// Apple Silicon NDKs ship `darwin-arm64`. Older NDKs only ship `darwin-x86_64`, which still
+/// runs under Rosetta, so that directory is the fallback.
+pub(super) fn ndk_prebuilt(root: &Path) -> Result<PathBuf> {
+    let hosts: &[&str] = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", "aarch64") => &["darwin-arm64", "darwin-x86_64"],
+        ("macos", _) => &["darwin-x86_64", "darwin-arm64"],
+        ("linux", _) => &["linux-x86_64"],
+        (os, _) => {
+            bail!("mobile app development on {os} is not supported; use macOS or Linux")
+        }
     };
-    require_file(
-        root.join("toolchains/llvm/prebuilt")
-            .join(host)
-            .join("bin/clang"),
-        "install the NDK for this development host",
+    for host in hosts {
+        let prebuilt = root.join("toolchains/llvm/prebuilt").join(host);
+        if prebuilt.join("bin").join(executable("clang")).is_file() {
+            return Ok(prebuilt);
+        }
+    }
+    bail!(
+        "missing NDK clang under {}; install the NDK for this development host",
+        root.join("toolchains/llvm/prebuilt").display()
     )
 }
 
@@ -115,6 +126,49 @@ mod tests {
     fn empty_component_directory_is_an_error() {
         let root = tempfile::tempdir().unwrap();
         assert!(latest_version(root.path()).is_err());
+    }
+
+    #[test]
+    fn ndk_prebuilt_prefers_the_native_host_and_falls_back() {
+        let root = tempfile::tempdir().unwrap();
+        let native = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            "darwin-arm64"
+        } else if cfg!(target_os = "macos") {
+            "darwin-x86_64"
+        } else {
+            "linux-x86_64"
+        };
+        let fallback = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+            "darwin-x86_64"
+        } else {
+            native
+        };
+        let clang = root
+            .path()
+            .join("toolchains/llvm/prebuilt")
+            .join(fallback)
+            .join("bin")
+            .join(executable("clang"));
+        std::fs::create_dir_all(clang.parent().unwrap()).unwrap();
+        std::fs::write(&clang, "").unwrap();
+        assert_eq!(
+            ndk_prebuilt(root.path()).unwrap(),
+            clang.parent().unwrap().parent().unwrap()
+        );
+        if fallback != native {
+            let native_clang = root
+                .path()
+                .join("toolchains/llvm/prebuilt")
+                .join(native)
+                .join("bin")
+                .join(executable("clang"));
+            std::fs::create_dir_all(native_clang.parent().unwrap()).unwrap();
+            std::fs::write(&native_clang, "").unwrap();
+            assert_eq!(
+                ndk_prebuilt(root.path()).unwrap(),
+                native_clang.parent().unwrap().parent().unwrap()
+            );
+        }
     }
 
     #[test]

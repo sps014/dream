@@ -177,7 +177,8 @@ fn mobile_only_build_and_run_never_fall_through_to_desktop_compilation() {
         let error = String::from_utf8_lossy(&output.stderr);
         assert!(
             error.contains("multiple hosts")
-                || error.contains("mobile canvas app build/run is not available"),
+                || error.contains("mobile canvas app build/run is not available")
+                || error.contains("mobile toolchain diagnosis found missing requirements"),
             "{args:?}: {error}"
         );
         assert!(!project.join("target/debug/main.bin").exists());

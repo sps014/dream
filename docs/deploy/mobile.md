@@ -38,7 +38,8 @@ For Android, set `ANDROID_HOME` to the installed SDK directory (`ANDROID_SDK_ROO
 is used when `ANDROID_HOME` is absent). Install platform-tools, an SDK platform at
 API 26 or newer, build-tools, an NDK, and JDK 21 or newer on `PATH`. Set
 `ANDROID_NDK_HOME` to select an NDK explicitly; otherwise the doctor selects the
-newest installed stable NDK. These are prerequisites for the canvas app development
+newest installed stable NDK. On Apple Silicon it uses the `darwin-arm64` NDK
+prebuilt when that directory is present, and the `darwin-x86_64` prebuilt otherwise. These are prerequisites for the canvas app development
 tooling; the library packager's minimum API remains configurable below.
 
 For iOS, install full Xcode, select its developer directory with `xcode-select`, and

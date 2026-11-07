@@ -57,7 +57,8 @@ pub fn run_with(
         RunTarget::Native => run_native(&workspace, &flags, extra_args),
         RunTarget::Node => run_node(&workspace, &flags, extra_args),
         RunTarget::Web => run_web(&workspace, &flags, port),
-        RunTarget::Android | RunTarget::Ios => bail!("{}", crate::mobile::CANVAS_UNAVAILABLE),
+        RunTarget::Android => crate::mobile::prepare_canvas(crate::mobile::Platform::Android),
+        RunTarget::Ios => crate::mobile::prepare_canvas(crate::mobile::Platform::Ios),
     }
 }
 

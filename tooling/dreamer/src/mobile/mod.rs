@@ -13,6 +13,15 @@ use std::process::Command;
 
 pub(crate) const CANVAS_UNAVAILABLE: &str = "mobile canvas app build/run is not available yet; inspect mobile setup with `dreamer toolchain doctor --target android`, `--target ios`, or `dreamer devices`";
 
+/// Prints the platform prerequisite report, then stops before packaging.
+///
+/// APK and simulator-app assembly is still outstanding. A missing SDK fails here with the
+/// diagnosis instead of compiling a desktop executable.
+pub(crate) fn prepare_canvas(platform: Platform) -> Result<()> {
+    doctor::run(platform, false)?;
+    bail!("{CANVAS_UNAVAILABLE}");
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {

@@ -63,8 +63,12 @@ pub fn compile_target(
     } else {
         only
     };
-    if matches!(only, Some(RunTarget::Android | RunTarget::Ios)) {
-        bail!("{}", crate::mobile::CANVAS_UNAVAILABLE);
+    if let Some(platform) = match only {
+        Some(RunTarget::Android) => Some(crate::mobile::Platform::Android),
+        Some(RunTarget::Ios) => Some(crate::mobile::Platform::Ios),
+        _ => None,
+    } {
+        return crate::mobile::prepare_canvas(platform);
     }
     let dream_bin = crate::dream_bin::locate()?;
     let compile_root = workspace.compile_root_path()?;

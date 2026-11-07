@@ -156,18 +156,18 @@ mod tests {
     #[test]
     fn ndk_prebuilt_prefers_the_native_host_and_falls_back() {
         let root = tempfile::tempdir().unwrap();
-        let native = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            "darwin-arm64"
-        } else if cfg!(target_os = "macos") {
-            "darwin-x86_64"
-        } else {
-            "linux-x86_64"
+        let hosts: &[&str] = match (std::env::consts::OS, std::env::consts::ARCH) {
+            ("macos", "aarch64") => &["darwin-arm64", "darwin-x86_64"],
+            ("macos", _) => &["darwin-x86_64", "darwin-arm64"],
+            ("linux", _) => &["linux-x86_64"],
+            _ => {
+                let error = ndk_prebuilt(root.path()).unwrap_err().to_string();
+                assert!(error.contains("not supported"));
+                return;
+            }
         };
-        let fallback = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            "darwin-x86_64"
-        } else {
-            native
-        };
+        let native = hosts[0];
+        let fallback = *hosts.last().unwrap();
         let clang = root
             .path()
             .join("toolchains/llvm/prebuilt")

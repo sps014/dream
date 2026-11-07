@@ -1,15 +1,15 @@
 ---
-title: Application lifetime
+title: App lifetime
 summary: Start and stop a program cleanly, and react to sleep, session lock, power, theme and locale changes.
 icon: material/power-settings
 api: reference/api/system-app.md
 ---
 
-# Application lifetime
+# App lifetime
 
 Import `system.app` to give a program a clear startup and shutdown. Wrap `main` in
-`Application.run`, do your startup in the function you pass to it, and register a cleanup for
-each resource right after you acquire it. Ctrl+C, `SIGTERM`, `Application.quit` and an
+`App.run`, do your startup in the function you pass to it, and register a cleanup for
+each resource right after you acquire it. Ctrl+C, `SIGTERM`, `App.quit` and an
 operating-system shutdown then all stop the program the same way: cleanups run newest first and
 `run` returns the exit code for `main` to return.
 
@@ -24,17 +24,17 @@ import system;
 import system.app;
 
 async fun heartbeat(): void {
-    while !Application.stopping.is_cancelled {
+    while !App.stopping.is_cancelled {
         System.println("tick");
         Time.delay(1000).await;
     }
 }
 
 async fun main(): int {
-    return Application.run(
+    return App.run(
         async () => {
             System.println("starting");
-            Application.on_stop(
+            App.on_stop(
                 async () => {
                     System.println("releasing resources");
                 }
@@ -46,7 +46,7 @@ async fun main(): int {
 }
 ```
 
-This program prints `tick` every second. Pressing Ctrl+C cancels `Application.stopping`, so the
+This program prints `tick` every second. Pressing Ctrl+C cancels `App.stopping`, so the
 loop ends after its current delay, `start` returns, the cleanup prints `releasing resources`, and
 the process exits with code `130`.
 
@@ -57,8 +57,8 @@ the process exits with code `130`.
    the cleanups registered so far run, and `run` returns `1`.
 2. **Running.** After `start` returns `Ok`, the program keeps running until something asks it
    to stop. `start` may also keep running for the whole program, for example a web server's
-   `run` call, as long as it returns once `Application.stopping` is cancelled.
-3. **Shutdown.** `Application.stopping` is cancelled first. `run` waits for `start` if it is
+   `run` call, as long as it returns once `App.stopping` is cancelled.
+3. **Shutdown.** `App.stopping` is cancelled first. `run` waits for `start` if it is
    still running, then runs the `on_stop` cleanups in reverse registration order, so a resource
    is released before the resources it depends on.
 
@@ -68,7 +68,7 @@ cancelled, a warning is printed, and the remaining cleanups still run.
 
 | What stopped the program | Exit code |
 | --- | --- |
-| `Application.quit(code)` | `code`, `0` by default |
+| `App.quit(code)` | `code`, `0` by default |
 | Ctrl+C (`SIGINT`) | `130` |
 | `SIGTERM` | `143` |
 | `start` returned `Err` | `1` |
@@ -76,7 +76,7 @@ cancelled, a warning is printed, and the remaining cleanups still run.
 
 A second Ctrl+C or `SIGTERM` while shutdown is running ends the process immediately with that
 signal's exit code. Calling `run` while another `run` is still active prints an error and returns `1`.
-Outside `run`, `Application.stopping` is never cancelled, so code that watches it also works in
+Outside `run`, `App.stopping` is never cancelled, so code that watches it also works in
 programs and tests that do not use `run`.
 
 `on_stop` returns `Err(AppError)` with code `ESTOPPING` once shutdown has begun, because a
@@ -91,7 +91,7 @@ says why, and lets a desktop program keep running, for example while a document 
 changes:
 
 ```dream
-Application.on_shutdown_requested(
+App.on_shutdown_requested(
     (request) => {
         if request.can_veto && editor.has_unsaved_changes() {
             request.veto();
@@ -105,7 +105,7 @@ Application.on_shutdown_requested(
 | --- | --- | --- |
 | `Interrupt` | Ctrl+C or `SIGINT` | No |
 | `Terminate` | `SIGTERM` or `SIGHUP` on Unix; Ctrl+Break, closing the console, logout or shutdown for a Windows console program | No |
-| `Requested` | The program called `Application.quit` | No |
+| `Requested` | The program called `App.quit` | No |
 | `SessionEnding` | Windows: the user is logging out or the computer is shutting down. macOS: the computer is shutting down or restarting | Yes, on the first Windows notice |
 | `OsQuit` | The app was asked to quit from its menu or Dock | Yes |
 | `LastWindowClosed` | The program's last window closed | Yes |
@@ -115,7 +115,7 @@ alive. The final notice that the session is ending cannot be vetoed. Only the fi
 request starts shutdown; later requests are ignored.
 
 No platform reports `OsQuit` or `LastWindowClosed` yet: Cmd+Q and closing a window currently
-arrive as `WindowEvent.CloseRequested` on each window. Use them with `Application.simulate` to
+arrive as `WindowEvent.CloseRequested` on each window. Use them with `App.simulate` to
 test vetoable shutdown paths.
 
 ## Operating-system events
@@ -143,19 +143,19 @@ import system;
 import system.app;
 
 async fun main(): int {
-    return Application.run(
+    return App.run(
         async () => {
-            Application.on_sleep(
+            App.on_sleep(
                 () => {
                     System.println("pausing sync");
                 }
             );
-            Application.on_wake(
+            App.on_wake(
                 (slept_ms) => {
                     System.println("slept for " + slept_ms.to_string() + " ms, refreshing");
                 }
             );
-            Application.on_theme(
+            App.on_theme(
                 (theme) => {
                     System.println("dark mode: " + (theme == SystemTheme.Dark).to_string());
                 }
@@ -187,7 +187,7 @@ unlocked, displays on, active, `PowerSource.Unknown` and `SystemTheme.Light`.
 
 ## Test lifetime code
 
-`Application.simulate` delivers an `AppEvent` as if the operating system had reported it. Hooks
+`App.simulate` delivers an `AppEvent` as if the operating system had reported it. Hooks
 run before `simulate` returns, and it returns false when the event was ignored: a duplicate such
 as `Woke` while not asleep, any event after shutdown began, or a vetoed shutdown request.
 
@@ -198,19 +198,19 @@ import system.testing;
 
 @test
 async fun pauses_while_asleep(): void {
-    let code = Application.run(
+    let code = App.run(
         async () => {
             let paused = false;
-            Application.on_sleep(
+            App.on_sleep(
                 () => {
                     paused = true;
                 }
             );
-            Assert.is_true(Application.simulate(AppEvent.Sleeping));
+            Assert.is_true(App.simulate(AppEvent.Sleeping));
             Assert.is_true(paused);
-            Assert.is_true(Application.phase == AppPhase.Asleep);
-            Assert.is_false(Application.simulate(AppEvent.Sleeping));
-            Application.quit(0);
+            Assert.is_true(App.phase == AppPhase.Asleep);
+            Assert.is_false(App.simulate(AppEvent.Sleeping));
+            App.quit(0);
             return Result.Ok(Unit());
         }
     ).await;
@@ -218,8 +218,8 @@ async fun pauses_while_asleep(): void {
 }
 ```
 
-Use `Application.quit` to end a test's `run`. When `run` returns, hooks are cleared and
-`Application.stopping` is a fresh token again, so the next test starts from a clean state.
+Use `App.quit` to end a test's `run`. When `run` returns, hooks are cleared and
+`App.stopping` is a fresh token again, so the next test starts from a clean state.
 
 See the [API reference](../../reference/api/system-app.md) for every declaration, and
-[Lifecycle and state](../../web-server/lifecycle.md) for using `Application.run` with a web server.
+[Lifecycle and state](../../web-server/lifecycle.md) for using `App.run` with a web server.

@@ -103,6 +103,10 @@ pub(super) fn package(
             .join(format!("{ACTIVITY}.java")),
         activity(&app.id, &libraries).as_bytes(),
     )?);
+    sources.push(write(
+        &java.join("org/dream/runtime/Surfaces.java"),
+        SURFACES_JAVA.as_bytes(),
+    )?);
     run(
         Command::new("javac")
             .args([
@@ -183,6 +187,7 @@ pub(super) fn package(
         };
         entries.push((entry, bytes, !name.ends_with(".so")));
     }
+    entries.extend(package_assets(&workspace.root, &package.assets, &work)?);
     append(&linked, &entries)?;
 
     let aligned = work.join("aligned.apk");
@@ -263,6 +268,14 @@ fn load_order(capabilities: &[HostCapability]) -> Vec<String> {
         .collect()
 }
 
+const SURFACES_JAVA: &str = r#"package org.dream.runtime;
+
+/** Blocks the UI thread until the window thread has dropped GPU surfaces. */
+public class Surfaces {
+    public static native void release();
+}
+"#;
+
 fn activity(id: &str, libraries: &[String]) -> String {
     let libraries = libraries
         .iter()
@@ -270,8 +283,25 @@ fn activity(id: &str, libraries: &[String]) -> String {
         .collect::<String>();
     format!(
         "package {id};\n\n\
-         import org.libsdl.app.SDLActivity;\n\n\
+         import android.content.res.AssetManager;\n\
+         import android.os.Bundle;\n\
+         import android.view.SurfaceHolder;\n\
+         import java.io.File;\n\
+         import java.io.FileOutputStream;\n\
+         import java.io.InputStream;\n\
+         import java.io.IOException;\n\
+         import org.libsdl.app.SDLActivity;\n\
+         import org.libsdl.app.SDLSurface;\n\n\
          public class {ACTIVITY} extends SDLActivity {{\n    \
+             @Override\n    \
+             protected void onCreate(Bundle savedInstanceState) {{\n        \
+                 copyAssets();\n        \
+                 super.onCreate(savedInstanceState);\n    \
+             }}\n\n    \
+             @Override\n    \
+             protected SDLSurface createSDLSurface(android.content.Context context) {{\n        \
+                 return new DreamSurface(context);\n    \
+             }}\n\n    \
              @Override\n    \
              protected String[] getLibraries() {{\n        \
                  return new String[] {{\n{libraries}        }};\n    \
@@ -279,6 +309,57 @@ fn activity(id: &str, libraries: &[String]) -> String {
              @Override\n    \
              protected String getMainFunction() {{\n        \
                  return \"main\";\n    \
+             }}\n\n    \
+             private void copyAssets() {{\n        \
+                 try {{\n            \
+                     copyTree(getAssets(), \"\", getFilesDir());\n        \
+                 }} catch (IOException error) {{\n            \
+                     android.util.Log.e(\"Dream\", \"copying assets failed\", error);\n        \
+                 }}\n    \
+             }}\n\n    \
+             private static void copyTree(AssetManager assets, String path, File root) throws IOException {{\n        \
+                 String[] names = assets.list(path);\n        \
+                 if (names == null) {{\n            \
+                     return;\n        \
+                 }}\n        \
+                 if (names.length == 0) {{\n            \
+                     if (!path.isEmpty()) {{\n                \
+                         copyFile(assets, path, new File(root, path));\n            \
+                     }}\n            \
+                     return;\n        \
+                 }}\n        \
+                 for (String name : names) {{\n            \
+                     String child = path.isEmpty() ? name : path + \"/\" + name;\n            \
+                     String[] nested = assets.list(child);\n            \
+                     if (nested != null && nested.length > 0) {{\n                \
+                         copyTree(assets, child, root);\n            \
+                     }} else {{\n                \
+                         copyFile(assets, child, new File(root, child));\n            \
+                     }}\n        \
+                 }}\n    \
+             }}\n\n    \
+             private static void copyFile(AssetManager assets, String path, File dest) throws IOException {{\n        \
+                 File parent = dest.getParentFile();\n        \
+                 if (parent != null) {{\n            \
+                     parent.mkdirs();\n        \
+                 }}\n        \
+                 try (InputStream input = assets.open(path); FileOutputStream output = new FileOutputStream(dest)) {{\n            \
+                     byte[] buffer = new byte[8192];\n            \
+                     int read;\n            \
+                     while ((read = input.read(buffer)) >= 0) {{\n                \
+                         output.write(buffer, 0, read);\n            \
+                     }}\n        \
+                 }}\n    \
+             }}\n\
+         }}\n\n\
+         class DreamSurface extends SDLSurface {{\n    \
+             public DreamSurface(android.content.Context context) {{\n        \
+                 super(context);\n    \
+             }}\n\n    \
+             @Override\n    \
+             public void surfaceDestroyed(SurfaceHolder holder) {{\n        \
+                 org.dream.runtime.Surfaces.release();\n        \
+                 super.surfaceDestroyed(holder);\n    \
              }}\n\
          }}\n"
     )
@@ -323,6 +404,46 @@ fn manifest(app: &AppConfig, label: &str, version: &str, target: u32, network: b
         label = xml_escape(label),
         version = xml_escape(version),
     )
+}
+
+/// APK `assets/` entries for `[package].assets`, preserving paths under the package root.
+fn package_assets(
+    root: &Path,
+    assets: &[String],
+    work: &Path,
+) -> Result<Vec<(String, Vec<u8>, bool)>> {
+    if assets.is_empty() {
+        return Ok(Vec::new());
+    }
+    let staged = work.join("staged-assets");
+    crate::assets::copy_into(root, assets, &staged)?;
+    let mut files = Vec::new();
+    let mut dirs = vec![staged.clone()];
+    while let Some(dir) = dirs.pop() {
+        let mut children = std::fs::read_dir(&dir)
+            .with_context(|| format!("reading {}", dir.display()))?
+            .collect::<std::io::Result<Vec<_>>>()?;
+        children.sort_by_key(|entry| entry.file_name());
+        for child in children {
+            let path = child.path();
+            if path.is_dir() {
+                dirs.push(path);
+                continue;
+            }
+            let relative = path
+                .strip_prefix(&staged)
+                .expect("staged asset stays under the staging directory")
+                .to_string_lossy()
+                .replace('\\', "/");
+            files.push((
+                format!("assets/{relative}"),
+                std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?,
+                true,
+            ));
+        }
+    }
+    files.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(files)
 }
 
 fn xml_escape(text: &str) -> String {
@@ -434,6 +555,20 @@ mod tests {
     }
 
     #[test]
+    fn package_assets_keep_their_relative_paths() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("pkg");
+        std::fs::create_dir_all(root.join("fixtures")).unwrap();
+        std::fs::write(root.join("fixtures/a.txt"), "hi").unwrap();
+        let work = tmp.path().join("work");
+        std::fs::create_dir_all(&work).unwrap();
+        let files = package_assets(&root, &["fixtures".into()], &work).unwrap();
+        assert_eq!(files[0].0, "assets/fixtures/a.txt");
+        assert_eq!(files[0].1, b"hi");
+        assert!(package_assets(&root, &[], &work).unwrap().is_empty());
+    }
+
+    #[test]
     fn activity_loads_capabilities_in_order_and_starts_main_last() {
         let libraries = load_order(&[
             HostCapability::Core,
@@ -454,6 +589,8 @@ mod tests {
         assert!(source.contains("extends SDLActivity"));
         assert!(source.contains("\"dream_host_window\",\n            \"dream_host_gpu\""));
         assert!(source.contains("return \"main\";"));
+        assert!(source.contains("org.dream.runtime.Surfaces.release()"));
+        assert!(source.contains("copyTree(getAssets()"));
     }
 
     #[test]

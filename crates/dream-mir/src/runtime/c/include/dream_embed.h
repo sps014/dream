@@ -56,11 +56,12 @@ void dream_set_panic_hook(dream_panic_hook hook);
  * domain must remain valid for the lifetime of the runtime; changing it after use is invalid. */
 void dream_set_platform(const dream_platform *platform);
 
-/* Runs one pass of this thread's ready Dream work and due timers, then returns. It does not
- * wait. Work that becomes ready during the pass runs on the next call, so a frame loop yields
- * once per call. The result is 1 while any timer or host completion is outstanding. Call it
- * from the platform event loop on the thread that attached the runtime; a call made while a
- * pump is already running returns 1 without running anything. */
+/* Runs one pass of this thread's ready Dream work and due timers. Work that becomes ready
+ * during the pass runs on the next call, so a frame loop yields once per call. Returns 0 when
+ * nothing is outstanding, 1 when runnable work is queued (the caller paces a visible frame),
+ * and on Android 2 after waiting in the host event park because only a timer or foreign
+ * completion was outstanding. A call made while a pump is already running returns 1 without
+ * running anything. Call it from the platform event loop on the thread that attached the runtime. */
 int dream_scheduler_pump(void);
 
 #ifdef __cplusplus

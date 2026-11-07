@@ -1,6 +1,6 @@
 module system.app;
 
-/// A registered `Application` hook. Keep it to remove the hook early with `cancel`; a
+/// A registered `App` hook. Keep it to remove the hook early with `cancel`; a
 /// subscription that is ignored stays registered until the program stops.
 public class Subscription {
     id: int;

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/system/app.md) for examples and common task
 
 ## `Subscription`
 
-A registered `Application` hook. Keep it to remove the hook early with `cancel`; a subscription that is ignored stays registered until the program stops.
+A registered `App` hook. Keep it to remove the hook early with `cancel`; a subscription that is ignored stays registered until the program stops.
 
 ```dream
 public class Subscription

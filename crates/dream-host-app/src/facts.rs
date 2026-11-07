@@ -1,4 +1,4 @@
-//! Current values behind `Application.is_session_locked`, `are_displays_on`, `is_active`,
+//! Current values behind `App.is_session_locked`, `are_displays_on`, `is_active`,
 //! `power_source`, and `theme`. -1 means the platform has not reported the fact.
 
 use crate::events;

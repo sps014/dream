@@ -115,6 +115,30 @@ pub(crate) fn native(entry: &crate::host::Entry) -> Option<WindowSurface> {
     Some(out)
 }
 
+/// Android has destroyed the native window and not yet created its replacement.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn android_detached(_window: &sdl3::video::Window) -> bool {
+    false
+}
+
+/// Android has destroyed the native window and not yet created its replacement.
+#[cfg(target_os = "android")]
+pub(crate) fn android_detached(window: &sdl3::video::Window) -> bool {
+    use sdl3::sys::{properties, video};
+    let props = unsafe { video::SDL_GetWindowProperties(window.raw()) };
+    if props.0 == 0 {
+        return true;
+    }
+    unsafe {
+        properties::SDL_GetPointerProperty(
+            props,
+            video::SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER,
+            std::ptr::null_mut(),
+        )
+    }
+    .is_null()
+}
+
 /// The Metal-backed subview UIKit windows draw through; its `CAMetalLayer` is the GPU surface.
 #[cfg(target_os = "ios")]
 pub(crate) struct MetalView(sdl3::sys::metal::SDL_MetalView);

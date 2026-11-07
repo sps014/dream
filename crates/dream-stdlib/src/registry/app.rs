@@ -59,8 +59,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/app/app_state.dream"),
         ),
         (
-            "<std>/system/app/application.dream",
-            include_str!("../system/app/application.dream"),
+            "<std>/system/app/app.dream",
+            include_str!("../system/app/app.dream"),
         ),
     ],
 };

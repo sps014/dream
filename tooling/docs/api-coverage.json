@@ -1,12 +1,151 @@
 [
   {
+    "source": "crates/dream-stdlib/src/system/app/app.dream",
+    "package": "system.app",
+    "page": "reference/api/app-app.md",
+    "declarations": [
+      {
+        "signature": "public static class App",
+        "description": "The lifetime of the whole program: startup, shutdown, and operating-system events such as sleep, session lock, and theme changes.  Wrap the program in `App.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the `stopping` token is cancelled, `on_stop` cleanups run newest first, and `run` returns the exit code for `main` to return. Register hooks for the events you care about; each hook returns a `Subscription` that can remove it.  Hooks run on the program's main scheduler, one event at a time, in registration order. They are not awaited, so they must return promptly; start a task for longer work.",
+        "line": 13,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static async fun run( start: fun(): Future<Result<Unit, Error>>, shutdown_timeout_ms: int = 5000 ): int",
+        "description": "Runs the program. `start` performs startup and may register hooks and cleanups.  After `start` returns `Ok`, the program keeps running until it is asked to stop: by `quit`, Ctrl+C, `SIGTERM`, or an operating-system shutdown that no hook vetoes. `start` may also keep running for the whole program, for example while serving requests, as long as it returns once `stopping` is cancelled. When `start` returns `Err`, the error is printed to standard error, cleanups registered so far run, and the exit code is `1`.  Shutdown cancels `stopping`, waits for `start` to return if it is still running, then runs `on_stop` cleanups in reverse registration order. All of this shares `shutdown_timeout_ms` milliseconds, counted from the start of shutdown: a `start` or cleanup still running when the time is up is cancelled and reported, and the remaining cleanups still run.  Returns the exit code: the value given to `quit`, `130` after Ctrl+C, `143` after `SIGTERM`, `1` after a failed `start`, and `0` otherwise. Calling `run` while another `run` is active prints an error and returns `1`.",
+        "line": 32,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_stop(cleanup: fun(): Future<void>): Result<Subscription, AppError>",
+        "description": "Registers `cleanup` to run during shutdown. Cleanups run newest first, so register each one right after acquiring the resource it releases. A cleanup registered during startup also runs when startup fails or is cancelled.  Returns `Err(AppError)` with code `ESTOPPING` once shutdown has begun, because the cleanup would never run.",
+        "line": 176,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_shutdown_requested(hook: fun(ShutdownRequest): void): Subscription",
+        "description": "Runs `hook` when something asks the program to stop: Ctrl+C, `SIGTERM`, `quit`, an operating-system quit, or the user session ending. Call `ShutdownRequest.veto` to keep running when the request allows it. Only the first accepted request is delivered; later requests are ignored once shutdown begins.",
+        "line": 191,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_sleep(hook: fun(): void): Subscription",
+        "description": "Runs `hook` just before the computer sleeps. Save anything that must survive a power loss, quickly: the operating system waits at most about half a second.",
+        "line": 199,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_wake(hook: fun(int): void): Subscription",
+        "description": "Runs `hook` after the computer wakes, with how long it slept in milliseconds, or `-1` when the platform cannot tell. Measure gaps with this value: wall-clock time can jump across sleep.",
+        "line": 208,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_session_lock(hook: fun(bool): void): Subscription",
+        "description": "Runs `hook` with `true` when the user session is locked, or another user switches in, and with `false` when it is unlocked again. Use it to hide sensitive content. Never fires in browsers, Node, or on Linux.",
+        "line": 217,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_display_power(hook: fun(bool): void): Subscription",
+        "description": "Runs `hook` with `false` when the displays go to sleep and `true` when they turn back on. The computer and the program keep running meanwhile. Never fires in browsers, Node, or on Linux.",
+        "line": 226,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_active(hook: fun(bool): void): Subscription",
+        "description": "Runs `hook` with `true` when the app comes to the foreground and `false` when it goes to the background: when every window lost focus natively, or when the browser tab is hidden. Programs without windows stay active.",
+        "line": 235,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_power_source(hook: fun(PowerSource): void): Subscription",
+        "description": "Runs `hook` when the computer switches between wall power and battery.",
+        "line": 242,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_theme(hook: fun(SystemTheme): void): Subscription",
+        "description": "Runs `hook` when the user changes the system color scheme.",
+        "line": 249,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_locale(hook: fun(): void): Subscription",
+        "description": "Runs `hook` when the user changes the system language or regional formats, so cached formatted text can be rebuilt.",
+        "line": 257,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun on_low_memory(hook: fun(): void): Subscription",
+        "description": "Runs `hook` when the operating system reports that memory is running low. Drop caches that can be rebuilt. Repeated warnings that arrive together run the hook once.",
+        "line": 265,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get stopping(): CancellationToken",
+        "description": "A token that is cancelled once, when shutdown begins and before any `on_stop` cleanup runs. Loops check `is_cancelled`; waits take it as their `token` argument. Outside `App.run` the token is never cancelled.",
+        "line": 274,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun quit(code: int = 0): void",
+        "description": "Stops the program with exit code `code`. `on_shutdown_requested` hooks see the reason `Requested`, which cannot be vetoed. Does nothing once shutdown has begun or when no `run` is active.",
+        "line": 281,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get phase(): AppPhase",
+        "description": "Where the program is in its lifetime. Intended for diagnostics and tests.",
+        "line": 289,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get is_session_locked(): bool",
+        "description": "True while the user session is locked or switched away from.",
+        "line": 294,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get are_displays_on(): bool",
+        "description": "False while the displays are asleep. True when the platform cannot tell.",
+        "line": 299,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get is_active(): bool",
+        "description": "True while the app is in the foreground. See `on_active`.",
+        "line": 304,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get power_source(): PowerSource",
+        "description": "The current power source. Read when `run` starts and kept current afterwards.",
+        "line": 309,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static get theme(): SystemTheme",
+        "description": "The current system color scheme. Read when `run` starts and kept current afterwards.",
+        "line": 314,
+        "page": "reference/api/app-app.md"
+      },
+      {
+        "signature": "public static fun simulate(event: AppEvent): bool",
+        "description": "Delivers `event` as if the operating system had reported it, for tests. Hooks run before `simulate` returns. Returns false when the event was ignored: a duplicate (for example `Woke` while not asleep, or locking an already locked session), any event after shutdown began, or a vetoed shutdown request.",
+        "line": 322,
+        "page": "reference/api/app-app.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/app/app_error.dream",
     "package": "system.app",
     "page": "reference/api/app-app-error.md",
     "declarations": [
       {
         "signature": "public class AppError: Error",
-        "description": "Why an `Application` operation was refused.",
+        "description": "Why an `App` operation was refused.",
         "line": 4,
         "page": "reference/api/app-app-error.md"
       },
@@ -31,7 +170,7 @@
     "declarations": [
       {
         "signature": "public enum AppEvent",
-        "description": "An operating-system event to inject with `Application.simulate` in tests.  Each variant reaches the same hooks, properties, and transition checks as the real event. Programs never receive `AppEvent` values; they register `Application.on_*` hooks.",
+        "description": "An operating-system event to inject with `App.simulate` in tests.  Each variant reaches the same hooks, properties, and transition checks as the real event. Programs never receive `AppEvent` values; they register `App.on_*` hooks.",
         "line": 7,
         "page": "reference/api/app-app-event.md"
       },
@@ -104,13 +243,13 @@
     "declarations": [
       {
         "signature": "public enum AppPhase",
-        "description": "Where the program is in its lifetime, as reported by `Application.phase`.  Normal code does not need the phase: use the `Application.on_*` hooks and `Application.stopping` instead. It exists for diagnostics and tests.",
+        "description": "Where the program is in its lifetime, as reported by `App.phase`.  Normal code does not need the phase: use the `App.on_*` hooks and `App.stopping` instead. It exists for diagnostics and tests.",
         "line": 7,
         "page": "reference/api/app-app-phase.md"
       },
       {
         "signature": "Starting",
-        "description": "`Application.run` is running the `start` function.",
+        "description": "`App.run` is running the `start` function.",
         "line": 9,
         "page": "reference/api/app-app-phase.md"
       },
@@ -128,148 +267,9 @@
       },
       {
         "signature": "Stopping",
-        "description": "Shutdown began. `Application.stopping` is cancelled and `on_stop` cleanups run.",
+        "description": "Shutdown began. `App.stopping` is cancelled and `on_stop` cleanups run.",
         "line": 15,
         "page": "reference/api/app-app-phase.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/app/application.dream",
-    "package": "system.app",
-    "page": "reference/api/app-application.md",
-    "declarations": [
-      {
-        "signature": "public static class Application",
-        "description": "The lifetime of the whole program: startup, shutdown, and operating-system events such as sleep, session lock, and theme changes.  Wrap the program in `Application.run`. Ctrl+C and `SIGTERM` then stop it cleanly: the `stopping` token is cancelled, `on_stop` cleanups run newest first, and `run` returns the exit code for `main` to return. Register hooks for the events you care about; each hook returns a `Subscription` that can remove it.  Hooks run on the program's main scheduler, one event at a time, in registration order. They are not awaited, so they must return promptly; start a task for longer work.",
-        "line": 13,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static async fun run( start: fun(): Future<Result<Unit, Error>>, shutdown_timeout_ms: int = 5000 ): int",
-        "description": "Runs the program. `start` performs startup and may register hooks and cleanups.  After `start` returns `Ok`, the program keeps running until it is asked to stop: by `quit`, Ctrl+C, `SIGTERM`, or an operating-system shutdown that no hook vetoes. `start` may also keep running for the whole program, for example while serving requests, as long as it returns once `stopping` is cancelled. When `start` returns `Err`, the error is printed to standard error, cleanups registered so far run, and the exit code is `1`.  Shutdown cancels `stopping`, waits for `start` to return if it is still running, then runs `on_stop` cleanups in reverse registration order. All of this shares `shutdown_timeout_ms` milliseconds, counted from the start of shutdown: a `start` or cleanup still running when the time is up is cancelled and reported, and the remaining cleanups still run.  Returns the exit code: the value given to `quit`, `130` after Ctrl+C, `143` after `SIGTERM`, `1` after a failed `start`, and `0` otherwise. Calling `run` while another `run` is active prints an error and returns `1`.",
-        "line": 32,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_stop(cleanup: fun(): Future<void>): Result<Subscription, AppError>",
-        "description": "Registers `cleanup` to run during shutdown. Cleanups run newest first, so register each one right after acquiring the resource it releases. A cleanup registered during startup also runs when startup fails or is cancelled.  Returns `Err(AppError)` with code `ESTOPPING` once shutdown has begun, because the cleanup would never run.",
-        "line": 176,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_shutdown_requested(hook: fun(ShutdownRequest): void): Subscription",
-        "description": "Runs `hook` when something asks the program to stop: Ctrl+C, `SIGTERM`, `quit`, an operating-system quit, or the user session ending. Call `ShutdownRequest.veto` to keep running when the request allows it. Only the first accepted request is delivered; later requests are ignored once shutdown begins.",
-        "line": 191,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_sleep(hook: fun(): void): Subscription",
-        "description": "Runs `hook` just before the computer sleeps. Save anything that must survive a power loss, quickly: the operating system waits at most about half a second.",
-        "line": 199,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_wake(hook: fun(int): void): Subscription",
-        "description": "Runs `hook` after the computer wakes, with how long it slept in milliseconds, or `-1` when the platform cannot tell. Measure gaps with this value: wall-clock time can jump across sleep.",
-        "line": 208,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_session_lock(hook: fun(bool): void): Subscription",
-        "description": "Runs `hook` with `true` when the user session is locked, or another user switches in, and with `false` when it is unlocked again. Use it to hide sensitive content. Never fires in browsers, Node, or on Linux.",
-        "line": 217,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_display_power(hook: fun(bool): void): Subscription",
-        "description": "Runs `hook` with `false` when the displays go to sleep and `true` when they turn back on. The computer and the program keep running meanwhile. Never fires in browsers, Node, or on Linux.",
-        "line": 226,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_active(hook: fun(bool): void): Subscription",
-        "description": "Runs `hook` with `true` when the app comes to the foreground and `false` when it goes to the background: when every window lost focus natively, or when the browser tab is hidden. Programs without windows stay active.",
-        "line": 235,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_power_source(hook: fun(PowerSource): void): Subscription",
-        "description": "Runs `hook` when the computer switches between wall power and battery.",
-        "line": 242,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_theme(hook: fun(SystemTheme): void): Subscription",
-        "description": "Runs `hook` when the user changes the system color scheme.",
-        "line": 249,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_locale(hook: fun(): void): Subscription",
-        "description": "Runs `hook` when the user changes the system language or regional formats, so cached formatted text can be rebuilt.",
-        "line": 257,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun on_low_memory(hook: fun(): void): Subscription",
-        "description": "Runs `hook` when the operating system reports that memory is running low. Drop caches that can be rebuilt. Repeated warnings that arrive together run the hook once.",
-        "line": 265,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get stopping(): CancellationToken",
-        "description": "A token that is cancelled once, when shutdown begins and before any `on_stop` cleanup runs. Loops check `is_cancelled`; waits take it as their `token` argument. Outside `Application.run` the token is never cancelled.",
-        "line": 274,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun quit(code: int = 0): void",
-        "description": "Stops the program with exit code `code`. `on_shutdown_requested` hooks see the reason `Requested`, which cannot be vetoed. Does nothing once shutdown has begun or when no `run` is active.",
-        "line": 281,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get phase(): AppPhase",
-        "description": "Where the program is in its lifetime. Intended for diagnostics and tests.",
-        "line": 289,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get is_session_locked(): bool",
-        "description": "True while the user session is locked or switched away from.",
-        "line": 294,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get are_displays_on(): bool",
-        "description": "False while the displays are asleep. True when the platform cannot tell.",
-        "line": 299,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get is_active(): bool",
-        "description": "True while the app is in the foreground. See `on_active`.",
-        "line": 304,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get power_source(): PowerSource",
-        "description": "The current power source. Read when `run` starts and kept current afterwards.",
-        "line": 309,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static get theme(): SystemTheme",
-        "description": "The current system color scheme. Read when `run` starts and kept current afterwards.",
-        "line": 314,
-        "page": "reference/api/app-application.md"
-      },
-      {
-        "signature": "public static fun simulate(event: AppEvent): bool",
-        "description": "Delivers `event` as if the operating system had reported it, for tests. Hooks run before `simulate` returns. Returns false when the event was ignored: a duplicate (for example `Woke` while not asleep, or locking an already locked session), any event after shutdown began, or a vetoed shutdown request.",
-        "line": 322,
-        "page": "reference/api/app-application.md"
       }
     ]
   },
@@ -280,7 +280,7 @@
     "declarations": [
       {
         "signature": "public enum PowerSource",
-        "description": "Where the computer gets its power from, as reported by `Application.power_source`.",
+        "description": "Where the computer gets its power from, as reported by `App.power_source`.",
         "line": 4,
         "page": "reference/api/app-power-source.md"
       },
@@ -329,7 +329,7 @@
       },
       {
         "signature": "OsQuit",
-        "description": "The user quit the app from its menu or Dock. It can be vetoed. No platform reports it yet: Cmd+Q currently arrives as `WindowEvent.CloseRequested` on each window, so deliver it with `Application.simulate` in tests.",
+        "description": "The user quit the app from its menu or Dock. It can be vetoed. No platform reports it yet: Cmd+Q currently arrives as `WindowEvent.CloseRequested` on each window, so deliver it with `App.simulate` in tests.",
         "line": 15,
         "page": "reference/api/app-shutdown-reason.md"
       },
@@ -341,13 +341,13 @@
       },
       {
         "signature": "LastWindowClosed",
-        "description": "The last open window of the app was closed. It can be vetoed. No platform reports it yet, so deliver it with `Application.simulate` in tests.",
+        "description": "The last open window of the app was closed. It can be vetoed. No platform reports it yet, so deliver it with `App.simulate` in tests.",
         "line": 22,
         "page": "reference/api/app-shutdown-reason.md"
       },
       {
         "signature": "Requested",
-        "description": "The program called `Application.quit`. It cannot be vetoed.",
+        "description": "The program called `App.quit`. It cannot be vetoed.",
         "line": 24,
         "page": "reference/api/app-shutdown-reason.md"
       }
@@ -360,7 +360,7 @@
     "declarations": [
       {
         "signature": "public class ShutdownRequest",
-        "description": "A request to stop the program, passed to `Application.on_shutdown_requested` hooks.  Every hook sees the same request. When any hook calls `veto` on a request that allows it, the program keeps running and `Application.stopping` stays uncancelled.",
+        "description": "A request to stop the program, passed to `App.on_shutdown_requested` hooks.  Every hook sees the same request. When any hook calls `veto` on a request that allows it, the program keeps running and `App.stopping` stays uncancelled.",
         "line": 7,
         "page": "reference/api/app-shutdown-request.md"
       },
@@ -372,7 +372,7 @@
       },
       {
         "signature": "public get can_veto(): bool",
-        "description": "True when `veto` can keep the program running. Signals, `Application.quit`, and the final notice that the session is ending cannot be vetoed.",
+        "description": "True when `veto` can keep the program running. Signals, `App.quit`, and the final notice that the session is ending cannot be vetoed.",
         "line": 25,
         "page": "reference/api/app-shutdown-request.md"
       },
@@ -391,7 +391,7 @@
     "declarations": [
       {
         "signature": "public class Subscription",
-        "description": "A registered `Application` hook. Keep it to remove the hook early with `cancel`; a subscription that is ignored stays registered until the program stops.",
+        "description": "A registered `App` hook. Keep it to remove the hook early with `cancel`; a subscription that is ignored stays registered until the program stops.",
         "line": 5,
         "page": "reference/api/app-subscription.md"
       },
@@ -410,7 +410,7 @@
     "declarations": [
       {
         "signature": "public enum SystemTheme",
-        "description": "The color scheme the user chose for the operating system or browser, as reported by `Application.theme`.",
+        "description": "The color scheme the user chose for the operating system or browser, as reported by `App.theme`.",
         "line": 5,
         "page": "reference/api/app-system-theme.md"
       },
@@ -22052,13 +22052,13 @@
       },
       {
         "signature": "public fun run( host: string, port: int, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Listens with the default `ServerConfig` and waits until shutdown or cancellation. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `Application.stopping` is cancelled.",
+        "description": "Listens with the default `ServerConfig` and waits until shutdown or cancellation. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `App.stopping` is cancelled.",
         "line": 419,
         "page": "reference/api/webapi-web-app.md"
       },
       {
         "signature": "public fun run( host: string, port: int, config: ServerConfig, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `Application.stopping` is cancelled.",
+        "description": "Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `App.stopping` is cancelled.",
         "line": 431,
         "page": "reference/api/webapi-web-app.md"
       },

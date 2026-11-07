@@ -414,7 +414,7 @@ public class WebApp {
 
     /// Listens with the default `ServerConfig` and waits until shutdown or cancellation.
     /// Without a `token` (explicit or inherited from the current task) the server stops
-    /// gracefully when `Application.stopping` is cancelled.
+    /// gracefully when `App.stopping` is cancelled.
     @native
     public fun run(
         host: string,
@@ -426,7 +426,7 @@ public class WebApp {
 
     /// Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`.
     /// Without a `token` (explicit or inherited from the current task) the server stops
-    /// gracefully when `Application.stopping` is cancelled.
+    /// gracefully when `App.stopping` is cancelled.
     @native
     public fun run(
         host: string,
@@ -446,7 +446,7 @@ public class WebApp {
     ): Result<Unit, IoError> {
         let effective = CancellationToken.resolve(token);
         if effective.is_none() {
-            effective = Option.Some(Application.stopping);
+            effective = Option.Some(App.stopping);
         }
         app.listen(host, port, config, effective).await?;
         app.wait(effective).await;

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/system/app.md) for examples and common task
 
 ## `SystemTheme`
 
-The color scheme the user chose for the operating system or browser, as reported by `Application.theme`.
+The color scheme the user chose for the operating system or browser, as reported by `App.theme`.
 
 ```dream
 public enum SystemTheme

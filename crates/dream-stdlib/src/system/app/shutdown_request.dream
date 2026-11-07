@@ -1,9 +1,9 @@
 module system.app;
 
-/// A request to stop the program, passed to `Application.on_shutdown_requested` hooks.
+/// A request to stop the program, passed to `App.on_shutdown_requested` hooks.
 ///
 /// Every hook sees the same request. When any hook calls `veto` on a request that allows
-/// it, the program keeps running and `Application.stopping` stays uncancelled.
+/// it, the program keeps running and `App.stopping` stays uncancelled.
 public class ShutdownRequest {
     request_reason: ShutdownReason;
     vetoable: bool;
@@ -20,7 +20,7 @@ public class ShutdownRequest {
         return this.request_reason;
     }
 
-    /// True when `veto` can keep the program running. Signals, `Application.quit`, and
+    /// True when `veto` can keep the program running. Signals, `App.quit`, and
     /// the final notice that the session is ending cannot be vetoed.
     public get can_veto(): bool {
         return this.vetoable;

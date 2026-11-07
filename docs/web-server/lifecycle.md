@@ -6,7 +6,7 @@ icon: material/power
 
 # Lifecycle and application state
 
-A web service shares its process lifetime with every other Dream program: wrap `main` in `Application.run` from `system.app`. Startup code goes in the `start` function, and each resource registers its release with `Application.on_stop` right after it is acquired. Ctrl+C and `SIGTERM` then stop the server gracefully.
+A web service shares its process lifetime with every other Dream program: wrap `main` in `App.run` from `system.app`. Startup code goes in the `start` function, and each resource registers its release with `App.on_stop` right after it is acquired. Ctrl+C and `SIGTERM` then stop the server gracefully.
 
 ```dream
 import system;
@@ -22,12 +22,12 @@ class Routes {
 }
 
 async fun main(): int {
-    return Application.run(
+    return App.run(
         async () => {
             let app = WebApp();
             app.include_router(Routes.router()).unwrap();
             app.state["service"] = "ready";
-            Application.on_stop(
+            App.on_stop(
                 async () => {
                     app.state.clear();
                 }
@@ -40,13 +40,13 @@ async fun main(): int {
 }
 ```
 
-When the process is asked to stop, `Application.stopping` is cancelled. `run` without a token watches that token, so it stops accepting connections, lets running requests finish, and returns. `Application.run` then runs the `on_stop` cleanups, newest first, and returns the exit code for `main`: `130` after Ctrl+C and `143` after `SIGTERM`. If `start` returns an error, for example because `run` could not bind the port, the error is printed, the cleanups registered so far run, and the exit code is `1`.
+When the process is asked to stop, `App.stopping` is cancelled. `run` without a token watches that token, so it stops accepting connections, lets running requests finish, and returns. `App.run` then runs the `on_stop` cleanups, newest first, and returns the exit code for `main`: `130` after Ctrl+C and `143` after `SIGTERM`. If `start` returns an error, for example because `run` could not bind the port, the error is printed, the cleanups registered so far run, and the exit code is `1`.
 
 To start the server without blocking `start`, call `listen` and register the drain as a cleanup:
 
 ```dream
 let port = app.listen("127.0.0.1", 0).await?;
-Application.on_stop(
+App.on_stop(
     async () => {
         app.shutdown();
         app.wait().await;
@@ -57,11 +57,11 @@ Application.on_stop(
 | `WebApp` member | Effect |
 | --- | --- |
 | `state` | A `Map<string, string>` shared by every request; handlers see it as `ctx.app_state`. |
-| `run(host, port, token?)` | Listens, then waits until the server stops. Without a token it stops when `Application.stopping` is cancelled. |
+| `run(host, port, token?)` | Listens, then waits until the server stops. Without a token it stops when `App.stopping` is cancelled. |
 | `shutdown()` | Stops accepting connections and cancels pending transport work. |
 | `wait(token?)` | Waits for active requests and their cleanup, then releases the listener. |
 
-`shutdown` stops acceptance and cancels pending transport operations. `wait` drains active requests and their cleanup. Call both during controlled termination. A trailing cancellation token on `listen`, `run`, or `wait` participates in structured cancellation. See [Application lifetime](../library/system/app.md) for the shutdown timeout and the other process events.
+`shutdown` stops acceptance and cancels pending transport operations. `wait` drains active requests and their cleanup. Call both during controlled termination. A trailing cancellation token on `listen`, `run`, or `wait` participates in structured cancellation. See [App lifetime](../library/system/app.md) for the shutdown timeout and the other process events.
 
 ## Request context
 

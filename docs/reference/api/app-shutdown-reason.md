@@ -30,7 +30,7 @@ Terminate
 
 ## `OsQuit`
 
-The user quit the app from its menu or Dock. It can be vetoed. No platform reports it yet: Cmd+Q currently arrives as `WindowEvent.CloseRequested` on each window, so deliver it with `Application.simulate` in tests.
+The user quit the app from its menu or Dock. It can be vetoed. No platform reports it yet: Cmd+Q currently arrives as `WindowEvent.CloseRequested` on each window, so deliver it with `App.simulate` in tests.
 
 ```dream
 OsQuit
@@ -46,7 +46,7 @@ SessionEnding
 
 ## `LastWindowClosed`
 
-The last open window of the app was closed. It can be vetoed. No platform reports it yet, so deliver it with `Application.simulate` in tests.
+The last open window of the app was closed. It can be vetoed. No platform reports it yet, so deliver it with `App.simulate` in tests.
 
 ```dream
 LastWindowClosed
@@ -54,7 +54,7 @@ LastWindowClosed
 
 ## `Requested`
 
-The program called `Application.quit`. It cannot be vetoed.
+The program called `App.quit`. It cannot be vetoed.
 
 ```dream
 Requested

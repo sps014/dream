@@ -1,6 +1,6 @@
 module system.app;
 
-// What `Application.run`'s `start` returned, once it returned.
+// What `App.run`'s `start` returned, once it returned.
 internal class StartOutcome {
     internal result: Option<Result<Unit, Error>>;
 

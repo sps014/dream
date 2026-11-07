@@ -213,6 +213,29 @@ pub(crate) fn shutdown() {
     HOST.with_borrow_mut(|host| *host = None);
 }
 
+/// The display period of a visible vsync window, used to pace Android frames that returned early.
+#[cfg(target_os = "android")]
+pub(crate) fn refresh_interval() -> Option<std::time::Duration> {
+    with_host(|host| {
+        let pacing = host
+            .windows
+            .values()
+            .any(|entry| entry.vsync && !entry.input.hidden && !host.background);
+        if !pacing {
+            return None;
+        }
+        let mode = unsafe {
+            sdl3::sys::video::SDL_GetCurrentDisplayMode(sdl3::sys::video::SDL_GetPrimaryDisplay())
+        };
+        if mode.is_null() {
+            return None;
+        }
+        let hz = f64::from(unsafe { (*mode).refresh_rate });
+        (hz >= 1.0).then(|| std::time::Duration::from_nanos((1_000_000_000.0 / hz) as u64))
+    })
+    .flatten()
+}
+
 /// Waits for platform events, preserving the event consumed by the wait for the next poll.
 pub fn park(timeout_ns: i64) {
     with_host(|host| {

@@ -39,6 +39,7 @@ pub(super) fn package(workspace: &Workspace, app: &AppConfig, guest: &Guest) -> 
         bundle.join("Info.plist"),
         info_plist(app, &package.name, &package.version, &executable),
     )?;
+    crate::assets::copy_into(&workspace.root, &package.assets, &bundle)?;
     // The simulator only requires an ad-hoc signature; nested code is signed before its bundle.
     signed.push(bundle.clone());
     for path in &signed {

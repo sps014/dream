@@ -168,18 +168,18 @@ async fun quit_after_requests(base: string, order: List<string>): void {
     Assert.eq(webapi_get(client, base, "/state", 200).await, "lifetime");
     client.close().unwrap();
     order.push("request");
-    Application.quit(0);
+    App.quit(0);
 }
 
 @test
 async fun webapi_application_lifetime(): void {
     let order = List<string>();
-    let code = Application.run(async () => {
+    let code = App.run(async () => {
         let app = WebApp();
         app.state["name"] = "lifetime";
         app.include_router(IsolatedRoutes.router()).unwrap();
         let port = app.listen("127.0.0.1", 0).await?;
-        Application.on_stop(async () => {
+        App.on_stop(async () => {
             app.shutdown();
             app.wait().await;
             order.push("stopped");
@@ -193,16 +193,16 @@ async fun webapi_application_lifetime(): void {
 
 async fun quit_soon(): void {
     Time.delay(50).await;
-    Application.quit(3);
+    App.quit(3);
 }
 
 @test
 async fun webapi_run_stops_with_application(): void {
     let order = List<string>();
-    let code = Application.run(async () => {
+    let code = App.run(async () => {
         let app = WebApp();
         app.include_router(IsolatedRoutes.router()).unwrap();
-        Application.on_stop(async () => {
+        App.on_stop(async () => {
             order.push("cleanup");
         });
         Promise.start(quit_soon());

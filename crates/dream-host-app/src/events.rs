@@ -1,4 +1,4 @@
-//! Event kinds and the coalescing queue, shared with `system/app/application.dream` and
+//! Event kinds and the coalescing queue, shared with `system/app/app.dream` and
 //! `runtime/src/hosts/app.js`.
 
 use std::collections::VecDeque;

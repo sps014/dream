@@ -48,9 +48,6 @@ pub(crate) fn run(
         .app
         .as_ref()
         .context("mobile builds require an [app] table in dream.toml")?;
-    if !workspace.manifest.package()?.assets.is_empty() {
-        eprintln!("warning: package assets are not copied into mobile app packages yet");
-    }
     doctor::run(platform, false)?;
     let device = if launch {
         Some(select_device(platform, device)?)

@@ -43,15 +43,22 @@ drops the window host. A second call returns 1 without re-entering SDL.
 `dream_scheduler_pump` is one bounded pass: it drains foreign completions and callbacks, fires the
 timers that were due when the pass began, and runs the ready queue until it empties. Work made ready
 by completions that arrive during the pass, including GPU presents, resumes on the next pass, so a
-frame loop yields to the platform once per frame. The pump never waits, returns 1 while work is
-outstanding, and returns 1 immediately when called while a pump is already on the stack.
+frame loop yields to the platform once per frame. It returns 0 when nothing is outstanding and 1
+when runnable work is queued. On Android, a pass that finds only a timer or a foreign completion
+waits in the window host's event park and returns 2, so a loop that is only waiting does not spin;
+the window host then spends any time left in a visible vsync frame before the next pass. iOS
+already iterates from a display link. A nested call returns 1.
 `dream_run_loop` remains the blocking desktop loop and the loop used by `Task` workers.
 
 SDL's event callback may run inside an SDL call the guest made, so it never calls Dream. It stores
 each event in the host's inbox, and the next `windowPoll` routes inbox events before newly polled
 ones. Android's `JNI_OnLoad` belongs to the window capability: SDL's definition is renamed to
 `dream_sdl_jni_onload` at build time (`.cargo/config.toml`), and the host exports a `JNI_OnLoad`
-that forwards to it. Lifecycle ordering during Android surface replacement is not yet handled.
+that forwards to it. When Android destroys the activity surface, the UI thread asks the window
+thread to drop every GPU swapchain and waits for that before SDL releases the `ANativeWindow`.
+The next frame queries the window host again and creates a swapchain for the replacement window.
+A missing native window is reported as occlusion, so a frame loop pauses instead of presenting
+to a destroyed surface.
 
 ## Event wire and coordinates
 

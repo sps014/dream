@@ -57,14 +57,12 @@ and `dreamer init app` initialize the current directory.
 
 All three templates generate the same canvas source. `app` defaults to desktop for
 `dreamer build` and `dreamer run`. `mobile` requires an explicit target because it declares
-two platforms. Mobile canvas execution and APK/simulator app packaging are not available
-yet: the mobile window, presentation, lifecycle, and shell integration are still required.
-Mobile commands report this limitation instead of compiling a desktop executable.
-See [mobile tooling](../deploy/mobile.md) to inspect SDK prerequisites and devices.
+two platforms. `dreamer build --target android` produces a debug APK and
+`dreamer build --target ios` produces a simulator app; `dreamer run` installs and launches
+one on a running device. See [mobile tooling](../deploy/mobile.md) for the SDK prerequisites.
 
 The starter handles touch events as well as mouse input, and offsets its content by
-`Window.safe_area`. Browser touch delivery and simulated touch events are supported;
-Android/iOS event delivery requires the mobile host integration.
+`Window.safe_area`.
 
 ## Browser and Node projects
 

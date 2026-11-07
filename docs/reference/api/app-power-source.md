@@ -6,7 +6,7 @@ Read the [usage guide](../../library/system/app.md) for examples and common task
 
 ## `PowerSource`
 
-Where the computer gets its power from, as reported by `Application.power_source`.
+Where the computer gets its power from, as reported by `App.power_source`.
 
 ```dream
 public enum PowerSource

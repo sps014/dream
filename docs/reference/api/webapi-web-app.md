@@ -103,7 +103,7 @@ public fun listen(
 
 ## `run`
 
-Listens with the default `ServerConfig` and waits until shutdown or cancellation. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `Application.stopping` is cancelled.
+Listens with the default `ServerConfig` and waits until shutdown or cancellation. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `App.stopping` is cancelled.
 
 ```dream
 public fun run(
@@ -115,7 +115,7 @@ public fun run(
 
 ## `run`
 
-Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `Application.stopping` is cancelled.
+Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `App.stopping` is cancelled.
 
 ```dream
 public fun run(

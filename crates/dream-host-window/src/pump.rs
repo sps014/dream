@@ -93,7 +93,8 @@ pub(crate) fn drain(host: &mut Host) {
             host.background
                 || flags.intersects(
                     WindowFlags::HIDDEN | WindowFlags::MINIMIZED | WindowFlags::OCCLUDED,
-                ),
+                )
+                || crate::surface::android_detached(&entry.window),
         );
     }
 }

@@ -503,12 +503,38 @@ int dream_scheduler_pump(void) {
     }
     run_ready();
     pump_active = 0;
+    /* A completion queued during this pass stays queued: the next call runs it, which is what
+     * yields a frame. Returning 1 tells the platform loop that work is ready to pace. */
+    if (rq_head) {
+        return 1;
+    }
     int pending = dream_async_pending();
     if (!pending) {
         ready_finish();
         timer_finish();
+        return 0;
     }
-    return pending;
+#ifdef __ANDROID__
+    /* Nothing is runnable. Waiting here, in the host's event park, is the difference between a
+     * timer and a busy loop; a foreign completion wakes the park. Due timers are left for the
+     * next pass. 2 means this call already waited, so the caller must not add a frame delay. */
+    {
+        int64_t now = timeNowNanos();
+        int64_t due = timer_count ? timer_peek()->due : 0;
+        dream_mutex_lock(&sched.mu);
+        if (!rq_head && !sched.fq_head && !dream_callback_pending()) {
+            if (timer_count && due > now) {
+                scheduler_park(due - now);
+            } else if (!timer_count) {
+                scheduler_park(-1);
+            }
+            dream_mutex_unlock(&sched.mu);
+            return 2;
+        }
+        dream_mutex_unlock(&sched.mu);
+    }
+#endif
+    return 1;
 }
 #endif
 

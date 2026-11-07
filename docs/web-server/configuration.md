@@ -134,7 +134,7 @@ Set `proxy_headers: false` when no proxy sits in front of the server and you wan
 | --- | --- |
 | `listen(host, port, token?)` | Starts accepting connections with the default `ServerConfig` and returns the bound port. Port `0` picks a free port. |
 | `listen(host, port, config, token?)` | The same, with your `ServerConfig`. |
-| `run(host, port, token?)` / `run(host, port, config, token?)` | Listens, then waits until the server stops. Without a token, it stops gracefully when `Application.stopping` is cancelled. |
+| `run(host, port, token?)` / `run(host, port, config, token?)` | Listens, then waits until the server stops. Without a token, it stops gracefully when `App.stopping` is cancelled. |
 | `shutdown()` | Stops accepting connections and starts a graceful shutdown. |
 | `wait(token?)` | Waits for active requests and their cleanup to finish, then releases the listener. |
 | `openapi()` | Returns the OpenAPI document as JSON text, without listening. |
@@ -145,7 +145,7 @@ Call `shutdown` followed by `wait` to release the listener and finish cleanup. A
 2. Requests already running finish normally. Requests that arrive during shutdown get `503`.
 3. Server WebSockets receive a close frame with code `1012` (service restart).
 4. When `timeout_graceful_shutdown_ms` is set and requests are still running after it, their connections close and their handlers are cancelled.
-5. Cleanups registered with `Application.on_stop` run last, when the server runs inside `Application.run`.
+5. Cleanups registered with `App.on_stop` run last, when the server runs inside `App.run`.
 
 Mount routers and install middleware and overrides before startup. Startup freezes configuration; later configuration calls return an error. Duplicate routes and documentation URL collisions fail before accepting traffic. Treat each app as one server lifetime: construct another instance to run a fresh server.
 

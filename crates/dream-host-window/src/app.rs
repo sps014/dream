@@ -9,6 +9,8 @@ use sdl3::sys::events::SDL_Event;
 use sdl3::sys::init::{SDL_APP_CONTINUE, SDL_APP_FAILURE, SDL_APP_SUCCESS, SDL_AppResult};
 use sdl3::sys::main::{SDL_EnterAppMainCallbacks, SDL_RunApp};
 use std::ffi::{c_char, c_int, c_void};
+#[cfg(target_os = "android")]
+use std::sync::Condvar;
 use std::sync::{Mutex, OnceLock};
 
 type GuestFn = extern "C" fn() -> c_int;
@@ -72,6 +74,7 @@ unsafe extern "C" fn app_init(
     let Some(guest) = GUEST.get() else {
         return SDL_APP_FAILURE;
     };
+    use_bundle_directory();
     if (guest.entry)() == 0 {
         SDL_APP_CONTINUE
     } else {
@@ -83,10 +86,146 @@ unsafe extern "C" fn app_iterate(_state: *mut c_void) -> SDL_AppResult {
     let Some(guest) = GUEST.get() else {
         return SDL_APP_FAILURE;
     };
-    if (guest.pump)() == 0 {
+    #[cfg(target_os = "android")]
+    let started = std::time::Instant::now();
+    service_surface_release();
+    // 0 finishes the loop. 1 still has runnable work, so Android waits out the rest of the
+    // display frame. 2 already waited for a timer or a foreign completion.
+    let status = (guest.pump)();
+    service_surface_release();
+    if status == 0 {
         SDL_APP_SUCCESS
     } else {
+        #[cfg(target_os = "android")]
+        if status == 1 {
+            pace_frame(started);
+        }
         SDL_APP_CONTINUE
+    }
+}
+
+/// Package assets are ordinary files under the directory the guest starts in: Android's
+/// internal storage, where the activity extracted the APK assets, or the iOS bundle.
+fn use_bundle_directory() {
+    #[cfg(target_os = "android")]
+    unsafe {
+        let path = sdl3::sys::system::SDL_GetAndroidInternalStoragePath();
+        if !path.is_null() {
+            let directory = std::ffi::CStr::from_ptr(path).to_string_lossy();
+            let _ = std::env::set_current_dir(directory.as_ref());
+        }
+    }
+    #[cfg(target_os = "ios")]
+    if let Some(directory) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+    {
+        let _ = std::env::set_current_dir(directory);
+    }
+}
+
+#[cfg(target_os = "android")]
+fn pace_frame(started: std::time::Instant) {
+    let Some(frame) = crate::host::refresh_interval() else {
+        return;
+    };
+    let spent = started.elapsed();
+    if let Some(rest) = frame.checked_sub(spent) {
+        crate::host::park(i64::try_from(rest.as_nanos()).unwrap_or(i64::MAX));
+    }
+}
+
+/// The Java UI thread sets the request in `surfaceDestroyed` and waits, so the swapchains are
+/// gone before Android frees the native window they were created from.
+#[cfg(target_os = "android")]
+struct SurfaceRelease {
+    requested: bool,
+    done: bool,
+}
+
+#[cfg(target_os = "android")]
+static SURFACE_RELEASE: (Mutex<SurfaceRelease>, Condvar) = (
+    Mutex::new(SurfaceRelease {
+        requested: false,
+        done: true,
+    }),
+    Condvar::new(),
+);
+
+fn service_surface_release() {
+    #[cfg(target_os = "android")]
+    {
+        let requested = {
+            let mut gate = SURFACE_RELEASE
+                .0
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            if !gate.requested {
+                return;
+            }
+            gate.requested = false;
+            true
+        };
+        if requested {
+            release_gpu_surfaces();
+            let mut gate = SURFACE_RELEASE
+                .0
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            gate.done = true;
+            SURFACE_RELEASE.1.notify_one();
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+fn release_gpu_surfaces() {
+    unsafe extern "C" {
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+    let symbol = unsafe {
+        dlsym(
+            usize::MAX as *mut c_void,
+            c"dream_gpu_release_window_surfaces".as_ptr(),
+        )
+    };
+    if !symbol.is_null() {
+        let release: extern "C" fn() = unsafe { std::mem::transmute(symbol) };
+        release();
+    }
+}
+
+/// Called on Android's UI thread from `surfaceDestroyed`, before SDL releases the native window.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub extern "C" fn Java_org_dream_runtime_Surfaces_release() {
+    {
+        let mut gate = SURFACE_RELEASE
+            .0
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        gate.requested = true;
+        gate.done = false;
+    }
+    crate::host::wake();
+    let mut gate = SURFACE_RELEASE
+        .0
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    while !gate.done {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            break;
+        }
+        let (next, timeout) = SURFACE_RELEASE
+            .1
+            .wait_timeout(gate, deadline.saturating_duration_since(now))
+            .unwrap_or_else(|poison| poison.into_inner());
+        gate = next;
+        if timeout.timed_out() {
+            break;
+        }
     }
 }
 

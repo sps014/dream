@@ -37,13 +37,21 @@ several are running. A shut-down iOS simulator named with `--device` is booted f
 An Android build targets the selected device's architecture (`arm64-v8a` or `x86_64`);
 `build` without a device produces an `arm64-v8a` APK. The APK is signed with the debug key in
 `~/.android/debug.keystore`, which is created on first use. iOS apps are built for the arm64
-simulator on Apple silicon Macs and are signed for local use only. Device deployment,
-store signing, and package assets are not supported yet; a package with `assets` builds with a
-warning that the files are not copied.
+simulator on Apple silicon Macs and are signed for local use only. Device deployment and
+store signing are not supported yet.
+
+Files listed in `[package].assets` are packaged with the app. On Android they are stored in the
+APK and extracted into the app's internal storage before `main` runs. On iOS they are copied into
+the app bundle. Either way the process starts in that directory, so the program opens them with
+the same relative paths it uses on the desktop.
 
 On a phone, the operating system owns the main thread. A Dream app's `main` returns to the
 platform after starting, and its async work continues between frames: timers, awaited GPU
-presents, and input events resume on the next frame instead of blocking it.
+presents, and input events resume on the next frame instead of blocking it. Android waits out
+the rest of a vsync frame when more work is ready, and waits for the next timer or input event
+when the only outstanding work is a timer. iOS draws from the display link. When Android
+replaces the window surface, the GPU swapchain is dropped first and created again for the new
+window; the window reports occlusion while it has nothing to draw into.
 
 ## Inspect the mobile toolchain
 

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/system/app.md) for examples and common task
 
 ## `AppPhase`
 
-Where the program is in its lifetime, as reported by `Application.phase`.  Normal code does not need the phase: use the `Application.on_*` hooks and `Application.stopping` instead. It exists for diagnostics and tests.
+Where the program is in its lifetime, as reported by `App.phase`.  Normal code does not need the phase: use the `App.on_*` hooks and `App.stopping` instead. It exists for diagnostics and tests.
 
 ```dream
 public enum AppPhase
@@ -14,7 +14,7 @@ public enum AppPhase
 
 ## `Starting`
 
-`Application.run` is running the `start` function.
+`App.run` is running the `start` function.
 
 ```dream
 Starting
@@ -38,7 +38,7 @@ Asleep
 
 ## `Stopping`
 
-Shutdown began. `Application.stopping` is cancelled and `on_stop` cleanups run.
+Shutdown began. `App.stopping` is cancelled and `on_stop` cleanups run.
 
 ```dream
 Stopping

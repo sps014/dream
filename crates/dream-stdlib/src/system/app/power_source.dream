@@ -1,6 +1,6 @@
 module system.app;
 
-/// Where the computer gets its power from, as reported by `Application.power_source`.
+/// Where the computer gets its power from, as reported by `App.power_source`.
 public enum PowerSource {
     /// The computer is plugged in to wall power.
     Ac,

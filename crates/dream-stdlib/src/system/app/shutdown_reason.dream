@@ -11,15 +11,15 @@ public enum ShutdownReason {
     Terminate,
     /// The user quit the app from its menu or Dock. It can be vetoed. No platform reports it
     /// yet: Cmd+Q currently arrives as `WindowEvent.CloseRequested` on each window, so deliver
-    /// it with `Application.simulate` in tests.
+    /// it with `App.simulate` in tests.
     OsQuit,
     /// On Windows, the user is logging off or the computer is shutting down; on macOS, the
     /// computer is shutting down or restarting. The first Windows request can be vetoed; the
     /// final notice cannot.
     SessionEnding,
     /// The last open window of the app was closed. It can be vetoed. No platform reports it
-    /// yet, so deliver it with `Application.simulate` in tests.
+    /// yet, so deliver it with `App.simulate` in tests.
     LastWindowClosed,
-    /// The program called `Application.quit`. It cannot be vetoed.
+    /// The program called `App.quit`. It cannot be vetoed.
     Requested
 }

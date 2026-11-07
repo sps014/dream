@@ -17,7 +17,7 @@ mod windows;
 #[unsafe(no_mangle)]
 pub extern "C" fn dream_host_app_abi_v3() {}
 
-/// Platform watchers start once, on the first `Application.run`, and outlive it: they only
+/// Platform watchers start once, on the first `App.run`, and outlive it: they only
 /// post while a run is active.
 fn install_watchers() {
     static INSTALLED: std::sync::Once = std::sync::Once::new();

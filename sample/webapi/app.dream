@@ -13,12 +13,12 @@ class Greeting {
 }
 
 async fun main(): int {
-    return Application.run(async () => {
+    return App.run(async () => {
         let app = WebApp();
         app.include_router(Routes.router()).unwrap();
         app.use(Cors.middleware(CorsOptions())).unwrap();
         let port = app.listen("127.0.0.1", 8000).await?;
-        Application.on_stop(async () => {
+        App.on_stop(async () => {
             app.shutdown();
             app.wait().await;
         });

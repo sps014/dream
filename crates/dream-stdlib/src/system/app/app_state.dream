@@ -1,6 +1,6 @@
 module system.app;
 
-// The single process-wide lifetime. Host events and `Application.simulate` both go through
+// The single process-wide lifetime. Host events and `App.simulate` both go through
 // `deliver`, so they share the same transition checks.
 internal class AppState {
     internal running: bool;

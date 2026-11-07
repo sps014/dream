@@ -3,20 +3,28 @@
 #define KIND_ALL FUTURE_KIND_ALL
 #define KIND_RACE FUTURE_KIND_RACE
 
-typedef struct {
-    void (*copy)(dream_ptr, dream_ptr);
-    dream_result (*clone)(dream_result);
-    const dream_type_info *array_info;
-} CombinatorState;
-static CombinatorState *combinator_state(dream_ptr f) {
-    return (CombinatorState *)((char *)dream_p(f) + F_SLOTS);
+void dream_future_visit_children(dream_ptr f) {
+    int32_t kind = i32_at(f, F_KIND)[0];
+    if (kind == KIND_ALL || kind == KIND_RACE) {
+        dream_visit_edge(combinator_state(f)->children);
+    }
 }
+
+void dream_future_clear_children(dream_ptr f) {
+    int32_t kind = i32_at(f, F_KIND)[0];
+    if (kind == KIND_ALL || kind == KIND_RACE) {
+        dream_ptr children = combinator_state(f)->children;
+        combinator_state(f)->children = 0;
+        dream_release_object(children);
+    }
+}
+
 void dream_combinator_progress(dream_ptr w, dream_ptr child) {
     int32_t kind = i32_at(w, F_KIND)[0];
     if (status_of(w)) { return; }
-    if (kind != KIND_RACE && --i32_at(w, F_REMAINING)[0] > 0) { return; }
-    int32_t n = i32_at(w, F_COUNT)[0];
-    dream_ptr kids = ptr_at(w, F_CHILDREN)[0];
+    if (kind != KIND_RACE && --combinator_state(w)->remaining > 0) { return; }
+    int32_t n = combinator_state(w)->count;
+    dream_ptr kids = combinator_state(w)->children;
     for (int32_t i = 0; i < n; ++i) {
         dream_ptr c = arr_get(kids, i);
         if (c && ptr_at(c, F_WAKER)[0] == w) { ptr_at(c, F_WAKER)[0] = 0; }
@@ -26,7 +34,7 @@ void dream_combinator_progress(dream_ptr w, dream_ptr child) {
         memcpy((char *)dream_p(w) + F_WIDE, (char *)dream_p(child) + F_WIDE, 8);
         dream_async_complete(w, state->clone(*result_at(child)));
     } else {
-        int32_t es = i32_at(w, F_ESIZE)[0];
+        int32_t es = combinator_state(w)->esize;
         dream_ptr out = dream_array_new(n, es);
         dream_set_type(out, state->array_info);
         for (int32_t i = 0; i < n; ++i) {
@@ -41,12 +49,11 @@ static dream_ptr combinator_new(dream_ptr arr, int32_t kind, int32_t esize, void
     int32_t n = arr ? dream_i32(arr)[0] : 0;
     int32_t i;
     dream_ptr w = dream_new_future(F_SLOTS + sizeof(CombinatorState), HOST_POLL_INDEX, kind);
-    *combinator_state(w) = (CombinatorState){copy, clone, array_info};
+    *combinator_state(w) = (CombinatorState){
+        .children = arr, .count = n, .remaining = n, .esize = esize > 0 ? esize : 4,
+        .copy = copy, .clone = clone, .array_info = array_info
+    };
     dream_retain(arr);
-    ptr_at(w, F_CHILDREN)[0] = arr;
-    i32_at(w, F_COUNT)[0] = n;
-    i32_at(w, F_REMAINING)[0] = n;
-    i32_at(w, F_ESIZE)[0] = esize > 0 ? esize : 4;
     if (n == 0 && kind == KIND_ALL) {
         dream_ptr out = dream_array_new(0, esize);
         dream_set_type(out, array_info);

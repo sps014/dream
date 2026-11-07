@@ -23,9 +23,7 @@ pub(in super::super) fn info(l: &mut Lcx<'_>, result: TypeId) -> String {
     }
     let mut fx = glue(l, &visit);
     let owner = fx.arg(0);
-    let children = fx.addr(&owner, fx.l.cx.target.abi().future.children as i64);
-    let child = fx.load_ty(fx.h(), &children, 8, true);
-    fx.call("dream_visit_edge", &[child]);
+    fx.call("dream_future_visit_children", std::slice::from_ref(&owner));
     let at = fx.addr(&owner, fx.l.cx.target.abi().future.result as i64);
     let value = fx.load_ty(fx.word(), &at, 8, true);
     if fx.is_value(result) {
@@ -39,10 +37,7 @@ pub(in super::super) fn info(l: &mut Lcx<'_>, result: TypeId) -> String {
     fx.finish();
     let mut fx = glue(l, &clear);
     let owner = fx.arg(0);
-    let children = fx.addr(&owner, fx.l.cx.target.abi().future.children as i64);
-    let child = fx.load_ty(fx.h(), &children, 8, true);
-    fx.store_ty(&fx.h(), &children, &V::s(Value::zero(fx.h())), 8);
-    fx.call("dream_release_object", &[child]);
+    fx.call("dream_future_clear_children", std::slice::from_ref(&owner));
     let at = fx.addr(&owner, fx.l.cx.target.abi().future.result as i64);
     let value = fx.load_ty(fx.word(), &at, 8, true);
     fx.store_ty(&fx.word(), &at, &V::s(Value::zero(fx.word())), 8);

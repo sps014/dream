@@ -1608,6 +1608,8 @@ int32_t delayMsAsync(dream_ptr future, int32_t ms);
 void *dream_ft_get(int32_t i);
 void *dream_fd_get(int32_t i);
 void dream_future_fini(dream_ptr f);
+void dream_future_visit_children(dream_ptr f);
+void dream_future_clear_children(dream_ptr f);
 int32_t utf8_width_at(dream_ptr s, int32_t i);
 int32_t utf8_decode_at(dream_ptr s, int32_t i);
 int32_t dream_lock_try_acquire(dream_ptr lock_addr);

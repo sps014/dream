@@ -34,8 +34,7 @@ import system.io;
 async fun main(): void {
     let config = (File.read("config.json").await).unwrap_or("");
     let image = match File.read_bytes("images/hero.png").await {
-        Ok(bytes) => bytes,
-        Err(_) => return,
+        Ok(bytes) => bytes, Err(_) => return,
     };
 }
 ```

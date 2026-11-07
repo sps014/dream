@@ -207,15 +207,14 @@ pub struct FutureLayout {
     pub waker: u32,
     pub awaiting: u32,
     pub kind: u32,
-    pub children: u32,
-    pub count: u32,
-    pub remaining: u32,
+    /// Native cancellation source retained by a protected task.
+    pub source: u32,
+    /// Indexed timer-heap position plus one; zero when unarmed.
+    pub timer_index: u32,
     /// Native: the scheduler a deferred `@async_host` future completes into.
     pub scheduler: u32,
     pub next: u32,
     pub queued: u32,
-    /// Combinator element size.
-    pub esize: u32,
     pub wide: u32,
     /// Inherited cancellation token, retained independently of saved locals.
     pub context: u32,
@@ -239,13 +238,11 @@ impl FutureLayout {
         let waker = place(&mut c, ptr_size, ptr_align);
         let awaiting = place(&mut c, ptr_size, ptr_align);
         let kind = place(&mut c, 4, 4);
-        let children = place(&mut c, ptr_size, ptr_align);
-        let count = place(&mut c, 4, 4);
-        let remaining = place(&mut c, 4, 4);
+        let source = place(&mut c, ptr_size, ptr_align);
+        let timer_index = place(&mut c, 4, 4);
         let scheduler = place(&mut c, ptr_size, ptr_align);
         let next = place(&mut c, ptr_size, ptr_align);
         let queued = place(&mut c, 4, 4);
-        let esize = 0;
         let wide = place(&mut c, 8, 8);
         let context = place(&mut c, ptr_size, ptr_align);
         let slots = align_up(c, 8);
@@ -257,13 +254,11 @@ impl FutureLayout {
             waker,
             awaiting,
             kind,
-            children,
-            count,
-            remaining,
+            source,
+            timer_index,
             scheduler,
             next,
             queued,
-            esize,
             wide,
             context,
             slots,
@@ -278,14 +273,12 @@ impl FutureLayout {
         let status = place(&mut c, 4, 4);
         let poll = place(&mut c, 4, 4);
         let kind = place(&mut c, 4, 4);
-        let count = place(&mut c, 4, 4);
-        let remaining = place(&mut c, 4, 4);
+        let timer_index = place(&mut c, 4, 4);
         let queued = place(&mut c, 4, 4);
-        let esize = place(&mut c, 4, 4);
         let result = place(&mut c, ptr_size, ptr_align);
         let waker = place(&mut c, ptr_size, ptr_align);
         let awaiting = place(&mut c, ptr_size, ptr_align);
-        let children = place(&mut c, ptr_size, ptr_align);
+        let source = place(&mut c, ptr_size, ptr_align);
         let scheduler = place(&mut c, ptr_size, ptr_align);
         let next = place(&mut c, ptr_size, ptr_align);
         let wide = place(&mut c, 8, 8);
@@ -299,13 +292,11 @@ impl FutureLayout {
             waker,
             awaiting,
             kind,
-            children,
-            count,
-            remaining,
+            source,
+            timer_index,
             scheduler,
             next,
             queued,
-            esize,
             wide,
             context,
             slots,

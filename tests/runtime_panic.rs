@@ -46,6 +46,8 @@ fn fatal_runtime_paths_report_without_allocating_or_deadlocking() {
         .arg(native.join("stdout_buffer.c"));
     for unit in [
         "heap_maps.c",
+        "heap_slabs.c",
+        "heap_large.c",
         "ownership.c",
         "publish.c",
         "region.c",

@@ -6,18 +6,6 @@ __dream_g0:
 	.globaltype	__dream_tid, i32
 __dream_tid:
 
-	.hidden	__dream_priv_slab
-	.globaltype	__dream_priv_slab, i32
-__dream_priv_slab:
-
-	.hidden	__dream_priv_off
-	.globaltype	__dream_priv_off, i32
-__dream_priv_off:
-
-	.hidden	__dream_priv_cap
-	.globaltype	__dream_priv_cap, i32
-__dream_priv_cap:
-
 	.hidden	__dream_priv_table
 	.globaltype	__dream_priv_table, i32
 __dream_priv_table:
@@ -54,51 +42,6 @@ dream_tid_set:
 	.functype	dream_tid_set (i32) -> ()
 	local.get	0
 	global.set	__dream_tid
-	end_function
-
-	.globl	dream_priv_slab_get
-	.type	dream_priv_slab_get,@function
-dream_priv_slab_get:
-	.functype	dream_priv_slab_get () -> (i32)
-	global.get	__dream_priv_slab
-	end_function
-
-	.globl	dream_priv_slab_set
-	.type	dream_priv_slab_set,@function
-dream_priv_slab_set:
-	.functype	dream_priv_slab_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_slab
-	end_function
-
-	.globl	dream_priv_off_get
-	.type	dream_priv_off_get,@function
-dream_priv_off_get:
-	.functype	dream_priv_off_get () -> (i32)
-	global.get	__dream_priv_off
-	end_function
-
-	.globl	dream_priv_off_set
-	.type	dream_priv_off_set,@function
-dream_priv_off_set:
-	.functype	dream_priv_off_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_off
-	end_function
-
-	.globl	dream_priv_cap_get
-	.type	dream_priv_cap_get,@function
-dream_priv_cap_get:
-	.functype	dream_priv_cap_get () -> (i32)
-	global.get	__dream_priv_cap
-	end_function
-
-	.globl	dream_priv_cap_set
-	.type	dream_priv_cap_set,@function
-dream_priv_cap_set:
-	.functype	dream_priv_cap_set (i32) -> ()
-	local.get	0
-	global.set	__dream_priv_cap
 	end_function
 
 	.globl	dream_priv_table_get

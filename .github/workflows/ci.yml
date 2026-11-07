@@ -272,7 +272,7 @@ jobs:
           core=crates/dream-mir/src/runtime/c/core
           clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -DDREAM_HEAP_COUNTERS=1 -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" "$native/stdout_buffer.c" \
-            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/heap_slabs.c" "$core/heap_large.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$native/sync.c" "$core/strings.c" tests/runtime_weak.c \
             -o "$stress_dir/weak"
           "$stress_dir/weak"
@@ -285,7 +285,7 @@ jobs:
           core=crates/dream-mir/src/runtime/c/core
           clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -DDREAM_HEAP_COUNTERS=1 -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" "$native/stdout_buffer.c" \
-            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/heap_slabs.c" "$core/heap_large.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$core/strings.c" tests/runtime_sync.c \
             -o "$stress_dir/sync"
           "$stress_dir/sync"
@@ -299,7 +299,7 @@ jobs:
           core=crates/dream-mir/src/runtime/c/core
           clang -std=gnu11 -O1 -g -pthread -fsanitize=thread -DDREAM_HEAP_COUNTERS=1 -I"$core/include" -I"$native/include" -I"$core/../include" \
             "$core/platform.c" "$core/utf8.c" "$native/platform.c" "$native/stdout_buffer.c" \
-            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/publish.c" \
+            "$core/heap.c" "$core/ownership.c" "$core/heap_maps.c" "$core/heap_slabs.c" "$core/heap_large.c" "$core/publish.c" \
             "$core/region.c" "$core/weak.c" "$native/sync.c" "$core/strings.c" tests/runtime_worker.c \
             -o "$stress_dir/worker"
           "$stress_dir/worker"

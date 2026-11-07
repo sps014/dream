@@ -56,8 +56,8 @@ impl<'l, 'a> Fx<'l, 'a> {
             let Some(payload) = frame_buffer_payload(self.mir, f, Local(i as u32)) else {
                 continue;
             };
-            let total = self.l.cx.target.abi().heap_header_size + payload;
-            self.frame_bufs[i] = Some(self.alloca_bytes(total as u64, 16));
+            let total = crate::abi::HEAP_HEADER_SIZE + payload;
+            self.frame_bufs[i] = Some(self.alloca_bytes(total as u64, 8));
         }
     }
 

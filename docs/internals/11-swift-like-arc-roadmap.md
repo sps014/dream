@@ -32,9 +32,8 @@ SSO, no user-facing `@stack` on class instances, no size-class-keyed unmanaged m
   descendant or destructor rejects the affected layout. Reaching local definitions and
   returned-parameter summaries avoid keeping dependencies after an alias is overwritten.
 - Value `struct` / plain `enum` off-heap (shadow stack); classes / arrays / strings / collections
-  on the heap with a 16-byte header ending in `[tag][ref_count]` (wasm32 leads with `[size][type info]`;
-  native leads with one word holding the type info and the size class, and blocks over 64 KiB keep
-  their size in a prefix). The RC
+  on the heap with an 8-byte `[tag][ref_count]` header on every target; size classes and block
+  sizes live in allocator metadata outside the header. The RC
   word is one signed int: positive = thread-local count, sign bit = atomic count (`shared`),
   `DREAM_RC_IMMORTAL` = never mutated or freed (interned strings, frame-allocated objects), so
   every RC fast path is one load plus a sign test.
@@ -112,8 +111,8 @@ levers (no SSO / `@stack` class / value collections):
    is built in the stack frame (`dream_frame_object`, immortal count) and its deaths release only its
    strong fields. Refused for `del`, weak/unowned fields, `shared`, large objects, recursion,
    region openers, and async. Also silent; the user-facing non-goal of `@stack` stands.
-8. **Allocator fast path** — native size classes are 16-byte steps to 256 then 8 per power of two
-   up to 64 KiB; the freelist pop/push is inline, alloc counters are per thread, and destroy glue
+8. **Allocator fast path** — size classes (shared by native and wasm32) are 8-byte steps to 128
+   then 8 per power of two up to 64 KiB; the freelist pop/push is inline, alloc counters are per thread, and destroy glue
    is iterative so long chains cannot overflow the C stack.
 
 Release ownership proofs share program-point provenance (`analysis/ownership.rs`) with

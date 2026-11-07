@@ -80,11 +80,11 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
                     decision = "rejected", reason = "possible-escape-or-publication");
                 continue;
             }
-            // Each backend buffer includes the immortal ARC header and is sixteen-aligned.
+            // Each backend buffer includes the immortal ARC header and is eight-aligned.
             let size = payload
                 .checked_add(crate::abi::HEAP_HEADER_SIZE)
-                .and_then(|n| n.checked_add(15))
-                .map(|n| n & !15)
+                .and_then(|n| n.checked_add(7))
+                .map(|n| n & !7)
                 .unwrap_or(u32::MAX);
             if size > limit || size > budget {
                 tracing::debug!(pass = STAGE, function = %f.name, local = o.0,

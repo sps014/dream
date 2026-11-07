@@ -34,9 +34,11 @@ static void heap_ptr_set(int32_t v) { *meta_i32(META_HEAP_PTR) = v; }
 
 int32_t *dream_wasm32_meta_i32(int32_t off) { return meta_i32(off); }
 
+static void ensure_pages(int32_t new_heap);
+
 void dream_heap_init(void) {
-    /* Headers and block sizes preserve 16-byte payload alignment. */
     int32_t desired = (dream_wasm_heap_start() + META_SIZE + 15) & -16;
+    ensure_pages(desired);
 #ifdef DREAM_WASM32_THREADS
     int32_t expected = 0;
     (void)__atomic_compare_exchange_n(meta_i32(META_HEAP_PTR), &expected, desired, 0,
@@ -71,25 +73,41 @@ static void ensure_pages(int32_t new_heap) {
 #endif
 }
 
-int32_t dream_wasm_heap_claim(int32_t n) {
+/* Claims `n` bytes at an `align`-aligned address. `*gap` receives the previous heap end, so the
+ * caller can reuse the bytes skipped for alignment. */
+int32_t dream_wasm_heap_claim_aligned(int32_t n, int32_t align, int32_t *gap) {
     int32_t start;
+    int32_t aligned;
 #ifdef DREAM_WASM32_THREADS
     start = __atomic_load_n(meta_i32(META_HEAP_PTR), __ATOMIC_RELAXED);
     for (;;) {
-        if (n <= 0 || start < 0 || n > INT32_MAX - start) {
+        if (n <= 0 || start < 0 || start > INT32_MAX - (align - 1)) {
             DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
         }
-        int32_t end = start + n;
-        if (__atomic_compare_exchange_n(meta_i32(META_HEAP_PTR), &start, end, 0,
+        aligned = (start + align - 1) & -align;
+        if (n > INT32_MAX - aligned) {
+            DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+        }
+        if (__atomic_compare_exchange_n(meta_i32(META_HEAP_PTR), &start, aligned + n, 0,
                                        __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { break; }
     }
 #else
     start = dream_wasm_heap_ptr_get();
-    if (n <= 0 || start < 0 || n > INT32_MAX - start) {
+    if (n <= 0 || start < 0 || start > INT32_MAX - (align - 1)) {
         DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
     }
-    heap_ptr_set(start + n);
+    aligned = (start + align - 1) & -align;
+    if (n > INT32_MAX - aligned) {
+        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+    }
+    heap_ptr_set(aligned + n);
 #endif
-    ensure_pages(start + n);
-    return start;
+    ensure_pages(aligned + n);
+    *gap = start;
+    return aligned;
+}
+
+int32_t dream_wasm_heap_claim(int32_t n) {
+    int32_t gap;
+    return dream_wasm_heap_claim_aligned(n, 8, &gap);
 }

@@ -427,18 +427,51 @@ when the run loop drains. Timers remain raw references owned by their awaiters.
 ### Tag-indexed ownership metadata
 
 Each emitted nominal, managed-array and Future ownership descriptor has a unique tag. The low
-28 bits index a deterministic module table; bits 28 and 29 identify typed arrays and Future
-frames. Shared and weak-target flags remain independent. Runtime-created arrays and futures
+27 bits index a deterministic module table; bit 27 marks region storage, and bits 28 and 29
+identify typed arrays and Future frames. Shared and weak-target flags remain independent. Runtime-created arrays and futures
 without typed ownership edges retain their basic kind tags. C, generated protocol/interface
 routers, worker dispatch, publication, reallocation and the JS host recognize shape independently
 of the descriptor identity.
 
 `dream_object_info` resolves metadata from the tag. `dream_set_type` installs the descriptor's
 tag while preserving allocation flags, including the implicit sharing of previously untyped
-storage. There is no per-object metadata pointer. Native allocation keeps its size class in the
-first header word; wasm32 keeps its block size and reserved word. Both headers remain 16 bytes.
-Slab side metadata and the 8-byte header migration are still pending; this step alone makes no
-claim about reduced allocation sizes or RSS.
+storage. There is no per-object metadata pointer. Every target uses the same 8-byte
+`[tag:i32][rc:i32]` heap header, so string literals, frame buffers and the JS host share one
+layout. The tag bits are fully assigned, which is why allocator metadata (size class, block
+size, free links) lives outside the header, as described below.
+
+### Native slab metadata
+
+Native small allocations come from homogeneous 256 KiB aligned slabs. Class and initialized-slot
+count live in a 64-byte slab prefix; no object header stores a size class. Freed blocks link
+through their payloads, with allocator-only unpoisoning during ASan accesses. Heap walks visit
+initialized slots by slab, and live-pointer checks reject unused tails and interior addresses.
+Large allocations have a dedicated mapping and retain their size/aging prefix. Idle-page release
+preserves the payload link. Mapping gauges include the extra address space reserved to meet slab
+alignment through the injected platform's 16-byte-aligned map hook.
+
+Size classes advance in 8-byte steps through 128 bytes and then use eight classes per doubling
+through 64 KiB. Managed native payloads are 8-byte aligned; the currently supported heap field
+layouts require at most 8-byte alignment. Frame buffers and explicitly aligned raw allocations
+retain their separate alignment rules. Region blocks keep their byte size in a prefix outside
+the guest header and carry the independent region flag. Immortal frames and literals stay off
+the slab free path. Thread exit returns free blocks to process lists and retains partial slabs
+for the next thread record, while published objects continue to belong to their mappings.
+
+Returning completely empty slabs to the OS remains pending; span metadata stays valid for the
+process lifetime.
+
+### Wasm32 span and page metadata
+
+Wasm32 uses the native size-class table. A one-byte-per-64 KiB-page map in the runtime metadata
+area records each page as unused, a span of one class, or a large block. Class spans are
+homogeneous, at least 64 KiB, and aligned to their own power-of-two size, so a block's class and
+slot boundary follow from its address. Large blocks carry an 8-byte prefix holding their size and
+free-list link, and free large blocks sit on an address-ordered list that merges neighbours on
+release. Padding skipped to align a span becomes a free large block. Each thread pops from a
+private per-class free list; shared and locked allocations use the process lists, and thread
+exit hands its free blocks and unused span tails back to them. Region blocks use the same 8-byte
+size prefix as native.
 
 ## Validation status
 
@@ -477,8 +510,8 @@ at the user's request. No local result establishes native x86-64 or other-platfo
 
 ### Bounded, minimal runtime
 
-- Add side metadata for slab lifetime. Account for live objects, TLS/process free-list references,
-  cross-thread frees, published objects and arena tails before reclaiming a slab. Remove heap-map
+- Extend slab metadata with lifetime accounting for live objects and TLS/process free-list references,
+  cross-thread frees, published objects and partial slabs before reclaiming a slab. Remove heap-map
   and debug-enumeration entries before releasing storage.
 - Add mapping release to the platform ABI and migrate every native, wasm, injected-test and
   embedding implementation together. Bound retained idle slabs without slowing private allocation;

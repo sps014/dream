@@ -53,7 +53,7 @@ test("character arrays preserve Unicode without widening byte arrays", () => {
 test("worker Future recognition uses shape bits and ignores shared/weak flags", () => {
   const guest = instance();
   const pointer = 96;
-  for (const tag of [TAGS.FUTURE, TAGS.FUTURE_KIND | 42, TAGS.FUTURE_KIND | TAGS.SHARED | 42, (TAGS.FUTURE_KIND | 42) | 0x80000000]) {
+  for (const tag of [TAGS.FUTURE, TAGS.FUTURE_KIND | 42, TAGS.FUTURE_KIND | TAGS.SHARED | 42, TAGS.FUTURE_KIND | TAGS.REGION | 42, (TAGS.FUTURE_KIND | 42) | 0x80000000]) {
     guest.view.setInt32(pointer - TAGS.FROM_DATA, tag, true);
     assert.equal(guest.__isFutureFrame(pointer), true);
   }

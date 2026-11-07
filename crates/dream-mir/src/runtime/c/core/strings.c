@@ -38,7 +38,7 @@ dream_ptr dream_string_alloc(int32_t units) {
 /* Counts remain Dream int values; byte sizes use the target's allocation width. */
 static dream_size array_bytes(int32_t len, int32_t esize) {
     if (len < 0 || esize < 1 ||
-        (size_t)len > (DREAM_SIZE_MAX - DREAM_BLOCK_HEADER - 15u - LEN_PREFIX_SIZE) / (size_t)esize) {
+        (size_t)len > (DREAM_SIZE_MAX - HEAP_HEADER_SIZE - 15u - LEN_PREFIX_SIZE) / (size_t)esize) {
         DREAM_PANIC_LITERAL(u"panic: array size exceeds the supported limit");
     }
     return (dream_size)len * esize + LEN_PREFIX_SIZE;

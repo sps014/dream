@@ -22,7 +22,6 @@ pub fn string_hash(units: &[u16]) -> i32 {
 pub struct TargetAbi {
     pub ptr_size: u32,
     pub ptr_align: u32,
-    pub heap_header_size: u32,
     pub future: FutureLayout,
 }
 
@@ -30,7 +29,6 @@ impl TargetAbi {
     pub const WASM32: Self = Self {
         ptr_size: 4,
         ptr_align: 4,
-        heap_header_size: HEAP_HEADER_SIZE,
         future: FutureLayout::WASM32,
     };
 
@@ -38,11 +36,6 @@ impl TargetAbi {
         Self {
             ptr_size: spec.ptr_size,
             ptr_align: spec.ptr_align,
-            heap_header_size: if spec.capabilities.linear_memory {
-                HEAP_HEADER_SIZE
-            } else {
-                NATIVE_HEAP_HEADER_SIZE
-            },
             future: FutureLayout::for_target(spec),
         }
     }
@@ -203,10 +196,6 @@ mod abi_h_lockstep {
             HEADER_LOCK_WORD_SIZE as i64
         );
         assert_eq!(header_define(h, "LOCK_DEPTH_BITS"), LOCK_DEPTH_BITS as i64);
-        assert_eq!(
-            header_define(h, "NATIVE_HEAP_HEADER_SIZE"),
-            NATIVE_HEAP_HEADER_SIZE as i64
-        );
         assert_eq!(
             header_define(h, "DREAM_STR_PAD_INLINE"),
             DREAM_STR_PAD_INLINE as i64

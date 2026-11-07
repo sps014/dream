@@ -83,26 +83,19 @@ static void save_string(dream_leak_scan *scan, char *data) {
 typedef void (*block_visitor)(void *context, char *block, size_t sz);
 
 static void walk_map(char *base, size_t len, block_visitor visit, void *context) {
-    char *p = base;
-    char *end = base + len;
-    while ((size_t)(end - p) >= NATIVE_HEAP_HEADER_SIZE) {
-        unsigned cls = dream_block_class(p);
-        char *block = p;
-        size_t sz;
-        if (cls == DREAM_CLASS_LARGE_PREFIX) {
-            block = p + DREAM_LARGE_PREFIX;
-            sz = DREAM_LARGE_PREFIX + *dream_large_size(block);
-        } else if (cls < DREAM_NCLASS) {
-            sz = (size_t)dream_class_bytes((int)cls);
-        } else {
-            p += 16;
-            continue;
+    dream_heap_span *span = (dream_heap_span *)base;
+    uint32_t count = __atomic_load_n(&span->used, __ATOMIC_ACQUIRE);
+    if (span->cls == DREAM_CLASS_LARGE) {
+        if (count) {
+            char *block = base + DREAM_SLAB_PREFIX + DREAM_LARGE_PREFIX;
+            visit(context, block, DREAM_LARGE_PREFIX + *dream_large_size(block));
         }
-        if (sz > (size_t)(end - p)) {
-            break;
-        }
-        visit(context, block, sz);
-        p += sz;
+        return;
+    }
+    size_t bytes = span->block_bytes;
+    if (bytes == 0 || count > (len - DREAM_SLAB_PREFIX) / bytes) { return; }
+    for (uint32_t i = 0; i < count; ++i) {
+        visit(context, base + DREAM_SLAB_PREFIX + (size_t)i * bytes, bytes);
     }
 }
 
@@ -111,15 +104,15 @@ static void walk_map(char *base, size_t len, block_visitor visit, void *context)
 static void walk_heap(block_visitor visit, void *context) {
     dream_platform_current->lock(DREAM_LOCK_HEAP);
     for (size_t map = 0; map < dream_heap_map_count_locked(); ++map) {
-        size_t size;
-        char *base = (char *)dream_heap_map_at_locked(map, &size);
+        size_t size, mapped;
+        char *base = (char *)dream_heap_map_at_locked(map, &size, &mapped);
         walk_map(base, size, visit, context);
     }
     dream_platform_current->unlock(DREAM_LOCK_HEAP);
 }
 
 static int32_t block_rc(char *block) {
-    return *(int32_t *)(block + NATIVE_HEAP_HEADER_SIZE - RC_FROM_DATA);
+    return *(int32_t *)(block + HEAP_HEADER_SIZE - RC_FROM_DATA);
 }
 
 static void tally_leak(void *context, char *block, size_t sz) {
@@ -133,7 +126,7 @@ static void tally_leak(void *context, char *block, size_t sz) {
         int32_t tag = raw_tag & TAG_VALUE_MASK;
         dream_leak_tally(scan, tag, 1, (uint64_t)sz);
         if (tag == TAG_STRING) {
-            save_string(scan, block + NATIVE_HEAP_HEADER_SIZE);
+            save_string(scan, block + HEAP_HEADER_SIZE);
         }
     }
 }
@@ -161,9 +154,9 @@ int64_t dream_heap_gauge(int32_t id) {
         uint64_t committed = 0;
         dream_platform_current->lock(DREAM_LOCK_HEAP);
         for (size_t map = 0; map < dream_heap_map_count_locked(); ++map) {
-            size_t size;
-            (void)dream_heap_map_at_locked(map, &size);
-            committed += size;
+            size_t size, mapped;
+            (void)dream_heap_map_at_locked(map, &size, &mapped);
+            committed += mapped;
         }
         dream_platform_current->unlock(DREAM_LOCK_HEAP);
         return (int64_t)(committed - dream_heap_released_bytes());

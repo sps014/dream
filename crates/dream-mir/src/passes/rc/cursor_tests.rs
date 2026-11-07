@@ -857,3 +857,55 @@ fn indexed_cursor_keeps_ownership_across_opaque_call_or_reallocation() {
         assert!(!f.locals[snapshot.0 as usize].is_cursor);
     }
 }
+
+/// `y = c` stays a cursor while `c` is read later; a block that neither reads `c` nor holds it
+/// live must not leftover-release `c` before a later block reads through `y`.
+#[test]
+fn copy_cursor_keeps_base_alive_across_blocks() {
+    let mut ctx = TypeCtx::new();
+    let cdef = ctx.register(DefKind::Struct, "Counter", vec![]);
+    let cty = ctx.interner.struct_ty(cdef, vec![]);
+    let mut b = FunctionBuilder::new("f", ctx.interner.void());
+    let c = b.new_local(cty, Some("c".into()));
+    let y = b.new_local(cty, Some("y".into()));
+    let seen = b.new_temp(ctx.interner.bool());
+    let used = b.new_temp(ctx.interner.bool());
+    let mid = b.new_block();
+    let tail = b.new_block();
+    b.assign(
+        Place::Local(c),
+        Rvalue::New {
+            def: cdef,
+            ty: cty,
+            ctor: None,
+            args: vec![],
+        },
+    );
+    b.assign(Place::Local(y), Rvalue::Use(Operand::Copy(Place::Local(c))));
+    b.assign(
+        Place::Local(seen),
+        Rvalue::IsType(Operand::Copy(Place::Local(c)), cty),
+    );
+    b.terminate(Terminator::Goto(mid));
+    b.switch_to(mid);
+    b.terminate(Terminator::Goto(tail));
+    b.switch_to(tail);
+    b.assign(
+        Place::Local(used),
+        Rvalue::IsType(Operand::Copy(Place::Local(y)), cty),
+    );
+    b.terminate(Terminator::Return(None));
+    let mut func = b.finish();
+    RcInsertion.run(&mut func, &ctx.interner);
+    assert!(func.locals[y.0 as usize].is_cursor);
+    let releases_c = |blk: crate::BlockId| {
+        func.blocks[blk.0 as usize].stmts.iter().any(|s| {
+            matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == c)
+        })
+    };
+    assert!(
+        !releases_c(func.entry) && !releases_c(mid),
+        "base released while its copy cursor is still read: {:?}",
+        func.blocks
+    );
+}

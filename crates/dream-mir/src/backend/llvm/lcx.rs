@@ -322,7 +322,7 @@ impl<'a> Lcx<'a> {
         let symbol = self.cx.str_sym(s);
         let block = super::ir::fmt::global(&format!("{symbol}_blk"));
         let index = self.word();
-        let offset = self.cx.target.abi().heap_header_size;
+        let offset = crate::abi::HEAP_HEADER_SIZE;
         let address = format!("getelementptr (i8, ptr {block}, {index} {offset})");
         Value::new(
             h.clone(),

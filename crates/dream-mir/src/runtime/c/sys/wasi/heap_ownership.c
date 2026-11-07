@@ -73,19 +73,29 @@ int32_t debug_get_heap_ptr(void) { return dream_wasm_heap_ptr_get(); }
  * not this allocator's internal list head, which coalescing keeps stable. */
 int32_t debug_get_free_list_head(void) { return last_freed; }
 
+/* Class blocks must start on a slot boundary of their span; large blocks must fit their prefix. */
 int dream_heap_is_live(dream_ptr ptr) {
     uint32_t address = (uint32_t)ptr;
     uint32_t start = (uint32_t)dream_wasm_heap_start() + META_SIZE;
     uint32_t end = (uint32_t)dream_wasm_heap_ptr_get();
-    if ((address & 3) != 0 || address < HEAP_HEADER_SIZE) {
+    if ((address & 7) != 0 || address < start + HEAP_HEADER_SIZE || address > end) {
         return 0;
     }
     uint32_t block = address - HEAP_HEADER_SIZE;
-    if (block < start || address > end) {
-        return 0;
-    }
-    int32_t size = dream_i32((int32_t)block)[0];
-    if (size < (int32_t)HEAP_HEADER_SIZE || (uint32_t)size > end - block) {
+    unsigned kind = dream_wasm_page_kind((int32_t)block);
+    if (kind == DREAM_PAGE_LARGE) {
+        uint32_t prefix = block - DREAM_LARGE_PREFIX;
+        int32_t size = dream_i32((int32_t)prefix)[0];
+        if (prefix < start || size < (int32_t)(DREAM_LARGE_PREFIX + HEAP_HEADER_SIZE) || (uint32_t)size > end - prefix) {
+            return 0;
+        }
+    } else if (kind - 1u < (unsigned)DREAM_NCLASS) {
+        uint32_t bytes = (uint32_t)dream_class_bytes((int)kind - 1);
+        uint32_t span = (uint32_t)dream_wasm_span_bytes((int)kind - 1);
+        if ((block & (span - 1u)) % bytes != 0) {
+            return 0;
+        }
+    } else {
         return 0;
     }
     int32_t rc = __atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED);

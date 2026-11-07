@@ -37,23 +37,26 @@ TAG_STRUCT_BASE: i32 = 14 => "TAG_STRUCT_BASE";
 /// Header tag high bit: object is concurrently refcounted (`@shared` / published worker
 /// env and wire / foreign futures). Mask with [`TAG_VALUE_MASK`] before comparing type tags.
 TAG_SHARED: i32 = 1 << 30 => "TAG_SHARED";
-TAG_VALUE_MASK: i32 = TAG_SHARED - 1 => "TAG_VALUE_MASK";
-/// Metadata identity occupies the low 28 bits. Shape bits let erased C/JS consumers
+/// Region allocations are reclaimed with their chunk rather than individually.
+TAG_REGION: i32 = 1 << 27 => "TAG_REGION";
+TAG_VALUE_MASK: i32 = (TAG_SHARED - 1) & !TAG_REGION => "TAG_VALUE_MASK";
+/// Metadata identity occupies the low 27 bits. Shape bits let erased C/JS consumers
 /// recognize typed arrays and Future frames without loading their ownership descriptor.
-TAG_INDEX_MASK: i32 = (1 << 28) - 1 => "TAG_INDEX_MASK";
+TAG_INDEX_MASK: i32 = TAG_REGION - 1 => "TAG_INDEX_MASK";
 TAG_ARRAY_KIND: i32 = 1 << 28 => "TAG_ARRAY_KIND";
 TAG_FUTURE_KIND: i32 = 1 << 29 => "TAG_FUTURE_KIND";
 TAG_KIND_MASK: i32 = TAG_ARRAY_KIND | TAG_FUTURE_KIND => "TAG_KIND_MASK";
-/// Byte size of the wasm heap header `[size:i32][reserved:i32][tag:i32][rc:i32]`. A value's data
-/// pointer is `block_start + HEAP_HEADER_SIZE`.
-HEAP_HEADER_SIZE: u32 = 16 => "HEAP_HEADER_SIZE";
+/// Byte size of the heap header `[tag:i32][rc:i32]` on every target. A value's data pointer is
+/// `block_start + HEAP_HEADER_SIZE`; allocator metadata (size class, large-block size, region
+/// size) lives outside the header.
+HEAP_HEADER_SIZE: u32 = 8 => "HEAP_HEADER_SIZE";
 /// Written into cleared `unowned` slots so loads can report "target destroyed" distinctly
 /// from "never assigned". Mirrors `DREAM_UNOWNED_POISON` in dream_abi.h.
 UNOWNED_POISON: i32 = -165764356 => "DREAM_UNOWNED_POISON";
 /// Byte offset (from the block start) of the type-tag word in the heap header.
-HEADER_TAG_OFFSET: u32 = 8 => "HEADER_TAG_OFFSET";
+HEADER_TAG_OFFSET: u32 = 0 => "HEADER_TAG_OFFSET";
 /// Byte offset (from the block start) of the reference-count word in the heap header.
-HEADER_REFCOUNT_OFFSET: u32 = 12 => "HEADER_REFCOUNT_OFFSET";
+HEADER_REFCOUNT_OFFSET: u32 = 4 => "HEADER_REFCOUNT_OFFSET";
 /// Byte size of the prefix preceding an array's elements at the data pointer
 /// (`[count:i32][pad:i32][payload...]`); the payload starts at `ptr + LEN_PREFIX_SIZE`. The pad
 /// keeps 8-byte elements (`long`, `double`, native pointers) naturally aligned, including for C
@@ -71,9 +74,6 @@ STRING_SCALAR_LEN_OFFSET: u32 = 4 => "STRING_SCALAR_LEN_OFFSET";
 DREAM_STR_PAD_INLINE: i32 = 0 => "DREAM_STR_PAD_INLINE";
 /// Pad value marking a fat slice (parent + external units pointer).
 DREAM_STR_SLICE: i32 = 1 => "DREAM_STR_SLICE";
-/// Native malloc header `[class|reserved:usize][tag:i32][rc:i32]` (32-bit hosts keep the class
-/// in a separate word after the reserved word). WASM uses [`HEAP_HEADER_SIZE`].
-NATIVE_HEAP_HEADER_SIZE: u32 = 16 => "NATIVE_HEAP_HEADER_SIZE";
 /// `data_ptr - RC_FROM_DATA` is the refcount word ([`HEADER_REFCOUNT_OFFSET`] from block start).
 RC_FROM_DATA: u32 = HEAP_HEADER_SIZE - HEADER_REFCOUNT_OFFSET => "RC_FROM_DATA";
 /// `data_ptr - TAG_FROM_DATA` is the type-tag word ([`HEADER_TAG_OFFSET`] from block start).

@@ -33,6 +33,8 @@ fn native_allocations_use_machine_width_without_committing_large_buffers() {
         .arg(native.join("stdout_buffer.c"));
     for unit in [
         "heap_maps.c",
+        "heap_slabs.c",
+        "heap_large.c",
         "ownership.c",
         "publish.c",
         "region.c",

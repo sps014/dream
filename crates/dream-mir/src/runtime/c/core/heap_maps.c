@@ -17,6 +17,7 @@ static _Noreturn void heap_map_oom(void) {
 typedef struct {
     uintptr_t base;
     size_t size;
+    size_t mapped;
 } HeapMap;
 
 static UT_array heap_maps = {.icd = {sizeof(HeapMap), NULL, NULL, NULL}};
@@ -34,7 +35,7 @@ static int compare_address(const void *key, const void *value) {
     return 0;
 }
 
-void dream_heap_map_add_locked(void *base, size_t size) {
+void dream_heap_map_add_locked(void *base, size_t size, size_t mapped) {
     if (base == NULL || size == 0) {
         return;
     }
@@ -42,7 +43,7 @@ void dream_heap_map_add_locked(void *base, size_t size) {
     if (count >= UINT_MAX / 2 || count >= SIZE_MAX / sizeof(HeapMap) / 2) {
         heap_map_oom();
     }
-    HeapMap map = {(uintptr_t)base, size};
+    HeapMap map = {(uintptr_t)base, size, mapped};
     /* Range lookup needs address order; insert the new mapping without hosted qsort. */
     unsigned position = 0;
     while (position < count && ((HeapMap *)utarray_eltptr(&heap_maps, position))->base < map.base) {
@@ -56,7 +57,7 @@ int dream_heap_map_contains_locked(const void *address, size_t size, uintptr_t *
     if (utarray_len(&heap_maps) == 0) {
         return 0;
     }
-    HeapMap request = {(uintptr_t)address, size};
+    HeapMap request = {(uintptr_t)address, size, 0};
     size_t low = 0, high = utarray_len(&heap_maps);
     while (low < high) {
         size_t middle = low + (high - low) / 2;
@@ -74,12 +75,13 @@ int dream_heap_map_contains_locked(const void *address, size_t size, uintptr_t *
 
 size_t dream_heap_map_count_locked(void) { return utarray_len(&heap_maps); }
 
-void *dream_heap_map_at_locked(size_t index, size_t *size) {
+void *dream_heap_map_at_locked(size_t index, size_t *size, size_t *mapped) {
     HeapMap *map = (HeapMap *)utarray_eltptr(&heap_maps, index);
     if (map == NULL) {
         *size = 0;
         return NULL;
     }
     *size = map->size;
+    *mapped = map->mapped;
     return (void *)map->base;
 }

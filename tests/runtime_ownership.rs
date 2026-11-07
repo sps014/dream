@@ -36,6 +36,8 @@ fn strong_cycles_require_explicit_teardown() {
         "heap.c",
         "ownership.c",
         "heap_maps.c",
+        "heap_slabs.c",
+        "heap_large.c",
         "publish.c",
         "region.c",
         "weak.c",

@@ -45,8 +45,8 @@ program linking. Cache keys include target, compiler identity, effective flags a
 ## ARC and cycle permissions
 
 Both profiles use ordinary ARC. There is no automatic cycle collector, collector
-registration, component metadata, candidate queue, or strong-edge barrier. Native object
-headers are 16 bytes, with packed type/size-class information. Private references use
+registration, component metadata, candidate queue, or strong-edge barrier. Object headers
+are 8 bytes (`[tag][rc]`); size classes live in slab metadata. Private references use
 the local count fast path; published references use atomic counts.
 
 The cycle analysis (`dream-sema` `analyzer/cycles/`) prefilters on the strong type graph,

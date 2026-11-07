@@ -27,6 +27,8 @@ fn lock_registry_reclaims_reused_addresses_and_checks_ownership() {
         "heap.c",
         "ownership.c",
         "heap_maps.c",
+        "heap_slabs.c",
+        "heap_large.c",
         "publish.c",
         "region.c",
         "weak.c",

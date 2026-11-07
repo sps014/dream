@@ -31,6 +31,8 @@ fn weak_load_and_unique_drop_do_not_resurrect_dying_targets() {
         "heap.c",
         "ownership.c",
         "heap_maps.c",
+        "heap_slabs.c",
+        "heap_large.c",
         "publish.c",
         "region.c",
         "weak.c",

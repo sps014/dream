@@ -224,7 +224,7 @@ pub const CORE_C: &[&str] = &[
     "gpu_bundle.c",
     "capability.c",
 ];
-const NATIVE_HEAP_C: &[&str] = &["heap.c", "heap_maps.c"];
+const NATIVE_HEAP_C: &[&str] = &["heap.c", "heap_maps.c", "heap_slabs.c", "heap_large.c"];
 const SHARED_SYS_C: &[&str] = &[
     "async.c",
     "async_combinators.c",

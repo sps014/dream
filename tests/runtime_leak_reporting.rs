@@ -68,6 +68,8 @@ fn leak_tally_counts_past_i32_and_never_drops_types() {
         "heap.c",
         "ownership.c",
         "heap_maps.c",
+        "heap_slabs.c",
+        "heap_large.c",
         "heap_debug.c",
         "publish.c",
         "region.c",

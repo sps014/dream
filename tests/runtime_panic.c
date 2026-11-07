@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     dream_set_platform(&platform);
     alarm(5);
     assert(argc == 2);
-    _Alignas(8) int32_t reference_header[NATIVE_HEAP_HEADER_SIZE / sizeof(int32_t)] = {0};
+    _Alignas(8) int32_t reference_header[HEAP_HEADER_SIZE / sizeof(int32_t)] = {0};
     dream_ptr reference = (dream_ptr)(reference_header + sizeof(reference_header) / sizeof(int32_t));
     if (strcmp(argv[1], "arc-underflow") == 0) { dream_rc_last(reference); }
     if (strcmp(argv[1], "arc-resurrection") == 0) { dream_retain(reference); }
@@ -60,7 +60,8 @@ int main(int argc, char **argv) {
     fail_mapping = 1;
     if (strcmp(argv[1], "shared-map") == 0) { dream_malloc_shared(16, 0); }
     /* Exercise mmap failure without first allocating a per-thread counter. */
-    tls_bump(16);
+    dream_heap_span *span = NULL;
+    dream_slab_bump(&span, 3, 0);
     return 1;
 }
 

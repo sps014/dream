@@ -969,6 +969,8 @@ class DreamInstance {
 
   /** Process-exit global `del` / RC drop. Native does this in `dream_guest_entry`; wasm32 does not. */
   __dropGlobals() {
+    // A callback handed to JS can run after `main` returns and still reads globals.
+    if (HAS_CALLBACKS && this._callbackWrappers.size > 0) return;
     const drop = this.exports.__dream_drop_globals;
     if (typeof drop === "function") drop();
   }

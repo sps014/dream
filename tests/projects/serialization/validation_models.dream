@@ -89,8 +89,8 @@ fun validation_sorted_maps_and_tuples(): void {
     Assert.eq(shapes.pair.0, 1);
     Assert.eq(shapes.pair.1.age, 18);
 
-    let short = Validation.decode<ValidatedShapes>("{\"scores\":{},\"pair\":[1]}").unwrap_err();
-    Assert.eq(short.issues[0].location[0], "pair");
+    let rejected = Validation.decode<ValidatedShapes>("{\"scores\":{},\"pair\":[1]}").unwrap_err();
+    Assert.eq(rejected.issues[0].location[0], "pair");
 
     let mistyped = Validation.decode<ValidatedShapes>(
         "{\"scores\":{},\"pair\":[\"one\",{\"name\":\"Dream\"}]}"

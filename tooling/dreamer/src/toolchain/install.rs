@@ -124,22 +124,48 @@ fn download_verified(archive: &HostArchive) -> Result<PathBuf> {
         .timeout_connect(Duration::from_secs(30))
         .timeout(Duration::from_secs(600))
         .build();
+    let tmp = path.with_extension("part");
+    let mut failure = None;
+    for attempt in 1..=4 {
+        match fetch_archive(&agent, archive, &tmp) {
+            Ok(actual) if actual == expected => {
+                fs::rename(&tmp, &path)?;
+                return Ok(path);
+            }
+            Ok(actual) => {
+                let _ = fs::remove_file(&tmp);
+                bail!("checksum mismatch for {filename}: expected {expected}, got {actual}");
+            }
+            Err(error) if attempt < 4 && retryable_download(&error) => {
+                let _ = fs::remove_file(&tmp);
+                eprintln!("GET {} failed ({error}); retrying", archive.url);
+                std::thread::sleep(Duration::from_secs(attempt * 2));
+                failure = Some(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(failure.unwrap_or_else(|| anyhow::anyhow!("GET {} failed", archive.url)))
+}
+
+fn fetch_archive(agent: &ureq::Agent, archive: &HostArchive, tmp: &Path) -> Result<String> {
     let resp = agent
         .get(archive.url)
         .call()
         .with_context(|| format!("GET {}", archive.url))?;
     let mut reader = resp.into_reader();
-    let tmp = path.with_extension("part");
-    let mut file = File::create(&tmp)?;
+    let mut file = File::create(tmp)?;
     let actual = stream_copy_sha256(&mut reader, &mut file)?;
     file.flush()?;
-    drop(file);
-    if actual != expected {
-        let _ = fs::remove_file(&tmp);
-        bail!("checksum mismatch for {filename}: expected {expected}, got {actual}");
+    Ok(actual)
+}
+
+fn retryable_download(error: &anyhow::Error) -> bool {
+    match error.downcast_ref::<ureq::Error>() {
+        Some(ureq::Error::Status(code, _)) => matches!(*code, 408 | 429 | 500 | 502 | 503 | 504),
+        Some(ureq::Error::Transport(_)) => true,
+        None => false,
     }
-    fs::rename(&tmp, &path)?;
-    Ok(path)
 }
 
 fn stream_sha256(reader: &mut impl io::Read) -> Result<String> {

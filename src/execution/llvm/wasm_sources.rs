@@ -177,7 +177,7 @@ pub(super) fn validate_signatures(
     let compare = |actual: &RuntimeSigs| -> Result<(), String> {
         for (name, declared) in &expected.fns {
             if let Some(defined) = actual.fns.get(name)
-                && declared.fty != defined.fty
+                && !c_signatures_compatible(&declared.fty, &defined.fty)
             {
                 return Err(format!(
                     "C ABI mismatch for '{name}': Dream declares {}, package source uses {}; use usize/isize for pointer-sized C integers",
@@ -193,6 +193,18 @@ pub(super) fn validate_signatures(
         compare(&actual)?;
     }
     Ok(())
+}
+
+/// Dream `bool` is `i1` and only the low bit is read, so a C function may return it in any
+/// integer width (`_Bool`, `int`, or a wider integer with the value in the low bit).
+fn c_signatures_compatible(
+    declared: &dream_mir::backend::llvm::ir::FnTy,
+    defined: &dream_mir::backend::llvm::ir::FnTy,
+) -> bool {
+    use dream_mir::backend::llvm::ir::Ty;
+    declared.varargs == defined.varargs
+        && declared.params == defined.params
+        && (declared.ret == defined.ret || (declared.ret == Ty::I1 && defined.ret.is_int()))
 }
 
 pub(super) fn validate_imports(

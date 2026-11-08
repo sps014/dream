@@ -309,8 +309,12 @@ fn member(out: &mut String, file: &str, class: Option<&Class>, m: &Member, known
         params.join(", ")
     };
     line(out, m.line, file);
-    let _ = writeln!(out, "extern \"C\" {ret_c} {}({params}) {{", m.symbol);
-    let _ = writeln!(out, "    return {wrapped};\n}}\n");
+    // One physical line, so `#line` reports the declaration rather than the generated body.
+    let _ = writeln!(
+        out,
+        "extern \"C\" {ret_c} {}({params}) {{ return {wrapped}; }}\n",
+        m.symbol
+    );
     reset_line(out);
 }
 

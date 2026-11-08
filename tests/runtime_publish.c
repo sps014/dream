@@ -27,6 +27,7 @@ static dream_ptr dispatch_reply(int32_t worker, int32_t fn, dream_ptr message) {
 void dream_release_object(dream_ptr ptr) { dream_release(ptr); }
 void dream_release_closure_env(dream_ptr ptr) { dream_release(ptr); }
 void dream_thread_attach(void) {}
+void dream_thread_bind_worker(void) {}
 void dream_callback_drain(void) {}
 void dream_callback_owner_finish(void) {}
 int dream_callback_pending(void) { return 0; }

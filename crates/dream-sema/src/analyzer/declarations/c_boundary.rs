@@ -92,7 +92,12 @@ impl<'a> Analyzer<'a> {
                 Some(function.name.position),
             );
         }
-        let generated_shim = symbol.starts_with("dream__") && symbol == function.name.text;
+        // The per-file last-error accessor keeps a private Dream name and binds the set's
+        // generated `dream__…` shim symbol. Every other `dream__` binding is the shim function
+        // itself, whose Dream name is that symbol.
+        let generated_shim = symbol == function.name.text
+            || (function.name.text.starts_with("__cpp_last_error_")
+                && symbol.starts_with("dream__"));
         if !is_c_identifier(&symbol) || (symbol.starts_with("dream__") && !generated_shim) {
             diagnostics.report_error(
                 format!(

@@ -172,7 +172,13 @@ fn object_from_bitcode(
         return Ok(());
     }
     let mut command = compiler(clang, config, spec, Lang::C);
-    command.arg("-c").arg(bitcode).arg("-o").arg(object);
+    command.arg("-c");
+    // Bitcode has no section assignment. ELF `--gc-sections` can drop an unused function
+    // only when this codegen step puts each function in its own section.
+    if !spec.is_windows() && !spec.is_apple() {
+        command.args(["-ffunction-sections", "-fdata-sections"]);
+    }
+    command.arg(bitcode).arg("-o").arg(object);
     run_captured(&mut command, &format!("clang ({})", bitcode.display()))
 }
 
@@ -440,7 +446,8 @@ mod tests {
         )
         .unwrap();
         let key = "abc";
-        let fingerprint = rt_stamp::content_fingerprint(vec![source.clone(), header.clone()]);
+        let fingerprint =
+            rt_stamp::content_fingerprint(dependency_paths(&deps).expect("dependency paths"));
         std::fs::write(
             sibling(&output, "stamp"),
             format!("native-unit-v1\n{key}\n{fingerprint}"),

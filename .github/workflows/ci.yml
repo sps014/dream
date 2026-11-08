@@ -256,6 +256,15 @@ jobs:
         run: |
           python scripts/test_corpus.py 2>&1 | Tee-Object -FilePath target/probe-native.log
           exit $LASTEXITCODE
+      # The core suite includes the drawing canvas, and the Node run compiles that
+      # project only when the browser host exists beside the runtime.
+      - name: Build drawing WASM host for Node assertions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install wasm-bindgen-cli --version 0.2.129 --locked
+          python scripts/build-drawing-web.py
       - name: Windows Node corpus
         if: runner.os == 'Windows'
         shell: pwsh

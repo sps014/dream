@@ -11,13 +11,13 @@ fun cc_platform(): string {
     return "wasm";
 }
 
-@cfg(Target.Windows)
-fun cc_bad_on_windows_only(): int {
-    return "never type-checked elsewhere";
+@cfg(Target.Native && Target.Wasm)
+fun cc_excluded_body(): int {
+    return "never type-checked";
 }
 
-@cfg(!Target.Windows)
-fun cc_bad_on_windows_only(): int {
+@cfg(Target.Native || Target.Wasm)
+fun cc_excluded_body(): int {
     return 1;
 }
 
@@ -57,7 +57,7 @@ fun cfg_selects_one_declaration_per_target(): void {
     let native = cc_platform() == "native";
     let wasm = cc_platform() == "wasm";
     Assert.is_true(native != wasm);
-    Assert.eq(cc_bad_on_windows_only(), 1);
+    Assert.eq(cc_excluded_body(), 1);
 
     let settings = CcSettings("app");
     let mode = settings.mode();

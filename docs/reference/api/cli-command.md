@@ -62,7 +62,7 @@ Adds a string option. Optional values default to empty; repeated occurrences are
 ```dream
 public fun string_option(
     name: string,
-    short: string = "",
+    letter: string = "",
     default_value: string = "",
     required: bool = false,
     description: string = ""
@@ -76,7 +76,7 @@ Adds a decimal 32-bit integer option. Optional values default to zero; required 
 ```dream
 public fun int_option(
     name: string,
-    short: string = "",
+    letter: string = "",
     default_value: int = 0,
     required: bool = false,
     description: string = ""
@@ -88,7 +88,7 @@ public fun int_option(
 Adds a boolean option defaulting to false; repeated occurrences remain true.
 
 ```dream
-public fun flag(name: string, short: string = "", description: string = ""): Command
+public fun flag(name: string, letter: string = "", description: string = ""): Command
 ```
 
 ## `choices`

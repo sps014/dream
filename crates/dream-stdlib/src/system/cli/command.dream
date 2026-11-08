@@ -55,12 +55,12 @@ public class Command {
     /// Adds a string option. Optional values default to empty; repeated occurrences are collected, with the last returned by get_string.
     public fun string_option(
         name: string,
-        short: string = "",
+        letter: string = "",
         default_value: string = "",
         required: bool = false,
         description: string = ""
     ): Command {
-        let argument = this.argument(name, CliArgumentKind.String, short, required, description);
+        let argument = this.argument(name, CliArgumentKind.String, letter, required, description);
         if !required {
             argument.default_value = Option.Some(default_value);
         }
@@ -70,12 +70,12 @@ public class Command {
     /// Adds a decimal 32-bit integer option. Optional values default to zero; required options ignore defaults.
     public fun int_option(
         name: string,
-        short: string = "",
+        letter: string = "",
         default_value: int = 0,
         required: bool = false,
         description: string = ""
     ): Command {
-        let argument = this.argument(name, CliArgumentKind.Int, short, required, description);
+        let argument = this.argument(name, CliArgumentKind.Int, letter, required, description);
         if !required {
             argument.default_value = Option.Some(default_value.to_string());
         }
@@ -83,8 +83,8 @@ public class Command {
     }
 
     /// Adds a boolean option defaulting to false; repeated occurrences remain true.
-    public fun flag(name: string, short: string = "", description: string = ""): Command {
-        this.argument(name, CliArgumentKind.Flag, short, false, description);
+    public fun flag(name: string, letter: string = "", description: string = ""): Command {
+        this.argument(name, CliArgumentKind.Flag, letter, false, description);
         return this;
     }
 
@@ -140,11 +140,11 @@ public class Command {
     fun argument(
         name: string,
         kind: CliArgumentKind,
-        short: string,
+        letter: string,
         required: bool,
         description: string
     ): CliArgument {
-        let argument = CliArgument(name, kind, short, required, description);
+        let argument = CliArgument(name, kind, letter, required, description);
         this.arguments.push(argument);
         return argument;
     }

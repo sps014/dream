@@ -96,9 +96,9 @@ async fun main(): int {
         .version("1.0.0")
         .description("Download an HTTP/HTTPS response to a file")
         .positional("url", required: true)
-        .string_option("output", short: "o", default_value: "download.bin")
+        .string_option("output", letter: "o", default_value: "download.bin")
         .int_option("timeout", default_value: 10000)
-        .flag("verbose", short: "v");
+        .flag("verbose", letter: "v");
 
     let result = command.parse(System.args);
     if result.is_err() {

@@ -30,8 +30,8 @@ internal static class CliHelp {
                 positional_left.push(argument.display());
                 positional_right.push(CliHelp.describe(argument));
             } else {
-                let short = argument.short.length > 0 ? "-" + argument.short + ", " : "    ";
-                option_left.push(short + argument.display());
+                let label = argument.short.length > 0 ? "-" + argument.short + ", " : "    ";
+                option_left.push(label + argument.display());
                 option_right.push(CliHelp.describe(argument));
             }
         }

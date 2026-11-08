@@ -7,9 +7,9 @@ fun cli_arguments(): void {
         .version("1.0.0")
         .description("Download a file")
         .positional("url", required: true)
-        .string_option("output", short: "o", default_value: "download.bin")
+        .string_option("output", letter: "o", default_value: "download.bin")
         .int_option("timeout", default_value: 10000)
-        .flag("verbose", short: "v");
+        .flag("verbose", letter: "v");
     let parsed = command.parse(
         ["-vv", "--timeout", "-42", "-o", "first", "--output=日本語", "--", "-url"]
     ).unwrap();
@@ -58,7 +58,7 @@ fun cli_arguments(): void {
     Assert.is_true(root.parse([]).is_err());
     Assert.is_true(Command("bad").flag("help").parse([]).is_err());
     Assert.is_true(
-        Command("bad").flag("one", short: "x").flag("two", short: "x").parse([]).is_err()
+        Command("bad").flag("one", letter: "x").flag("two", letter: "x").parse([]).is_err()
     );
     Assert.is_true(Command("invalid name").parse([]).is_err());
     let raw = Command("raw")
@@ -76,9 +76,9 @@ fun probe(): Command {
     return Command("probe")
         .description("Read a value")
         .version("1.2.3")
-        .string_option("name", short: "n", default_value: "world")
+        .string_option("name", letter: "n", default_value: "world")
         .int_option("count", default_value: 7)
-        .flag("verbose", short: "v")
+        .flag("verbose", letter: "v")
         .positional("files", multiple: true);
 }
 

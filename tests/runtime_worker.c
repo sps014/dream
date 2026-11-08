@@ -79,6 +79,7 @@ static dream_ptr dispatch_reply(int32_t id, int32_t fn, dream_ptr env, dream_ptr
 
 void dream_future_fini(dream_ptr ptr) { (void)ptr; }
 void dream_thread_attach(void) {}
+void dream_thread_bind_worker(void) {}
 void dream_callback_drain(void) {}
 void dream_callback_owner_finish(void) {}
 int dream_callback_pending(void) { return 0; }

@@ -80,7 +80,7 @@ async fun main(): int {
     let command = Command("http-csv-pipeline")
         .description("Download CSV and prefix each record with a UUID")
         .positional("url", required: true)
-        .string_option("output", short: "o", default_value: "records.csv");
+        .string_option("output", letter: "o", default_value: "records.csv");
     let parsed = command.parse(System.args);
     if parsed.is_err() {
         System.stderr.write_all(Encoding.utf8_encode(parsed.unwrap_err().message() + "\n"));

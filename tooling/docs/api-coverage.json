@@ -1282,19 +1282,19 @@
         "page": "reference/api/cli-command.md"
       },
       {
-        "signature": "public fun string_option( name: string, short: string = \"\", default_value: string = \"\", required: bool = false, description: string = \"\" ): Command",
+        "signature": "public fun string_option( name: string, letter: string = \"\", default_value: string = \"\", required: bool = false, description: string = \"\" ): Command",
         "description": "Adds a string option. Optional values default to empty; repeated occurrences are collected, with the last returned by get_string.",
         "line": 56,
         "page": "reference/api/cli-command.md"
       },
       {
-        "signature": "public fun int_option( name: string, short: string = \"\", default_value: int = 0, required: bool = false, description: string = \"\" ): Command",
+        "signature": "public fun int_option( name: string, letter: string = \"\", default_value: int = 0, required: bool = false, description: string = \"\" ): Command",
         "description": "Adds a decimal 32-bit integer option. Optional values default to zero; required options ignore defaults.",
         "line": 71,
         "page": "reference/api/cli-command.md"
       },
       {
-        "signature": "public fun flag(name: string, short: string = \"\", description: string = \"\"): Command",
+        "signature": "public fun flag(name: string, letter: string = \"\", description: string = \"\"): Command",
         "description": "Adds a boolean option defaulting to false; repeated occurrences remain true.",
         "line": 86,
         "page": "reference/api/cli-command.md"

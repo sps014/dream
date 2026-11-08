@@ -14,13 +14,13 @@ internal class CliArgument {
     internal constructor(
         name: string,
         kind: CliArgumentKind,
-        short: string,
+        letter: string,
         required: bool,
         description: string
     ) {
         this.name = name;
         this.kind = kind;
-        this.short = short;
+        this.short = letter;
         this.required = required;
         this.multiple = false;
         this.default_value = Option.None;

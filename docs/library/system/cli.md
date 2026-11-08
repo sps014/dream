@@ -20,9 +20,9 @@ fun main(): void {
         .version("1.0.0")
         .description("Download a file")
         .positional("url", required: true)
-        .string_option("output", short: "o", default_value: "download.bin")
+        .string_option("output", letter: "o", default_value: "download.bin")
         .int_option("timeout", default_value: 10000)
-        .flag("verbose", short: "v");
+        .flag("verbose", letter: "v");
 
     let parsed = command.parse(["https://example.com/file"]).unwrap();
 
@@ -47,9 +47,9 @@ mistakes are reported by `parse`, not by the builder call.
 | `version(value)` | `value: string` | Sets version text and enables `--version`/`-V` here and in subcommands. |
 | `description(value)` | `value: string` | Adds text to the generated help. |
 | `positional(name, ...)` | `required = false`, `multiple = false`, `description = ""` | Adds an ordered string argument. |
-| `string_option(name, ...)` | `short = ""`, `default_value = ""`, `required = false`, `description = ""` | Adds `--name <text>`. |
-| `int_option(name, ...)` | `short = ""`, `default_value = 0`, `required = false`, `description = ""` | Adds `--name <integer>` (signed 32-bit). |
-| `flag(name, ...)` | `short = ""`, `description = ""` | Adds a boolean `--name` that defaults to false. |
+| `string_option(name, ...)` | `letter = ""`, `default_value = ""`, `required = false`, `description = ""` | Adds `--name <text>`. |
+| `int_option(name, ...)` | `letter = ""`, `default_value = 0`, `required = false`, `description = ""` | Adds `--name <integer>` (signed 32-bit). |
+| `flag(name, ...)` | `letter = ""`, `description = ""` | Adds a boolean `--name` that defaults to false. |
 | `choices(name, values)` | `values: string[]` | Restricts an already declared positional, string, or integer argument. |
 | `subcommand(command)` | `command: Command` | Attaches a snapshot of a child command. |
 | `require_subcommand(required)` | `required = true` | Makes invoking one of the subcommands mandatory. |

@@ -12,11 +12,9 @@ on:
         default: origin/main
         type: string
 
-# A later push waits. Cancelling the in-progress run kills the corpus with
-# exit 143 before it can finish.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always

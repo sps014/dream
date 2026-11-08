@@ -3,7 +3,7 @@
 use crate::{gamepads::Pads, input::Input, metrics::Metrics, thread::is_window_thread};
 use dream_host_abi::{SchedulerPark, window_surface::WindowSurface};
 use sdl3::{EventPump, Sdl, VideoSubsystem, event::Event, joystick::JoystickId, video::Window};
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{cell::RefCell, collections::BTreeMap, mem::ManuallyDrop};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HostError {
@@ -55,7 +55,9 @@ pub(crate) struct Host {
 }
 
 thread_local! {
-    static HOST: RefCell<Option<Host>> = const { RefCell::new(None) };
+    // No thread-exit destructor: on Windows it would run SDL's teardown inside `ExitProcess`
+    // under the loader lock. `shutdown` releases the host explicitly where a platform loop ends.
+    static HOST: ManuallyDrop<RefCell<Option<Host>>> = const { ManuallyDrop::new(RefCell::new(None)) };
     static LAST_ERROR: RefCell<Option<HostError>> = const { RefCell::new(None) };
 }
 
@@ -64,7 +66,8 @@ pub fn initialize() -> Result<(), HostError> {
     if !is_window_thread() {
         return Err(HostError::wrong_thread());
     }
-    HOST.with_borrow_mut(|host| {
+    HOST.with(|cell| {
+        let mut host = cell.borrow_mut();
         if host.is_some() {
             return Ok(());
         }
@@ -100,7 +103,7 @@ pub(crate) fn with_host<R>(f: impl FnOnce(&mut Host) -> R) -> Option<R> {
     if !is_window_thread() {
         return None;
     }
-    HOST.with_borrow_mut(|host| host.as_mut().map(f))
+    HOST.with(|cell| cell.borrow_mut().as_mut().map(f))
 }
 
 pub fn record_error(error: HostError) {
@@ -210,7 +213,7 @@ pub(crate) fn shutdown() {
         return;
     }
     dream_host_abi::set_scheduler_park(None);
-    HOST.with_borrow_mut(|host| *host = None);
+    HOST.with(|cell| *cell.borrow_mut() = None);
 }
 
 /// The display period of a visible vsync window, used to pace Android frames that returned early.

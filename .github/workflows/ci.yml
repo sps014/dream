@@ -193,15 +193,6 @@ jobs:
       - name: Native CLI release smoke
         if: runner.os != 'Linux'
         run: python scripts/test_corpus.py --release cli_arguments
-      - name: Qualify async I/O and networking on native and Node
-        run: python scripts/qualify-io-net.py
-      - name: Preserve phase qualification results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: phase34-${{ runner.os }}-${{ runner.arch }}
-          path: target/phase34-qualification/
-          retention-days: 7
       - name: Compile-time and memory regression budget
         if: runner.os == 'Linux'
         shell: bash
@@ -358,7 +349,7 @@ jobs:
       - name: JavaScript runtime storage and generated bundle
         run: |
           node scripts/bundle-runtime.mjs --check
-          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs scripts/test-window-host.mjs scripts/test-typed-host.mjs scripts/test-socket-spans.mjs scripts/test-gpu-host.mjs scripts/test-stdlib-hosts.mjs scripts/test-cancellation-host.mjs
+          node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs scripts/test-window-host.mjs scripts/test-typed-host.mjs scripts/test-socket-spans.mjs scripts/test-gpu-host.mjs scripts/test-stdlib-hosts.mjs scripts/test-cancellation-host.mjs scripts/test-http-host.mjs
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}

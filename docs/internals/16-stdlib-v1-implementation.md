@@ -85,10 +85,9 @@ drained per Dream client. These changes do not establish production v1 readiness
 
 The phase 3–4 qualification command (`scripts/qualify-io-net.py`) runs native and
 Node fixtures in debug/release modes, transport/TLS tests, and adapter/ownership
-checks. The dedicated platform workflow runs it on Linux, macOS, and Windows and
-publishes reports. The [Linux/macOS/Windows run](https://github.com/sps014/dream/actions/runs/38684962085)
-passes all 13 checks on each platform at `e34ce58c`. Each archived report identifies
-the revision and confirms a clean source tree.
+checks. CI does not run it: the workspace tests and the corpus already cover those
+cases. The [Linux/macOS/Windows run](https://github.com/sps014/dream/actions/runs/38684962085)
+passed all 13 checks on each platform at `e34ce58c`.
 
 ## Phase 5 implementation
 
@@ -232,9 +231,9 @@ connection reuse, disconnects, and unclaimed-response cleanup. Direct JavaScript
 adapter/bundler checks cover cancellation subscriptions, shared-memory growth,
 HTTP completion/release, and host selection.
 
-The platform workflow preserves `target/phase34-qualification/report.json` and
-per-step logs. The broader phase 8 release gate still includes the complete
-packaging, determinism, failure-injection, and supported-platform matrix.
+The workspace tests and the corpus cover those fixtures. The broader phase 8
+release gate still includes the complete packaging, determinism, failure-injection,
+and supported-platform matrix.
 
 Phase 5 passes local workspace build, strict Clippy, workspace tests, the complete
 native/Node corpus, and the CLI corpus in guest release mode. Thirty-six JavaScript

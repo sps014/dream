@@ -581,7 +581,7 @@ jobs:
             ~/.dream/toolchains/llvm-22.1.8
             ~/.dream/toolchains/mold-3.0.0-331ac66
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
-      - run: cargo test --test integration -- runtime_worker:: runtime_ownership:: runtime_weak:: runtime_callback:: runtime_cancellation:: --nocapture
+      - run: "cargo test --test integration -- runtime_worker:: runtime_ownership:: runtime_weak:: runtime_callback:: runtime_cancellation:: --nocapture"
 
   supply-chain:
     name: cargo-deny

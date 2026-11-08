@@ -80,7 +80,9 @@ fun sea_trace(origin: GpuVec3, ray: GpuVec3, time: float, strength: float): GpuV
     let near_height = sea_map(origin, time, strength, 3);
     let point = origin;
     // The height field is not a signed distance: use a bracketed secant search.
-    for (let i in 0..32) {
+    // Eight steps are the original march. Further steps do not move the surface
+    // enough to justify the cost on a high-DPI frame.
+    for (let i in 0..8) {
         let middle = GpuMath.mix(near, far, near_height / (near_height - far_height));
         point = origin + ray * middle;
         let height = sea_map(point, time, strength, 3);
@@ -226,6 +228,17 @@ fun ocean_fragment(
     return GpuVec4(color.x, color.y, color.z, 1.0f);
 }
 
+// The march is per pixel, so a retina backing store costs four times a logical one
+// for an image the compositor will scale up anyway.
+fun shade_size(pixels: WindowSize, scale: float): WindowSize {
+    if scale <= 1.0f || pixels.width <= 0 || pixels.height <= 0 {
+        return pixels;
+    }
+    let width = (int)(((float)pixels.width / scale).max(1.0f));
+    let height = (int)(((float)pixels.height / scale).max(1.0f));
+    return WindowSize(width, height);
+}
+
 async fun run_ocean(window: Window): Result<Unit, GpuError> {
     let device = GpuDevice.create(GpuBackend.Auto).await?;
     let surface = device.create_surface(window)?;
@@ -244,22 +257,14 @@ async fun run_ocean(window: Window): Result<Unit, GpuError> {
     let strength = 1.0f;
     let daylight = 1.0f;
     let paused = false;
-    let antialias = 1;
+    let antialias = 0;
+    let drawn_width = 0;
+    let drawn_height = 0;
     System.println(
         "Ocean ready | Space: pause | Up/Down: waves | Left/Right: daylight | Q: quality | R: reset | Esc: close"
     );
     while window.is_open {
         let input = window.poll();
-        for (let event in input.events) {
-            switch (event) {
-                WindowEvent.Resized(size) => {
-                    if size.width > 0 && size.height > 0 {
-                        surface.resize(size.width, size.height)?;
-                    }
-                }
-                _ => {}
-            }
-        }
         if input.keyboard.pressed(KeyCode.Escape) {
             window.close();
         }
@@ -293,10 +298,15 @@ async fun run_ocean(window: Window): Result<Unit, GpuError> {
             daylight = 1.0f;
             time = 0.0f;
         }
-        let size = window.pixel_size;
+        let size = shade_size(window.pixel_size, window.scale_factor);
         if size.width <= 0 || size.height <= 0 {
             Time.delay(50).await;
             continue;
+        }
+        if size.width != drawn_width || size.height != drawn_height {
+            surface.resize(size.width, size.height)?;
+            drawn_width = size.width;
+            drawn_height = size.height;
         }
         let frame = surface.begin_frame(GpuVec4(0.0f, 0.09f, 0.18f, 1.0f)).await?;
         let pass = frame.pass;

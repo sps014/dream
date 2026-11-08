@@ -129,14 +129,15 @@ Click the ocean in the browser to give it keyboard focus.
 | Space | Pause/resume waves and camera drift |
 | Up / Down | Increase/decrease wave height |
 | Left / Right | Warmer/cooler daylight |
-| Q | Toggle nine-sample antialiasing (enabled initially) |
+| Q | Toggle nine-sample antialiasing (off initially) |
 | R | Reset time, wave height and daylight |
 | Escape | Close the ocean; reload the browser page to restart |
 
-The render loop follows the display refresh rate. Nine subpixel samples smooth the
-fine crests and highlights. Press Q for a faster single-sample mode on slower GPUs.
-Rendering cost scales with the drawable pixel count: reduce the window size on
-high-DPI screens if needed.
+The render loop follows the display refresh rate. The march uses the original eight
+steps, and on a high-DPI display the framebuffer is the window's logical size so the
+compositor scales it up instead of shading every physical pixel. Each pixel is traced
+once. Press Q to average nine subpixel samples; that smooths the crests and costs
+about nine times as much.
 The program handles resize and skips rendering while minimized.
 
 ## Attribution and license
@@ -149,7 +150,7 @@ and distribute adaptations under that license for noncommercial use.
 This port expresses the original noise, choppy octaves, height tracing, normals and
 lighting in Dream. It uses explicit shader parameters and one shared height sampler,
 retains the original camera rotation and forward drift, skips tracing above the
-horizon, enables the original's optional nine-sample antialiasing, and adds keyboard
+horizon, keeps the original's optional nine-sample antialiasing on Q, and adds keyboard
 controls, resizing and a browser host page.
 
 The noise lattice uses the public-domain

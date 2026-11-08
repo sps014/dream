@@ -143,7 +143,9 @@ jobs:
         with:
           path: ~/.dream/toolchains/binaryen-133
           key: binaryen-133-${{ runner.os }}-${{ runner.arch }}
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # One full compilation. Clippy is a check: running it first leaves metadata-only
+      # dependency artifacts, and the build then compiles that graph again. Tests and
+      # clippy below reuse the rlibs this build writes.
       - run: cargo build --workspace --timings
       - run: cargo run --locked -p dreamer -- toolchain install binaryen
       # The GPU shader generator compiles with the pinned slangc and records layouts with
@@ -174,6 +176,8 @@ jobs:
         with:
           node-version: "22"
       - run: cargo test --workspace --no-fail-fast --timings
+      # Dependencies are already built. This lints workspace crates only.
+      - run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
       - name: X11 windows and GPU presentation under a real display server
         if: runner.os == 'Linux'
         run: |
@@ -184,7 +188,11 @@ jobs:
           python scripts/generate-capabilities.py --check
           python scripts/build-gpu-parser.py --check
           node --test scripts/test-wasm-size.mjs
-          python scripts/test_corpus.py --release cli_arguments
+      # Linux runs this case inside the full release corpus. macOS and Windows have no other
+      # native CLI run.
+      - name: Native CLI release smoke
+        if: runner.os != 'Linux'
+        run: python scripts/test_corpus.py --release cli_arguments
       - name: Qualify async I/O and networking on native and Node
         run: python scripts/qualify-io-net.py
       - name: Preserve phase qualification results
@@ -208,9 +216,9 @@ jobs:
             cp "$RUNNER_TEMP/dream-compile-candidate" "$RUNNER_TEMP/dream-compile-baseline-bin"
           else
             git worktree add --detach "$baseline_tree" "$baseline_commit"
-            cargo build --locked -p dream --bin dream --manifest-path "$baseline_tree/Cargo.toml" --target-dir "$PWD/target"
-            cp target/debug/dream "$RUNNER_TEMP/dream-compile-baseline-bin"
-            cp "$RUNNER_TEMP/dream-compile-candidate" target/debug/dream
+            # A separate target directory, so this build does not replace the candidate's artifacts.
+            cargo build --locked -p dream --bin dream --manifest-path "$baseline_tree/Cargo.toml" --target-dir "$baseline_tree/target"
+            cp "$baseline_tree/target/debug/dream" "$RUNNER_TEMP/dream-compile-baseline-bin"
           fi
           # The baseline compiler reads its C runtime sources from the worktree it was built in,
           # so the worktree must outlive the measurement.
@@ -573,11 +581,7 @@ jobs:
             ~/.dream/toolchains/llvm-22.1.8
             ~/.dream/toolchains/mold-3.0.0-331ac66
           key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
-      - run: "cargo test --test integration runtime_worker:: -- --nocapture"
-      - run: "cargo test --test integration runtime_ownership:: -- --nocapture"
-      - run: "cargo test --test integration runtime_weak:: -- --nocapture"
-      - run: "cargo test --test integration runtime_callback:: -- --nocapture"
-      - run: "cargo test --test integration runtime_cancellation:: -- --nocapture"
+      - run: cargo test --test integration -- runtime_worker:: runtime_ownership:: runtime_weak:: runtime_callback:: runtime_cancellation:: --nocapture
 
   supply-chain:
     name: cargo-deny

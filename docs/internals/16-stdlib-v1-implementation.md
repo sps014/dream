@@ -170,9 +170,8 @@ revision, dirty state, platform, step results, and logs. Its native/Node gate
 includes workspace builds and tests, strict Clippy, both guest profiles, executable
 docs, full-corpus determinism, packaging, and sanitizer checks. The separate
 browser harness checks debug/release fixtures and unsupported capabilities.
-`.github/workflows/stdlib-v1.yml` runs native qualification on Linux, macOS, and
-Windows and browser qualification on Linux, preserving evidence as artifacts.
-A gate is not qualified until its corresponding report passes.
+Run the script locally and keep its report. A gate is not qualified until that
+report passes.
 
 The application example exposed excessive Wasm locals in large debug async polls.
 Debug Wasm program code generation now enables llc stackification/coalescing;

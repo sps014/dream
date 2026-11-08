@@ -87,7 +87,7 @@ The declarations and generator lowering exist (`@differentiable` → `[Different
 1. **Done.** The guide is `docs/library/gpu/` (setup and compute, shaders and the generated `GpuShaders` class, rendering with `system.window`, ray tracing, machine learning). Full ray-query and autodiff programs live in those pages; the cookbook adds a histogram (atomics) and a mouse-driven fragment shader. Every full program is compile-checked by `tooling/docs/check_examples.py`.
 2. **Done.** The inventory is refreshed and the docs gate passes.
 3. **Done.** `make_bundles.py --check` runs in the Linux and macOS build jobs. Windows stages the SDK's `dxcompiler.dll` and `dxil.dll` inside the fingerprinted Slang root, then regenerates the fixtures with DXIL/DXBC before the host matrix. Fixture reflection compiles each entry separately, as required by DXBC. The triangle uses the explicit Vulkan vertex index except on D3D, where that semantic is invalid.
-4. **Done.** X11 packages and the window capability library are in `release.yml` and `phase34.yml`.
+4. **Done.** X11 packages and the window capability library are in `release.yml` and `ci.yml`.
 5. **Local Windows gate passes:** workspace build, strict clippy, workspace tests, and the full native/Node corpus. Shader goldens and per-host byte determinism also pass; SPIR-V golden comparisons preserve sizes/layouts/bindings while allowing Slang's host-dependent blob hashes.
 
 ## Known limitations and follow-up bugs

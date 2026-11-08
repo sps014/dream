@@ -168,7 +168,8 @@ pub fn emit_llvm_artifacts(
     let src = std::fs::read_to_string(ll_path)?;
     if profile.is_debug() {
         let opt_ll = ll_path.with_extension("opt.ll");
-        let optimized = if opt == OptLevel::O0 {
+        let optimized = if opt == OptLevel::O0 && sanitizer_passes(&tools.config, target).is_empty()
+        {
             std::fs::copy(ll_path, &opt_ll)?;
             ll_path.to_path_buf()
         } else {
@@ -176,8 +177,9 @@ pub fn emit_llvm_artifacts(
             let mut command = tools.command("opt");
             command
                 .arg(format!(
-                    "-passes={}",
-                    pipeline(opt).trim_start_matches("internalize,")
+                    "-passes={}{}",
+                    pipeline(opt).trim_start_matches("internalize,"),
+                    sanitizer_passes(&tools.config, target)
                 ))
                 .arg(ll_path)
                 .arg("-o")
@@ -431,18 +433,36 @@ pub fn compile_llvm(
     let optimized = if separate_runtime {
         for module in shim.iter().chain(&icon_ll) {
             let object = module.with_extension("shim.o");
-            run_llc(&tools, module, opt, debug, "obj", &object, &spec)?;
+            let passes = sanitizer_passes(&tools.config, &spec);
+            let instrumented = module.with_extension("san.bc");
+            let input = if passes.is_empty() {
+                module.as_path()
+            } else {
+                let mut command = tools.command("opt");
+                command
+                    .arg(format!("-passes={}", passes.trim_start_matches(',')))
+                    .arg(module)
+                    .arg("-o")
+                    .arg(&instrumented);
+                run_captured(&mut command, "opt (shim sanitizer)")?;
+                &instrumented
+            };
+            run_llc(&tools, input, opt, debug, "obj", &object, &spec)?;
+            if !passes.is_empty() {
+                let _ = std::fs::remove_file(instrumented);
+            }
             debug_objects.push(object);
         }
-        if opt == OptLevel::O0 {
+        if opt == OptLevel::O0 && sanitizer_passes(&tools.config, &spec).is_empty() {
             Ok(ll_path.to_path_buf())
         } else {
             let out = ll_path.with_extension("opt.bc");
             let mut command = tools.command("opt");
             command
                 .arg(format!(
-                    "-passes={}",
-                    pipeline(opt).trim_start_matches("internalize,")
+                    "-passes={}{}",
+                    pipeline(opt).trim_start_matches("internalize,"),
+                    sanitizer_passes(&tools.config, &spec)
                 ))
                 .arg(ll_path)
                 .arg("-o")

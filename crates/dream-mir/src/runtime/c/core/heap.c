@@ -217,6 +217,7 @@ static void account_frees(uint32_t n) {
 static void heap_refresh_fast(void);
 
 dream_ptr dream_region_activate(char *prefix, dream_size total, int32_t tag) {
+    DREAM_UNPOISON(prefix, DREAM_REGION_PREFIX + HEAP_HEADER_SIZE);
     *(size_t *)prefix = (size_t)total - DREAM_REGION_PREFIX;
     char *block = prefix + DREAM_REGION_PREFIX;
     DREAM_UNPOISON(block, (size_t)total - DREAM_REGION_PREFIX);
@@ -244,7 +245,7 @@ static void heap_refresh_fast(void) {
 }
 
 static size_t allocation_total(size_t size) {
-    if (size > PTRDIFF_MAX - HEAP_HEADER_SIZE - 15) {
+    if (size > PTRDIFF_MAX - HEAP_HEADER_SIZE - 15 - DREAM_REDZONE_BYTES) {
         DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
     }
     return dream_block_need(size);
@@ -266,6 +267,10 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
         if (block != NULL) {
             dream_heap.free[idx] = block_next(block);
             activate(block, cls, tag);
+#ifdef DREAM_ASAN
+            dream_allocation_bounds(block + HEAP_HEADER_SIZE,
+                                    dream_block_total(block) - HEAP_HEADER_SIZE, (size_t)size);
+#endif
             return (dream_ptr)(block + HEAP_HEADER_SIZE);
         }
         if (__atomic_load_n(&shared_available[idx], __ATOMIC_ACQUIRE)) {
@@ -283,6 +288,10 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
         if (block) {
             dream_heap.free[idx] = block_next(block);
             activate(block, cls, tag);
+#ifdef DREAM_ASAN
+            dream_allocation_bounds(block + HEAP_HEADER_SIZE,
+                                    dream_block_total(block) - HEAP_HEADER_SIZE, (size_t)size);
+#endif
             return (dream_ptr)(block + HEAP_HEADER_SIZE);
         }
     } else {
@@ -293,6 +302,10 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
         heap_unlock();
         if (block != NULL) {
             activate(block, cls, tag);
+#ifdef DREAM_ASAN
+            dream_allocation_bounds(block + HEAP_HEADER_SIZE,
+                                    dream_block_total(block) - HEAP_HEADER_SIZE, (size_t)size);
+#endif
             return (dream_ptr)(block + HEAP_HEADER_SIZE);
         }
     }
@@ -302,6 +315,10 @@ static dream_ptr malloc_general(dream_size size, int32_t tag) {
         block = dream_slab_bump(&dream_heap.slabs[idx], (unsigned)idx, 0);
     }
     activate(block, cls, tag);
+#ifdef DREAM_ASAN
+    dream_allocation_bounds(block + HEAP_HEADER_SIZE,
+                            dream_block_total(block) - HEAP_HEADER_SIZE, (size_t)size);
+#endif
     return (dream_ptr)(block + HEAP_HEADER_SIZE);
 }
 
@@ -352,6 +369,10 @@ dream_ptr dream_malloc_shared(dream_size size, int32_t tag) {
     }
     heap_unlock();
     activate(block, cls, tag);
+#ifdef DREAM_ASAN
+    dream_allocation_bounds(block + HEAP_HEADER_SIZE,
+                            dream_block_total(block) - HEAP_HEADER_SIZE, (size_t)size);
+#endif
     return (dream_ptr)(block + HEAP_HEADER_SIZE);
 }
 
@@ -486,7 +507,13 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
     if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) { DREAM_PANIC_LITERAL(u"panic: cannot resize immortal storage"); }
     block = (char *)dream_p(ptr) - HEAP_HEADER_SIZE;
     old_total = dream_block_total(block);
+#ifdef DREAM_ASAN
+    size_t old_size = dream_allocation_size(dream_p(ptr), old_total - HEAP_HEADER_SIZE);
+#endif
     if (new_total <= old_total) {
+#ifdef DREAM_ASAN
+        dream_allocation_bounds(dream_p(ptr), old_total - HEAP_HEADER_SIZE, (size_t)new_size);
+#endif
         return ptr;
     }
     const dream_type_info *info = dream_object_info(ptr);
@@ -497,6 +524,9 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
         dream_visit_owned(ptr, retain_copied_edge, NULL);
     }
     copy = old_total - HEAP_HEADER_SIZE;
+#ifdef DREAM_ASAN
+    copy = old_size;
+#endif
     if (copy > new_size) {
         copy = new_size;
     }

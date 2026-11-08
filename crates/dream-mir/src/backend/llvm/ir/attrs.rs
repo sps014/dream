@@ -8,6 +8,8 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FnAttr {
     AlwaysInline,
+    SanitizeAddress,
+    SanitizeThread,
     NoInline,
     OptNone,
     NoReturn,
@@ -31,6 +33,8 @@ pub enum FnAttr {
 impl fmt::Display for FnAttr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            FnAttr::SanitizeAddress => f.write_str("sanitize_address"),
+            FnAttr::SanitizeThread => f.write_str("sanitize_thread"),
             FnAttr::AlwaysInline => f.write_str("alwaysinline"),
             FnAttr::NoInline => f.write_str("noinline"),
             FnAttr::OptNone => f.write_str("optnone"),

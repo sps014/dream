@@ -34,6 +34,7 @@ mod leak_diagnostics;
 mod library_outputs;
 mod llvm_backend_tests;
 mod lock_emission;
+mod memory_sanitizers;
 mod mir_pipeline;
 mod native_dead_strip;
 mod native_interop;

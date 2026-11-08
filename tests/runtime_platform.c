@@ -135,6 +135,28 @@ int main(int argc, char **argv) {
     dream_platform platform = {allocate, resize, deallocate, map, release, now, terminal_abort, write_bytes,
                                lock, unlock, object_drop};
     dream_set_platform(&platform);
+    if (strcmp(argv[1], "status-size") == 0) { dream_status_bytes(0, "x", (size_t)INT32_MAX); }
+    if (strcmp(argv[1], "status-null") == 0) { dream_status_bytes(0, NULL, 1); }
+    if (strcmp(argv[1], "status-capacity") == 0) { dream_status_buffer(INT32_MAX); }
+    if (strcmp(argv[1], "status-negative") == 0) { dream_status_buffer(-1); }
+    if (strcmp(argv[1], "status-finish") == 0) { dream_status_finish(dream_status_buffer(1), INT64_MAX); }
+    if (strcmp(argv[1], "status-result") == 0) {
+        dream_ptr result = dream_status_bytes(0, "ok", 2);
+        assert(dream_i32(result)[0] == 3);
+        assert(memcmp(dream_array_bytes(result), "\0ok", 3) == 0);
+        dream_release(result);
+        result = dream_status_buffer(2);
+        dream_status_finish(result, 2);
+        assert(dream_i32(result)[0] == 3 && dream_array_bytes(result)[0] == 0);
+        dream_status_finish(result, -1);
+        assert(dream_i32(result)[0] == 1 && dream_array_bytes(result)[0] == 1);
+        dream_release(result);
+        result = dream_status_buffer(0);
+        dream_status_finish(result, 0);
+        assert(dream_i32(result)[0] == 1 && dream_array_bytes(result)[0] == 0);
+        dream_release(result);
+        return 0;
+    }
     if (strcmp(argv[1], "raw-memory") == 0) {
         int before_allocations = allocations, before_frees = frees;
         uintptr_t p = dream_raw_alloc(16, 128, _Alignof(int32_t), 0);

@@ -78,13 +78,30 @@ _Noreturn void dream_platform_abort(void);
 #endif
 #endif
 #ifdef DREAM_ASAN
+#define DREAM_REDZONE_BYTES 8u
 void __asan_poison_memory_region(void const volatile *addr, size_t size);
 void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+void *__asan_region_is_poisoned(void *addr, size_t size);
 #define DREAM_POISON(addr, size) __asan_poison_memory_region((addr), (size))
 #define DREAM_UNPOISON(addr, size) __asan_unpoison_memory_region((addr), (size))
 #else
+#define DREAM_REDZONE_BYTES 0u
 #define DREAM_POISON(addr, size) ((void)(addr), (void)(size))
 #define DREAM_UNPOISON(addr, size) ((void)(addr), (void)(size))
+#endif
+
+/* Class slack is not part of a live allocation. These annotations also track exact sizes
+ * for sanitizer realloc copies without adding metadata or work to production allocations. */
+#ifdef DREAM_ASAN
+DREAM_ALWAYS_INLINE void dream_allocation_bounds(void *payload, size_t capacity, size_t size) {
+    DREAM_UNPOISON(payload, capacity);
+    DREAM_POISON((char *)payload + size, capacity - size);
+}
+
+DREAM_ALWAYS_INLINE size_t dream_allocation_size(void *payload, size_t capacity) {
+    void *end = __asan_region_is_poisoned(payload, capacity);
+    return end ? (size_t)((char *)end - (char *)payload) : capacity;
+}
 #endif
 
 #ifdef DREAM_WASM32
@@ -349,6 +366,9 @@ DREAM_ALWAYS_INLINE int32_t dream_class_bytes(int idx) {
 /* Block bytes for a payload of `size`: payloads round to eight bytes and hold at least a
  * free-list link. */
 DREAM_ALWAYS_INLINE size_t dream_block_need(size_t size) {
+#ifdef DREAM_ASAN
+    size += DREAM_REDZONE_BYTES;
+#endif
     return (((size < 8u ? 8u : size) + 7u) & ~(size_t)7u) + HEAP_HEADER_SIZE;
 }
 
@@ -452,12 +472,16 @@ DREAM_ALWAYS_INLINE void dream_heap_count(uint64_t *c, uint64_t n) {
 DREAM_ALWAYS_INLINE dream_ptr dream_malloc(dream_size size, int32_t tag) {
     dream_heap_tls *h = &dream_heap;
     dream_heap_counters *c = h->fast;
-    if (DREAM_LIKELY(c != NULL && size <= DREAM_MAX_CLASS_BYTES - HEAP_HEADER_SIZE)) {
+    if (DREAM_LIKELY(c != NULL && size <= DREAM_MAX_CLASS_BYTES - HEAP_HEADER_SIZE - DREAM_REDZONE_BYTES)) {
         int idx = dream_size_class((uint32_t)dream_block_need((size_t)size));
         char *block = h->free[idx];
         if (DREAM_LIKELY(block != NULL)) {
             h->free[idx] = dream_block_next(block);
             dream_block_activate(block, (unsigned)idx, tag);
+#ifdef DREAM_ASAN
+            dream_allocation_bounds(block + HEAP_HEADER_SIZE,
+                                    (size_t)dream_class_bytes(idx) - HEAP_HEADER_SIZE, (size_t)size);
+#endif
             dream_heap_count(&c->allocs, UINT64_C(1));
             return (dream_ptr)(block + HEAP_HEADER_SIZE);
         }
@@ -1312,6 +1336,9 @@ dream_ptr dream_array_new(int32_t len, int32_t esize);
 /* Host results are byte arrays whose first byte is a status (0 success, 1 failure) followed by
    the payload. */
 static inline dream_ptr dream_status_bytes(uint8_t status, const void *payload, size_t count) {
+    if (DREAM_UNLIKELY(count > INT32_MAX - 1u || (count && !payload))) {
+        DREAM_PANIC_LITERAL(u"panic: invalid host result payload size");
+    }
     dream_ptr result = dream_array_new((int32_t)count + 1, 1);
     uint8_t *bytes = dream_array_bytes(result);
     bytes[0] = status;
@@ -1322,10 +1349,16 @@ static inline dream_ptr dream_status_bytes(uint8_t status, const void *payload, 
 /* A status array with room for `capacity` payload bytes at dream_array_bytes(result) + 1;
    dream_status_finish records how many were filled, or failure when `filled` is negative. */
 static inline dream_ptr dream_status_buffer(int32_t capacity) {
+    if (DREAM_UNLIKELY(capacity < 0 || capacity == INT32_MAX)) {
+        DREAM_PANIC_LITERAL(u"panic: invalid host result capacity");
+    }
     return dream_array_new(capacity + 1, 1);
 }
 
 static inline void dream_status_finish(dream_ptr result, int64_t filled) {
+    if (DREAM_UNLIKELY(!result || dream_i32(result)[0] < 1 || filled >= dream_i32(result)[0])) {
+        DREAM_PANIC_LITERAL(u"panic: host result exceeds buffer capacity");
+    }
     dream_array_bytes(result)[0] = filled < 0 ? 1 : 0;
     dream_i32(result)[0] = filled < 0 ? 1 : (int32_t)filled + 1;
 }

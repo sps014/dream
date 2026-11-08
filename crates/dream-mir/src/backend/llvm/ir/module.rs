@@ -37,6 +37,8 @@ pub struct ModuleWriter {
     defined: IndexSet<String>,
     bodies: String,
     pub md: Metadata,
+    /// Applied to definitions, including compiler-generated glue.
+    pub definition_attrs: Vec<FnAttr>,
 }
 
 impl ModuleWriter {
@@ -51,6 +53,7 @@ impl ModuleWriter {
             defined: IndexSet::new(),
             bodies: String::new(),
             md: Metadata::default(),
+            definition_attrs: Vec::new(),
         }
     }
 
@@ -80,12 +83,13 @@ impl ModuleWriter {
         self.defined.contains(name)
     }
 
-    pub fn define(&mut self, f: FunctionWriter) {
+    pub fn define(&mut self, mut f: FunctionWriter) {
         assert!(
             self.defined.insert(f.name().to_string()),
             "ICE: LLVM function {} defined twice",
             f.name()
         );
+        f.attrs.extend(self.definition_attrs.iter().cloned());
         f.write(&mut self.bodies);
     }
 
@@ -172,6 +176,22 @@ impl ModuleWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sanitizer_attributes_cover_every_definition_only() {
+        for attr in [FnAttr::SanitizeAddress, FnAttr::SanitizeThread] {
+            let mut m = ModuleWriter::new("sanitizer.dream", "", "");
+            m.definition_attrs.push(attr.clone());
+            for name in ["user", "glue"] {
+                let mut f = FunctionWriter::new(name, Ty::Void, vec![]);
+                f.ret(None);
+                m.define(f);
+            }
+            let ir = m.finish();
+            assert_eq!(ir.matches(&attr.to_string()).count(), 2);
+            super::super::assert_assembles(&ir);
+        }
+    }
 
     #[test]
     fn declarations_yield_to_definitions() {

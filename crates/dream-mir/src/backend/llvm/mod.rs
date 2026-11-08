@@ -67,6 +67,13 @@ pub struct LlvmModule {
     pub exports: Vec<dream_abi::exports::ExportFunction>,
 }
 
+/// Instrumentation is selected by the driver, never inferred from the ambient environment.
+#[derive(Debug, Clone, Copy)]
+pub enum Sanitizer {
+    Address,
+    Thread,
+}
+
 /// Lowers optimized MIR to one `.ll` module typed against the runtime's signature table.
 /// `leak_checks` (debug builds) makes native `main` print the exit-time heap report and a
 /// wasm32 module export its live-object count; release modules contain neither. `std_sources` is a
@@ -79,9 +86,18 @@ pub fn emit_llvm_module(
     leak_checks: bool,
     target: crate::backend::Target,
     std_sources: Option<&std::path::Path>,
+    sanitizer: Option<Sanitizer>,
 ) -> Result<LlvmModule, EmitError> {
     let result = catch_unwind(AssertUnwindSafe(|| {
-        emit_llvm_module_unchecked(mir, interner, sigs, leak_checks, target, std_sources)
+        emit_llvm_module_unchecked(
+            mir,
+            interner,
+            sigs,
+            leak_checks,
+            target,
+            std_sources,
+            sanitizer,
+        )
     }));
     match result {
         Ok(ir) => Ok(ir),
@@ -99,8 +115,15 @@ fn emit_llvm_module_unchecked(
     leak_checks: bool,
     target: crate::backend::Target,
     std_sources: Option<&std::path::Path>,
+    sanitizer: Option<Sanitizer>,
 ) -> LlvmModule {
     let mut l = Lcx::new(mir, interner, sigs, leak_checks, target);
+    if let Some(sanitizer) = sanitizer {
+        l.m.definition_attrs.push(match sanitizer {
+            Sanitizer::Address => ir::FnAttr::SanitizeAddress,
+            Sanitizer::Thread => ir::FnAttr::SanitizeThread,
+        });
+    }
     l.std_sources = std_sources.map(std::path::Path::to_path_buf);
     // Objects are built `-relocation-model=pic`; without a PIE level LLVM assumes a shared
     // object and routes every runtime thread-local through `__tls_get_addr`/TLSDESC.

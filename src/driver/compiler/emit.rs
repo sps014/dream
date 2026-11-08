@@ -76,6 +76,22 @@ impl Compiler {
             })
             .transpose()?;
         let _phase = tracing::info_span!("compile_phase", phase = "ir_emission").entered();
+        let sanitizer = self
+            .toolchain_config()
+            .native_sanitize
+            .as_ref()
+            .and_then(|value| value.to_str())
+            .filter(|_| self.target.spec().can_link_on_host())
+            .and_then(|value| {
+                let mut names = value.split(',').map(str::trim);
+                if names.clone().any(|name| name == "address") {
+                    Some(dream_mir::backend::llvm::Sanitizer::Address)
+                } else if names.any(|name| name == "thread") {
+                    Some(dream_mir::backend::llvm::Sanitizer::Thread)
+                } else {
+                    None
+                }
+            });
         let module = dream_mir::backend::llvm::emit_llvm_module(
             mir,
             interner,
@@ -83,6 +99,7 @@ impl Compiler {
             self.profile.is_debug(),
             self.target.clone(),
             std_sources.as_deref(),
+            sanitizer,
         )
         .map_err(|error| stale(error.to_string()))?;
         let c_shim = (!module.c_shim.is_empty())

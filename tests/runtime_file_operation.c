@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
+void dream_panic(dream_ptr message) { (void)message; abort(); }
+
 static dream_mutex mu = DREAM_MUTEX_INIT;
 static dream_cond changed = DREAM_COND_INIT;
 static int live = 1, entered, released, wakes;

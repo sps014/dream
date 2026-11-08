@@ -65,6 +65,8 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
     let output = Command::new(&binary).arg("normal").output().unwrap();
     assert!(output.status.success(), "{:?}", output);
     assert!(String::from_utf8_lossy(&output.stdout).contains("injected platform passed"));
+    let status = Command::new(&binary).arg("status-result").output().unwrap();
+    assert!(status.status.success(), "host results: {status:?}");
     let raw = Command::new(&binary).arg("raw-memory").output().unwrap();
     assert!(raw.status.success(), "raw allocation platform: {raw:?}");
     let retired = Command::new(&binary)
@@ -86,6 +88,11 @@ fn core_runs_and_reports_exhaustion_through_the_injected_platform() {
         3000
     );
     for (mode, message) in [
+        ("status-size", "invalid host result payload size"),
+        ("status-null", "invalid host result payload size"),
+        ("status-capacity", "invalid host result capacity"),
+        ("status-negative", "invalid host result capacity"),
+        ("status-finish", "host result exceeds buffer capacity"),
         ("counters", "out of memory registering heap counters"),
         ("mapping", "out of memory mapping the private heap"),
         ("index", "out of memory indexing the Dream heap"),

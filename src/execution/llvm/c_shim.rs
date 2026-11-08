@@ -40,6 +40,9 @@ pub(super) fn shim_bitcode(
         .arg(&src)
         .arg("-o")
         .arg(&out);
+    if let Some(flag) = super::runtime::native_sanitize_flag(&tools.config, spec) {
+        cmd.arg(flag).arg("-fno-sanitize-recover=all");
+    }
     // A non-PIC shim's module flags can force local-exec TLS in the linked runtime.
     if !spec.is_windows() && !spec.capabilities.linear_memory {
         cmd.arg("-fPIC");

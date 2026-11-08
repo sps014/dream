@@ -16,6 +16,7 @@ static dream_heap_span *map_span(unsigned cls, size_t bytes, int locked) {
     }
     uintptr_t aligned = ((uintptr_t)raw + DREAM_SLAB_BYTES - 1u) & ~(uintptr_t)(DREAM_SLAB_BYTES - 1u);
     dream_heap_span *span = (dream_heap_span *)aligned;
+    DREAM_POISON((char *)span + DREAM_SLAB_PREFIX, bytes - DREAM_SLAB_PREFIX);
     *span = (dream_heap_span){.cls = cls, .block_bytes = cls < DREAM_NCLASS ? (size_t)dream_class_bytes((int)cls) : 0};
     if (!locked) { dream_platform_current->lock(DREAM_LOCK_HEAP); }
     dream_heap_map_add_locked(span, bytes, mapped);
@@ -32,6 +33,7 @@ char *dream_slab_bump(dream_heap_span **current, unsigned cls, int locked) {
     }
     uint32_t used = __atomic_load_n(&span->used, __ATOMIC_RELAXED);
     char *block = (char *)span + DREAM_SLAB_PREFIX + (size_t)used * bytes;
+    DREAM_UNPOISON(block, HEAP_HEADER_SIZE);
     dream_heap_header *header = (dream_heap_header *)block;
     header->tag = DREAM_TAG_FREED;
     header->rc = 0;
@@ -45,6 +47,7 @@ char *dream_large_map(size_t total, int locked) {
     }
     dream_heap_span *span = map_span(DREAM_CLASS_LARGE, DREAM_SLAB_PREFIX + DREAM_LARGE_PREFIX + total, locked);
     char *block = (char *)span + DREAM_SLAB_PREFIX + DREAM_LARGE_PREFIX;
+    DREAM_UNPOISON(block - DREAM_LARGE_PREFIX, DREAM_LARGE_PREFIX + HEAP_HEADER_SIZE);
     *dream_large_size(block) = total;
     *dream_large_state(block) = 0;
     dream_heap_header *header = (dream_heap_header *)block;

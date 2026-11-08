@@ -62,10 +62,10 @@ static void slab_layouts(void) {
         assert(cls == 0 || (uint32_t)dream_class_bytes(cls - 1) < total);
     }
     int saw_eight_alignment = 0;
-    for (int cls = dream_size_class(HEAP_HEADER_SIZE + 8); cls < DREAM_NCLASS; ++cls) {
+    for (int cls = dream_size_class(HEAP_HEADER_SIZE + 8 + DREAM_REDZONE_BYTES); cls < DREAM_NCLASS; ++cls) {
         dream_ptr values[3];
         for (int i = 0; i < 3; ++i) {
-            values[i] = dream_malloc((size_t)dream_class_bytes(cls) - HEAP_HEADER_SIZE, TAG_ARRAY);
+            values[i] = dream_malloc((size_t)dream_class_bytes(cls) - HEAP_HEADER_SIZE - DREAM_REDZONE_BYTES, TAG_ARRAY);
             char *block = (char *)dream_p(values[i]) - HEAP_HEADER_SIZE;
             assert((uintptr_t)values[i] % 8 == 0);
             saw_eight_alignment |= (uintptr_t)values[i] % 16 != 0;
@@ -94,9 +94,55 @@ static void slab_layouts(void) {
     assert(!dream_heap_is_live(p));
 }
 
+static void allocation_bounds(void) {
+    for (size_t size = 1; size <= 1024; ++size) {
+        dream_ptr p = dream_malloc(size, TAG_ARRAY);
+        memset(dream_p(p), 0x5a, size);
+#ifdef DREAM_ASAN
+        assert(!__asan_address_is_poisoned(dream_p(p)));
+        assert(!__asan_address_is_poisoned((char *)dream_p(p) + size - 1));
+        assert(__asan_address_is_poisoned((char *)dream_p(p) + size));
+        dream_heap_span *span = dream_block_span((char *)dream_p(p) - HEAP_HEADER_SIZE);
+        size_t unused = DREAM_SLAB_PREFIX + (size_t)span->used * span->block_bytes;
+        if (unused < DREAM_SLAB_BYTES) {
+            assert(__asan_address_is_poisoned((char *)span + unused));
+        }
+#endif
+        dream_ptr grown = dream_realloc(p, size + 4096, TAG_ARRAY);
+        for (size_t i = 0; i < size; ++i) { assert(((unsigned char *)dream_p(grown))[i] == 0x5a); }
+        grown = dream_realloc(grown, size, TAG_ARRAY);
+#ifdef DREAM_ASAN
+        assert(__asan_address_is_poisoned((char *)dream_p(grown) + size));
+#endif
+        dream_release(grown);
+    }
+    dream_region_enter();
+    dream_ptr outer = dream_malloc(9, TAG_ARRAY);
+    dream_region_enter();
+    dream_ptr inner = dream_malloc(11, TAG_ARRAY);
+    memset(dream_p(inner), 1, 11);
+#ifdef DREAM_ASAN
+    assert(__asan_address_is_poisoned((char *)dream_p(inner) + 128));
+#endif
+    dream_region_leave();
+#ifdef DREAM_ASAN
+    assert(__asan_address_is_poisoned(dream_p(inner)));
+    assert(!__asan_address_is_poisoned(dream_p(outer)));
+#endif
+    dream_ptr reused = dream_malloc(11, TAG_ARRAY);
+    memset(dream_p(reused), 2, 11);
+    dream_region_leave();
+    (void)outer;
+}
+
 int main(void) {
     int64_t before = debug_get_live_objects();
     slab_layouts();
+    allocation_bounds();
+    dream_ptr text = dream_array_to_string(0);
+    assert(dream_str_len(text) == 2);
+    assert(dream_char_at_u(text, 0) == '[' && dream_char_at_u(text, 1) == ']');
+    dream_release(text);
     assert(debug_get_live_objects() == before);
     dream_ptr parent = node(1), child = node(2);
     edge(parent, child);

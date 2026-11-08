@@ -63,7 +63,7 @@ int32_t dream_hash_double(double v) {
 }
 
 dream_ptr dream_array_to_string(dream_ptr arr) {
-    dream_ptr r = dream_string_alloc(1);
+    dream_ptr r = dream_string_alloc(2);
     uint16_t *u;
     (void)arr;
     dream_i32(r)[0] = 2;

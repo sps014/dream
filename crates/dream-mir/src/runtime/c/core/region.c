@@ -71,11 +71,11 @@ static region_state *active_region(void) {
 int dream_region_active(void) { return active_region() != NULL; }
 
 static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag) {
-    if ((size_t)size > DREAM_SIZE_MAX - 63 - sizeof(region_chunk)) {
+    if ((size_t)size > DREAM_SIZE_MAX - 63 - sizeof(region_chunk) - DREAM_REDZONE_BYTES) {
         region_panic();
         return 0;
     }
-    size_t total = dream_region_block_bytes(((size_t)size + HEAP_HEADER_SIZE + REGION_ALIGNMENT - 1u) & ~(size_t)(REGION_ALIGNMENT - 1u));
+    size_t total = dream_region_block_bytes(((size_t)size + DREAM_REDZONE_BYTES + HEAP_HEADER_SIZE + REGION_ALIGNMENT - 1u) & ~(size_t)(REGION_ALIGNMENT - 1u));
     region_chunk *chunk = s->chunk;
     if (chunk == NULL || total > chunk->capacity - chunk->offset) {
         size_t prefix = (sizeof(region_chunk) + REGION_ALIGNMENT - 1u) & ~(size_t)(REGION_ALIGNMENT - 1u);
@@ -85,12 +85,19 @@ static dream_ptr region_bump(region_state *s, dream_size size, int32_t tag) {
         chunk->previous = s->chunk;
         chunk->capacity = capacity;
         chunk->offset = prefix;
+        DREAM_POISON((char *)chunk + prefix, capacity - prefix);
         s->chunk = chunk;
     }
     char *block = (char *)chunk + chunk->offset;
     chunk->offset += total;
     ++s->allocations;
+#ifdef DREAM_ASAN
+    dream_ptr pointer = dream_region_activate(block, (dream_size)total, tag);
+    dream_allocation_bounds(dream_p(pointer), total - DREAM_REGION_PREFIX - HEAP_HEADER_SIZE, (size_t)size);
+    return pointer;
+#else
     return dream_region_activate(block, (dream_size)total, tag);
+#endif
 }
 
 dream_ptr dream_region_try_malloc(dream_size size, int32_t tag) {
@@ -139,6 +146,7 @@ void dream_region_leave(void) {
         dream_recycle((dream_ptr)chunk);
     }
     if (s->chunk != NULL) {
+        DREAM_POISON((char *)s->chunk + mark.offset, s->chunk->offset - mark.offset);
         s->chunk->offset = mark.offset;
     }
     if (s->depth == 0) {

@@ -9,7 +9,19 @@ fn strong_cycles_require_explicit_teardown() {
     let native = root.join("crates/dream-mir/src/runtime/c/sys/native");
     let temp = tempfile::tempdir().expect("ownership test directory");
     let binary = temp.path().join("ownership");
-    let mut command = Command::new(std::env::var_os("CC").unwrap_or_else(|| "cc".into()));
+    let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
+    let tools = dream::execution::llvm::resolve_llvm(&config).unwrap();
+    let mut command = Command::new(tools.clang().unwrap());
+    if cfg!(target_os = "macos") {
+        let sdk = Command::new("xcrun")
+            .args(["--show-sdk-path"])
+            .output()
+            .unwrap();
+        assert!(sdk.status.success());
+        command
+            .arg("-isysroot")
+            .arg(String::from_utf8(sdk.stdout).unwrap().trim());
+    }
     command.args([
         "-std=gnu11",
         "-O2",
@@ -43,6 +55,7 @@ fn strong_cycles_require_explicit_teardown() {
         "weak.c",
         "sync.c",
         "strings.c",
+        "object.c",
     ] {
         let path = dream_mir::runtime::native_runtime_units(
             runtime,

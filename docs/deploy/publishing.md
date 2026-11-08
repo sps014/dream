@@ -6,18 +6,18 @@ icon: material/package-up
 
 # Publish a source package
 
-Publishing shares reusable Dream source through a package registry. Other projects can then install it with `dreamer add`. To share a finished app instead, use [packaging](index.md).
+Publishing shares reusable Dream source so other projects can install it with `dreamer add`. To share a finished app, use [packaging](index.md).
 
 ## Prepare the package
 
-Check its name, version, description, license, and dependencies in `dream.toml`. Run its tests. Include a README explaining what it does and how to use it.
+Check the name, version, description, license, and dependencies in `dream.toml`, run the tests, and include a README that explains what the package does and how to use it.
 
 ```sh
 dreamer test
 dreamer publish
 ```
 
-Publishing uploads your package; run it only when you intend to share that version. The source archive must be at most 10 MiB. Path-only dependencies cannot be published because another machine cannot resolve your local folders; give them a `version` as well. Test packages (`type = "test"`) are never published.
+Publishing uploads the package, so run it only when you intend to share that version, and keep the source archive at or under 10 MiB. Path-only dependencies need a `version` as well, because another machine cannot use your local folders, and test packages (`type = "test"`) are never published.
 
 | Archive entry | Included when |
 |---|---|

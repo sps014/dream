@@ -9,7 +9,7 @@ related: [language/abstraction/generics.md, language/types/classes-structs.md]
 
 # Interfaces
 
-An interface names the methods a type must provide. Use one when different types should be usable through the same set of operations. A call uses the implementation belonging to the actual value.
+An interface names the methods a type must provide. A call uses the implementation of the value you actually pass.
 
 !!! glance "At a glance"
 
@@ -28,13 +28,9 @@ An interface names the methods a type must provide. Use one when different types
     - An interface lists the methods a type must provide.
     - Code written against an interface accepts any type that implements it.
 
-That is how Dream does polymorphism.
-
 ## Declaring an interface
 
-List method signatures (return type and parameters).
-A signature with no body ends in a semicolon.
-Interfaces declare methods only — no fields:
+List method signatures. A signature with no body ends in a semicolon, and an interface has methods only:
 
 ```dream
 interface Animal {
@@ -69,8 +65,7 @@ class Dog: Animal {
 }
 ```
 
-A class can implement several at once (`class Robot : Animal, Serializable { ... }`).
-Omitting a method, or declaring it with the wrong signature, is a compile error.
+A class can implement several interfaces at once (`class Robot : Animal, Serializable { ... }`). A missing method, or the wrong signature, is a compile error.
 
 ## Using an interface-typed value
 
@@ -124,7 +119,7 @@ interface ReadWrite: Readable + Writable {
 }
 ```
 
-A type that implements the child is a subtype of every parent — `List<T>` only needs to declare `IndexedCollection<T>` and is still usable as `Collection<T>`. Inherited methods (and their defaults) become part of the child's method set; a child method with the same name overrides the parent. Cycles among parents are a compile error.
+A type that implements the child is a subtype of every parent, so `List<T>` can declare `IndexedCollection<T>` and still be used as `Collection<T>`. Inherited methods become part of the child, a same-named child method overrides the parent, and a cycle among parents is an error.
 
 Ambiguous defaults from two parents (same method name, both with a default body, no override on the child) are rejected.
 
@@ -208,7 +203,9 @@ if a is Cat cat {
 The bound name exists only inside the taken branch.
 
 !!! note
-    `is`-with-binding works in `if (...)` and `while (...)` conditions, and through a top-level `&&` chain (`if (x is T t && cond)` makes `t` available in the branch body). It is also visible in a *later conjunct of the same `&&` chain* — `if (x is T t && t.ok())` type-checks, since `t` is only ever read once `x is T t` has already evaluated true. It is **not** visible across `||` (`if (x is T t || t.ok())` is still rejected — the left side isn't guaranteed to have held).
+`is` with a binding works in `if` and `while`, and in a top-level `&&` chain. `if (x is T t && t.ok())` is valid because `t` is read only after the test succeeds.
+
+`t` is not available across `||`, so `if (x is T t || t.ok())` is an error.
 
 ## Advanced
 
@@ -321,9 +318,7 @@ Every numeric primitive plus `char` and `string` already implements `Comparable`
 - **`<` / `<=` / `>` / `>=` use `compare`** when the left operand's type implements `Comparable<Self>` (`a < b` means `a.compare(b) < 0`). A more specific [`@operator("...")`](operator-overloading.md#operator-overloading) for a different symbol is unaffected.
 - **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../../library/collections/list.md#copy-join-and-sort).
 
-Both interfaces work with [value structs](../types/classes-structs.md).
-When the concrete type is known, calls are direct.
-Assigning a value struct to a bare interface variable boxes it so the call can go to the right method at runtime:
+Both interfaces work with [value structs](../types/classes-structs.md). A known concrete type calls that method directly, and assigning a value struct to an interface variable copies it onto the heap:
 
 ```dream
 let a: Shape = Rect(3, 4); // boxed; a.area() runs the Rect implementation

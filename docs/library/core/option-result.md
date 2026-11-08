@@ -7,7 +7,7 @@ api: reference/api/system-core.md
 
 # Option and Result
 
-Option represents a value that may be missing. Result represents an operation that may have failed. Both make you consider the other outcome instead of assuming a value exists. No import is needed.
+`Option` is a value that may be missing, and `Result` is an operation that may have failed. Both are available with no import.
 
 ```dream
 import system;
@@ -127,7 +127,7 @@ The library also declares the static helper `Option.flatten`, but the current bu
 
 ## Recover from a failure
 
-`result.or_else(handler)` calls the handler only for `Err`. The handler receives the error and returns a new `Result` with the same success type. It can provide a replacement success value or return another error. An `Ok` passes through unchanged.
+`result.or_else(handler)` calls the handler only for `Err`. The handler returns a `Result` of the same success type, a replacement or another error, and an `Ok` passes through unchanged.
 
 Use `unwrap_or` for a fixed fallback value, `map_err` to change an error, and `or_else` when recovery itself can succeed or fail.
 

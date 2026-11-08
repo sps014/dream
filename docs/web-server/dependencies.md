@@ -49,11 +49,11 @@ async fun main(): void {
 | `Result<T, HttpStatus>` | `T` | The request stops with that status. |
 | `DependencyResource<T>` | `T`, with cleanup registered | — (see [resources](resources.md)) |
 
-Providers may be synchronous or `async`. A provider's own parameters work like a handler's: `@path`, `@query`, `@header`, `@cookie`, and `@body` values, `HttpIncoming`, `RequestContext`, and other `@dep` values. A missing `@header` value inside a provider returns 401 instead of 422, so authentication providers fail with the right status. The generator resolves the graph and reports unknown providers and cycles at compile time.
+Providers may be synchronous or `async`, and their parameters use the same sources as a handler (`@path`, `@query`, `@header`, `@cookie`, `@body`, `HttpIncoming`, `RequestContext`, and other `@dep` values). A missing `@header` inside a provider returns 401 instead of 422, and unknown providers and cycles are compile-time errors.
 
-Each request caches provider values by declaration identity. Two parameters using the same provider share one acquisition, including dependencies reached through different providers. Use `@dep(provider, false)` when an injection must run independently. Cache lifetime ends with that request.
+Each request caches a provider by its declaration, so two parameters that use it share one result, including through other providers. Use `@dep(provider, false)` when that injection must run on its own; the cache ends with the request.
 
-A `Result<T, HttpStatus>` failure stops the endpoint with the supplied status. Providers returning resources register cleanup as soon as acquisition succeeds. The [resource guide](resources.md) explains failure, cancellation, and overrides.
+A `Result<T, HttpStatus>` failure stops the endpoint with that status, and a resource provider registers cleanup as soon as acquisition succeeds. Failure, cancellation, and overrides are covered in the [resource guide](resources.md).
 
 Use dependencies for values an endpoint needs, such as identity, a repository, or a request-scoped resource. Use middleware for behavior surrounding requests and responses.
 

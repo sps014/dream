@@ -15,7 +15,7 @@ Functions cross the Dream/JavaScript boundary in both directions: hand a Dream f
     - Hand a Dream function to JavaScript, or call a JavaScript function from Dream.
     - The runtime wraps functions automatically in both directions.
 
-**Only non-capturing functions may cross into JS.** A capturing lambda would lose its captured state at the boundary. Dream rejects capturing callbacks — use a top-level `fun`, a captureless lambda, or module-level state instead (see the [music player sample](https://github.com/sps014/dream/blob/main/sample/music_player/music_player.dream)).
+Only a function that captures nothing may cross into JavaScript. A capturing lambda is rejected, so use a top-level `fun`, a captureless lambda, or module-level state (see the [music player sample](https://github.com/sps014/dream/blob/main/sample/music_player/music_player.dream)).
 
 ```dream
 // el.addEventListener("click", (ev) => { System.println(name); }); // error: capturing callback rejected
@@ -48,7 +48,7 @@ fun main(): void {
 }
 ```
 
-The wrapper has **stable identity per function**, so a handler registered with `addEventListener` can later be removed by passing the *same* Dream function to `removeEventListener`. If you need an explicit `js` callable up front (to store, compare, or pass around first), build one with `js.func(handler)` / `js.func0(handler)` (still only with a captureless `fun(...)`).
+The wrapper keeps a stable identity for each function, so `removeEventListener` can take the same Dream function you passed to `addEventListener`. To hold a `js` value before you pass it, call `js.func(handler)` or `js.func0(handler)` with a captureless function.
 
 ## JS to Dream
 

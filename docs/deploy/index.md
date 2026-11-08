@@ -22,6 +22,6 @@ dreamer run --release
 dreamer pack
 ```
 
-`dreamer pack` creates CLI output under `target/pack/`. It does not upload your app. See [Packaging options and troubleshooting](options.md) before building for another computer.
+`dreamer pack` creates CLI output under `target/pack/` and does not upload your app. See [Packaging options and troubleshooting](options.md) before building for another computer.
 
 For reusable source packages, use [Publishing](publishing.md).

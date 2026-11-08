@@ -6,7 +6,7 @@ icon: material/alert-circle-outline
 
 # Understand an API failure
 
-An operation that can fail usually returns `Result<Value, ErrorType>`. Check `Ok` and `Err` rather than assuming it worked. The error's `message()` is for people; its `code()` lets your program distinguish categories of failure.
+An operation that can fail returns `Result<Value, ErrorType>`. Check `Ok` and `Err`; `message()` is for people, and `code()` tells your program which kind of failure it was.
 
 ```dream
 import system;
@@ -32,7 +32,7 @@ The parse operation takes the error branch. Read [Option and Result](option-resu
 
 ## Encryption errors
 
-`CryptoError` is returned by encryption and key operations. `EINVAL_KEY` indicates unsuitable key material, `EINVAL_NONCE` an invalid nonce, and `EDECRYPT` a decryption or authentication failure. Handle `EDECRYPT` as a failed operation; do not use unauthenticated output.
+Encryption and key operations return `CryptoError`: `EINVAL_KEY` for bad key material, `EINVAL_NONCE` for a bad nonce, and `EDECRYPT` for a failed decrypt or authentication check. Treat `EDECRYPT` as failure and do not use the output.
 
 The public helpers `invalid_key`, `invalid_nonce`, and `decrypt_failed` create errors from a message. `CryptoError(code, message)` constructs one directly.
 

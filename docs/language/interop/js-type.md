@@ -36,9 +36,7 @@ fun main(): void {
 
 ## How `js` values work
 
-`js` is a real static type, but Dream does **no member resolution** on it. Any `.name`,
-`.name(...)`, `[key]`, or call type-checks; whether the member exists is decided at runtime by the
-JS host. Dynamic operations return `js`, so chains like `el.classList.add(...)` just work.
+`js` is a static type, and Dream does not look up its members: any `.name`, call, or `[key]` type-checks, and the host decides whether it exists. The result is `js`, so `el.classList.add(...)` works.
 
 You leave the dynamic world at a **typed boundary** — assigning to a typed variable, passing a typed
 argument, or returning a typed value — where Dream converts automatically:
@@ -47,10 +45,7 @@ argument, or returning a typed value — where Dream converts automatically:
 let count: int = config.count; // js -> int here
 ```
 
-A `js` value is not a Dream heap object, but its **handle is reference-counted** the same way heap values are: when the last Dream owner drops, the JS value can be collected. See [Memory Management](../memory/index.md).
-
-You do **not** call a manual release API — scope exit, reassignment, and container teardown free
-handles automatically.
+A `js` value is not a Dream object. Dream frees the handle when your program no longer uses it, including when the scope ends, you reassign it, or a container goes away — see [Memory Management](../memory/index.md).
 
 ## Getting a `js` value
 
@@ -118,9 +113,7 @@ class Point {
 js.global.render(Point(3, 4)); // -> render({ x: 3, y: 4 })
 ```
 
-Assigning a `js` object to a `class`- or value-`struct`-typed variable rebuilds it by reading
-each declared field — the constructor is not called. Classes allocate a heap instance; value
-structs fill the destination slot in place:
+Assigning a `js` object to a class or value struct reads each declared field and does not call the constructor. A class is created on the heap, and a value struct is filled in place:
 
 ```dream
 class Point {
@@ -147,8 +140,7 @@ let v: Vec2 = js.global.originVec();
 
 ## Getting values back out
 
-A result from JS stays a `js` value until a typed binding, argument, or return converts it. Or
-convert explicitly:
+A JS result stays `js` until a typed binding, argument, or return converts it. You can also convert it yourself:
 
 | Method | Converts to |
 | --- | --- |
@@ -157,10 +149,9 @@ convert explicitly:
 
 ## Awaiting JS Promises
 
-Await a JS Promise directly — it resolves to **`Option<js>`**: `Some(value)` on success, `None`
-when the Promise rejected or resolved with `null`/`undefined`. A rejection reason is printed on
-the console. Typed `extern async fun` results stop the program on rejection instead; see
-[Awaiting JavaScript promises](../concurrency/async.md#when-the-promise-rejects).
+Await a JS Promise directly. It resolves to `Option<js>`: `Some(value)` on success, and `None` when the Promise rejects or resolves to `null` or `undefined`.
+
+A rejection reason is printed on the console. A typed `extern async fun` stops the program on rejection instead — see [Awaiting JavaScript promises](../concurrency/async.md#when-the-promise-rejects).
 
 ```dream
 async fun load(): void {

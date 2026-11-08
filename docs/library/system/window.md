@@ -90,10 +90,7 @@ fast as the CPU allows.
 - `pressed` is true only in the frame where it went down.
 - `released` is true only in the frame where it came up.
 
-Use `is_down` for movement, and `pressed` for actions that should happen once, such as jumping or
-firing. A key that the user taps between two polls reports both `pressed` and `released` in the
-same frame, while `is_down` is false. Key repeats from the operating system appear as `KeyDown`
-events with `repeat` set, but they never count as presses.
+Use `is_down` for movement and `pressed` for a one-shot action such as jumping. A tap between polls is both `pressed` and `released` in that frame, with `is_down` false; OS key repeats are `KeyDown` events with `repeat` and do not count as presses.
 
 `KeyCode` names physical keys by their position on a US keyboard, so `KeyCode.W` is the same key on
 QWERTY, AZERTY and Dvorak layouts. Use `KeyEvent.key` for the character the active layout prints,
@@ -119,10 +116,9 @@ the cursor on its next click when the first request is refused.
 
 ## Touch input and safe areas
 
-Touch events use logical window pixels, like mouse positions. A contact starts with
-`TouchDown(id, position)` and keeps the same ID through `TouchMove` until `TouchUp`
-or `TouchCancel`. IDs may be reused after a contact ends. Cancellation means the action
-was interrupted, so discard its state without activating a button.
+Touch positions use logical pixels, like the mouse. A contact starts with `TouchDown(id, position)` and keeps that ID through `TouchMove` until `TouchUp` or `TouchCancel`.
+
+IDs can be reused after a contact ends. `TouchCancel` means the gesture was interrupted: drop its state and do not activate a button.
 
 This headless example can run on desktop or Node without a display:
 
@@ -154,18 +150,13 @@ fun main(): void {
 }
 ```
 
-It prints `contact 0` and `content y: 36`. `safe_area` contains top, right, bottom, and
-left distances to avoid at the drawable edges. Offset drawing and hit testing by the
-same distances. Insets are in logical pixels; multiply by `scale_factor` only when
-converting to physical pixels. Insets start at zero and change after a
-`SafeAreaChanged` event is delivered by `poll`.
+The example prints `contact 0` and `content y: 36`. `safe_area` is the top, right, bottom, and left inset to keep clear.
 
-Browser canvases capture touch pointers and cancel contacts on focus loss, page hiding,
-or capture loss. Touch input is delivered separately from mouse state. The canvas
-disables browser touch scrolling while attached and restores its previous touch behavior
-when closed. Desktop, browser, and headless windows report zero safe-area insets unless
-an inset event is simulated. A mobile app receives touch and insets when it runs on
-Android or iOS.
+Offset drawing and hit testing by those insets. They are logical pixels (multiply by `scale_factor` for physical pixels), start at zero, and update when `poll` delivers `SafeAreaChanged`.
+
+A browser canvas captures touch pointers and cancels a contact when focus, the page, or the capture is lost. Touch is separate from mouse state.
+
+The canvas disables browser touch scrolling while attached and restores it on close. Desktop, browser, and headless windows report zero insets unless you simulate one; Android and iOS report real touch and insets.
 
 ## Testing input without a display
 
@@ -198,25 +189,20 @@ next poll, which is useful for on-screen controls.
 
 ## Windows, threads and browsers
 
-Native windows use SDL3 and belong to the program's main thread. `main` and its `async` code run
-on that thread, so a normal game loop needs no extra setup. Calls from a `Task` worker do not
-reach the window: `Window.open` returns a `WindowError` with code `ETHREAD`, and the other methods
-do nothing.
+A native window belongs to the program's main thread. `main` and its `async` code already run there.
 
-While a native window is open, an `await` that has to wait, such as a slow network read, keeps
-handling the window system's events, so the operating system never reports the window as not
-responding. Your frame loop does not draw while it waits, though. To keep drawing, move slow work
-into its own `async` function that stores its result in an object the frame loop reads, start it
-with `Promise.start`, and let the frame loop `await` only per-frame work such as presenting a frame
-or `Time.delay(16)`.
+A call from a `Task` worker does not reach the window. `Window.open` returns `WindowError` code `ETHREAD`, and the other methods do nothing.
+
+While a native window is open, a waiting `await` still handles window-system events, so the OS does not mark the window as not responding. The frame loop does not draw during that wait.
+
+To keep drawing, put slow work in its own `async` function, store the result where the loop can read it, and start it with `Promise.start`. The frame loop should `await` only per-frame work, such as presenting or `Time.delay(16)`.
 
 Desktop operating-system operations such as live resizing can delay drawing until control
 returns to the frame loop.
 
-In a browser, use `Window.canvas` with the `id` of a `<canvas>` element on the page.
-`Window.open` also works there: it adds a canvas of the requested size to the page. The browser
-only delivers input while your program is waiting, so a browser frame loop must `await` something
-on every frame, such as presenting a GPU frame or `Time.delay(16)`.
+In a browser, pass a `<canvas>` id to `Window.canvas`. `Window.open` adds a canvas of the requested size.
+
+The browser delivers input only while your program is waiting. Each frame must `await` something, such as presenting a GPU frame or `Time.delay(16)`.
 
 Platform differences:
 

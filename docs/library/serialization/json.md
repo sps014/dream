@@ -34,7 +34,7 @@ fun main() {
 }
 ```
 
-A `@json` class with no constructor of its own uses the implicit zero-argument constructor. `Json.deserialize` fills the fields after that. Declare a constructor that takes the fields in order when you want `User("Ada", 36)`.
+A `@json` class with no constructor of its own uses the implicit zero-argument constructor, and `Json.deserialize` fills the fields after that. Declare a constructor that takes the fields in order when you want `User("Ada", 36)`.
 
 | API | Role |
 | --- | --- |
@@ -45,11 +45,14 @@ A `@json` class with no constructor of its own uses the implicit zero-argument c
 | `Json.from_value<T>(value)` | Already-parsed `JsonValue` into `T` (`from_value<JsonValue>` is identity) |
 | `Json.from_value<T>(value, options)` | Same, matching property names to fields as `options` describes |
 
-Fields may be primitives, `string`, arrays, other `@json` types, tuples (JSON arrays), `List`/`Set`/`Map<string, V>`/`SortedMap<string, V>`, `JsonValue`, and `Option<T>` of supported types. JSON object keys are strings, so maps must be `Map<string, V>`. `@property_name("key")` renames a JSON key. Skip a field with the ignore attribute. [Unions](../../language/types/enums-unions.md) serialize with a `"type"` tag.
+Fields may be primitives, `string`, arrays, other `@json` types, tuples (JSON arrays), `List`, `Set`, `Map<string, V>`, `SortedMap<string, V>`, `JsonValue`, and `Option<T>` of those.
 
-Every field type must be one `@json` already knows. `object` is not: `Json.serialize` on a `Map<string, object>` is rejected. Reach for `JsonValue` instead — it carries its own shape and is passed through untouched.
+- Map keys must be strings. `@property_name("key")` renames one field, and the ignore attribute skips a field.
+- [Unions](../../language/types/enums-unions.md) serialize with a `"type"` tag.
 
-`Json.serialize(data)` infers `T` from `data` (including an annotated `let data: Map<string, string> = …`). `deserialize` still needs an explicit type argument because the JSON text does not name a Dream type.
+Every field type must be one `@json` already knows. `object` is not, so `Json.serialize` rejects `Map<string, object>`; use `JsonValue` when the shape is not fixed.
+
+`Json.serialize(data)` infers `T` from `data`, including `let data: Map<string, string>`. `deserialize` still needs a type argument, because the text does not name a Dream type.
 
 ## Options
 
@@ -102,7 +105,9 @@ Ada
 | `indent` | `0` | Spaces per nesting level. `0` writes compact text on one line. |
 | `ignore_case` | `false` | When `true`, reading matches property names to fields regardless of ASCII letter case. |
 
-Naming changes only the names of declared fields. A `@property_name("key")` field always uses its key exactly, and map keys and the keys inside a `JsonValue` are written as they are. Read with the same `naming` you wrote with: a camel-case reader does not match `user_id` and leaves that field at its default. Add `ignore_case: true` to accept keys such as `USERID` or `DisplayName` from other systems.
+`naming` changes only declared field names. `@property_name("key")` always uses that key, and map keys and keys inside a `JsonValue` are written as they are.
+
+Read with the same `naming` you used when writing. A camel-case reader does not match `user_id` and leaves that field at its default; `ignore_case: true` also accepts `USERID` or `DisplayName`.
 
 Indentation applies to every value `Json.serialize` accepts, including lists and `JsonValue` trees. Empty objects and arrays stay `{}` and `[]`.
 
@@ -127,7 +132,9 @@ switch (r.json()) {
 
 ### Read one field
 
-`v.get(key)` returns the property as `Option<JsonValue>`: `None` when the key is missing or `v` is not an object. Chain a typed reader through `and_then` to decode it, and `unwrap_or` to supply a fallback; a wrong JSON type is also `None`. `v[key]` returns the property directly and panics when it is missing, so use it only when the shape is already known. `v.contains(key)` tests presence.
+`v.get(key)` returns `Option<JsonValue>`, or `None` when the key is missing, `v` is not an object, or the JSON type is wrong.
+
+Chain `and_then` to decode and `unwrap_or` for a fallback. `v[key]` panics if the key is missing, so use it only for a known shape; `contains(key)` only tests presence.
 
 ```dream
 let name = v.get("name").and_then((item: JsonValue) => item.as_string()).unwrap_or("");
@@ -137,7 +144,7 @@ if v.contains("error") {
 }
 ```
 
-`is_*` / `kind()` are an integer tag check. `as_bool` / `as_int` / `as_double` wrap a scalar in `Option`. `as_string` clones the string. `as_map` / `as_array` return the existing container.
+`is_*` and `kind()` check the JSON kind. `as_bool`, `as_int`, and `as_double` return `Option`; `as_string` copies the string, and `as_map` / `as_array` return the existing container.
 
 ### Walk with `kind()`
 
@@ -204,5 +211,7 @@ System.println(Json.serialize(mixed)); // {"n":42,"s":"text"}
 
 ## How `@json` works
 
-`@json` is an ordinary Dream source generator, `json_derive` in `system.json`. Importing `system.json` registers it, so it works the same in single files, packages, dependencies, `dream test`, and wasm builds. It runs only when the program has a `@json` type or calls `Json.serialize`, `Json.deserialize`, or `Json.from_value`. It is `@incremental`, so unchanged programs replay its cached output. The generated code is written to `generated/<entry>/system/json/derive/json_derive/json.dream`; to step through the derive itself, see [Debugging a generator](../../language/metaprogramming/generators.md#debugging-a-generator).
+`@json` is the `json_derive` generator in `system.json`. Importing the package registers it for single files, packages, `dream test`, and wasm builds.
+
+It runs only for a `@json` type or a call to `Json.serialize`, `Json.deserialize`, or `Json.from_value`, and reuses cached output when nothing changed. Generated code is at `generated/<entry>/system/json/derive/json_derive/json.dream` ([debugging a generator](../../language/metaprogramming/generators.md#debugging-a-generator)).
 

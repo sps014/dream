@@ -51,7 +51,7 @@ For a `Set<string>`, `contains` also accepts a `ReadOnlySpan<char>`, so you can 
 
 ## Compare sets
 
-`union(other)` includes values from either set. `intersection(other)` keeps values in both. `difference(other)` keeps values only in this set. `is_subset` and `is_disjoint` answer relationship questions.
+`union` keeps values from either set, `intersection` keeps values in both, and `difference` keeps values only in this set. `is_subset` and `is_disjoint` answer those questions.
 
 | Member | Returns | Effect |
 | --- | --- | --- |

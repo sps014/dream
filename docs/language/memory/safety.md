@@ -8,7 +8,7 @@ targets: [native, web, node]
 
 # Memory Safety Guide
 
-Dream checks ordinary code to prevent invalid memory access and checks potentially cyclic class ownership. This guide explains the rules you will meet while writing safe code and the boundaries that still need care.
+Ordinary code cannot read freed memory or index past the end. This page lists the rules you will meet, and the cases that still need care.
 
 !!! glance "At a glance"
 
@@ -31,18 +31,13 @@ Dream checks ordinary code to prevent invalid memory access and checks potential
 | Cross-function stale view | error | view returned from method, then mutation |
 | Container rewind without clearing slots | safe | old elements stay until overwrite or drop |
 
-## The core memory model
+## Arrays and fields
 
-ARC (automatic reference counting) reclaims objects deterministically.
-Three rules hold unconditionally:
+- Writing a slot drops the old value.
+- Reading a slot gives you a valid value. The array or object still holds its own.
+- Dropping an array drops every slot, including ones a counter no longer counts.
 
-1. **Slot overwrite releases** — writing into any array/field releases the old value.
-2. **Slot reads retain** — reading gives you a valid owned reference.
-3. **Array drop releases all slots** — even slots a counter abandoned.
-
-These mean raw buffers (`T[]` + manual counters) are always memory-safe.
-Rewinding a counter is safe — no error.
-Old elements stay until overwritten or the array is dropped.
+Rewinding a counter without clearing slots is safe. Old elements stay until they are overwritten or the array is dropped.
 
 ## Receiver modes
 
@@ -203,11 +198,10 @@ and `unowned` is restricted to fields. Numbers, strings and value structs cannot
 
 ### Rewinding counters
 
-Pure rewinding (`count = 0`) without clearing slots is safe — dead elements stay retained until overwritten or until the container drops.
-No compile error, no leak.
+Setting `count = 0` without clearing slots is safe. Old elements stay until overwritten or the container is dropped.
 
-### Eager reclamation
+### Drop a value now
 
-Use `List.clear()` or remove entries from a list to release its stored references immediately.
-For arrays of optional references, assigning `Option.None` releases the previous slot value.
-Overwriting an array element also releases the previous value.
+- `List.clear()`, or removing an entry, drops that value immediately.
+- Assign `Option.None` to drop the value in an optional slot.
+- Writing a new element drops the previous one.

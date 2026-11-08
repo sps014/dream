@@ -23,7 +23,7 @@ fun main() {
 }
 ```
 
-This prints `first`. `enqueue` adds an item. `dequeue` removes the oldest item and returns `Option<T>`. `peek` reads it without removing it, also returning `Option<T>`. An empty queue returns `None`.
+This prints `first`. `enqueue` adds an item, `dequeue` removes the oldest and returns `Option<T>`, and `peek` reads it without removing it; an empty queue returns `None`.
 
 | Member | Returns | Effect |
 | --- | --- | --- |

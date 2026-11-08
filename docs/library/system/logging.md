@@ -26,7 +26,7 @@ fun main() {
 }
 ```
 
-Levels, low to high: `Trace`, `Debug`, `Info`, `Warn`, `Error`. Records below the logger’s level are dropped. `level_name(LogLevel.Info)` is `"Info"`.
+Levels, low to high: `Trace`, `Debug`, `Info`, `Warn`, `Error`. Records below the logger’s level are dropped, and `level_name(LogLevel.Info)` is `"Info"`.
 
 | Call | Meaning |
 | --- | --- |
@@ -66,6 +66,6 @@ fun main() {
 }
 ```
 
-This prints `app: ready`. Choose `Logger(name)` for a new logger or `Logger.get(name)` to reuse a named logger. Avoid logging credentials or private data in either kind of handler.
+This prints `app: ready`. `Logger(name)` makes a new logger and `Logger.get(name)` reuses one; do not log credentials or private data.
 
 See [LogRecord](../../reference/api/logging-log-record.md), [LogHandler](../../reference/api/logging-log-handler.md), and [Logger](../../reference/api/logging-logger.md) for all declarations.

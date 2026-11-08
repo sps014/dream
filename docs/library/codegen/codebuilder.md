@@ -8,7 +8,7 @@ api: reference/api/system-codegen.md
 # CodeBuilder (`system.codegen`)
 
 
-CodeBuilder helps you write formatted Dream source. GenContext helps a registered source generator inspect declarations, replace custom notation, and report errors. Start with the [generator guide](../../language/metaprogramming/generators.md) before using the reference below.
+`CodeBuilder` writes formatted Dream source, and `GenContext` lets a generator inspect declarations, replace notation, and report errors. Start with the [generator guide](../../language/metaprogramming/generators.md).
 
 **Import:** `import system.codegen;`
 
@@ -36,7 +36,7 @@ fun snippet(): string {
 
 ## GenContext
 
-`GenContext` is the compile-time handle a `@generator` function receives. Use it to find the sites that triggered the generator, queue output, and report errors. Full walkthrough: [Source generators](../../language/metaprogramming/generators.md).
+`GenContext` is the handle a `@generator` function receives. Use it to find the sites that triggered the generator, queue output, and report errors ([Source generators](../../language/metaprogramming/generators.md)).
 
 | Call | Meaning |
 | --- | --- |
@@ -51,6 +51,6 @@ fun snippet(): string {
 
 ## Declaration model
 
-`GenDecl` (`kind`, `fields`, `variants`, `methods`, `generics`, `attributes`) describes one declaration. `GenField.ty` is a `GenTypeRef`: query it with `primitive()`, `collection()`, `is_option()`, `arg(i)`, and `is_decl(declof(T))` instead of comparing type names as strings. Read typed attributes with `has<A>()`, `attribute<A>()`, and `attributes_of<A>()`.
+`GenDecl` describes one declaration (`kind`, `fields`, `variants`, `methods`, `generics`, `attributes`). Query `GenField.ty` with `primitive()`, `collection()`, `is_option()`, `arg(i)`, and `is_decl(declof(T))`, and read attributes with `has<A>()`, `attribute<A>()`, and `attributes_of<A>()`.
 
 Samples: [`quote`](https://github.com/sps014/dream/tree/main/sample/generators/quote), [`html`](https://github.com/sps014/dream/tree/main/sample/generators/html), [`dto`](https://github.com/sps014/dream/tree/main/sample/generators/dto). See [all generator declarations](../../reference/api/system-codegen.md).

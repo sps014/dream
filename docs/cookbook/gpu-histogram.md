@@ -6,10 +6,7 @@ icon: material/chart-bar
 
 # Count values on the GPU
 
-This program generates 100,000 test scores from 0 to 100 and counts how many fall into each band
-of ten on the GPU. Every GPU thread reads one score and adds one to its band's counter. The
-counters use `GpuAtomic.add`, so threads that update the same band at the same moment do not lose
-counts.
+This program generates 100,000 scores from 0 to 100 and counts how many fall into each band of ten on the GPU. Each thread reads one score and adds one to that band with `GpuAtomic.add`, so two threads updating the same band do not lose a count.
 
 Building it needs the shader compiler, which you install once with
 `dreamer toolchain install slang`.
@@ -83,15 +80,13 @@ Run it with `dream run main.dream`:
 counted 100000 scores
 ```
 
-Each `#` stands for 1,000 scores. Averaging two random numbers makes middle scores more common, so
-the bars peak around 50. Scores of exactly 100 go into the last band, because
-`GpuMath.min(scores[i] / 10, 9)` caps the band index.
+Each `#` stands for 1,000 scores. Averaging two random numbers makes middle scores more common, so the bars peak around 50, and a score of 100 stays in the last band because `GpuMath.min(scores[i] / 10, 9)` caps the index.
 
 How it works:
 
 - `@compute(256, 1, 1)` runs the shader in groups of 256 threads, and
-  `GpuDispatch.threads_1d(scores.length)` starts enough groups for one thread per score. The
-  last group is only partly needed, so the shader checks `i < n`.
+  `GpuDispatch.threads_1d(scores.length)` starts enough groups for one thread per score.
+  The last group may be partial, so the shader checks `i < n`.
 - `buffer_alloc<int>(10)` creates ten counters that start at zero.
 - `?` returns the first `GpuError`, for example when the machine has no GPU, and `main` prints it.
 

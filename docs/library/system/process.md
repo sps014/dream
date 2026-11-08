@@ -25,9 +25,13 @@ async fun main(): void {
 }
 ```
 
-The simple `run(command, arguments)` overload uses default options. `run` feeds `options.input` to stdin, closes it, drains stdout and stderr concurrently, and waits for exit. Argument boundaries preserve empty strings, Unicode, whitespace, and newlines through length-prefixed UTF-8 encoding. Commands launch directly without shell interpolation.
+`run(command, arguments)` uses default options. It writes `options.input` to stdin, closes stdin, drains stdout and stderr together, and waits for exit.
 
-Options inherit the environment and working directory by default. Set `env` overrides, `clear_env`, `cwd`, and `timeout_ms` explicitly. Captured output defaults to an 8 MiB limit per stream; exceeding `max_output_bytes` returns `ELIMIT`. Input is buffered in the options snapshot. A child that rejects input can cause an I/O error.
+Arguments keep empty strings, Unicode, spaces, and newlines. The command is started directly, not through a shell.
+
+Options inherit the environment and working directory. Set `env`, `clear_env`, `cwd`, and `timeout_ms` when you need something else.
+
+Each captured stream stops at `max_output_bytes` (default 8 MiB) and then returns `ELIMIT`. `input` is written to stdin before it is closed; a child that rejects those bytes can return an I/O error.
 
 A nonzero exit status is a successful transport result; `run_checked` turns it into `EEXIT`. `which` searches for an existing nondirectory path, without validating execute permissions.
 
@@ -92,13 +96,23 @@ child.close().await?;
 | `writer.write_async(data)` | `Result<int, IoError>` (async) | Writes some or all bytes and returns the count. |
 | `writer.flush_async()` | `Result<Unit, IoError>` (async) | Checks the pipe is open; there is no buffer to flush. |
 
-`stdin` implements `AsyncWriter`; `stdout` and `stderr` implement `AsyncReader`. Reads and writes return partial progress and propagate failures. `Streams.copy_async` connects process pipes to files, HTTP bodies, and other async streams. Writes are not guaranteed to consume the entire buffer; retry the remaining bytes or use the copy helper.
+`stdin` is an `AsyncWriter`, and `stdout` and `stderr` are `AsyncReader`s. A read or write may move only some of the bytes.
 
-Drain stdout and stderr concurrently when a command can fill both pipes. Waiting for process exit before draining can deadlock on output backpressure. A retained `ProcessReader` provides buffered `read_line`, with LF/CRLF handling, a line-size limit, and final unterminated lines.
+`Streams.copy_async` connects a pipe to a file, an HTTP body, or another async stream. Retry the rest of a short write, or use that helper.
 
-`wait` leaves the handle and unread pipes available. `close().await` terminates unfinished work, reaps the direct child, and closes ownership idempotently. Concurrent closes share the outcome. A destructor requests nonthrowing cleanup; explicit close reports errors. Pipe wrappers retain their owning child.
+Drain stdout and stderr together when a command can fill both pipes. Waiting for exit before draining can deadlock.
 
-Cancellable operations inherit the current structured task's token when omitted. Cancelling `run` or its deadline terminates and reaps the owned child before returning `ECANCELLED` or `ETIMEOUT`. Cancelling an individual pipe operation preserves completed side effects and leaves the child available for explicit closure. Spawned-child deadlines also terminate and reap the child. Descendant process trees are not managed as a group.
+`read_line` handles LF and CRLF, enforces a line-size limit, and returns a final line that has no newline.
+
+`wait` leaves the handle and unread pipes available. `close().await` stops a child that is still running and is safe to call again.
+
+Concurrent closes share one result. Dropping the child cleans up without throwing, so call `close` when you need the error; a pipe keeps its child alive.
+
+If you omit a token, the call uses the current task's cancellation.
+
+- Cancelling `run`, or hitting its deadline, stops the child and then returns `ECANCELLED` or `ETIMEOUT`.
+- Cancelling one pipe operation keeps bytes already transferred and leaves the child open for you to close.
+- A spawned child's deadline also stops that child. Processes that the child itself starts are not stopped with it.
 
 ## Error codes
 

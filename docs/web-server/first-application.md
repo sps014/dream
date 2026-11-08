@@ -27,10 +27,10 @@ async fun main(): void {
 }
 ```
 
-Open `http://127.0.0.1:8000/hello/Dream`. The string response uses `text/plain`. Visit `/docs` for Swagger UI, `/redoc` for ReDoc, and `/openapi.json` for the generated document.
+Open `http://127.0.0.1:8000/hello/Dream` for a `text/plain` response. `/docs` is Swagger UI, `/redoc` is ReDoc, and `/openapi.json` is the generated document.
 
-`@router` creates a reusable group; `Routes.router()` is generated at compile time. `include_router` makes the group part of this app. Configuration methods return `Result`, so handle or unwrap failures while building the application.
+`@router` creates a reusable group, and `include_router` adds `Routes.router()` to this app. Configuration methods return `Result`, so handle or unwrap failures while you build the application.
 
-Handlers may be synchronous or asynchronous. Use [JSON models](validation.md) for typed request and response bodies. Keep handlers static; services and per-request values enter through [dependencies](dependencies.md).
+Handlers may be synchronous or asynchronous, and they stay static. Use [JSON models](validation.md) for typed bodies, and pass services and per-request values through [dependencies](dependencies.md).
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

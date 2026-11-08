@@ -25,11 +25,11 @@ fun main() {
 }
 ```
 
-Output: `10`, then `20` on a new line. `peek()` leaves the item in the queue. `pop()` removes it. Both return `None` when empty.
+The example prints `10`, then `20`. `peek()` leaves the item in the queue, `pop()` removes it, and both return `None` when empty.
 
 ## Choose a different order
 
-The no-argument constructor uses the element's natural comparison order. Supply a comparison function to choose another order. It must return a negative number when the first value should come out first, zero when equal, and a positive number when the second should come out first.
+The no-argument constructor uses the element's own order. Pass a comparison to choose another: negative if the first value should come out first, zero if equal, positive if the second should come out first.
 
 ```dream
 let largest_first = PriorityQueue<int>((a, b) => b.compare(a));
@@ -50,7 +50,6 @@ This is a setup snippet for use inside a function. Prefer `compare` over subtrac
 | `.length` | `int` | Number of items. |
 | `is_empty()` | `bool` | `true` when the queue has no items. |
 
-A `for` loop visits a sorted copy of the items taken when the loop starts, in priority order. The loop does not remove anything, and pushing or popping during the loop does not change what it visits. Priority queues also have the [query helpers](seq.md) such as `filter` and `any`. See [all PriorityQueue signatures](../../reference/api/collections-priority-queue.md).
+A `for` loop walks a sorted copy from when the loop starts, and later pushes or pops do not change that copy. Helpers such as `filter` are in [queries](seq.md); signatures are in the [PriorityQueue reference](../../reference/api/collections-priority-queue.md).
 
-The queue uses a four-child heap. Equal-priority elements have no guaranteed order.
-A comparator may read the queue and update unrelated state, but calling `push`, `pop`, or `clear` on the same queue from its comparator panics before mutation.
+Equal-priority elements have no guaranteed order. A comparator may read the queue, but `push`, `pop`, or `clear` on that same queue from the comparator stops the program.

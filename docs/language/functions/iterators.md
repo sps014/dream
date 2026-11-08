@@ -8,8 +8,7 @@ targets: [native, web, node]
 
 # Yield and lazy sequences
 
-Use `yield value;` to produce one element and pause a function. The next request resumes
-immediately after that statement. `yield break;` ends the sequence; reaching the end does too.
+`yield value;` produces one element and pauses until the next request, which resumes just after that statement. `yield break;` ends the sequence, and so does reaching the end.
 
 !!! glance "At a glance"
 
@@ -46,13 +45,11 @@ fun main(): void {
 }
 ```
 
-Calling `numbers` captures its arguments without running its body. Each loop creates a fresh
-cursor, so the sequence can be enumerated repeatedly or by independent consumers. Reference
-arguments keep their usual shared identity; enumeration does not snapshot their contents.
-Value struct receivers get an independent copy for each cursor.
+Calling `numbers` saves its arguments and does not run the body yet. Each loop gets a fresh cursor, so you can walk the sequence more than once.
 
-`continue;` skips a loop iteration. It does not produce a value. There is no `yield continue`
-or `yield return` spelling.
+Reference arguments stay shared, and the sequence does not copy their contents. A value-struct receiver is copied for each cursor.
+
+`continue;` skips a loop iteration and does not produce a value. There is no `yield continue` or `yield return`.
 
 ```dream
 fun positives(values: int[]): Iterable<int> {
@@ -70,8 +67,7 @@ fun positives(values: int[]): Iterable<int> {
 
 ## Asynchronous sequences
 
-An async iterator declares `AsyncIterable<T>` and may await between elements. Calling it returns
-the sequence directly. Use `await for` inside an async function to consume it:
+An async iterator returns `AsyncIterable<T>` and may await between elements. Consume it with `await for` inside an async function:
 
 ```dream
 import system;
@@ -94,10 +90,9 @@ Only requested elements are produced. Ordinary async functions still return `Fut
 
 ## Cursor access and cleanup
 
-`Iterable<T>.iterator()` returns an `Iterator<T>`; its `next()` returns `Option<T>`.
-`AsyncIterable<T>.iterator()` returns an `AsyncIterator<T>` whose `next()` returns
-`Future<Option<T>>`. Both cursors have `close(): void`, which ends iteration and releases suspended
-producer state. Repeated close is harmless; advancing a closed cursor returns `None`.
+`Iterable<T>.iterator()` returns an `Iterator<T>` whose `next()` is `Option<T>`. `AsyncIterable<T>.iterator()` returns an `AsyncIterator<T>` whose `next()` is `Future<Option<T>>`.
+
+Both cursors have `close(): void`, which ends iteration and drops the paused producer. Closing again is harmless, and a closed cursor's `next` is `None`.
 
 | Type | Member | Returns |
 |------|--------|---------|
@@ -116,10 +111,9 @@ let first = cursor.next(); // Some(0)
 cursor.close();
 ```
 
-Loops close their cursors when exhausted or exited early, including `return`. Manual cursor
-consumers should close cursors when finished. Cancelled consumers close their active cursor when
-the Future frame is released. An async cursor permits one pending advancement
-at a time. Closing it cancels its producer and wakes pending advancement with `None`.
+Loops close their cursors when they finish or leave early, including on `return`. Close a cursor yourself when you drive it by hand.
+
+A cancelled consumer closes its active cursor. An async cursor allows one pending `next` at a time, and closing it cancels the producer and completes that `next` with `None`.
 
 ## Statements at a glance
 

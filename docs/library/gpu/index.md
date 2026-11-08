@@ -7,11 +7,9 @@ api: reference/api/system-gpu.md
 
 # GPU programming
 
-Import `system.gpu` to run code on the graphics card. Shaders are ordinary Dream functions with a
-stage attribute such as `@compute`. When the program builds, Dream compiles them ahead of time for
-the GPU APIs you choose and generates a `GpuShaders` class that runs them with typed parameters.
-No shader source ships with the program, and nothing is compiled while it runs. Automatic
-differentiation and small neural networks are covered in [Machine learning](machine-learning.md).
+Import `system.gpu` and mark a function with a stage attribute such as `@compute`. The build compiles it for the GPU APIs you choose and generates a `GpuShaders` class with typed parameters.
+
+Automatic differentiation and small networks are in [Machine learning](machine-learning.md).
 
 ## Setup
 
@@ -23,15 +21,13 @@ dreamer toolchain install slang
 
 Programs without shaders, such as one that only lists devices, build without it.
 
-On Windows, DXIL targets also need the Windows SDK's DirectX compiler inside the Slang tool
-root so the generator sandbox can read it. `dreamer toolchain install slang` copies
-`dxcompiler.dll` and `dxil.dll` from the newest installed Windows 10 SDK into that root. A
-Visual Studio Developer shell's `WindowsSdkVerBinPath` is used when it is set. The install
-prints where to find the SDK when neither the variable nor the registry has the libraries.
+On Windows, DXIL targets also need the Windows SDK's DirectX compiler.
 
-The generator fingerprints these libraries together with the tool installation. They are
-build tools and are not shipped with the game. Dream chooses the shader model required by
-each pipeline group: ray queries need Shader Model 6.5 and bindless handles need 6.6.
+- `dreamer toolchain install slang` copies `dxcompiler.dll` and `dxil.dll` from the newest installed Windows 10 SDK into the Slang tool root.
+- A Visual Studio Developer shell's `WindowsSdkVerBinPath` is used when it is set.
+- If neither that variable nor the registry has the libraries, the install prints where to find the SDK.
+
+Those libraries stay on the build machine. Ray queries need Shader Model 6.5, and bindless handles need 6.6.
 
 At run time, native programs use the GPU drivers already on the machine. Browser builds use the
 browser's WebGPU support; include the JavaScript host with `--runtime --web` (see
@@ -95,12 +91,13 @@ It prints `1999`. The steps are:
 
 1. `@compute(64, 1, 1)` makes `scale_add` a compute shader that runs in groups of 64 threads.
    Each thread handles one element: `global_id().x` is its index across the whole dispatch.
+
 2. `GpuDevice.create` opens a GPU. Every buffer and pipeline belongs to the device that made it.
+
 3. `buffer_from` copies an array into GPU memory, and `buffer_alloc` reserves an empty buffer.
-4. `GpuShaders.scale_add.dispatch` runs the shader. Its parameters after the device and the
-   dispatch size are the shader's own parameters, in order and with the same types.
-   `threads_1d(n)` starts enough groups to cover `n` threads, so the shader checks `i < n`
-   for the last, partly filled group.
+
+4. `GpuShaders.scale_add.dispatch` runs the shader. Arguments after the device and dispatch size match the shader parameters, and `threads_1d(n)` still needs an `i < n` check for a partly filled last group.
+
 5. `read` copies the buffer back into a Dream array after the GPU finishes.
 
 `@readonly` tells the compiler that a shader never writes a buffer. It is optional, but it lets
@@ -108,10 +105,7 @@ the GPU skip work and documents intent.
 
 ## Choosing GPU APIs
 
-A shader is compiled for WebGPU unless you say otherwise. WebGPU runs in browsers and, through
-Google's Dawn library, in native programs on every desktop platform, so the default works
-everywhere. To use the platform's own API, list the targets with `@gpu_targets` on a shader or on
-the module:
+A shader is compiled for WebGPU unless you say otherwise, and that default runs in browsers and in native programs. To use the platform API, list targets with `@gpu_targets` on a shader or on the module:
 
 ```dream
 @gpu_targets(GpuTarget.Metal, GpuTarget.Vulkan, GpuTarget.Dx12, GpuTarget.WebGpu)
@@ -129,14 +123,12 @@ import system.gpu;
 | `Dx11` | Direct3D 11 | Windows, built on Windows |
 | `Cuda` | CUDA | NVIDIA GPUs on Windows and Linux, compute shaders only |
 
-Each build keeps the listed targets it can use. A wasm build keeps `WebGpu`; a macOS build keeps
-`Metal`, `Vulkan` and `WebGpu`. A shader whose list fits none of them, such as a Metal-only
-shader in a Linux build, is left out of that build with a warning. Running it there returns
-`GpuError.BackendNotCompiled`, so one program can carry platform-specific shaders and choose
-between them at run time.
-`@gpu_targets` on a function replaces the module's list for that shader, which is how one shader
-can use a feature that only some APIs have. Targets are chosen in code only; there are no
-command-line flags or `dream.toml` settings for them.
+Each build keeps the listed targets it can compile.
+
+- A wasm build keeps `WebGpu`. A macOS build keeps `Metal`, `Vulkan`, and `WebGpu`.
+- A shader that fits none of those targets is left out, with a warning. Calling it returns `GpuError.BackendNotCompiled`.
+- `@gpu_targets` on a function replaces the module list for that shader.
+- Set targets in code. There is no command-line flag or `dream.toml` setting.
 
 Most targets need nothing beyond `dreamer toolchain install slang`. Building `Dx12` and `Dx11`
 code also needs Microsoft's DirectX shader compilers (`dxc` and `fxc`, from the Windows SDK) on the
@@ -178,9 +170,7 @@ never replaced by another one: when its code is missing, `create` returns
 `GpuError.BackendNotCompiled`, and when the machine cannot run it, for example CUDA without an
 NVIDIA driver, `create` returns `GpuError.BackendUnavailable`.
 
-Optional features differ between GPUs. Check them with `device.supports(GpuFeature.RayQuery)`
-before using one. A pipeline that needs a missing feature fails with
-`GpuError.UnsupportedCapability` instead of crashing.
+Check `device.supports(GpuFeature.RayQuery)` before using an optional feature. A pipeline that needs a missing feature returns `GpuError.UnsupportedCapability`.
 
 ## Buffers
 
@@ -199,9 +189,7 @@ before using one. A pipeline that needs a missing feature fails with
 On WebGPU, a `write_at` must start at a multiple of 4 bytes and end at one or at the end of the
 buffer. That matters for buffers of `byte` and `float16`.
 
-Shaders see buffers with the GPU's layout rules. Scalars, `GpuVec2` and `GpuVec4` have the same
-layout on both sides. `GpuVec3` and struct fields can be padded differently on the GPU, so prefer
-`GpuVec4` and scalar fields for data that both the CPU and a shader read.
+Scalars, `GpuVec2`, and `GpuVec4` have the same layout in Dream and in the shader. `GpuVec3` and struct fields can be padded on the GPU, so prefer `GpuVec4` and scalar fields for data both sides read.
 
 ## Recording several dispatches
 

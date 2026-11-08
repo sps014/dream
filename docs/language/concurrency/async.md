@@ -24,13 +24,9 @@ Use `async` for work that may need to wait. Calling an async function creates a 
     - Calling an `async` function creates a future; `.await` waits for its result.
     - Waiting suspends only the current task, so other work keeps running.
 
-**Packages:** `Promise` / `Future` are bootstrap (`system.core`). `Time.sleep` needs `import system;`.
+`Promise` and `Future` need no import. `Time.sleep` needs `import system;`.
 
-Dream has cooperative concurrency with `async`/`await`.
-The model is **lazy**: calling an `async fun` builds a `Future<T>` but does *not* run it.
-The body runs when the future is first **awaited**, passed to a combinator (`Promise.all` / `race`), or launched with `Promise.start`.
-
-A future that is never started never runs, and a cancelled-before-start future is simply discarded.
+A future that is never started never runs. Cancelling it before it starts discards it.
 
 ## Declaring and awaiting
 
@@ -158,25 +154,25 @@ src.cancel();
 System.println(tok.check().is_err()); // true → ECANCELLED
 ```
 
-Public stdlib async APIs take a trailing `token: Option<CancellationToken> = None` (omitted at existing call sites).
-`Result` methods return `Err` with machine code `ECANCELLED`; `void` / non-`Result` APIs panic via `throw_if_cancelled`.
-`Promise.cancel(future)` marks a future cancelled; pending sleeps are dropped when the token is cancelled.
-A cancelled future has no result, so awaiting it afterwards panics with `awaited a cancelled future`.
-Cancellation follows ownership: the future being awaited by the cancelled one is cancelled as well, unless something else still holds it (a stored handle, a `Task.scope` job, another awaiter), in which case it keeps running.
+- A public async API takes a trailing `token: Option<CancellationToken> = None`. You can omit it.
+- A `Result` method returns `Err` with code `ECANCELLED`. Other methods panic.
+- `Promise.cancel(future)` cancels that future. A pending sleep is dropped.
+- Awaiting a cancelled future panics with `awaited a cancelled future`.
+- The future it was waiting on is cancelled too, unless something else still holds it. A stored handle, a `Task.scope` job, or another awaiter keeps it running.
 
 Cancelling a not-yet-started future means it never runs.
 Native in-flight host I/O remains best-effort.
 
 ### Native deferred hosts (`@async_host`)
 
-On native, an `extern async fun` host blocks the whole run loop while it runs.
-Declaring it `@async_host` opts that import into true async: on the native host, the function runs off the main task and completes the future when it finishes — so timers and other tasks keep interleaving while the host op is in flight.
-User-provided native hosts can use this contract; wasm32 bridges are always deferred.
+On native, an `extern async fun` host blocks the run loop until it returns. Mark it `@async_host` to run it off the main task. Timers and other tasks keep running while it works. WebAssembly hosts are always deferred.
 
-A C host for `@async_host extern async fun read_slowly(id: int): int` is `int32_t read_slowlyAsync(void *future, int32_t id)`.
-It returns `1` after handing the work off, then calls `dream_complete_foreign(future, result)` from `<dream_embed.h>` on any thread when the work is done.
-The result lands on the thread whose task awaited the call, including a `Task` worker; that thread keeps running its loop until every host call it started has completed.
-`Promise.cancel` on an in-flight call stops the awaiting side immediately; the late completion is ignored.
+A C host for `extern async fun read_slowly(id: int): int` is `int32_t read_slowlyAsync(void *future, int32_t id)`.
+
+- Return `1` after handing the work off.
+- Call `dream_complete_foreign(future, result)` from `<dream_embed.h>` on any thread when the work is done.
+- The result is delivered on the thread that awaited the call.
+- `Promise.cancel` stops the awaiting side immediately. A late completion is ignored.
 
 ## Async methods
 

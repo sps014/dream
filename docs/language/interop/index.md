@@ -6,8 +6,7 @@ icon: material/swap-horizontal
 
 # JavaScript interop
 
-Use `js.global` to access browser or Node APIs. Read properties, call methods, and assign values
-with ordinary Dream syntax. No binding declarations or imports are needed.
+Use `js.global` to read, call, and assign browser or Node APIs with ordinary Dream syntax. No binding declarations or imports are needed.
 
 ```dream
 fun main(): void {
@@ -38,17 +37,11 @@ fun main(): void {
 }
 ```
 
-Member names are checked by JavaScript when the operation runs. A missing function, JavaScript
-exception, or failed conversion is a runtime failure; use `try`/`catch` in a JavaScript function
-when an external API needs recoverable exception handling, and return an explicit result to Dream.
-For promises, use the async facilities described in [The js type](js-type.md).
+Member names are checked when the JavaScript runs, and a missing function, exception, or failed conversion stops that operation. Catch a recoverable error in JavaScript and return a result; promises are covered in [The js type](js-type.md).
 
-Pass Dream functions directly as callbacks. See [Callbacks](callbacks.md) for callback identity
-and supported signatures. [The js type](js-type.md) covers arrays, objects, conversion, and promises.
+Pass Dream functions directly as callbacks. [Callbacks](callbacks.md) covers identity and signatures, and [The js type](js-type.md) covers arrays, objects, conversion, and promises.
 
-Explicit JS `extern` bindings are internal implementation facilities. Application-facing APIs use
-`js` syntax or ordinary Dream functions with bodies. Compiler contributors can read
-[Internal JavaScript bindings](../../internals/21-js-bindings.md).
+Application code uses `js` syntax or ordinary Dream functions. Explicit JS `extern` bindings are for the compiler — see [Internal JavaScript bindings](../../internals/21-js-bindings.md).
 
 Native library integration uses [C interop](c.md) or [C++ interop](cpp.md).
 

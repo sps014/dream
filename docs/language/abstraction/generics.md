@@ -26,9 +26,7 @@ Type parameters let the same function or data type work with different kinds of 
 
 ## Generic functions
 
-Add `<T>` after the function name.
-Dream usually infers `T` from the call.
-You can also write the type explicitly with `<Type>`:
+Add `<T>` after the function name. Dream infers `T` from the call, or you can write `<Type>`:
 
 ```dream
 fun first<T>(arr: T[]): T {
@@ -88,9 +86,7 @@ Constructors can also use a `where` clause after their parameters. For example,
 `constructor() where T : Comparable<T>` makes the natural-order constructor available only
 when `T` supports comparison; a separate custom-comparator constructor can remain unconstrained.
 
-Constrain a type parameter to one or more interfaces with `T : Iface`.
-Inside the body, that interface's methods are available.
-Constraints apply to functions, classes, structs, interfaces, and `extend` blocks:
+Constrain a type parameter with `T : Iface`. Inside the body, that interface's methods are available on `T`, for functions, classes, structs, interfaces, and `extend` blocks:
 
 ```dream
 fun max_of<T: Comparable<T>>(a: T, b: T): T {
@@ -116,17 +112,13 @@ fun send<T: shared>(value: T): void { /* … */
 }
 ```
 
-At each use, Dream checks that the concrete type satisfies the constraint.
-Otherwise you get a compile error (for example `List<int>().sort()` needs `int : Comparable<int>`).
-Each type gets its own copy of the generic, so a constrained call binds to the concrete method with **no boxing** — even for [value structs](../types/classes-structs.md).
-
-There is no extra runtime wrapper for value structs.
+At each use, Dream checks the constraint and calls that concrete type's method. A mismatch is a compile error — `List<int>().sort()` needs `int : Comparable<int>`.
 
 ### Static methods on a generic class
 
-If the class type parameters appear in the static method's parameters, they are inferred from the call — the same rule as generic functions (`first(words)`).
-Write `List(items)` or `Task.spawn(() => n * n)` (`TOut` is a method type argument).
-Explicit `Class<Args>.method(...)` always works, and is required when a parameter does not appear in the arguments (`Cache.make` below):
+If a class type parameter appears in a static method's parameters, Dream infers it from the call, as with `first(words)`. Write `List(items)` or `Task.spawn(() => n * n)` when the type argument belongs to the method.
+
+Write `Class<Args>.method(...)` when a parameter does not mention the class type argument (`Cache.make` below):
 
 ```dream
 class Cache<T> {
@@ -149,9 +141,7 @@ As with any static member, the method must be `public` to be called from another
 
 ### Generic functions as first-class values
 
-A generic function can become a [first-class function value](../functions/declaring.md).
-With a concrete `fun(...)` type at the use site, its type arguments are inferred and a separate copy is used for that type.
-A bare binding stays generic and picks a type independently at each later use (typed assignment, typed argument, or call):
+A generic function can become a [first-class function value](../functions/declaring.md). A concrete `fun(...)` type infers its type arguments, and a bare binding stays generic until a later use:
 
 ```dream
 fun natural_order<T: Comparable<T>>(a: T, b: T): int {
@@ -166,8 +156,7 @@ let g: fun(int, int): int = f; // instantiates from the annotation
 
 ### Type checking inside generic bodies
 
-Use `is` to branch on the concrete type.
-The compiler eliminates the dead branches:
+Use `is` to branch on the concrete type:
 
 ```dream
 fun describe<T>(v: T): void {
@@ -183,5 +172,4 @@ fun describe<T>(v: T): void {
 
 ### How it works
 
-Every unique combination of type arguments creates a new copy.
-`Box<int>` and `Box<string>` are entirely separate types — no boxing, no overhead versus writing the type-specific code by hand.
+`Box<int>` and `Box<string>` are separate types.

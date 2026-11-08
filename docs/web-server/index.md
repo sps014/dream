@@ -23,6 +23,6 @@ Transport guides cover [uploads](uploads.md), [streaming and SSE](streaming.md),
 
 ## Requirements
 
-HTTP servers require a native Dream target and the `dream-host-net` capability. Local authentication additionally uses `dream-host-crypto`. Server calls in WebAssembly programs receive compile-time availability diagnostics. The HTTP client remains available separately through `system.net`.
+HTTP servers need a native Dream target and the `dream-host-net` capability, and local authentication also needs `dream-host-crypto`. Server calls are rejected when you compile to WebAssembly, while the HTTP client stays available through `system.net`.
 
-Applications mount routers explicitly. Importing a file does not expose its handlers. Two apps may mount the same router with different prefixes and have independent middleware, state, documentation, dependency overrides, and shutdown.
+Applications mount routers explicitly, and importing a file does not publish its handlers. Two apps can mount the same router with different prefixes and keep separate middleware, state, documentation, dependency overrides, and shutdown.

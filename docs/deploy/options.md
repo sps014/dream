@@ -18,11 +18,11 @@ Start with a working release build before changing packaging options.
 
 ## A target cannot build
 
-Run `dreamer toolchain doctor --target <target-triple>`. It reports missing build tools and libraries without installing them. Install the required tools using the [toolchain guide](../tooling/toolchain.md). An SDK may still be required for the target platform.
+Run `dreamer toolchain doctor --target <target-triple>` to list missing build tools and libraries without installing them. Install what it lists from the [toolchain guide](../tooling/toolchain.md); the target platform may still need its SDK.
 
 ## A packaged app cannot start
 
-Copy the entire target pack folder, including its accompanying libraries. The receiving machine also needs the platform's system libraries. Signing and notarization are separate distribution steps.
+Copy the entire target pack folder, including its libraries. The receiving machine also needs the platform's system libraries, and signing and notarization are separate steps.
 
 ## The project is a library
 

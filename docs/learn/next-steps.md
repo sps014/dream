@@ -16,4 +16,4 @@ Choose a topic that helps with the program you want to build.
 | Save data | [Files](../library/io/file.md) and [JSON](../library/serialization/json.md) |
 | Share an app | [Packaging](../deploy/index.md) |
 
-Use the [cookbook](../cookbook/index.md) for worked examples. Use the [API catalog](../reference/api/index.md) when you need an exact parameter or result type. If you want to change Dream itself, read the [contributor handbook](../internals/README.md).
+Use the [cookbook](../cookbook/index.md) for worked examples, and the [API catalog](../reference/api/index.md) for an exact parameter or result type. To change Dream itself, read the [contributor handbook](../internals/README.md).

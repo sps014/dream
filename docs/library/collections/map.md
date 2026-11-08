@@ -31,9 +31,11 @@ This prints `No score yet`.
 
 ## Add and look up
 
-Create a map with `Map<K, V>()`, an optional initial capacity, or a typed map literal. `set(key, value)` adds a key or replaces its value. `map[key] = value` does the same.
+Create a map with `Map<K, V>()`, an optional capacity, or a typed literal. `set(key, value)` and `map[key] = value` add a key or replace its value.
 
-`get(key)` returns `Option<V>`. Indexed reading, `map[key]`, requires the key to exist and stops the program if it is missing. Use `get_or(key, fallback)` when you want a default. `get_or_insert(key, factory)` borrows the key for the lookup, and calls a no-argument function to create and store a value only when the key is missing (copying the key on that miss).
+`get(key)` returns `Option<V>`, and `map[key]` stops the program if the key is missing. `get_or(key, fallback)` supplies a default.
+
+`get_or_insert(key, factory)` calls a no-argument function only when the key is missing, and stores that value.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
@@ -51,9 +53,9 @@ When the key type is `string`, `get`, `get_or`, and `contains` also accept a `Re
 
 ## Combine and inspect
 
-`set_all(keys, values)` adds entries from two arrays, pairing matching positions and using the shorter array's length. `Map<K, V>(keys, values)` creates a map that way. `merge(other)` copies another map's entries into the current map. Existing entries with matching keys are replaced.
+`set_all(keys, values)` pairs positions from two arrays and stops at the shorter one. `Map<K, V>(keys, values)` creates a map that way, and `merge(other)` copies entries in, replacing keys that already exist.
 
-`keys()`, `values()`, and `entries()` return new copies, so changing the map later does not change them. A `for` loop gives `KeyValuePair<K, V>` values with `.key` and `.value`. Entries come out in no guaranteed order.
+`keys()`, `values()`, and `entries()` return copies, so later map changes do not affect them. A `for` loop yields `KeyValuePair<K, V>` (`.key` and `.value`) in no guaranteed order.
 
 | Member | Returns | Effect |
 | --- | --- | --- |

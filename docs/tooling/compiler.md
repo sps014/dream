@@ -44,11 +44,11 @@ The first command builds and runs the file. The second only builds it. The third
 | `--crate-type lib` or `bin` | Choose a library or runnable program |
 | `--release --profile`, `--release --use-profile[=path]` | Record or use measurements to improve native builds |
 
-Debug builds (no `--release`) always compile without optimization so they can count allocations and print the exit-time leak report; passing `-O`, `--profile` or `--use-profile` without `--release` is an error. Release builds contain no allocation tracking.
+A debug build is unoptimized and prints a leak report when the program exits. `-O`, `--profile`, and `--use-profile` require `--release`.
 
 Native output normally goes under `target/debug/` or `target/release/`. Browser output goes under `target/web/`. [Build and run](build-run.md) explains profile-guided builds. [Library output](../deploy/native-libraries.md) explains exported libraries.
 
-Use `--perf-symbols` for sampling profiles. It requires `--release` and cannot be combined with `-g`; it emits optimized source/function information without debugger local preservation. Both settings participate in build-cache identity.
+`--perf-symbols` requires `--release` and cannot be combined with `-g`. Use it for a sampling profile. Use `-g` when you need to step through source.
 
 ## Browser and Node
 

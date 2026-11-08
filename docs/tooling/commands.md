@@ -30,4 +30,8 @@ Look up a command here. For a walkthrough, use the guides linked from the [Dream
 | `dreamer toolchain list` | Show which of those components are installed. |
 | `dreamer toolchain uninstall <component>` | Remove that component. |
 
-`dreamer toolchain install` is **not** `dreamer install` (packages). Every build uses the pinned LLVM from `DREAM_LLVM`, then the release bundle, then `~/.dream/toolchains/llvm-*`. Native builds compile and link with that LLVM's clang; Linux and macOS outputs link with the pinned mold (`DREAM_MOLD`, the release bundle, then `~/.dream/toolchains/mold-*`) and Windows outputs with LLVM's lld. No compiler or linker is taken from `PATH`. `use-toolchain.sh` fetches the development LLVM and mold when they are missing (`DREAM_SKIP_LLVM=1` skips it).
+`dreamer toolchain install` installs tools. `dreamer install` installs packages.
+
+Builds look for the compiler in `DREAM_LLVM`, then the release bundle, then `~/.dream/toolchains/llvm-*`. Linux and macOS look for the linker in `DREAM_MOLD`, then the release bundle, then `~/.dream/toolchains/mold-*`; Windows uses the bundled linker, and nothing is taken from `PATH`.
+
+`use-toolchain.sh` fetches the development compiler and linker when they are missing. `DREAM_SKIP_LLVM=1` skips that download.

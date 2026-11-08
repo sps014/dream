@@ -26,7 +26,7 @@ Output: `3, 4`.
 
 ## Immediate queries
 
-The common `Collection<T>` interface provides the helpers in the first table. These do not require the collections package by themselves. `List`, `Map`, `Set`, `Queue`, `Stack`, and `PriorityQueue` are all collections; a map's items are its `KeyValuePair<K, V>` entries.
+The `Collection<T>` helpers in the first table do not require the collections package. `List`, `Map`, `Set`, `Queue`, `Stack`, and `PriorityQueue` are collections, and a map's items are `KeyValuePair<K, V>` entries.
 
 | Method | Returns | Effect |
 | --- | --- | --- |
@@ -42,9 +42,9 @@ Lists also provide `first()`, `last()`, and `find_index(pred)`; see [List](list.
 
 ## Sequence chains
 
-`collection.seq()` starts from a copy of the collection's elements. On the sequence, `filter`, `map`, `flat_map`, `distinct`, `take`, and `skip` build steps that run when a result is requested. `to_list()` copies the selected elements into a list, and `count()` counts them.
+`collection.seq()` starts from a copy of the elements. `filter`, `map`, `flat_map`, `distinct`, `take`, and `skip` run when you ask for a result; `to_list()` copies what remains and `count()` counts it.
 
-Each traversal runs these steps again, without intermediate lists, and `take` stops upstream work once it has enough elements. `sort_by` immediately collects and sorts all elements. Shared objects inside the copied elements remain shared.
+Each pass runs the steps again, and `take` stops once it has enough elements. `sort_by` sorts immediately, and objects inside the copied elements stay shared.
 
 | Method | Returns | When it runs |
 | --- | --- | --- |
@@ -58,10 +58,9 @@ Each traversal runs these steps again, without intermediate lists, and `take` st
 | `to_list()` | `List<T>` | Runs the chain and returns the remaining items. |
 | `count()` | `int` | Runs the chain and returns how many items remain. |
 
-A `Seq` can also finish with `reduce(initial, combine)`, `collect_set()`, `min()`, or `max()`.
-`min` and `max` require comparable elements and return `None` for an empty sequence.
-`reduce` returns the initial value when there are no elements.
-Traverse a `Seq` directly with a `for` loop. Call `to_list()` when you need a list to index or change.
+A `Seq` can also finish with `reduce(initial, combine)`, `collect_set()`, `min()`, or `max()`. `min` and `max` need comparable elements and return `None` when empty; `reduce` returns the initial value when there are no elements.
+
+A `for` loop walks a `Seq` directly. Call `to_list()` when you need to index or change the items.
 
 ```dream
 import system;

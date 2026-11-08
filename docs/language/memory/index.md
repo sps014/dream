@@ -1,14 +1,14 @@
 ---
 title: Memory
-summary: "Automatic reference counting, ownership, safety rules, and cleanup timing."
+summary: "How Dream frees objects, and the cases that need extra care."
 icon: material/memory
 ---
 
-# Memory Management
+# Memory
 
-Dream cleans up objects automatically when they are no longer needed. Most programs can rely on this without managing memory themselves. This guide explains shared objects, cleanup timing, and the advanced cases that need extra care.
+Dream frees an object when nothing uses it. You do not free it yourself.
 
-Available memory and the selected environment limit allocation size. A request that is too large, or an allocation that fails, stops the program with a clear error. Array and string lengths still use `int`. Use `isize` and `usize` when a size must match the selected platform.
+A request that is too large stops the program. Array and string lengths use `int`. Use `isize` or `usize` when a size must match the platform.
 
 ## Guides in this section
 
@@ -21,81 +21,71 @@ Available memory and the selected environment limit allocation size. A request t
 - Class instances
 - Standard library collections (`List`, `Map`, `Set`)
 
-Primitives (`int`, `float`, `bool`, ...) and value `struct`s are stored inline — no heap allocation.
+Primitives (`int`, `float`, `bool`, ...) and structs are stored inline.
 
-`js` handles are not Dream heap objects, but they follow the same ownership rules: when the last Dream owner drops, the JS value can be collected. See [The `js` type](../interop/js-type.md).
+A `js` value follows the same rules. When the last Dream name drops it, the JS value can be collected. See [The `js` type](../interop/js-type.md).
 
-## Safety guarantees
+## What stays safe
 
-Dream's type system and compiler enforce the following in safe code — no `unsafe` block, no annotation, no discipline required:
+- A value stays valid while you still use it.
+- Each object is freed once.
+- An out-of-bounds index stops the program.
+- A store that would form a reference cycle is a compile error. Use `weak` or `unowned`, or `@allow_cycle` when your code breaks the cycle.
+- A constructor runs when the object is created.
+- A function local hides a top-level name with the same spelling.
 
-| Guarantee | How |
-|---|---|
-| No use-after-free | Values remain valid while they are still in use |
-| No double-free | Automatic cleanup frees each object once |
-| No out-of-bounds read | Bounds-checked indexing panics with a clear message |
-| Cycle ownership checked | Stores that would form a strong reference cycle are compile errors; use weak/unowned back-links, or `@allow_cycle` for cycles the program breaks itself |
-| Constructor side effects preserved | Constructor bodies always run at allocation sites |
-| Global/local scope separation | Top-level variables are file-scoped; function locals shadow them cleanly |
+`RawPtr<T>` and `Arena` are the manual option. They require `@unsafe`.
 
-When these guarantees are not enough, the `@unsafe` tier (`RawPtr<T>` and `Arena`) provides manual control with explicit opt-in.
+## When an object is freed
 
-## How it works
-
-Every heap object tracks how many names still point at it.
-
-- When a variable goes out of scope, that count goes down.
-- Reassigning a variable drops the value it held before. Module-level `let` names follow the same automatic reference tracking rules as a field store (a still-live local copied into a global is retained; the previous occupant is released).
-- When the count reaches zero, the object is freed (its `del` destructor runs first, if it has one).
-- Passing and assigning heap values uses [ownership](ownership.md): unmarked parameters take ownership, `borrow` shares, and a last use **moves** instead of copying.
+- A name leaving scope drops the value.
+- Assigning a new value drops the old one. That includes a module-level `let`.
+- At the last drop, `del` runs if the type has one, then the object is freed.
+- Passing and assigning follows [ownership](ownership.md). An unmarked parameter takes the value, `borrow` only looks, and a last use hands the value over.
 
 ```dream
 fun make_list(): int[] {
-    let arr = [1, 2, 3]; // allocated, count = 1
-    return arr; // handed to the caller
+    let arr = [1, 2, 3];
+    return arr;
 }
 
 fun main() {
     let result = make_list();
     System.println(result[0]);
-} // result leaves scope -> count 0 -> freed
+} // result leaves scope and is freed
 ```
 
-When you compile for the browser or Node, memory is freed as soon as the last use ends.
-`dream run` may wait until the end of the block.
+- Browser and Node free a value as soon as the last use ends.
+- `dream run` may wait until the end of the block.
 
-### Share values with a task
+### Share a value with a task
 
-Use a `shared` type when a value must be accessible to several tasks. Sharing does not make changes to its fields safe by itself: use `lock` to coordinate those changes. Read [Tasks](../concurrency/tasks.md) for examples and the sharing restrictions.
+Use a `shared` type when several tasks must use one value. Use `lock` before changing its fields. See [Tasks](../concurrency/tasks.md).
 
-## Known boundaries
+## Limits
 
-The following are documented limitations, not silent unsoundness — each degrades to a detectable pattern or an explicit opt-out rather than memory corruption:
-
-| Boundary | Status |
+| Limit | What you do |
 |---|---|
-| Owning `object` fields | A store whose erased contents the compiler cannot prove acyclic is reported as a cycle; strong cycles in `@allow_cycle` classes still leak unless the program breaks them |
-| JS↔Dream cross-collector cycles | Interop boundary is weak-by-convention; use id-based protocols |
-| Data races across threads | Use `Lock` on a `shared class`. Dream does not yet reject races for you |
+| A field typed as `object` | A store that might form a cycle is a compile error. An `@allow_cycle` class leaks until your code breaks the cycle |
+| A Dream object and a JS object pointing at each other | Pass an id instead |
+| Changes from several tasks | Use `Lock` on a `shared class`. Dream does not reject races for you |
 
-## Performance notes
+## On a hot path
 
-- Prefer `StringBuilder` (and `append` / `append_utf8_slice`) over repeated `string` `+` when building text in a loop.
-- Use `byte_size` / `byte_at` for the raw UTF-16 bytes; `char_at` / `substring` index UTF-16 code units. `substring` is a cheap slice of the parent; `string.clone` copies.
-- `List` / `Map` / `Set` `clear()` keeps capacity. Prefer `clear` + refill over allocating a new collection each batch.
-- `Arena` manually owns raw blocks for mixed unmanaged scratch allocations. `reset()` invalidates allocations and retains blocks for reuse; `free()` releases all storage. [`sizeof` and `alignof`](../basics/type-queries.md#sizeof-nameof-and-typeof) report target storage size and alignment.
-- Unmarked parameters sink into the callee (see [Ownership](ownership.md)); mark readers `borrow`.
-- Prefer `struct` / scalars / `Span` / dense `int[]` on hot paths.
+- Build text with `StringBuilder`, not repeated `+`.
+- `char_at` and `substring` count UTF-16 code units. `substring` shares the parent string. `clone` copies it.
+- `List`, `Map`, and `Set` `clear()` keeps capacity.
+- `Arena.reset()` drops the allocations and keeps the storage. `free()` releases the storage. See [`sizeof`](../basics/type-queries.md#sizeof-nameof-and-typeof).
+- Mark a parameter `borrow` when it only reads. See [Ownership](ownership.md).
 
-## Call stack (`dream run`)
+## Call stack
 
-Deep recursion and large `struct` frames need enough call stack. For `dream run`, set **`DREAM_STACK_SIZE`** (e.g. `32M`, `32MiB`, or a byte count). The default is 16 MiB.
+Deep recursion and large structs need a bigger stack. For `dream run`, set `DREAM_STACK_SIZE` (`32M`, `32MiB`, or a byte count). The default is 16 MiB. Values below 64 KiB are rejected.
 
-Values below 64 KiB are rejected. The same variable also sizes the wasm32 guest stack (`dream --wasm` links with `-z stack-size`).
+The same variable sets the WebAssembly stack for `dream --wasm`.
 
 ```bash
 DREAM_STACK_SIZE=32M dream run path/to/file.dream
 ```
 
-This only affects native `dream run`.
-Browser and Node use the engine's own stack limits.
+`dream run` and `dream --wasm` use this value. Browser and Node use the engine's own stack.

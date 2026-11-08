@@ -7,12 +7,9 @@ targets: [native, web, node]
 related: [language/memory/ownership.md, language/memory/cleanup.md]
 ---
 
-# Cycles and ARC
+# Cycles
 
-Dream uses deterministic reference counting in Debug and Release. ARC does not collect
-strong reference cycles, so the compiler rejects stores that would create one. Use `weak` or
-checked `unowned` back-links instead, or mark a class `@allow_cycle` and clear an owning
-edge yourself before releasing the last external owner.
+A cycle keeps every object in it alive, so a store that would create one is a compile error. Use `weak` or `unowned` for a back-link, or mark the class `@allow_cycle` and break the cycle yourself.
 
 !!! glance "At a glance"
 
@@ -27,18 +24,12 @@ edge yourself before releasing the last external owner.
     }
     ```
 
-    - Reference counting does not collect strong cycles.
-    - The compiler rejects a store that can link an object back to itself through strong references.
-    - Fix a reported cycle with `weak` or `unowned`, or add `@allow_cycle` to a class whose cycles the program breaks itself.
+    - A store that links an object back to itself is an error.
+    - Use `weak` or `unowned`, or `@allow_cycle` when your code breaks the cycle.
 
 ## Cycle checking
 
-A recursive class such as a linked list or a tree is fine on its own. The compiler checks
-the stores your program actually performs, in Debug and Release builds alike, and reports
-an error only when a store can link an object back to itself through strong references.
-The check follows fields, generic containers, arrays, tuples, inline structs, interface
-values, closure captures and calls, including calls through `fun` values. Weak and unowned
-links never form a cycle.
+A linked list or a tree is fine. The error is a store that points an object back at itself. `weak` and `unowned` do not count as that kind of link. The check is the same in debug and release builds.
 
 ```dream
 class Node {
@@ -174,18 +165,6 @@ class Counter {
 must be rebound. Both accept a class instance or `Option<T>` and read as `Option<T>`.
 Clearing a mutable weak binding with `Option.None` is visible to closures that capture it.
 
-## Concurrency
+## Several tasks
 
-Published objects use atomic reference counts. A dedicated registry lock synchronizes
-weak/unowned reads, registration and observed-target destruction. User finalizers run
-outside it. Objects without weak observers need no registry lookup or lock. Application
-code remains responsible for synchronization of concurrent field mutation.
-
-Cleanup is deterministic for the same synchronized execution. Concurrent scheduling does
-not gain a global destruction-order guarantee.
-
-## Private regions
-
-Release can infer a `UniqueRegion` for proven nonescaping, destructor-free allocations
-and reclaim their storage in bulk. This is an internal optimization, not a public graph
-owner or a guarantee that arbitrary strong cycles are reclaimed.
+`weak` and `unowned` are safe to read from more than one task. You still coordinate changes to the object's fields yourself. Cleanup order is defined for one task. It is not a global order across tasks.

@@ -18,8 +18,7 @@ A registry is a sparse index plus tarball storage. A plain directory works, serv
 <base>/dl/<name>/<name>-<version>.tar.gz    the tarball an index entry's "tarball" field points at
 ```
 
-`<name>` is the full registry package name (including `.` when present), e.g. `index/foo.bar` and
-`dl/foo.bar/foo.bar-1.0.0.tar.gz`. Dots are literal filename characters, not path separators.
+`<name>` is the full registry package name, including any `.`, as in `index/foo.bar` and `dl/foo.bar/foo.bar-1.0.0.tar.gz`. A dot is a filename character, not a path separator.
 
 Each line of `<base>/index/<name>` is a JSON object:
 
@@ -57,11 +56,9 @@ Each line of `<base>/index/<name>` is a JSON object:
 | `readme` | no | README path inside the tarball |
 | `keywords` | no | From `[package].keywords` |
 
-Fields beyond `name` / `vers` / `deps` / `cksum` / `tarball` are optional metadata copied from
-`dream.toml` at publish time. `readme` is an **archive-relative path** (e.g. `README.md`) pointing at
-the README packed into the tarball — the index never embeds README body text.
-`keywords` come from `[package].keywords` and feed static search.
-`catalog.json` stores the same discovery fields except `deps` / `cksum` / `tarball`.
+Fields beyond `name`, `vers`, `deps`, `cksum`, and `tarball` are optional metadata copied from `dream.toml` at publish time. `readme` is a path inside the archive, such as `README.md`, and the index does not store the README text.
+
+`keywords` come from `[package].keywords` and feed static search. `catalog.json` stores the same discovery fields except `deps`, `cksum`, and `tarball`.
 
 Optional endpoints / files for `dreamer search` / `dreamer publish`:
 
@@ -80,10 +77,7 @@ Optional endpoints / files for `dreamer search` / `dreamer publish`:
 | Any other `http://` or `https://` URL | HTTP registry using the endpoints above |
 | `file://<path>` or a plain path | Local directory registry |
 
-The default public registry is the GitHub repo
-[`sps014/dream-registry`](https://github.com/sps014/dream-registry), served at
-`https://raw.githubusercontent.com/sps014/dream-registry/main`. Indexes live under `index/`,
-tarballs under `dl/` (separate trees). Max package tarball size is **10 MiB**.
+The default public registry is [`sps014/dream-registry`](https://github.com/sps014/dream-registry), served at `https://raw.githubusercontent.com/sps014/dream-registry/main`. Indexes live under `index/`, tarballs live under `dl/`, and a package tarball can be at most **10 MiB**.
 
 `dreamer publish` to that registry uses the GitHub Contents API (pass `--token`, or set
 `DREAM_REGISTRY_TOKEN` or `GITHUB_TOKEN`, with `contents:write`). Point `[registries] default` at any other `file://` or

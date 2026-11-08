@@ -7,9 +7,10 @@ api: reference/api/system-audio.md
 # Audio playback and FFT
 
 Import `system.audio` to play WAV, MP3, and WebM/Opus on native desktops and in
-browsers. Format detection inspects the bytes; the file extension is not required
-to match. WebM decoding selects the first Opus track and ignores video tracks.
-The initial implementation supports mono and stereo.
+browsers.
+
+- Format detection uses the bytes. The file extension does not have to match.
+- WebM uses the first Opus track and ignores video. Mono and stereo are supported.
 
 ## Play a file
 
@@ -42,60 +43,45 @@ async fun main(): void {
 }
 ```
 
-`Audio()` creates an empty player. Assign `src` before playing. Constructors do no
-file I/O or device initialization. `Audio(bytes)` copies encoded bytes;
-`Audio(buffer)` uses an already decoded `AudioBuffer`. Call `load().await` to
-prepare a source without playing it. `play().await` prepares it if necessary and
-returns when output starts. Node and standalone WASI support buffer decoding and
-FFT analysis; speaker output is unavailable there.
+`Audio()` creates an empty player. Assign `src` before playing.
 
-`pause()` preserves position. `play().await` resumes. Set `current_time` in seconds
-to seek; streamed sources seek as described under URLs and limits. `duration` is absent until loading completes.
-`volume` ranges from zero to one; `muted` preserves its value. `loop` repeats a
-loaded source. `close()` is terminal and idempotent. Keeping a player alive keeps
-its playback resources alive; dropping it cancels loading and releases output.
+- Constructors do no file I/O and do not open a device.
+- `Audio(bytes)` copies encoded bytes. `Audio(buffer)` uses a decoded `AudioBuffer`.
+- `load().await` prepares a source without playing it. `play().await` prepares it if needed and returns when output starts.
+- Node and standalone WASI can decode buffers and run FFT. They cannot play to a speaker.
+
+`pause()` keeps the position. `play().await` resumes from there.
+
+- Set `current_time` in seconds to seek. Streamed sources follow the rules under URLs and limits.
+- `duration` is absent until loading finishes. `volume` is 0 to 1, and `muted` keeps that value.
+- `loop` repeats a loaded source. `close()` is final and safe to call again.
+- Dropping a player cancels loading and stops output. Keep it alive while it should play.
 
 ## URLs and limits
 
-String sources also accept HTTP and HTTPS URLs. Native and Node requests use
-Dream's HTTP client; non-success HTTP responses produce `EHTTP`. Browser URLs use
-the browser's media element for loading, decoding, buffering, and seeking. Browser
-requests follow media permissions and CORS rules; cross-origin servers must allow
-the application origin so rendered samples can be visualized. Browser media load
-failures report `EIO`. Replacing `src`, calling `load` again, or closing cancels the prior
-load; its completion cannot overwrite the replacement source.
+String sources also accept `http` and `https` URLs.
 
-Native file and HTTP sources stream: playback starts once the first 256 KiB (or the
-whole source, if smaller) has arrived and a quarter second of audio has been
-decoded, and memory use does not grow with track length. `load()`
-reads only enough to learn the format, channel count, and (when the container
-declares it) the duration. Streamed MP3 files, and WebM files without a declared
-duration, keep `duration` absent; playback and `Ended` still work. Looping requires
-a seekable source.
+- Native and Node use Dream's HTTP client. A non-success status is `EHTTP`.
+- Browser URLs use the page's media element for loading, decoding, buffering, and seeking. They follow media permissions and CORS, and a failed load is `EIO`.
+- Replacing `src`, calling `load` again, or `close()` cancels the previous load. That load cannot replace the new source.
 
-If data arrives more slowly than it plays, output pauses with silence, `Waiting`
-is reported, and `Playing` follows once data resumes. Local file seeking reopens
-and decodes up to the target. Native and Node HTTP seeking currently supports
-PCM and IEEE-float WAV through validated frame-to-byte positions from dr_wav.
-The server must advertise byte ranges, supply a strong ETag or Last-Modified
-validator and Content-Length, and return the requested range of the same resource.
-Unsupported formats or servers report `ENOTSUP`; ignored or inconsistent range
-responses report `ESEEK`. Failure preserves playback at its previous position.
-No full download is performed to make a remote source seekable. Browser URLs use
-the media element's seekable ranges and the browser's container indexes and HTTP
-range implementation; supported formats depend on the browser's installed codecs.
-A seek on a stream is asynchronous: `seeking` stays true until `Seeked` arrives,
-and assigning `current_time` again before then reports `EBUSY`. A target beyond a
-known duration reports `EINVAL`.
+Native file and HTTP sources stream. Playback starts after the first 256 KiB arrives (or the whole file, if smaller) and a quarter second is decoded, and memory does not grow with the track.
 
-The browser controls URL buffering independently of `AudioOptions`. Encoded bytes,
-local file sources, and offline `AudioBuffer.decode` still use the portable decoders.
+- `load()` reads the format, the channel count, and the duration when the container declares one.
+- Streamed MP3, and WebM without a declared duration, leave `duration` absent. Playback and `Ended` still work.
+- Looping needs a seekable source.
 
-Decoding never runs on the program's own thread. Native programs decode on a
-background thread; browser and Node programs decode in a dedicated worker that
-needs no cross-origin isolation headers. A streamed source decodes the next chunk
-ahead while the current one plays, so a busy program does not starve the speaker
-as long as it keeps awaiting.
+If data arrives slower than playback, output goes silent, `Waiting` is reported, and `Playing` follows when data resumes.
+
+- Seeking a local file reopens it and decodes up to the target.
+- Native and Node HTTP seeking supports PCM and IEEE-float WAV. The server must advertise byte ranges, a strong ETag or Last-Modified, and Content-Length, and return that range of the same resource.
+- Unsupported formats or servers return `ENOTSUP`. A bad range response returns `ESEEK` and leaves the play position unchanged.
+- A remote file is not fully downloaded just to make it seekable. Browser seeking uses the media element's ranges, and supported formats depend on the browser.
+- A seek stays in progress until `Seeked`. Setting `current_time` again before then returns `EBUSY`, and a target past a known duration returns `EINVAL`.
+
+The browser buffers URL media on its own, separate from `AudioOptions`. Byte sources, local files, and `AudioBuffer.decode` use the built-in decoders.
+
+Decoding runs off your program's thread, so timers and input keep running. A stream decodes the next chunk while the current one plays.
 
 ```dream
 import system.audio;
@@ -106,39 +92,34 @@ options.max_decoded_bytes = 64 * 1024 * 1024;
 let audio = Audio("https://example.com/song.webm", options);
 ```
 
-For streamed sources, `max_compressed_bytes` (default 8 MiB) bounds the encoded
-data held while decoding, not the track length. A file whose headers or a single
-WebM element cannot be decoded within it fails with `ELIMIT`. `buffer_seconds`
-(default one second, at most 30) sets how much decoded audio is queued ahead of
-the speaker. `max_decoded_bytes` (default 256 MiB) applies to byte sources, which
-are decoded completely; a larger result returns `ELIMIT`. Limits are snapshotted
-by the constructor.
+For a stream, `max_compressed_bytes` (default 8 MiB) limits encoded data held while decoding, not the track length. A header or WebM element that does not fit returns `ELIMIT`.
+
+- `buffer_seconds` (default 1, at most 30) is how much decoded audio is queued ahead of the speaker.
+- `max_decoded_bytes` (default 256 MiB) applies to byte sources, which are decoded in full. A larger result returns `ELIMIT`.
+- The constructor copies the limits. Later changes to the options object do not apply.
 
 ## Receive events
 
-`poll_events()` drains a typed queue. Events contain monotonic timestamps in
-nanoseconds. `Play` reports an accepted start and `Playing` reports running output.
-`Seeking` and `Seeked` surround an accepted seek. `Pause`, `Ended`, `VolumeChange`,
-`SinkChange`, and `Error` report the corresponding transitions. State properties
-remain queryable if events are not being polled.
+`poll_events()` drains a typed queue. Timestamps are monotonic nanoseconds.
 
-Invalid property assignments preserve the previous value and enqueue `Error`.
-Fallible methods return `Result`; they may also enqueue an operation error.
-Events remain readable after close. Repeated pause/close calls do not duplicate
-those transitions. The queue holds 1,024 events; overflow discards the oldest and
-adds an `EventsLost` record on the next drain. Position events are limited to four
-per second and are generated while state is observed. Poll once per UI frame.
+- `Play` means the start was accepted. `Playing` means output is running.
+- `Seeking` and `Seeked` surround an accepted seek.
+- `Pause`, `Ended`, `VolumeChange`, `SinkChange`, and `Error` report those changes.
+- State properties stay readable if you do not poll.
 
-`Waiting` reports a streaming underrun; byte and buffer sources never produce it.
-Current device-loss detection observes a stopped native device or closed browser
-context. Browser permission changes and all forms of hardware hotplug have not
-been qualified on every platform.
+An invalid property assignment keeps the previous value and enqueues `Error`. Methods that return `Result` may also enqueue an error.
+
+- Events stay readable after `close()`. A repeated pause or close does not add another event.
+- The queue holds 1,024 events. Overflow drops the oldest and adds `EventsLost` on the next drain.
+- Position events are limited to four per second while state is observed. Poll once per frame.
+
+`Waiting` means playback ran out of streamed data. Byte and buffer sources never emit it.
+
+A stopped native device or a closed browser audio context is reported as device loss. Permission changes and hardware hotplug are not reported on every platform.
 
 ## Choose an output
 
-Each player has its own `sink_id`; an empty ID uses the system default. Players
-using the same device share a mixer internally. Switching preserves the source
-position, volume, mute, and looping. A failed switch leaves the old output active.
+Each player has its own `sink_id`, and an empty ID uses the system default. Switching keeps position, volume, mute, and looping; a failed switch leaves the old output active.
 
 ```dream
 import system.audio;
@@ -152,13 +133,11 @@ async fun select_output(audio: Audio): Result<Unit, AudioError> {
 }
 ```
 
-IDs are opaque and host-specific. Enumerate again rather than assuming an old ID
-still identifies the same device. Browsers may hide labels until permission has
-been granted. `Audio.request_device().await` opens the browser's output picker and
-must originate from a suitable user action in a secure context. Native programs
-use enumeration; `request_device` returns `ENOTSUP`. Unsupported browser output
-selection and denied permission return errors. Starting audio also requires
-browser user activation.
+IDs are opaque. Enumerate devices again instead of reusing an old ID.
+
+- Browsers may hide labels until permission is granted.
+- `Audio.request_device().await` opens the browser output picker and must run from a user action in a secure context. On native it returns `ENOTSUP`.
+- Unsupported output selection and denied permission return errors. Starting playback in a browser also needs a user gesture.
 
 ## Inspect PCM and FFT data
 
@@ -186,27 +165,21 @@ fun main(): void {
 }
 ```
 
-Samples are interleaved: stereo frames are left, right, left, right. The analyzer
-averages channels to mono, uses the latest FFT-sized block, and pads short input
-with silence. Sample rate must be positive, frames complete, and samples finite.
-It defaults to 2,048 samples and a Hann window. `set_fft_size` accepts powers of two
-from 32 through 32,768; `AudioWindow.Rectangular` disables tapering.
+Samples are interleaved: left, right, left, right for stereo. The analyzer averages channels to mono, uses the latest FFT-sized block, and pads a short input with silence.
 
-For FFT size `N`, results contain `N / 2 + 1` bins at `bin * sample_rate / N` Hz.
-`real` and `imaginary` are unnormalized complex components after windowing.
-`magnitudes` divides complex magnitude by the sum of window weights and doubles
-all bins except DC and Nyquist. A unit, bin-centered sine therefore has amplitude
-one. `magnitudes_db` uses `20 * log10(amplitude)`, floored at -120 dBFS. Peak and RMS
-use the unweighted, padded waveform.
+- The sample rate must be positive, frames complete, and samples finite.
+- The default is 2,048 samples and a Hann window.
+- `set_fft_size` accepts powers of two from 32 through 32,768. `AudioWindow.Rectangular` turns tapering off.
 
-`AudioBuffer.from_pcm` copies supplied PCM. `read_pcm(start_frame, frame_count)`
-returns a checked copy.
+For size `N`, there are `N / 2 + 1` bins at `bin * sample_rate / N` Hz.
 
-`AudioBuffer.decode(bytes).await` detects WAV, MP3, or WebM/Opus content without
-opening a device. It copies the input and decodes on a background thread (a worker
-on the web), so timers and input keep running during a long decode. `max_bytes`
-(default 256 MiB) limits the decoded PCM; pass a `CancellationToken` to stop
-waiting:
+- `real` and `imaginary` are unnormalized complex values after the window.
+- `magnitudes` divides magnitude by the sum of window weights and doubles every bin except DC and Nyquist. A unit sine centered on a bin has amplitude 1.
+- `magnitudes_db` is `20 * log10(amplitude)`, floored at -120 dBFS. Peak and RMS use the unweighted, padded waveform.
+
+`AudioBuffer.from_pcm` copies the PCM you pass. `read_pcm(start_frame, frame_count)` returns a checked copy.
+
+`AudioBuffer.decode(bytes).await` detects WAV, MP3, or WebM/Opus without opening a device. It copies the input, decodes off your thread, limits decoded PCM with `max_bytes` (default 256 MiB), and accepts a `CancellationToken` to stop waiting:
 
 ```dream
 import system;
@@ -231,27 +204,22 @@ async fun main(): void {
 }
 ```
 
-Unsupported or invalid input returns `EFORMAT`, audio over the limit or with more
-than two channels returns `ELIMIT`, an exhausted decoder returns `ENOMEM`, an
-unavailable decoder thread returns `EBUSY`, and a cancelled wait returns
-`ECANCELLED`. A cancelled decode finishes in the background and its result is
-discarded.
+- Invalid input returns `EFORMAT`. More than two channels, or audio over the limit, returns `ELIMIT`.
+- An exhausted decoder returns `ENOMEM`, no decoder thread returns `EBUSY`, and a cancelled wait returns `ECANCELLED`.
+- A cancelled decode finishes in the background and its result is discarded.
 
-`audio.capture(frame_count)` lazily enables a bounded tap after this player's
-gain and mute and before mixing with other players. It returns stereo PCM at the
-output sample rate. The first calls can return an empty snapshot while the tap
-starts. Capture accepts at most 32,768 frames; `frame_position` counts rendered
-frames since capture began. `overrun` reports dropped frames or a concurrent
-update that prevented a consistent snapshot. Browser capture uses a bounded pool
-of transferable buffers and requires no shared memory.
+`audio.capture(frame_count)` taps this player after gain and mute, before it mixes with other players. It returns stereo PCM at the output sample rate.
+
+- The first calls can be empty while the tap starts.
+- At most 32,768 frames are accepted. `frame_position` counts rendered frames since capture began.
+- `overrun` means frames were dropped, or the snapshot was not consistent.
 
 ## Deployment
 
-In optimized native deployments and browser WASM, an unused `system.audio` import
-adds no audio code, hosts, or assets. Native debug binaries still retain unused
-type metadata; byte-identical trimming there is not implemented yet. PCM playback
-excludes decoders and FFT; analysis-only code excludes output hosts and decoders.
-Automatic encoded-audio decoding includes all supported codecs because the source
-format is discovered at runtime. String-source playback includes file/HTTP routing.
+An optimized native build and a browser build drop an unused `system.audio` import. A debug native build keeps the type anyway.
+
+- PCM playback does not include decoders or FFT. Analysis-only code does not include playback.
+- Playing encoded audio includes every supported codec, because the format is read from the bytes.
+- A string source also includes file and HTTP loading.
 
 The [Audio API reference](../../reference/api/system-audio.md) lists declarations.

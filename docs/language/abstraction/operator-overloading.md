@@ -101,9 +101,7 @@ Rules:
 - `<`, `<=`, `>`, `>=` are **not** tagged individually. Implement `Comparable<Self>` (see
   [Interfaces § Built-in `Equatable` and `Comparable`](interfaces.md#built-in-equatable-and-comparable))
   instead; all four ordering operators dispatch to its single `compare` method.
-- A type may declare multiple binary overloads of the same symbol with different right-hand
-  operand types. An exact type match wins over a compatible match; equally good matches are
-  ambiguous. Duplicate parameter types are errors, even when the return types differ.
+- A type may declare several binary overloads of one symbol with different right-hand types. An exact match wins, equally good matches are an error, and duplicate parameter types are errors even when the return types differ.
 - Unary operators remain unique per symbol, and casts remain unique per target type.
 - Equality overloads must return `bool`. `==` and `!=` select the same overload; `!=` negates it.
 - Operators dispatch on the left operand. Support both operand orders by declaring an overload
@@ -154,6 +152,4 @@ fun main(): void {
 }
 ```
 
-An explicit `(T)expr` cast accepts either `implicit` or `explicit` — implicit
-conversions are always also spellable explicitly. Implicit conversions themselves are currently
-recognized at typed `let x: T = expr;` bindings; elsewhere, cast explicitly.
+An explicit `(T)expr` cast accepts either `implicit` or `explicit`. An implicit conversion is also used at `let x: T = expr;`, and anywhere else you write the cast.

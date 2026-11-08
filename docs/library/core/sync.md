@@ -7,7 +7,7 @@ api: reference/api/system-core.md
 
 # Lock and Semaphore
 
-Use locks and semaphores to coordinate tasks that share work or data. A lock protects changes to a shared value. A semaphore limits how many tasks may enter a section at once.
+A lock protects changes to a shared value. A semaphore limits how many tasks may enter a section at once.
 
 ```dream
 import system;
@@ -32,9 +32,7 @@ Locks are reentrant: each successful acquisition must be matched by a release on
 thread. Releasing an unheld lock, or releasing from another thread, panics with
 `panic: lock release requires the owning thread`.
 
-Native waiters sleep on a condition belonging to that object, and timed acquisition keeps one
-deadline across spurious wakes. Native lock-registry entries are removed when their objects are
-destroyed, so a reused heap address starts with a fresh lock. WASM uses the object's lock word.
+A timed `try_acquire_for` keeps one deadline for the whole wait. Destroying a lock starts the next lock fresh, including if its storage is reused.
 
 ## `Semaphore`
 

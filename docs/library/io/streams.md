@@ -23,9 +23,7 @@ Open a file with `FileHandle.open(path, mode)` or `FileHandle.open_async(path, m
 | `FileMode.WriteRead` | read and write | Truncates it | Creates it |
 | `FileMode.AppendRead` | read and append | Writes go to the end | Creates it |
 
-The mode is a `FileMode` enum. Reads, writes, seeking, length queries, and
-explicit closure return `Result`. A successful empty read at a positive requested
-size means EOF; a read failure returns `IoError`.
+Reads, writes, seeks, length, and `close` return `Result`. An empty successful read means EOF, and a failure returns `IoError`.
 
 ```dream
 import system.io;
@@ -62,35 +60,21 @@ The async forms `read_async(n, token)`, `write_async(data, token)`,
 `seek_async(pos, token)`, and `flush_async(token)` return the same results.
 Neither `flush()` nor `flush_async()` forces data to durable storage.
 
-Use `Streams.read_text(file)` to read the remaining bytes as UTF-8 text, or `file.read_line()`
-for line-by-line input. Byte reads use `file.read(n)`. For chunked Unicode input use an
-incremental decoder so a chunk boundary cannot split a character.
+`Streams.read_text(file)` reads the rest as UTF-8, `read_line()` reads one line, and `read(n)` reads bytes. Use an incremental decoder when a chunk might split a character.
 
-`close()` is idempotent. Operations after closure return `ECLOSED`. Dropping the
-last reference also closes the handle, but only explicit closure can report an
-error. A failed close retires the handle: retrying an OS descriptor could close a
-different file after the descriptor has been reused.
+`close()` is safe to call again, and later operations return `ECLOSED`. Dropping the last reference also closes the handle, but only `close()` can report an error.
 
-File positions and sizes use `long`. `tell()` includes buffered read-ahead, so
-mixing line and byte reads preserves the logical position. Failed seeks preserve
-the position and any unread bytes. `FileHandle.tell()` and `.size()` return
-`Result<long, IoError>`; use `seek()` to change position.
+A failed close retires the handle. Do not retry in a way that could close a different file after the descriptor is reused.
 
-Async opens, reads, writes, and seeks use a bounded native executor or Node's
-callback-based filesystem APIs. Native execution uses four workers and a queue
-of at most 128 jobs; a saturated executor reports `EBUSY`. Browser memory-file
-operations remain immediately ready. No guest buffers are accessed by workers.
+Positions and sizes are `long`. `tell()` includes buffered read-ahead, so mixing line and byte reads keeps the logical position, and a failed seek keeps that position and any unread bytes.
 
-A handle permits one pending operation at a time. Concurrent I/O or explicit
-closure returns `EBUSY`, leaving the handle open. After a cancelled operation,
-wait for underlying work to finish before reusing or closing that handle. Dropping
-the handle is safe while work continues: the host retains the necessary resources.
+Async file calls run on a native pool of four workers, with at most 128 queued jobs. A full queue returns `EBUSY`, and browser memory-file operations are ready immediately.
 
-Tokens are checked before submission and register event subscriptions while
-pending. Completion and cancellation wake the scheduler without periodic checks. Cancellation does not undo completed writes or restore consumed input.
-A cancelled open closes its late result automatically. A submitted seek completes
-and updates read-ahead state before reporting cancellation; this prevents a
-cancelled seek from leaving the logical cursor inconsistent.
+A handle allows one pending operation. A second I/O call or `close` returns `EBUSY` and leaves the handle open.
+
+After cancellation, wait for the work already started to finish before you reuse or close that handle. Dropping the handle while that work continues is safe.
+
+Cancellation does not undo a completed write or put consumed bytes back. A cancelled open closes a late result, and a seek already submitted finishes and updates read-ahead before cancellation is reported.
 
 ## Streaming copies
 
@@ -111,10 +95,9 @@ fun main(): Result<Unit, IoError> {
 | `Streams.copy(source, destination, buffer_size)` | `Result<long, IoError>` | Copies a `Reader` to a `Writer`. |
 | `Streams.copy_async(source, destination, buffer_size, token)` | `async Result<long, IoError>` | Copies an `AsyncReader` to an `AsyncWriter`. |
 
-Both copy to EOF in chunks of at most `buffer_size` bytes (default 8192), flush the
-destination, and return the byte count. Neither closes either stream. A
-nonpositive `buffer_size` returns `EINVAL`. Completed writes stay in place
-after a failure or cancellation.
+Both copy until EOF in chunks of at most `buffer_size` bytes (default 8192), flush the destination, and return the byte count. Neither closes either stream.
+
+A nonpositive `buffer_size` returns `EINVAL`. Bytes already written stay written after a failure or cancellation.
 
 ## Stream interfaces
 
@@ -128,9 +111,7 @@ buffered wrappers:
 | `AsyncReader` | `read_async(max_bytes, token)` | Same EOF and size rules as `Reader`. |
 | `AsyncWriter` | `write_async(data, token)`, `flush_async(token)` | Writes may accept fewer bytes than given. |
 
-`Reader.read_exact` reports `EEOF` if the stream ends early. `Writer.write_all`
-retries short writes and reports an error if the writer makes no progress.
-Interface implementations must return no more bytes than requested.
+`read_exact` returns `EEOF` if the stream ends early. `write_all` retries a short write and errors if a write makes no progress; do not return more bytes than requested.
 
 ## Buffered and memory streams
 
@@ -163,24 +144,17 @@ fun main(): Result<Unit, IoError> {
 | `BufferedWriter.flush()` | `Result<Unit, IoError>` | Writes pending bytes and flushes the destination. |
 | `BufferedWriter.finish()` | `Result<Unit, IoError>` | Flushes and rejects later writes with `ECLOSED`. |
 
-Buffer wrappers retain their underlying streams without closing them. Finish a
-buffered writer explicitly so failures are visible; dropping it does not flush.
-After a partial flush failure, the unwritten bytes remain available for retry.
-`finish()` is idempotent after success and rejects subsequent writes.
+A buffer wrapper keeps the inner stream open. Call `finish()` so a flush error is visible; dropping the writer does not flush.
 
-Use a buffered reader's `seek()` when repositioning its seekable source. Do not
-read, write, or reposition that source directly while unread bytes are held by the
-wrapper. `take_buffered()` transfers those unread bytes to the caller.
+After a partial flush failure, unwritten bytes stay available to retry. A successful `finish()` rejects later writes with `ECLOSED`.
 
-Line reads support LF and CRLF, preserve standalone carriage returns, and return
-an unterminated final line before EOF. The default line limit is 1 MiB, configurable
-with `read_line(max_bytes: ...)`. A limit error consumes the prefix and the byte
-that exceeded the limit. Buffer sizes must be positive; invalid sizes return
-`EINVAL` when used.
+Seek through the buffered reader, and do not touch the inner source while the wrapper holds unread bytes. `take_buffered()` returns those bytes.
 
-Memory streams support seeking, overwriting, and zero-filled gaps. Their
-`to_bytes()` method returns an independent copy. Memory stream async methods are
-immediately ready and do not block on host I/O.
+Line reads accept LF and CRLF, keep a standalone carriage return, and return a final line with no newline. The default limit is 1 MiB (`read_line(max_bytes: ...)`).
+
+A limit error consumes the prefix and the byte past the limit. The buffer size must be positive; an invalid size returns `EINVAL` when you use it.
+
+A memory stream can seek, overwrite, and fill gaps with zeros. `to_bytes()` returns a copy, and its async methods are ready immediately.
 
 | `MemoryStream` member | Returns | Effect |
 |---|---|---|
@@ -238,9 +212,7 @@ async fun main(): Result<Unit, IoError> {
 
 ## Standard input and output
 
-Import `system.io` to use `System.stdin` as a `Reader` and `System.stdout` or
-`System.stderr` as a `Writer`. Byte reads and writes report `IoError`; they leave the
-process descriptors open. Standard streams do not support seeking.
+With `system.io`, `System.stdin` is a `Reader` and `System.stdout` and `System.stderr` are writers. Reads and writes return `IoError`, leave the process streams open, and cannot seek.
 
 ```dream
 import system;
@@ -260,11 +232,8 @@ fun main(): void {
 }
 ```
 
-`Streams.copy(System.stdin, destination)` copies incoming bytes into a writer.
-`Streams.copy(source, System.stdout)` copies from a reader to standard output;
-flush the output when the copy finishes. Reading standard input can block.
+`Streams.copy` connects standard input or output to another stream. Flush standard output when a copy to it finishes; reading standard input can block.
 
-`System.print` and `System.println` are console text shortcuts for writing to
-standard output. They flush their output, preserving order when mixed with
-`System.stdout.write`. `System.read_line` and `System.read_key` remain shortcuts
-for simple console input. Use `BufferedReader` and `Encoding` for text over a byte stream.
+`System.print` and `System.println` write text and flush, so they stay in order with `System.stdout.write`.
+
+`System.read_line` and `System.read_key` are the shortcuts for simple console input. Use `BufferedReader` and `Encoding` for text over a byte stream.

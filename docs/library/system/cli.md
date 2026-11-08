@@ -7,11 +7,9 @@ api: reference/api/system-cli.md
 
 # Command-line arguments
 
-Import `system.cli` to declare commands, named flags, typed options, positional
-arguments, and subcommands. Parsing returns `Result<ParsedArguments, CliError>`.
-It never prints or exits the process. Help and version requests are successful
-outcomes, so your application decides how to display them.
-Parsing behaves the same on native, Node, browser, and standalone WASI targets.
+Import `system.cli` to declare commands, flags, options, positionals, and subcommands. `parse` returns `Result<ParsedArguments, CliError>` and does not print or exit.
+
+Help and version are successful results, so your program decides how to show them. Parsing works the same on every target.
 
 ```dream
 import system;
@@ -59,28 +57,23 @@ mistakes are reported by `parse`, not by the builder call.
 
 ## Options and validation
 
-`string_option` defaults to an empty string and `int_option` to zero unless you
-supply a default. A required option needs an explicit value; its default is ignored.
-Flags default to false. `get_string`, `get_int`, and `get_bool` enforce the declared
-type and return errors for unknown names or missing values. An omitted optional
-positional has no value; `get_strings` returns an empty array for it.
+`string_option` defaults to `""` and `int_option` to `0` unless you set a default. A required option must be passed; its default is ignored.
 
-Repeated options retain all occurrences. `get_string` and `get_int` return the last
-one; `get_strings` and `get_ints` copy all occurrences in order. Repeating a boolean
-flag keeps it true, including short clusters such as `-vv`. `is_present(name)`
-distinguishes explicit arguments from defaults.
+Flags default to false. Getters check the declared type and return an error for an unknown name or a missing value; an omitted optional positional has no value, and `get_strings` returns an empty array.
 
-Integers are signed decimal 32-bit values, including negative values supplied as
-`--timeout -42` or `--timeout=-42`. Invalid conversions and overflow return `EARGS`.
-`--` ends option parsing, allowing positionals beginning with `-`. Argument values
-preserve empty strings, Unicode, whitespace, and embedded newlines.
+Repeated options keep every value. `get_string` and `get_int` return the last one; `get_strings` and `get_ints` return all of them, in order.
 
-Use `.choices("mode", ["fast", "slow"])` after declaring an argument to restrict
-its values. An optional default must also be one of those choices. Command and
-argument names start with an ASCII letter and contain ASCII letters, digits, `_`,
-or `-`, with a maximum of 128 characters. Short options are one ASCII letter. Duplicate names/short options,
-reserved `help`/`version` names, and invalid positional ordering return `EINVAL`.
-Required positionals precede optional ones; only the last can have `multiple: true`.
+Repeating a flag, including `-vv`, keeps it true. `is_present(name)` is true only when the argument was written on the command line.
+
+Integers are signed 32-bit decimals, including `--timeout -42` and `--timeout=-42`. A bad number or overflow returns `EARGS`.
+
+`--` stops option parsing, so a positional may start with `-`. Values keep empty strings, Unicode, spaces, and embedded newlines.
+
+Call `.choices("mode", ["fast", "slow"])` after declaring the argument. A default must be one of those choices.
+
+- A name starts with an ASCII letter, then letters, digits, `_`, or `-`, up to 128 characters. A short option is one ASCII letter.
+- A duplicate name or short option, a reserved `help` or `version` name, or a bad positional order returns `EINVAL`.
+- Required positionals come before optional ones. Only the last positional can set `multiple: true`.
 
 ## Reading parsed values
 
@@ -125,18 +118,11 @@ fun main(): void {
 }
 ```
 
-An attached subcommand is a snapshot: finish configuring it before attaching it.
-Each parsed command scope has its own values. A selected child is available through
-`parsed.subcommand`; use `command_name` to identify it.
+Finish a subcommand before `subcommand` snapshots it. Each scope has its own values; read the child from `parsed.subcommand` and check `command_name`.
 
-`--help`/`-h` return `is_help` with generated `help_text`, including for children.
-After `.version(...)`, `--version`/`-V` return `is_version` with `version_text`;
-versions propagate to subcommands. These requests bypass required argument checks.
-Help lists the description, a usage line, then `Commands:`, `Arguments:`, and`
-Options:` sections. Each row shows the argument's description followed by any`
-[default: ...]` and `[possible values: ...]`, aligned two spaces after the widest
-entry in its section. Invocation errors start with `error:`, then repeat the usage line
-and suggest `--help`.
+`--help` and `-h` set `is_help` and fill `help_text`, including for a child. After `.version(...)`, `--version` and `-V` set `is_version` and `version_text` on this command and its subcommands, and these requests skip required arguments.
+
+Help shows the description, a usage line, then `Commands:`, `Arguments:`, and `Options:`. Rows add `[default: ...]` and `[possible values: ...]` when set, and an error starts with `error:`, repeats the usage line, and suggests `--help`.
 
 ## Error codes
 
@@ -189,9 +175,7 @@ fun main(): int {
 }
 ```
 
-Run `dream run inspect.dream -- notes.txt` to print `notes.txt`.
-Use `--help` to print usage, or `--version` to print `1.0.0`. Missing the required
-path prints an error to standard error and returns exit status 2.
+`dream run inspect.dream -- notes.txt` prints `notes.txt`. `--help` prints usage, `--version` prints `1.0.0`, and a missing path writes to standard error and exits 2.
 
 The [download walkthrough](../../cookbook/download-file.md) applies this pattern to
 HTTP transfers, with each step and its cleanup explained on the page.

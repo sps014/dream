@@ -37,14 +37,9 @@ async fun main(): void {
 }
 ```
 
-Run `dream run app.dream`, then open `http://127.0.0.1:8000/hello/Dream`.
-The response is `{"message":"Hello, Dream"}` with the `application/json` content type.
-Open `/docs` to try the endpoint interactively. Stop the server with Ctrl+C.
+Run `dream run app.dream`, then open `http://127.0.0.1:8000/hello/Dream` for `{"message":"Hello, Dream"}` with content type `application/json`. Open `/docs` to try the endpoint, and stop the server with Ctrl+C.
 
-`@path` reads the URL parameter. `@json` lets the handler return a typed object.
-Configuration and startup return `Result`; this small example uses `unwrap` to report
-failures immediately. An application that needs recovery should inspect those results
-and handle the errors before accepting requests.
+`@path` reads the URL parameter, and `@json` lets the handler return a typed object. Configuration and startup return `Result`; this example uses `unwrap`, while an app that needs recovery should handle those errors before it accepts requests.
 
 Continue with [validated models](../web-server/validation.md),
 [dependencies](../web-server/dependencies.md), or the

@@ -6,11 +6,7 @@ icon: material/laptop
 
 # Package a CLI program
 
-`dreamer pack` builds a runnable package and writes a relocatable executable to
-`target/pack/<os>-<arch>/<name>-<os>-<arch>` (`.exe` on Windows).
-Only host libraries selected by live calls are copied beside the executable.
-The capability libraries are core, Unicode, crypto, process, timezone, net, CLI, data, and I/O;
-programs without host calls require no host libraries.
+`dreamer pack` writes a relocatable executable to `target/pack/<os>-<arch>/<name>-<os>-<arch>` (`.exe` on Windows). Beside it, Dream copies only the host libraries the program calls (core, Unicode, crypto, process, timezone, net, CLI, data, and I/O), and a program with no host calls gets none.
 
 | `--target` | Platform |
 |---|---|
@@ -45,8 +41,6 @@ dreamer pack --target linux-arm64
 dreamer pack --target all
 ```
 
-Keep the executable and its adjacent libraries together when sharing or moving
-the output folder. Files listed in `[package].assets` are copied beside the
-executable too. Target machines need a compatible OS but do not need the
-Dream compiler or toolchain. Packaging requires a bin package. Browser and Node
-output uses WebAssembly; mobile library packaging has a separate workflow.
+Keep the executable and its adjacent libraries together when you share or move the folder. Files listed in `[package].assets` are copied beside the executable too.
+
+The target machine needs a compatible OS, not the Dream compiler, and packaging requires a bin package. Browser and Node output is WebAssembly, and mobile libraries use a separate workflow.

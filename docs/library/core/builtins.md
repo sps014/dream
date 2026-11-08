@@ -53,13 +53,15 @@ fun main() {
 
 Example: `Math.sqrt(9.0)` → `3.0`. A negative input is NaN.
 
-`Math.floor`, `ceil`, `round`, `sqrt`, `pow`, `sin` / `cos` / `tan`, `asin` / `acos` / `atan` / `atan2`, `log` / `log10` / `exp` / `hypot`, and `Math.PI` / `Math.E`. Angles are radians. `round` sends halfway cases away from zero (`Math.round(-2.5)` is `-3.0`). Every function gives the same result on native and WebAssembly targets.
+`Math.floor`, `ceil`, `round`, `sqrt`, `pow`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `log`, `log10`, `exp`, `hypot`, `Math.PI`, and `Math.E`.
+
+Angles are radians. `round` sends halfway cases away from zero (`Math.round(-2.5)` is `-3.0`), and every function matches on native and WebAssembly.
 
 Absolute value, minimum, maximum, and clamping are methods on the number itself: `x.abs()`, `x.min(y)`, `x.max(y)`, and `x.clamp(low, high)`.
 
 ## Timing
 
-`Time.delay(ms).await` / `Time.sleep(ms).await` need an `async` function. `Time.nano_time()` is a monotonic clock. `Stopwatch` times a span — also on [DateTime](../system/datetime.md).
+`Time.delay(ms).await` and `Time.sleep(ms).await` need an `async` function. `Time.nano_time()` is monotonic, and `Stopwatch` times a span (also under [DateTime](../system/datetime.md)).
 
 ## Other
 
@@ -69,12 +71,11 @@ Absolute value, minimum, maximum, and clamping are methods on the number itself:
 
 ## Waiting for cancellation
 
-Cancellation tokens can suspend until cancellation, or wait for another future while
-observing cancellation. Waits use scheduler notifications rather than periodic checks.
-`wait` returns `Err(CancelledError)` and cancels the supplied future when cancellation
-wins; completed side effects remain observable. A wait detaches its subscription on completion or when its cancelled future is
-released. Tokens retain their existing cross-worker sharing behavior.
-Use `wait_void` for a `Future<void>`; it returns `Ok(Unit())` when the operation completes.
+A token can wait until it is cancelled, or wait on another future and cancel that future if the token wins.
+
+- `wait` returns `Err(CancelledError)` when cancellation wins. Work that already finished stays visible.
+- The wait ends its subscription when it completes, or when the cancelled future is released. Tokens can be shared across workers.
+- `wait_void` is for a `Future<void>`. It returns `Ok(Unit())` when the operation completes.
 
 ```dream
 import system;

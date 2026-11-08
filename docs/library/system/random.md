@@ -8,7 +8,7 @@ api: reference/api/package-system.md
 # Random
 
 
-Use Random for repeatable tests, games, and shuffling. Giving it the same seed reproduces the same sequence. Use [SecureRandom](../security/crypto.md) when unpredictability is a security requirement.
+Use `Random` for tests, games, and shuffling. The same seed repeats the same sequence; use [SecureRandom](../security/crypto.md) when the values must be unpredictable.
 
 **Import:** `import system;`
 

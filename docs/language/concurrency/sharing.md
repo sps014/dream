@@ -29,8 +29,8 @@ A task body may be a **capturing lambda** — as long as everything it captures 
 - a blittable / unmanaged local,
 - a `string`,
 - a value struct of `shared` fields,
-- a **`shared class`** instance (captured by reference, guarded by its lock word), or
-- a **managed heap value moved by pointer hand-off** — an ordinary class instance, an array (`int[]`, `Job[]`), `List<T>`, … Tasks share the parent's memory, so the move is zero-copy: the object's ownership transfers and **the sender's binding cannot be used afterwards** (a use after the move is a compile error until it is reassigned).
+- a **`shared class`** instance, captured by reference and guarded with `lock`, or
+- a managed heap value that **moves** into the task — an ordinary class, an array (`int[]`, `Job[]`), `List<T>`, and similar. The sender cannot use that binding again until it is assigned.
 
 What stays rejected: anything that would copy a non-shared *reference* across the boundary without transferring ownership — e.g. a value struct embedding an ordinary class field.
 
@@ -81,8 +81,8 @@ async fun main(): void {
 }
 ```
 
-`lock (obj) { ... }` is a reentrant mutual-exclusion block and requires a `shared class` (a lock word), not every `shared` type.
-A `shared class`'s fields must be `shared` or managed heap references whose graph joins the object's shared region — see the [closed-graph field rule](../types/classes-structs.md).
+`lock (obj) { ... }` is reentrant and requires a `shared class`.
+A `shared class`'s fields must be `shared` or managed references whose reachable values join the object — see the [closed-graph field rule](../types/classes-structs.md).
 
 ## What a task can capture
 

@@ -7,7 +7,7 @@ hide: [toc]
 
 # Dreamer: manage your project
 
-`dreamer` helps you create, run, test, and share Dream projects. Run its commands from your project folder. It reads your `dream.toml` settings and installs the packages your project needs.
+`dreamer` creates, runs, tests, and shares Dream projects. Run it from the project folder: it reads `dream.toml` and installs the packages the project needs.
 
 ```sh
 dreamer init console hello

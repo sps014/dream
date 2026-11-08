@@ -7,9 +7,7 @@ api: reference/api/system-gpu.md
 
 # Writing shaders
 
-A shader is a top-level Dream function with a stage attribute. Dream checks it like any other
-function, then compiles it for the GPU when the program builds. Shader functions are not callable
-from CPU code; run them through the generated `GpuShaders` class instead.
+A shader is a top-level function with a stage attribute. It is checked and compiled for the GPU when the program builds, and CPU code runs it through the generated `GpuShaders` class.
 
 ## Stages
 
@@ -99,10 +97,7 @@ When the Slang compiler itself rejects a shader, Dream maps its message back to 
 | `discard_fragment()` | drops the current pixel, in fragment shaders |
 | `workgroup_barrier()`, `storage_barrier()` | waits until every thread of the workgroup reaches this point |
 
-`GpuMath` has the usual scalar and vector math: `sin`, `cos`, `sqrt`, `pow`, `exp`, `log`, `min`,
-`max`, `clamp`, `mix`, `step`, `smoothstep`, `reflect`, `fract`, and more. Each works on `float`,
-`float16` and GPU vectors, component by component. `GpuMath` exists only inside shaders; on the
-CPU use `Math`.
+`GpuMath` covers `sin`, `cos`, `sqrt`, `pow`, `exp`, `log`, `min`, `max`, `clamp`, `mix`, `step`, `smoothstep`, `reflect`, `fract`, and more, on `float`, `float16`, and GPU vectors. On the CPU, use `Math`.
 
 `GpuAtomic` updates a buffer element that many threads change at once: `add`, `add_float`, `sub`,
 `min`, `max`, `and`, `or`, `xor`, `exchange` and `compare_exchange`.
@@ -137,22 +132,15 @@ fun group_sums(@readonly values: GpuBuffer<float>, sums: GpuBuffer<float>, n: in
 }
 ```
 
-The length must be a constant. Every thread of the workgroup must reach each
-`workgroup_barrier()`, so never `return` early before a barrier; guard the work with `if`, as
-above. WebGPU rejects a shader whose barrier depends on a per-thread condition.
+The length must be a constant, and every thread must reach each `workgroup_barrier()`, so guard work with `if` instead of returning early. WebGPU rejects a barrier that depends on a per-thread condition.
 
 ## Subgroups
 
-Threads also run in small hardware groups called subgroups, usually 32 or 64 wide.
-`subgroup_add`, `subgroup_min`, `subgroup_max`, `subgroup_prefix_add`, `subgroup_ballot`,
-`subgroup_broadcast`, `subgroup_shuffle` and the other `subgroup_` functions exchange values
-within one without workgroup memory. Check `GpuFeature.Subgroups` first; browsers may not offer
-them.
+Threads also run in subgroups, usually 32 or 64 wide. The `subgroup_` functions share values inside one subgroup; check `GpuFeature.Subgroups` first, because a browser may not offer it.
 
 ## float16
 
-`float16` values and `GpuBuffer<float16>` halve memory use and are faster on many GPUs. Shaders that
-use them need `GpuFeature.Float16`. Uploading and reading `float16` buffers works on every device.
+`float16` values and `GpuBuffer<float16>` use half the memory and are faster on many GPUs. Shader arithmetic needs `GpuFeature.Float16`; uploading and reading the buffer works on every device.
 
 ## The generated GpuShaders class
 

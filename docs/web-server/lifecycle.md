@@ -6,7 +6,7 @@ icon: material/power
 
 # Lifecycle and application state
 
-A web service shares its process lifetime with every other Dream program: wrap `main` in `App.run` from `system.app`. Startup code goes in the `start` function, and each resource registers its release with `App.on_stop` right after it is acquired. Ctrl+C and `SIGTERM` then stop the server gracefully.
+Wrap `main` in `App.run` from `system.app`. Put startup in the `start` function, register each release with `App.on_stop` right after you acquire the resource, and let Ctrl+C or `SIGTERM` stop the server.
 
 ```dream
 import system;
@@ -40,7 +40,9 @@ async fun main(): int {
 }
 ```
 
-When the process is asked to stop, `App.stopping` is cancelled. `run` without a token watches that token, so it stops accepting connections, lets running requests finish, and returns. `App.run` then runs the `on_stop` cleanups, newest first, and returns the exit code for `main`: `130` after Ctrl+C and `143` after `SIGTERM`. If `start` returns an error, for example because `run` could not bind the port, the error is printed, the cleanups registered so far run, and the exit code is `1`.
+When the process is asked to stop, `App.stopping` is cancelled. `run` without a token watches that token: it stops accepting connections, lets running requests finish, and returns.
+
+`App.run` then runs the `on_stop` cleanups, newest first. The exit code is `130` after Ctrl+C, `143` after `SIGTERM`, and `1` when `start` fails (the error is printed, and cleanups registered so far still run).
 
 To start the server without blocking `start`, call `listen` and register the drain as a cleanup:
 
@@ -61,7 +63,9 @@ App.on_stop(
 | `shutdown()` | Stops accepting connections and cancels pending transport work. |
 | `wait(token?)` | Waits for active requests and their cleanup, then releases the listener. |
 
-`shutdown` stops acceptance and cancels pending transport operations. `wait` drains active requests and their cleanup. Call both during controlled termination. A trailing cancellation token on `listen`, `run`, or `wait` participates in structured cancellation. See [App lifetime](../library/system/app.md) for the shutdown timeout and the other process events.
+`shutdown` stops acceptance and cancels pending transport operations. `wait` drains active requests and their cleanup.
+
+Call both during controlled termination. Pass a cancellation token to `listen`, `run`, or `wait` when that call should stop with the shutdown ([App lifetime](../library/system/app.md)).
 
 ## Request context
 

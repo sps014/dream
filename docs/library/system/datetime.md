@@ -59,7 +59,7 @@ fun main() {
 
 `to_string()` for a default rendering; `to_iso8601()` for ISO text. `parse` (ISO-8601) returns `Result`.
 
-`Duration` is a millisecond span. Create one with `Duration(millis)`, `from_seconds`, `from_minutes`, `from_hours`, or `from_days`; read it with the `millis` field or `as_seconds()`; and combine spans with `add` / `sub`. `DateTime.add(d)` and `until(other)` use it.
+`Duration` is a millisecond span, built with `Duration(millis)`, `from_seconds`, `from_minutes`, `from_hours`, or `from_days`, and read with `millis` or `as_seconds()`. `add` and `sub` combine spans; `DateTime.add` and `until` use the same type.
 
 ## `TimeZone`
 
@@ -67,4 +67,4 @@ Named zones for “what time is it in Tokyo” independent of the machine’s lo
 
 ## `Time` / `Stopwatch`
 
-`Time.sleep(ms).await` / `delay(ms)` (async, optional last `CancellationToken`). `Time.nano_time()` for a monotonic clock. `Stopwatch` records elapsed time. Also listed under [Built-ins](../core/builtins.md).
+`Time.sleep(ms).await` and `delay(ms)` are async and take an optional `CancellationToken`. `Time.nano_time()` is monotonic, and `Stopwatch` records elapsed time ([Built-ins](../core/builtins.md)).

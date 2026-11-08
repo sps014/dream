@@ -109,21 +109,13 @@ Cross builds read these environment variables:
 | `SDKROOT` | Apple SDK path |
 | `DEVELOPER_DIR` | Xcode installation to use |
 
-Cross builds use the same pinned clang and linkers as host builds, so the only extra inputs are the
-target's system files and capability libraries. Place target-built capability libraries in
-`~/.dream/targets/<target-triple>/lib/` (override the targets root with `DREAM_TARGETS`),
-including Windows import libraries where applicable. The compiler validates architecture,
-file format and the current library version marker before linking; it never substitutes host libraries.
-A cross link needs the target's C library and startup files: set `DREAM_SYSROOT` to the target
-sysroot (for Android, the NDK's `toolchains/llvm/prebuilt/<host>/sysroot`), or `SDKROOT` for Apple
-SDKs. `DEVELOPER_DIR` selects an Xcode installation. On macOS, `xcrun` resolves the selected
-macOS/iOS SDK. Cross builds require the target runtime sources and the required build-tools installation.
+Place target-built capability libraries, including Windows import libraries, in `~/.dream/targets/<target-triple>/lib/` (`DREAM_TARGETS` overrides that folder). A library for the wrong architecture, file format, or version is rejected, and a host library is not used in its place.
 
-Use `dreamer toolchain doctor --target aarch64-unknown-linux-gnu` to inspect these requirements.
-Windows icon resources are compiled with the pinned `llvm-rc`.
-The configuration hash and resolved tool/library identities, including resolved SDK arguments, enter build stamps, so changing
-the compiler, SDK or capability libraries invalidates cached outputs. Cross-target PGO requires
-running profiles on the target and is currently rejected.
+A cross link needs the target's C library and startup files. Set `DREAM_SYSROOT` to the target sysroot (for Android, the NDK's `toolchains/llvm/prebuilt/<host>/sysroot`), or `SDKROOT` for Apple SDKs.
+
+`DEVELOPER_DIR` selects the Xcode installation. Cross builds also need the target runtime sources and the required build tools.
+
+Use `dreamer toolchain doctor --target aarch64-unknown-linux-gnu` to inspect these requirements. Changing the compiler, SDK, or capability libraries rebuilds cached outputs, and cross-target profile-guided optimization is rejected.
 
 ### LSP
 

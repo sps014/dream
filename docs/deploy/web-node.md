@@ -26,18 +26,20 @@ dreamer build --release
 | `target/web/` | `<stem>.wasm`, `<stem>.wat`, `<stem>.abi.json`, `<stem>.web.runtime.js` | The browser page (`index.html`) |
 | `target/node/` | `<stem>.wasm`, `<stem>.abi.json`, `<stem>.node.runtime.js`, your assets | `run.mjs` under Node |
 
-`<stem>` is the entry file's name without `.dream`, such as `main`. Debug and release builds share these folders. Optimized builds also write `.gz` and `.br` copies of the `.wasm` and runtime files in `target/web/` for web servers that serve pre-compressed files.
+`<stem>` is the entry file's name without `.dream`, such as `main`, and debug and release builds share these folders. Optimized builds also write `.gz` and `.br` copies of the `.wasm` and runtime files in `target/web/` for servers that serve pre-compressed files.
 
 ## Browser
 
-Keep your page, assets, and the generated files under `target/web/` together. Files listed in `[package].assets` are copied into `target/web/` and `target/node/` on every build. The page created by `dreamer init web` loads the generated program from that folder. Serve the files through an HTTP server; opening the page directly from disk can block loading.
+Keep your page, assets, and the generated files under `target/web/` together. `[package].assets` are copied into `target/web/` and `target/node/` on every build, and the page from `dreamer init web` loads the program from that folder.
+
+Serve the files through an HTTP server. Opening the page directly from disk can block loading.
 
 Use `dreamer run --target web` to check the page locally. Deploy its files through your chosen web host when you are ready.
 
 ## Node
 
-Keep `run.mjs`, the generated files under `target/node/`, and any assets your app reads. The person running it needs Node. Run the scaffolded launcher with `node run.mjs`.
+Keep `run.mjs`, the generated files under `target/node/`, and any assets your app reads. The person running it needs Node, and starts the scaffolded launcher with `node run.mjs`.
 
 ## Check before sharing
 
-Use the same release output you tested. Check relative asset paths, permissions, and environment variables on a clean machine. [Build and run](../tooling/build-run.md) explains environment selection; [integration](../language/interop/index.md) explains loading and calling your program.
+Use the same release output you tested, and check asset paths, permissions, and environment variables on a clean machine. [Build and run](../tooling/build-run.md) covers environment selection, and [integration](../language/interop/index.md) covers loading and calling the program.

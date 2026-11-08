@@ -28,9 +28,9 @@ dream --target wasm32-wasip2 hello.dream
 wasmtime run hello.wasm
 ```
 
-The output is `Hello from WASI`. Compilation also writes readable `hello.wat` and
-`hello.abi.json` files. The compiler uses a pinned WASI SDK.
-Install it with `dreamer toolchain install wasi-sdk` before compiling.
+The output is `Hello from WASI`. Compilation also writes `hello.wat` and `hello.abi.json`.
+
+Install the WASI SDK with `dreamer toolchain install wasi-sdk` before compiling.
 
 For Preview 3, select `--target wasm32-wasip3`. With the pinned Wasmtime 49.0.4,
 run the component with its Preview 3 features enabled:
@@ -65,15 +65,13 @@ async fun main(): void {
 }
 ```
 
-Enable HTTP imports with `-S http=y`. Socket programs also need the host's network permissions;
-Wasmtime grants them with `-S inherit-network=y`. Continue to handle `Result.Err` from network
-operations because connection failures and host restrictions can still reject a request.
+Enable HTTP with `-S http=y`. Sockets also need host network permission (`-S inherit-network=y` on Wasmtime), and you should still handle `Result.Err` when a connection fails or the host rejects the request.
 
-Command components provide stdio, files, clocks, secure randomness, TCP, UDP, and HTTP.
-HTTP exposes individual responses; an explicit redirect limit reports an unsupported-operation
-error. Unsupported host capabilities produce a compiler diagnostic. JavaScript interop, windowing,
-GPU devices, process spawning, and CLI parsing are unavailable on these targets. Use native output
-for CLI parsing, and [JavaScript interop](index.md) for browser and Node applications.
+Command components provide stdio, files, clocks, secure randomness, TCP, UDP, and HTTP. HTTP returns individual responses, and an explicit redirect limit reports an unsupported operation.
+
+JavaScript interop, windowing, GPU devices, process spawning, and CLI parsing are unavailable. Use a native build for CLI parsing, and [JavaScript interop](index.md) for browser and Node.
+
+An unsupported host capability is a compiler error.
 
 Components currently expose the command entry point. Exported component libraries require an
 explicit WIT interface and are rejected by this target.

@@ -8,7 +8,7 @@ api: reference/api/system-testing.md
 # Testing
 
 
-Tests describe behavior you want to keep working. Mark a function with `@test`, use assertions to check its results, and run it with `dreamer test` or `dream test`. A failed assertion stops the test and reports the problem.
+Mark a function with `@test`, check results with assertions, and run `dreamer test` or `dream test`. A failed assertion stops the test and reports the problem.
 
 **Import:** `import system.testing;`
 
@@ -31,7 +31,7 @@ dreamer test
 dream test --filter addition tests/
 ```
 
-`@test` is for a top-level `fun name(): void` or `async fun name(): void`, never `main`. Test files must not declare `main`. Put tests in a test project (`type = "test"`) or a package's `tests/` folder; see [Test a project](../../tooling/testing.md).
+`@test` is a top-level `fun name(): void` or `async fun name(): void`, never `main`, and the file must not declare `main`. Put tests in a test project (`type = "test"`) or a package's `tests/` folder ([Test a project](../../tooling/testing.md)).
 
 `@timeout(ms)` sets a limit for one test. There is no default limit.
 
@@ -56,7 +56,7 @@ fun main() {
 }
 ```
 
-`Test.run(name, body)` prints `RUN <name>` before the body and `PASS <name>` after it. When the body leaves more live objects than it found, it prints `LEAK <name> live=+N` first. `Test.run_with_timeout(name, ms, body)` also prints the limit (`RUN <name> timeout=<ms>`); `dream test` enforces it.
+`Test.run(name, body)` prints `RUN <name>` before the body and `PASS <name>` after it. Extra live objects print `LEAK <name> live=+N` first, and `Test.run_with_timeout` prints `timeout=<ms>`, which `dream test` enforces.
 
 | Call | Meaning |
 | --- | --- |

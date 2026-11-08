@@ -7,7 +7,7 @@ api: reference/api/system-collections.md
 
 # List: items in order
 
-A `List<T>` grows as you add items. Positions start at zero. Use it when order matters and you want to read or change an item by position.
+A `List<T>` grows as you add items, and positions start at zero. Use it when order matters and you read or change an item by position.
 
 **Import:** `import system.collections;` · **Availability:** desktop, browser, and Node.
 
@@ -27,7 +27,9 @@ Output: `1, 2, 3, 4`.
 
 ## Create and grow
 
-Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves room; it does not create that many items. `reserve(additional)` makes room for that many more items beyond the current length. It returns `Err(CapacityError)` for a negative count or a total too large to store, and leaves the list unchanged in that case. Read the item count with `.length` and reserved room with `.capacity`.
+Create a list with `List<T>()`, `List<T>(capacity)`, or a typed literal. Capacity reserves room and does not create items.
+
+`reserve(additional)` makes room for that many more items. A negative count or a total too large returns `Err(CapacityError)` and leaves the list unchanged; `.length` is the item count and `.capacity` is reserved room.
 
 `insert(index, value)` adds an item at a position and moves later items. The index may equal `.length` to append.
 
@@ -47,7 +49,7 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 
 `list[index]` requires a valid position and stops the program if the position is outside the list. Indexed assignment replaces an item.
 
-`pop()` returns `Option<T>` because a list can be empty. `remove_at(index)` returns whether it removed an item; `remove(value)` removes the first matching item. Searches compare items by value, so strings match by their contents.
+`pop()` returns `Option<T>` because a list can be empty. `remove_at(index)` reports whether it removed an item, and `remove(value)` removes the first match by value, so strings match by their contents.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
@@ -66,9 +68,13 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 
 ## Copy, join, and sort
 
-`clone()` makes a new list holding the same elements. Objects inside it are still shared; it does not copy each object. `slice(start, end)` makes a list from a range, excluding `end`. It panics unless `0 <= start <= end <= length`, the same rule as array and span `slice`. `concat(other)` makes a combined list. `reverse()` changes the current list.
+`clone()` makes a new list of the same elements. Objects inside stay shared; the list itself is the copy.
 
-`join(separator)` converts items to text and joins them. `sort()` uses the elements' comparison order. `sort_by(compare)` takes your comparison function: return a negative number when the first item should come first, zero when equal, or a positive number when the second should come first. Sorting is stable, so equal items keep their relative order. `binary_search` requires a list already sorted in the matching order.
+`slice(start, end)` copies a range excluding `end`, and stops unless `0 <= start <= end <= length`. `concat(other)` makes a combined list, and `reverse()` changes this list.
+
+`join(separator)` turns items into text and joins them. `sort()` uses each element's comparison order.
+
+`sort_by(compare)` returns negative, zero, or positive for less, equal, or greater, and the sort is stable. `binary_search` needs that same order already.
 
 `take_array()` returns an array containing the items and leaves the list empty. `clear()` removes every item while keeping reserved capacity.
 
@@ -89,6 +95,6 @@ Use `List<T>()`, `List<T>(capacity)`, or a typed list literal. Capacity reserves
 
 A span keeps showing the storage it was taken from. After the list grows, shrinks, or is emptied, take a new span.
 
-A `for` loop visits items from first to last. Use `list.seq()` to start the transformations described in [queries](seq.md). Collection predicates such as `any` are also available directly.
+A `for` loop visits items from first to last. `list.seq()` starts the steps in [queries](seq.md), and predicates such as `any` are also available directly.
 
 See [all List signatures](../../reference/api/collections-list.md), [queries](seq.md), and [collection choice](index.md).

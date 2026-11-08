@@ -26,8 +26,7 @@ Store a function, pass one to another function, or create a function that rememb
 
 ### Generic functions
 
-Add `<TypeParam>` after the name. A generic function works for each concrete type you use, with no
-extra cost when the program runs. See [Generics](../abstraction/generics.md).
+Add `<TypeParam>` after the name so the function works for each concrete type you use. See [Generics](../abstraction/generics.md).
 
 ```dream
 fun identity<T>(value: T): T {
@@ -64,7 +63,11 @@ A [generic function used as a first-class value](../abstraction/generics.md#gene
 
 #### Arrow-lambda literals
 
-An anonymous function can be written inline with arrow syntax, `(params) => expr` or `(params) => { statements }`. A parameter's `: Type` annotation is optional when the lambda is used in a `fun(...)`-typed context (a `let` annotation, or a parameter/argument whose declared type is `fun(...)`): omitted parameter types and the return type are taken from that context. When every parameter is explicitly annotated, the return type can instead be inferred from the body — so `let f = (x: int) => x * 2;` works without a surrounding `fun(...)` annotation. A lambda with any untyped parameter and no `fun(...)` context is rejected.
+An anonymous function is `(params) => expr` or `(params) => { statements }`.
+
+- Omit `: Type` when a `fun(...)` type is already expected, such as a `let` annotation or a `fun(...)` parameter. Parameter and return types come from that context.
+- When every parameter has a type, the return type comes from the body, so `let f = (x: int) => x * 2;` needs no `fun(...)` annotation.
+- A lambda with an untyped parameter and no `fun(...)` context is rejected.
 
 ```dream
 let add: fun(int, int): int = (x, y) => x + y; // x, y inferred as int from the `let` annotation
@@ -83,7 +86,7 @@ nums.push(2);
 nums.sort_by((a, b) => a - b); // `a`/`b` inferred as `int` from `sort_by`'s `cmp: fun(int, int): int`
 ```
 
-A lambda written with an untyped parameter and no surrounding `fun(...)` context cannot have its type inferred and is rejected with an error asking for one. A lambda may declare its own type parameters (`<T>(x: T) => x`), which work for each concrete type you use — from a `fun(...)` context or by binding a generic item and using it at each site.
+A lambda may declare its own type parameters, as in `<T>(x: T) => x`. Use it where a `fun(...)` type is expected, or bind it and pick a type at each call.
 
 #### Async lambdas
 
@@ -100,11 +103,15 @@ async fun main(): void {
 }
 ```
 
-The expected context must be `fun(...): Future<T>` (not `fun(...): T`). A sync lambda against a `Future`-returning `fun` type, or an async lambda against a non-`Future` return, is a compile-time error. Named `async fun` values work the same way — `let f: fun(int): Future<int> = delayed_triple;` boxes the function as a `Future`-returning `fun` value.
+The expected type must be `fun(...): Future<T>`, not `fun(...): T`. A sync lambda cannot fill a `Future` return, and an async lambda cannot fill a plain return.
+
+A named `async fun` uses the same type: `let f: fun(int): Future<int> = delayed_triple;`.
 
 #### Capturing closures
 
-A lambda's body may also reference variables from an enclosing function; this is a *capture*. A captured name is captured **by reference**, not by value: the closure and the enclosing function share the same storage, so a write from either side is visible to the other, and the closure keeps working after the enclosing function has returned. A lambda may capture more than one name, and capture is transitive: a lambda nested inside another lambda may reach past its immediate parent to a grandparent's (or higher) local — each level forwards what the level below it needs, one hop at a time.
+A lambda may use variables from an enclosing function. That capture is shared: a write from either side is visible to the other, and the closure still works after the enclosing function returns.
+
+A lambda may capture several names. A nested lambda can use a local from further out.
 
 ```dream
 fun make_adder(n: int): fun(int): int {
@@ -130,7 +137,7 @@ System.println(inc()); // 2
 
 Each call to a function that returns a capturing lambda creates its own independent storage — two counters from separate `make_counter()` calls do not interfere with each other.
 
-Capturing closures are ordinary `fun(...)` values. The closure keeps the values it captured until nothing uses the closure anymore. A self-capturing closure (a `fun` that stores itself into its own environment) can still form a reference cycle and leak, just like mutually-referencing classes — break such cycles deliberately or avoid them.
+A closure is an ordinary `fun(...)` value and keeps what it captured until nothing uses it. A closure that stores itself can leak, so avoid that or break the cycle on purpose.
 
 Capturing closures **cannot** be passed to JavaScript APIs — the JS bridges drop the closure environment. See [Callbacks](../interop/callbacks.md).
 

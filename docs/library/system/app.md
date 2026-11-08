@@ -7,15 +7,11 @@ api: reference/api/system-app.md
 
 # App lifetime
 
-Import `system.app` to give a program a clear startup and shutdown. Wrap `main` in
-`App.run`, do your startup in the function you pass to it, and register a cleanup for
-each resource right after you acquire it. Ctrl+C, `SIGTERM`, `App.quit` and an
-operating-system shutdown then all stop the program the same way: cleanups run newest first and
-`run` returns the exit code for `main` to return.
+Import `system.app` and wrap `main` in `App.run`. Do startup in the function you pass, and register a cleanup right after you acquire each resource.
 
-The same package reports what happens around the program: the computer going to sleep and
-waking up, the user session being locked, displays turning off, the app moving to the
-background, the power source and color scheme changing, and the system running low on memory.
+Ctrl+C, `SIGTERM`, `App.quit`, and an operating-system shutdown all stop the same way: cleanups run newest first, and `run` returns the exit code.
+
+The same package reports sleep and wake, session lock, display power, backgrounding, power source, color scheme, locale, and low memory.
 
 ## Run a program
 
@@ -52,15 +48,13 @@ the process exits with code `130`.
 
 `run` works in three steps:
 
-1. **Startup.** It calls `start`. Hooks and cleanups registered here are active straight away.
-   If `start` returns `Err`, the error is printed to standard error as `error: CODE: message`,
-   the cleanups registered so far run, and `run` returns `1`.
-2. **Running.** After `start` returns `Ok`, the program keeps running until something asks it
-   to stop. `start` may also keep running for the whole program, for example a web server's
-   `run` call, as long as it returns once `App.stopping` is cancelled.
-3. **Shutdown.** `App.stopping` is cancelled first. `run` waits for `start` if it is
-   still running, then runs the `on_stop` cleanups in reverse registration order, so a resource
-   is released before the resources it depends on.
+1. **Startup.** It calls `start`, and hooks registered there are active immediately.
+   If `start` returns `Err`, the error is printed as `error: CODE: message`, cleanups so far run, and `run` returns `1`.
+
+2. **Running.** After `Ok`, the program runs until something asks it to stop.
+   `start` may itself run until `App.stopping` is cancelled, for example a server.
+
+3. **Shutdown.** `App.stopping` is cancelled first. `run` waits if `start` is still going, then runs `on_stop` cleanups newest first.
 
 All of shutdown shares one budget, `shutdown_timeout_ms` (5000 ms by default), counted from the
 moment shutdown begins. If `start` or a cleanup is still running when the budget is spent, it is
@@ -74,10 +68,9 @@ cancelled, a warning is printed, and the remaining cleanups still run.
 | `start` returned `Err` | `1` |
 | Operating-system shutdown or logout | `0` |
 
-A second Ctrl+C or `SIGTERM` while shutdown is running ends the process immediately with that
-signal's exit code. Calling `run` while another `run` is still active prints an error and returns `1`.
-Outside `run`, `App.stopping` is never cancelled, so code that watches it also works in
-programs and tests that do not use `run`.
+A second Ctrl+C or `SIGTERM` during shutdown exits immediately with that signal's code. Calling `run` while another `run` is active prints an error and returns `1`.
+
+Outside `run`, `App.stopping` is never cancelled, so code that watches it also works without `run`.
 
 `on_stop` returns `Err(AppError)` with code `ESTOPPING` once shutdown has begun, because a
 cleanup registered then would never run. Every hook and cleanup returns a `Subscription`; call
@@ -110,9 +103,7 @@ App.on_shutdown_requested(
 | `OsQuit` | The app was asked to quit from its menu or Dock | Yes |
 | `LastWindowClosed` | The program's last window closed | Yes |
 
-Windows asks running programs before the session ends, and a veto there keeps the session
-alive. The final notice that the session is ending cannot be vetoed. Only the first accepted
-request starts shutdown; later requests are ignored.
+On Windows, a veto of the first session-ending notice keeps the session alive. The final notice cannot be vetoed, and only the first accepted request starts shutdown.
 
 No platform reports `OsQuit` or `LastWindowClosed` yet: Cmd+Q and closing a window currently
 arrive as `WindowEvent.CloseRequested` on each window. Use them with `App.simulate` to
@@ -120,9 +111,9 @@ test vetoable shutdown paths.
 
 ## Operating-system events
 
-Hooks run on the program's main scheduler, one event at a time, in registration order. They are
-not awaited, so keep them short and start a task for longer work. Each event that also has a
-current value is readable as a property, which is filled in when `run` starts:
+Hooks run on the main scheduler, one event at a time, in registration order. They are not awaited, so keep them short and start a task for longer work.
+
+A value that can change is also a property, filled in when `run` starts:
 
 | Hook | Property | Reports |
 | --- | --- | --- |
@@ -181,9 +172,7 @@ async fun main(): int {
 | Locale | Yes | Yes | No | Yes | No |
 | Low memory | Yes | Yes | No | No | No |
 
-On macOS, session lock, theme and locale changes are noticed within about two seconds. Events a
-platform does not report never fire, and the matching property keeps its starting value:
-unlocked, displays on, active, `PowerSource.Unknown` and `SystemTheme.Light`.
+On macOS, session lock, theme, and locale changes show up within about two seconds. Events a platform does not report never fire, and the property stays at its start value: unlocked, displays on, active, `PowerSource.Unknown`, and `SystemTheme.Light`.
 
 ## Test lifetime code
 

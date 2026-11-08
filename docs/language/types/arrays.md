@@ -151,7 +151,9 @@ grid[0][0] = 32;
 
 ## `Span<T>`: a bounds-checked view without copying
 
-`Span<T>` is a [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type) that views a contiguous run of an existing array's elements — no copy, no heap allocation of its own, and its own logical range is enforced independently of the backing array's actual size. Because it is a `ref struct`, the compiler rejects any use that would let one escape the stack frame that created it (a field, a generic type argument, a lambda capture, or an `async` parameter):
+`Span<T>` is a [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type). It views a run of an existing array. It does not copy those elements.
+
+It cannot leave the function that created it. You cannot store it in a field, use it as a generic argument, capture it in a lambda, or pass it to an `async` function.
 
 ```dream
 let xs = [1, 2, 3, 4, 5];
@@ -165,15 +167,15 @@ System.println(xs[1]); // 20
 let owned = mid.to_array(); // copies into a fresh, independently-owned array
 ```
 
-`Span<T>` keeps its backing array strongly referenced (unlike `RawPtr<T>` below), so the memory it views can never be freed out from under it. Prefer `Span<T>` over a raw index range whenever a function only needs to read/write a *slice* of an array without owning or resizing it.
+`Span<T>` keeps its array alive for as long as the span is used, unlike `RawPtr<T>` below. Prefer a span when a function only reads or writes part of an array and does not resize it.
 
 `ReadOnlySpan<T>` is the same view without writes (`span.as_read_only()`, or `ReadOnlySpan.of(xs)`), and `list.as_span()` / `list.as_read_only_span()` view a `List<T>`'s live elements. `for (let x in span)` iterates any of them without allocating an iterator. See [Spans](spans.md) for the full API, the string view `ReadOnlySpan<char>`, and what makes spans free at runtime.
 
 ## `RawPtr<T>`: raw memory (`@unsafe`)
 
-`RawPtr<T: unmanaged>` carries an address without a length, array header, or ARC ownership.
-Allocation is uninitialized by default. Reads, writes, indexing, casts and pointer arithmetic
-require `@unsafe` and do not check bounds. Initialize a value before reading it.
+`RawPtr<T: unmanaged>` is an address with no length and no automatic cleanup. Allocation starts uninitialized.
+
+Reads, writes, indexing, casts, and pointer arithmetic require `@unsafe` and do not check bounds. Initialize a value before reading it.
 
 ```dream
 @unsafe
@@ -188,12 +190,10 @@ fun scratch(): void {
 }
 ```
 
-Use `alloc_zeroed` when zeroed bytes are required, and `alloc_aligned` for an explicit
-power-of-two alignment at least `alignof(T)`. Reallocation preserves the overlapping prefix
-and leaves the new tail uninitialized. It invalidates every old alias. Only base pointers returned by RawPtr allocation methods may be freed or resized;
-foreign pointers require their originating deallocator.
-`copy_to` requires non-overlapping ranges; `move_to` permits overlap. Both count elements.
-`fill_bytes` counts bytes. Copies never keep storage alive.
+- Use `alloc_zeroed` for zeroed bytes, and `alloc_aligned` for a power-of-two alignment of at least `alignof(T)`.
+- `realloc` keeps the overlapping prefix and leaves the new tail uninitialized. Every old alias is then invalid.
+- Free or resize only a base pointer returned by a `RawPtr` allocation method. A pointer from elsewhere needs the allocator that created it.
+- `copy_to` needs non-overlapping ranges, and `move_to` allows overlap. Both count elements, `fill_bytes` counts bytes, and a copy does not keep the allocation alive.
 
 | `RawPtr<T>` member | Needs `@unsafe` | Effect |
 |--------------------|-----------------|--------|
@@ -216,10 +216,11 @@ foreign pointers require their originating deallocator.
 | `.move_to(dst, count)` | Yes | Copies `count` values to `dst`; ranges may overlap |
 | `.fill_bytes(value, byte_count)` | Yes | Sets `byte_count` bytes to `value` |
 
-`Arena(initial_capacity)` owns manually freed blocks, measured in bytes. Its generic
-`alloc<T>(count)` methods support different unmanaged types in one arena. Growth adds blocks
-without moving existing allocations. Reset invalidates every allocation but keeps the blocks
-for reuse; free releases all blocks. Arena allocations cannot be individually freed or resized.
+`Arena(initial_capacity)` owns blocks you free yourself, measured in bytes.
+
+- `alloc<T>(count)` can mix unmanaged types in one arena. Growth adds blocks and does not move existing allocations.
+- `reset` invalidates every allocation and keeps the blocks for reuse. `free` releases every block.
+- One arena allocation cannot be freed or resized on its own.
 
 | `Arena` member | Effect |
 |----------------|--------|
@@ -244,10 +245,9 @@ fun batch(): void {
 }
 ```
 
-Both types are value handles with manual lifetime contracts, and neither has automatic cleanup.
-Copying an arena aliases the same state; free that state once. Strings, arrays, classes and
-values containing managed references cannot be raw elements. Use ordinary arrays and spans
-when automatic ownership and bounds checking meet your needs.
+`RawPtr` and `Arena` have no automatic cleanup. Copying an arena shares its state, so free that state once.
+
+Strings, arrays, classes, and values that contain managed references cannot be raw elements. Use an array or a span when you want bounds checks and automatic cleanup.
 
 ## Advanced: growable arrays
 

@@ -10,7 +10,10 @@ icon: material/toolbox-outline
 
 ## UUID values
 
-`Uuid` is a 16-byte struct containing two unsigned 64-bit words. Assignment copies the value without allocating or retaining a heap object. Equality, ordering, and hashing operate on those bits, so independently parsed UUIDs work as the same map key. Strings and byte arrays are created only when explicitly requested. Parsing accepts canonical hyphenated text in either case and formatting produces lowercase text. `v4()` uses the secure entropy source and reports failures.
+`Uuid` is a 16-byte value. Equal bits compare equal, so two parsed copies work as the same map key.
+
+- Parsing accepts canonical hyphenated text in either case. `to_string()` returns lowercase.
+- `v4()` uses secure random bytes and reports failures.
 
 ```dream
 import system;
@@ -41,7 +44,11 @@ Failures return `UuidError`, whose `code()` is `EUUID`.
 
 ## Streaming CSV
 
-`CsvReader` borrows a `Reader`; `CsvWriter` borrows a `Writer`. Both behave the same on every target and need no host library. The writer ends each record with CRLF and quotes a field only when it contains the delimiter, a quote, or a line break (doubling any quotes inside), or when it is the record's only field and is empty, so `["a", "b,c"]` becomes `a,"b,c"`. The reader frames records incrementally, rejects misplaced/unclosed quotes, validates UTF-8 strictly, and reports a one-based logical record number and absolute byte offset on errors. LF, CRLF, and standalone CR terminate records outside quotes; embedded newlines remain part of quoted fields. Blank records produce one empty field.
+`CsvReader` borrows a `Reader`, and `CsvWriter` borrows a `Writer`. Both work the same on every target.
+
+- Records end with CRLF. A field is quoted when it contains the delimiter, a quote, or a line break, quotes inside are doubled, and a record whose only field is empty is quoted, so `["a", "b,c"]` becomes `a,"b,c"`.
+- The reader rejects a misplaced or unclosed quote and invalid UTF-8. The error includes a one-based record number and a byte offset.
+- LF, CRLF, and a standalone CR end a record outside quotes. A newline inside quotes stays in the field, and a blank record is one empty field.
 
 ```dream
 import system;
@@ -61,7 +68,11 @@ fun main(): void {
 }
 ```
 
-Records default to a 1 MiB limit and accept a configured limit up to 4 MiB. Reader memory is bounded by that record limit plus its input buffer. A malformed record permanently fails that reader. Writer limits include escaping and the trailing CRLF. Delimiters must be nonzero ASCII excluding quote, CR, and LF. Close the underlying resources explicitly after finishing borrowed wrappers.
+Records default to a 1 MiB limit, and you can raise that to 4 MiB. Reader memory stays within that limit plus the input buffer.
+
+- A malformed record permanently fails that reader. The writer limit includes escaping and the trailing CRLF.
+- The delimiter must be a nonzero ASCII byte other than `"`, CR, or LF.
+- Close the underlying stream yourself when you are done with the reader or writer.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
@@ -76,7 +87,10 @@ Records default to a 1 MiB limit and accept a configured limit up to 4 MiB. Read
 
 ## Temporary resources and atomic replacement
 
-`TempDirectory.create()` and `TempFile.create()` securely create a private directory under the OS temporary directory. `create_in(directory)` selects the filesystem. Files live inside that private directory. Explicit `close()` reports cleanup failures and succeeds repeatedly after cleanup; destructors perform best-effort cleanup. Resources are available on native and Node. Browsers report `TempCapabilities.supported == false` and return `EUNSUPPORTED`.
+`TempDirectory.create()` and `TempFile.create()` make a private directory under the OS temporary directory. `create_in(directory)` chooses the parent, and the file lives inside that directory.
+
+- `close()` reports cleanup failures and succeeds again after cleanup. Dropping the value also tries to clean up.
+- These types work on native and Node. Browsers report `TempCapabilities.supported == false` and return `EUNSUPPORTED`.
 
 ```dream
 import system;
@@ -91,9 +105,12 @@ fun main(): void {
 }
 ```
 
-Use `TempFile.create_in(Path.parent(destination).unwrap_or("."))` followed by `persist_replace(destination)` to replace a file on the same filesystem. Replacement flushes and closes the temporary file first. A failed rename preserves the old destination and temporary contents. Atomic replacement does not imply durable storage across power loss. An error removing the private directory can occur after a successful replacement; the destination is already published in that case.
+Replace a file on the same filesystem with `TempFile.create_in(Path.parent(destination).unwrap_or("."))`, then `persist_replace(destination)`.
 
-Destructors cannot unwind through process termination, traps, or an OS kill. Explicit cleanup is appropriate when reporting cleanup failures matters.
+- The call flushes and closes the temporary file first. A failed rename leaves the old destination and the temporary file.
+- A successful replace is not a promise the data survives power loss. Removing the private directory can still fail after the destination is already replaced.
+
+Call `close()` when you need cleanup errors reported. A crash or a killed process can skip cleanup.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
@@ -114,7 +131,12 @@ when the operating system refuses to create them.
 
 ## Typed configuration
 
-`ConfigBuilder` always applies **defaults → JSON files → environment → explicit CLI arguments**, regardless of builder call order. Multiple JSON files apply in insertion order. JSON must be an object of scalar settings and is limited to 1 MiB. Environment names use the prefix plus the ASCII-uppercase key with hyphens replaced by underscores. Environment lookup covers known keys declared by defaults, `require`, validators, files, or CLI definitions. Parser defaults do not override configuration-file or environment values.
+`ConfigBuilder` applies sources in this order, whatever the call order: **defaults, then JSON files, then environment, then explicit CLI arguments**.
+
+- JSON files apply in the order you add them. Each file must be an object of scalar settings and at most 1 MiB.
+- An environment name is the prefix plus the key in ASCII uppercase, with hyphens turned into underscores.
+- Only keys declared by defaults, `require`, validators, files, or CLI definitions are read from the environment.
+- A parser default does not override a file or an environment value.
 
 ```dream
 import system;
@@ -135,7 +157,7 @@ fun main(): void {
 }
 ```
 
-`get_int`, `get_bool`, `require`, and custom validators return source-aware `ConfigError`s. Diagnostics identify the key and source without including the setting value. Environment variables are unavailable in browser hosts; explicit argument arrays and virtual filesystem JSON files remain usable.
+`get_int`, `get_bool`, `require`, and validators return `ConfigError` with the key and source, not the value. Browsers have no environment variables; argument arrays and JSON files still work there.
 
 | `ConfigBuilder` method | Effect |
 | --- | --- |
@@ -159,9 +181,11 @@ setting, and `message()` combines them with the reason.
 
 ## Async assertions and fixtures
 
-Existing `@test async fun` tests can use `Assert.eq_async(future, expected)` and `Assert.ok_async(future)`. `TestFixture<T, E>` owns a resource and a fallible cleanup callback. `Fixtures.run(fixture, async_body)` runs cleanup after either `Ok` or `Err`, preserves a body error, and otherwise reports cleanup errors. Repeated closure returns the original cleanup outcome. Releasing a cancelled async frame also releases its fixture owner.
+`Assert.eq_async` and `Assert.ok_async` await a future inside an `@test async fun`.
 
-`Fixtures.temporary_file()` and `Fixtures.temporary_directory()` return the same owned temporary resource types used by applications. Explicit close reports failures; destructor cleanup is nonthrowing. Assertion failure exits the test process, so use fallible bodies when cleanup must run before a failure is reported.
+`TestFixture<T, E>` owns a resource and a cleanup callback. `Fixtures.run` runs that cleanup after `Ok` or `Err`, keeps a body error, and otherwise reports the cleanup error; calling close again returns the first result.
+
+`Fixtures.temporary_file()` and `Fixtures.temporary_directory()` return the same temporary types applications use. `close()` reports failures, and an assertion failure exits the process, so use a fallible body when cleanup must run first.
 
 | Member | Returns | Effect |
 | --- | --- | --- |
@@ -176,10 +200,7 @@ Existing `@test async fun` tests can use `Assert.eq_async(future, expected)` and
 
 ## Download and transform CSV
 
-Save this as `convert.dream`. It downloads CSV into a temporary file, adds a UUID column
-to each record, and replaces the destination only after writing succeeds. The temporary
-file keeps memory bounded while allowing the synchronous CSV reader to consume a
-network response.
+Save this as `convert.dream`. It downloads CSV into a temporary file, adds a UUID column, and replaces the destination only after the write succeeds.
 
 ```dream
 import system.encoding;
@@ -295,6 +316,4 @@ async fun main(): int {
 }
 ```
 
-Run `dream run convert.dream -- https://example.com/input.csv -o records.csv`, replacing
-the URL with an accessible CSV resource. Success prints the number of written records.
-Invalid arguments return exit status 2; download, CSV, and filesystem failures return 1.
+Run `dream run convert.dream -- https://example.com/input.csv -o records.csv`. Success prints the record count; invalid arguments exit 2, and download, CSV, or filesystem failures exit 1.

@@ -8,7 +8,7 @@ targets: [native, web, node]
 
 # Spans
 
-A span is a view of part of a string, array or list. It stores no copy of the data: just the source, an offset and a length. Spans are [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type)s, so they live on the stack. Making, slicing and comparing one never allocates.
+A span views part of a string, array, or list: the source, an offset, and a length, not a copy. Spans are [`ref struct`](classes-structs.md#ref-struct-a-stack-only-value-type)s, so they stay on the stack, and creating, slicing, or comparing one does not allocate.
 
 !!! glance "At a glance"
 
@@ -42,14 +42,15 @@ fun main() {
 
 ## Character views
 
-`Span<char>` permits writes to a `char[]` of 32-bit code points; strings are immutable and
-store 16-bit UTF-16 units, including surrogate pairs, and may use sliced storage.
-`ReadOnlySpan<char>` views either backing without copying: it keeps its source owner alive and
-reads UTF-16 units from strings or full 32-bit values from arrays. `ReadOnlySpan<char>.of(s)`
-and `s.span()` create string views; `Span<char>.of(chars).as_read_only()` creates an array view. Both views are stored inline. Release can hoist the string payload address
-out of read-only loops when the source lifetime and view fields are proven stable.
+`Span<char>` writes a `char[]` of 32-bit code points. Strings are immutable UTF-16, including surrogate pairs, and a string view may cover only part of the text.
 
-`s.span(start, end)` clamps its bounds exactly like `s.substring(start, end)`, but returns a view instead of a new `string`. Once a view exists, `view.slice(start, end)` takes a checked start and exclusive end, like every other `slice`; out-of-range bounds panic. String-backed views have no setters; writes fail at compile time. It supports the read-only `string` surface:
+`ReadOnlySpan<char>` views either backing without copying and keeps its source alive. It reads UTF-16 units from strings and 32-bit values from arrays.
+
+`ReadOnlySpan<char>.of(s)` and `s.span()` view a string, and `Span<char>.of(chars).as_read_only()` views an array. Both views are stored inline.
+
+`s.span(start, end)` clamps its bounds like `s.substring(start, end)` and returns a view instead of a new `string`. Once a view exists, `view.slice(start, end)` takes a checked start and exclusive end, and out-of-range bounds panic.
+
+String-backed views have no setters, so a write fails at compile time. The view supports the read-only `string` surface:
 
 | Call | Meaning |
 | --- | --- |
@@ -103,7 +104,7 @@ Both view `array[offset .. offset + length)`. Creating one with a range outside 
 | `copy_to(dst)` / `to_array()` | yes | yes |
 | `as_read_only()` | yes | — |
 
-`for (let x in span)` walks either kind with an index loop; no iterator object is allocated. Copies of array-backed `unmanaged` elements use bulk memory operations. String-backed character copies widen UTF-16 units into 32-bit array elements. Comparisons use element equality.
+`for (let x in span)` walks either kind, and comparisons use element equality. Copying string-backed characters widens each UTF-16 unit into a 32-bit array element.
 
 `list.as_span()` views the list's elements at the moment it is called. Like C#'s `CollectionsMarshal.AsSpan`, it keeps the backing array it saw alive: if the list later grows into a new array, the span still shows the old one.
 

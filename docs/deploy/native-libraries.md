@@ -32,11 +32,9 @@ output-type = "staticlib"
 | `"staticlib"` | A static archive linked into the host program |
 | `"cdylib"` | A shared C ABI library loaded at run time |
 
-Use `output-type = "cdylib"` for a shared C ABI library. The value is a single string.
-`[lib]` is only allowed on `type = "lib"` packages with no `icon` and no `targets` other than `native`.
-The default source is `src/mylib.dream` (hyphens and dots in package names become underscores).
-Build with `dreamer build` or `dream build`; an explicit source path and `-o` may override
-input and output paths without changing the manifest's output kind.
+Use `output-type = "cdylib"` for a shared C ABI library. The value is one string, and `[lib]` is allowed only on a `type = "lib"` package with no `icon` and no `targets` other than `native`.
+
+The default source is `src/mylib.dream` (hyphens and dots in the package name become underscores). `dreamer build` and `dream build` both work, and a source path plus `-o` can override the input and output without changing the manifest's output kind.
 
 ```sh
 dreamer build
@@ -44,14 +42,13 @@ dream build --release
 dream build src/mylib.dream -o target/mylib.a
 ```
 
-These builds reject `main`. Exports must be synchronous, non-generic, non-variadic functions
-with distinct C identifiers; runtime and compiler names are reserved. Public Dream visibility
-alone does not export a C symbol. Library outputs link for the host by default.
-`dream --target TRIPLE` links the configured library for that target; add `--object` to emit only its interface and an unlinked object.
-Target builds require matching capability libraries and SDKs;
-[mobile packaging](mobile.md) consumes target-built libraries.
-Native library output selection belongs to `[lib].output-type`; `--crate-type` only selects
-validation for intermediate output or a different target.
+These builds reject `main`. Exports must be synchronous, non-generic, non-variadic functions with distinct C identifiers.
+
+Runtime and compiler names are reserved, and public Dream visibility alone does not export a C symbol. Library outputs link for the host by default.
+
+`dream --target TRIPLE` links for that target, and `--object` emits the interface plus an unlinked object. Target builds need matching capability libraries and SDKs ([mobile packaging](mobile.md)).
+
+`[lib].output-type` chooses the library kind. `--crate-type` only selects validation for intermediate output or a different target.
 
 | File | Produced for | Contents |
 |---|---|---|
@@ -79,20 +76,14 @@ int main(void) {
 }
 ```
 
-Serialize the first exported call, which initializes module globals. Attach every calling thread
-and detach it before it exits. Respect the embedding API's thread and callback ownership rules;
-ordinary reference counts are not atomic.
+Serialize the first exported call so module globals initialize once. Attach every calling thread, detach it before the thread exits, and follow the embedding API's rules for threads and callbacks.
 
-The exported ABI uses 32-bit integers for `int`, `uint`, `bool`, `byte`, `char` and enums,
-64-bit integers for `long`/`ulong`, pointer-width integers for `isize`/`usize`, and native
-`float`/`double` for floating point. Managed objects, strings, arrays, function boxes and value
-structs cross this boundary as opaque pointers, rather than C aggregates. Value-struct results
-are heap boxes. Unmarked managed parameters consume one reference; `borrow` and `ref` parameters
-borrow. Returned managed references own one count, which the host releases with `dream_release`.
-The C header records the lowered ABI; these declarations are not the by-value C struct ABI.
+The exported ABI uses 32-bit integers for `int`, `uint`, `bool`, `byte`, `char`, and enums, and 64-bit integers for `long` and `ulong`. `isize` and `usize` are pointer-width, and `float` and `double` stay native floating-point values.
 
-Panics never unwind into the host. A panic hook receives the message and source location;
-returning from the hook still aborts. Locations identify the library's own source statement,
-such as `mylib/src/lib.dream:12`; stdlib and dependency panics identify the library line that
-called them. Paths are relative to the package root and prefixed with its manifest name.
-C callers supply no hidden location argument. Prebuilt Dream-to-Dream linking is not supported.
+Managed objects, strings, arrays, function boxes, and value structs cross as opaque pointers, not as C structs. A plain managed parameter is consumed by the call, `borrow` and `ref` are not, and the host releases a returned value with `dream_release`.
+
+Panics never unwind into the host. A panic hook receives the message and source location, and returning from the hook still aborts.
+
+Locations name the library statement, such as `mylib/src/lib.dream:12`. A panic in the standard library or a dependency names the library line that called it, with a path relative to the package root and prefixed by the package name.
+
+C callers pass no hidden location argument. Prebuilt Dream-to-Dream linking is not supported.

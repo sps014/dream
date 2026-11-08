@@ -65,7 +65,7 @@ A package that is not a test package can keep its tests in `tests/`. `dreamer te
 
 ## One runner per project
 
-`dream test` compiles every `@test` in the project into one runner, so a project builds once no matter how many files it has. Builds are cached: when nothing changed, a rerun skips compilation. `--filter` removes tests before compiling, so a filtered run builds only what it runs.
+`dream test` compiles every `@test` into one runner, and skips compilation when nothing changed. `--filter` drops tests before compiling, so a filtered run builds only what it runs.
 
 Tests may be synchronous or `async`, must return `void`, and run sequentially. An async test finishes before its pass report and before the next test begins.
 
@@ -97,7 +97,7 @@ When the limit passes, `dream test` stops the runner, reports the test as `TIMEO
 
 ## Leak checks
 
-Test runners are built with leak checks on, on both hosts. When a test leaves more live objects than it found, its report includes a `LEAK <name> live=+N` hint. The run fails when objects are still alive at exit (`live` is not 0).
+When a test leaves objects alive, its report includes a `LEAK <name> live=+N` hint. The run fails when `live` is not 0 at exit.
 
 ## Assets
 
@@ -120,7 +120,7 @@ fun reads_fixture() {
 
 ## Hosts
 
-`[test].targets` chooses the hosts. `--native` and `--node` override it for one run; pass both to run on both. On Node the runner is a wasm module run by the Node host, with the same leak check.
+`[test].targets` chooses the hosts. `--native` and `--node` override that choice for one run; pass both to run on both hosts, with the same leak report on Node.
 
 ## Workspaces
 
@@ -136,7 +136,7 @@ Use `-p name` to run one of them.
 
 ## The compiler command
 
-`dream test [path]` runs one test project without installing dependencies. The path can be a test package, a folder of `.dream` files, or one file. Without a path it uses the current test package, else `./tests`.
+`dream test [path]` runs one test project without installing dependencies. The path can be a test package, a folder of `.dream` files, or one file; with no path it uses the current test package, or `./tests`.
 
 | Path | Tests that run |
 |---|---|

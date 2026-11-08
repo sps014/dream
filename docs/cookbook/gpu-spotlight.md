@@ -6,9 +6,7 @@ icon: material/cursor-default-click-outline
 
 # A spotlight that follows the mouse
 
-This program opens a window and draws a soft-edged circle wherever the mouse is. Clicking switches
-the color between orange and blue, and Escape closes the window. A fragment shader decides the
-color of every pixel on its own, so the whole picture is one draw call.
+This program opens a window and draws a soft-edged circle wherever the mouse is. A click switches the color between orange and blue, Escape closes the window, and one fragment shader colors every pixel.
 
 Building it needs the shader compiler, which you install once with
 `dreamer toolchain install slang`. Run it on a desktop with a display.

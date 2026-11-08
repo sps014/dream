@@ -44,7 +44,7 @@ This app exposes `/v1/users/{id}`. Mount the same descriptor on another app with
 | `@websocket(path)` | Static method | Upgrades the request to a [WebSocket](websockets.md). |
 | `@use(middleware)` | Class or static method | Runs a [middleware](middleware.md) function around the group or route; repeatable. |
 
-Route paths are relative to the router prefix. Write a named segment as `{name}` and bind it with a parameter of the same name. Other per-route attributes are covered in their guides: [`@operation` and `@response`](openapi.md#operation-attributes), [`@requires_scopes`](authorization.md), and [`@produces`](streaming.md).
+Route paths are relative to the router prefix. Write a named segment as `{name}` and bind it with a parameter of the same name; other attributes are [`@operation` and `@response`](openapi.md#operation-attributes), [`@requires_scopes`](authorization.md), and [`@produces`](streaming.md).
 
 ## How a request finds its route
 
@@ -60,8 +60,8 @@ Routes are tried in the order they were mounted, and within a router in declarat
 | --- | --- |
 | `include_router(router, prefix = "")` | Serves and documents every route in `router`, with `prefix` added in front of the router's own prefix. |
 
-For multiple files, put a public router class in `users.dream`, import that file from the application entry point, and call `app.include_router(Users.router()).unwrap()`. Put request/response models and account repositories in their own files. The [complete example](example.md) shows the exact layout.
+For several files, put a public router class in `users.dream`, import it from the entry point, and call `app.include_router(Users.router()).unwrap()`. Put models and repositories in their own files; the [complete example](example.md) shows that layout.
 
-Only explicitly mounted routers are served or documented. Duplicate methods and paths within one router are compile-time errors. Duplicate routes introduced by mounting are startup errors. Keep endpoint names and paths stable when clients use the generated OpenAPI operation IDs.
+Only mounted routers are served or documented. Duplicate methods and paths in one router are compile-time errors, duplicates created by mounting are startup errors, and clients that use generated operation IDs need those names and paths to stay stable.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

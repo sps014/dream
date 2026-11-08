@@ -16,11 +16,11 @@ If you are using the extension from this repository, build and package it using 
 
 ## When the editor cannot find Dream
 
-Restart the editor after installation. Set `dream.home` and `dreamer.home` to the folder containing their executables if automatic discovery does not work. The extension starts `dream-lsp` for language support.
+Restart the editor after installation. If discovery fails, set `dream.home` and `dreamer.home` to the folder that contains the executables; the extension starts `dream-lsp` from there.
 
 ## Project support
 
-Install dependencies with `dreamer install` so imported packages are available. Open a workspace's root folder when working on several packages. See [Workspaces](workspaces.md).
+Install dependencies with `dreamer install` so imported packages are available. For several packages, open the workspace root ([Workspaces](workspaces.md)).
 
 The settings below come from the extension's configuration. Change them in your editor's settings panel.
 

@@ -22,7 +22,7 @@ Ownership explains what happens when you assign a value or pass it to a function
     - Objects are shared on assignment; simple values and structs are copied.
     - Unmarked parameters take ownership, `borrow` shares, and a last use moves.
 
-This page is only about **who owns that value** when you pass or assign something. There is no `move` keyword. Dream moves for you when it can see you are done with a name.
+There is no `move` keyword. Dream hands a value over when that name is not used again.
 
 ## Two kinds of values
 
@@ -58,21 +58,13 @@ b.x = 9;
 System.println(a.x); // 1
 ```
 
-Automatic **move** (the rest of this page) applies to **share** types. A `struct` always copies its bytes. On the last use of a struct local, the copy keeps the nested heap values; they are not counted a second time. A struct that is still used later, or a field or index, still counts them again.
+A move applies to shared objects. A struct is always copied.
 
 ## Passing to a function
 
 Write nothing extra on a parameter and the callee **takes** the value (a **sink**). If you still need the name afterward, Dream **copies** instead of moving.
 
-Mark a parameter `borrow` when the function only **looks** — you keep the value.
-
-In release builds, the compiler can infer a borrowed calling convention for internal helpers
-without a `borrow` annotation. It proves each parameter independently through aliases and
-known direct calls, including recursion. Returning an alias keeps that parameter owning while
-unrelated parameters can still borrow. The proof is conservative around managed mutations,
-unknown calls, destructors and suspension; exported functions keep their declared ownership
-contract. Explicit `borrow` remains useful for interface contracts and cases inference cannot
-prove. This optimization does not change the source-level sink-default rules.
+Mark a parameter `borrow` when the function only looks. You keep the value.
 
 | On the parameter | Meaning |
 |------------------|---------|
@@ -158,9 +150,9 @@ class Bag {
 
 Giving a new value to the same name (`items = List<int>();`) makes the name usable again.
 
-## Receiver modes: inferred borrow and unique
+## Methods on `this`
 
-Every non-static method's implicit `this` has a **mutation contract** Dream infers from the body:
+Dream infers how a method uses `this`:
 
 - **Borrow**: reads `this` without mutating it. Always safe to call.
 - **Unique**: may mutate instance state (field writes, calls to other Unique methods).
@@ -206,8 +198,8 @@ class Counter {
 
 ## What is *not* a move
 
-- Last **read**, then the function does other work: the value is still released at the **end** of the function, not the moment you finish reading it.
-- `struct` assign or pass: always a byte copy. On the last use of a struct local, the copy keeps the nested heap values; they are not counted a second time. A field or `list[i]` still counts them again.
+- A last read does not free the value early. It is freed at the end of the function.
+- Assigning or passing a `struct` always copies it.
 - Reading `obj.field` or `xs[i]` into a sink: always a copy; the object/array still owns its slot.
 - `borrow` / `ref` arguments: never consumed.
 

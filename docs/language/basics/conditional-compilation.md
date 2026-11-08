@@ -53,9 +53,7 @@ fun main(): void {
 }
 ```
 
-A native build prints `Running on native`, and a `--wasm` build prints `Running on WebAssembly`.
-If two versions both remain, the build reports a duplicate declaration. If none remains, calls to
-the name report it as undefined.
+A native build prints `Running on native`, and a `--wasm` build prints `Running on WebAssembly`. If two versions remain, the name is a duplicate, and if none remains, calls report it as undefined.
 
 ## Gate members and enum choices
 
@@ -128,9 +126,9 @@ A condition names targets as `Target.<name>`. The names a build defines:
 | `Target.Android` | building a native binary for Android |
 | `Target.Ios` | building a native binary for iOS |
 
-Every build defines exactly one of `Debug` and `Release`, and exactly one of `Native` and `Wasm`.
-A native build also defines its operating system; a WebAssembly build defines `Browser` or `Wasi`.
-Pass `--target` with an LLVM target triple to build for another operating system.
+Every build defines exactly one of `Debug` and `Release`, and exactly one of `Native` and `Wasm`. A native build also defines its operating system, and a WebAssembly build defines `Browser` or `Wasi`.
+
+Pass `--target` with a target triple to build for another operating system.
 
 Combine names with `!` (not), `&&` (and), and `||` (or). `!` binds tightest, then `&&`, then `||`;
 use parentheses to group differently:

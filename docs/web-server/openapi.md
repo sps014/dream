@@ -37,7 +37,7 @@ async fun main(): void {
 
 The example prints the document without starting a listener. If you serve `/api-docs`, the asset URLs must be served by your deployment or by explicit routes.
 
-OpenAPI 3.0.3 contains mounted paths, parameter sources, shared model schemas, request bodies, content types, operation metadata, and validation responses. Mounted prefixes are reflected in paths. Unmounted routers are absent. WebSocket endpoints are not represented as ordinary OpenAPI operations.
+OpenAPI 3.0.3 lists mounted paths, parameter sources, shared model schemas, request bodies, content types, operation metadata, and validation responses, including each router's prefix. Unmounted routers are omitted, and WebSocket endpoints are not ordinary operations.
 
 ## Operation attributes
 
@@ -63,7 +63,7 @@ These providers in `system.webapi` already carry `@security_scheme`, so injectin
 | `HttpAuth.basic_auth` | `Authorization: Basic <value>` | The encoded value after `Basic ` | `BasicAuth` (`http`, `basic`) |
 | `HttpAuth.api_key_header` | `X-Api-Key` header | The key | `ApiKeyAuth` (`apiKey` in a header) |
 
-Each returns 401 when the header is missing or malformed. They only extract credentials; your own dependency must check them. Metadata describes a check; include the actual provider or authentication middleware to enforce it.
+Each returns 401 when the header is missing or malformed, and they only extract the credential. Your dependency or authentication middleware has to check it; the metadata only describes the check.
 
 ## Swagger options
 
@@ -81,6 +81,6 @@ Set these on `options.swagger`, a `SwaggerOptions` value.
 | `oauth_use_pkce` | `true` | Use PKCE in Swagger's OAuth login. |
 | `oauth_redirect_url` | `""` | Redirect URL after Swagger's OAuth login. |
 
-Client secrets belong on the server, never in Swagger UI configuration. Leave OpenAPI enabled when serving Swagger or ReDoc; disabling its endpoint leaves those viewers without a document to load. The documentation URLs themselves are set on [`WebAppOptions`](configuration.md#app-options-webappoptions).
+Keep client secrets on the server, not in the Swagger UI configuration. Leave OpenAPI enabled when you serve Swagger or ReDoc, because an empty document URL leaves those pages with nothing to load ([`WebAppOptions`](configuration.md#app-options-webappoptions) sets the documentation URLs).
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

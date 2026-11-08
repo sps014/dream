@@ -72,10 +72,7 @@ and keeps earlier extensions: the stem of `a.tar.gz` is `a.tar`.
 | `absolute(path)` | `string` | Joins a relative path onto the working directory, then normalizes. |
 | `relative_to(path, base)` | `Option<string>` | Suffix of `path` under `base`, or `None`. |
 
-None of these consult the filesystem or resolve symbolic links. `normalize`
-returns `.` when a relative path simplifies to nothing, and drops `..` that would
-climb above the root of an absolute path. `relative_to` compares normalized text
-and returns `.` when both paths are equal.
+None of these touch the filesystem or follow symbolic links. `normalize` returns `.` for an empty relative path and drops `..` above an absolute root; `relative_to` returns `.` when the normalized paths are equal.
 
 Use the [file API](file.md) when you need existence checks, file contents, or filesystem
 errors. The [Path reference](../../reference/api/io-path.md) lists every signature.

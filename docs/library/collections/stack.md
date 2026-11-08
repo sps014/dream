@@ -23,7 +23,7 @@ fun main() {
 }
 ```
 
-This prints `second`. `push` adds an item. `pop` removes the newest item and returns `Option<T>`. `peek` reads it without removing it. An empty stack returns `None`.
+This prints `second`. `push` adds an item, `pop` removes the newest and returns `Option<T>`, and `peek` reads it without removing it; an empty stack returns `None`.
 
 | Member | Returns | Effect |
 | --- | --- | --- |

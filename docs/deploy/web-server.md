@@ -47,11 +47,11 @@ These settings matter most when deploying. [Configuration](../web-server/configu
 | `WebAppOptions.openapi_url` | `"/openapi.json"` | OpenAPI document path; empty disables it. |
 | `WebAppOptions.redoc_url` | `"/redoc"` | ReDoc path; empty disables it. |
 
-Supplying only one TLS path, invalid credentials, or a bind failure returns `IoError`. Certificate/key files are deployment inputs. Run the service with access to the required native capability libraries, or use Dream's relocatable build packaging.
+Supplying only one TLS path, invalid credentials, or a bind failure returns `IoError`. Certificate and key files are deployment inputs, and the service needs the native capability libraries, or a relocatable package that includes them.
 
 ## Request size limits
 
-Like FastAPI and Uvicorn, the server does not cap the size of request bodies. Routes that read the whole body (`@body`, `read_body_bytes`, `read_body_text`) hold it in memory, so set a limit in front of the service. With nginx, for example:
+The server does not cap request-body size. Routes that read the whole body (`@body`, `read_body_bytes`, `read_body_text`) hold it in memory, so set a limit in front of the service, for example with nginx:
 
 ```nginx
 client_max_body_size 20m;
@@ -61,14 +61,16 @@ Routes that accept large inputs should read them with `incoming.stream()` or `fo
 
 ## Behind a reverse proxy
 
-Bind to a private address, configure TLS and request limits at the proxy, and register externally visible OIDC callback URLs. The service does not infer trust from arbitrary forwarded headers. Browser authentication cookies require HTTPS.
+Bind to a private address, configure TLS and request limits at the proxy, and register the public OIDC callback URLs. The service does not trust arbitrary forwarded headers, and browser authentication cookies require HTTPS.
 
 Set `limit_concurrency` to the load one instance can serve. Requests above it fail fast with `503`, which a proxy or load balancer can retry on another instance instead of queueing them.
 
-Decide whether interactive docs should be enabled in each environment. Disable docs, OpenAPI, and ReDoc independently with empty URLs; self-host assets when your deployment must avoid CDN requests. Ensure the configured docs and authentication endpoints do not collide with mounted routes.
+Disable docs, OpenAPI, and ReDoc independently with empty URLs, and self-host their assets when the deployment must avoid CDN requests. Keep those URLs and the authentication endpoints off your mounted routes.
 
 ## Stopping the service
 
-Run the service inside `App.run`, so `SIGTERM` from the supervisor stops it gracefully: the server stops accepting connections, lets running requests finish, sends WebSocket clients a `1012` close frame, and then the `App.on_stop` cleanups run. Outside `App.run`, call `shutdown`, then await `wait`. Set `timeout_graceful_shutdown_ms` below your supervisor's kill timeout so slow requests are cut off before the process is killed.
+Run the service inside `App.run` so a supervisor `SIGTERM` stops it: the server stops accepting connections, finishes running requests, sends WebSocket clients a `1012` close frame, then runs `App.on_stop`. Outside `App.run`, call `shutdown`, then await `wait`.
+
+Set `timeout_graceful_shutdown_ms` below the supervisor's kill timeout so slow requests end before the process is killed.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](../web-server/example.md).

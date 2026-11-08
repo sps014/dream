@@ -34,13 +34,19 @@ async fun main(): void {
 }
 ```
 
-`dispatch` accepts synchronous worker code; `dispatch_async` accepts an async callback. Both return `Result<T, TaskPoolError>`. They check cancellation before submission and after the job settles. Async worker jobs inherit the submitted token. Long synchronous CPU jobs must capture and check a token explicitly to stop early.
+`dispatch` runs synchronous code, and `dispatch_async` runs an async callback. Both return `Result<T, TaskPoolError>` and check cancellation before the job is submitted and after it finishes.
 
-`map` and `map_async` keep at most `size` dispatches active and preserve input order. Their failures use `TaskFailure<TaskPoolError>`. Worker captures and result types follow the [sharing rules](sharing.md).
+An async job inherits the token you pass. A long synchronous job must capture a token and check it if it should stop early.
 
-`close().await` stops accepting work, waits for active dispatches, and closes workers. Repeated closure succeeds. A nonpositive pool size creates no workers and dispatch returns `InvalidSize`; dispatch after closure returns `Closed`. A constructed dispatch future is lazy, so close before starting it rejects its later submission.
+`map` and `map_async` keep at most `size` jobs active and preserve input order. Failures use `TaskFailure<TaskPoolError>`, and captures follow the [sharing rules](sharing.md).
 
-Use `scope.spawn_on(pool, body)` when a region should own a CPU job alongside local async work. Native worker replies wake the owner scheduler instead of blocking it.
+`close().await` stops new work, waits for active jobs, and closes the workers. Closing again succeeds.
+
+A size of `0` or less creates no workers, and dispatch returns `InvalidSize`. Dispatch after close returns `Closed`.
+
+A dispatch future starts when you await it. Closing the pool first rejects that later start.
+
+Use `scope.spawn_on(pool, body)` when a region should own a CPU job alongside local async work.
 
 ## `TaskPool` members
 

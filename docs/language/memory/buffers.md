@@ -26,14 +26,13 @@ Use ordinary arrays first. This guide explains the extra care required when buil
 
 ## Raw buffers and custom containers
 
-`T[]` is always safe to use directly — including as the backing storage of your own data structure.
-Three guarantees hold for any array, no matter how you track its contents:
+`T[]` is safe to use as the storage of your own container.
 
-1. **Overwriting a slot releases the old element** immediately.
-2. **Reading a slot retains the element** — both the array and your variable are valid owners, so there is no way to create a dangling or double-freed reference through reads.
-3. **Freeing an array releases every slot**, including slots a counter has already "left behind".
+- Writing a slot drops the old element.
+- Reading a slot gives you a valid value. The array still holds its own.
+- Dropping the array drops every slot, including ones your counter no longer counts.
 
-The practical consequence: if you hand-roll a container (`entries: string[]` plus a `count: int`), rewinding the counter **without clearing slots is safe**. Old elements stay until they are overwritten or the array is dropped. There is no error.
+Rewinding `count` without clearing slots is safe. Old elements stay until they are overwritten or the array is dropped.
 
 Use `List<T>` when the logical size changes. Removing an element or calling `clear()`
 releases the list's ownership of its elements. When an array needs empty slots, choose

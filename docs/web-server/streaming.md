@@ -54,13 +54,13 @@ Any other item type is a compile-time error. Write `@produces("application/x-ndj
 
 `SseEvent.data(text)` creates an event with only data. The full constructor takes the fields in the order shown.
 
-The dispatcher writes incrementally with backpressure. Client disconnect cancels the handler at a suspension point and closes iterator resources. Request dependency cleanup runs after streaming stops, so a resource needed to enumerate the stream remains alive for its full lifetime.
+The server writes the stream as the client can accept it. A disconnect cancels the handler and closes iterator resources, and request cleanup runs after streaming stops so a resource used by the stream stays alive until then.
 
 Once response headers or chunks have been sent, later errors cannot replace them with a new HTTP error status. Design the stream protocol to communicate application-level failures when needed.
 
 ## Reading a request body as a stream
 
-`read_body_bytes` and `read_body_text` read the whole request body into memory. For a body that may be large, call `incoming.stream()` to read it in chunks as the client sends it. The returned `HttpRequestStream` is an `AsyncReader`, so you can loop over `read_async` or pass it to `Streams.copy_async`.
+`read_body_bytes` and `read_body_text` load the whole body. For a large body, call `incoming.stream()` and read chunks as they arrive; `HttpRequestStream` is an `AsyncReader`, so you can loop on `read_async` or pass it to `Streams.copy_async`.
 
 ```dream
 import system;
@@ -98,7 +98,7 @@ async fun main(): void {
 }
 ```
 
-Try `curl --data-binary @access.log http://127.0.0.1:8000/count-lines`. An empty chunk marks the end of the body. The request's cancellation applies to every read, so a client disconnect stops the loop with an error.
+Try `curl --data-binary @access.log http://127.0.0.1:8000/count-lines`. An empty chunk ends the body, and a client disconnect cancels each read with an error.
 
 A body can be read whole or streamed, but not both, because streamed bytes are not kept:
 

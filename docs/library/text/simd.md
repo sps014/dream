@@ -7,20 +7,13 @@ api: reference/api/system-simd.md
 
 # Process values with SIMD
 
-Import `system.simd` to process a small group of numbers with each operation.
-`Vector<T>` loads values from an array, combines corresponding lanes, and stores the
-result back into an array. Use an ordinary loop when direct control over lanes is
-unnecessary.
+Import `system.simd` so one operation handles a small group of numbers. `Vector<T>` loads lanes, combines them, and stores the result; use an ordinary loop when you do not need lanes.
 
-`T` must be `byte`, `int`, `long`, `float`, or `double`. A vector holds 16 bytes:
-16 byte lanes, 4 int lanes, 2 long lanes, 4 float lanes, or 2 double lanes.
-Use `Vector<T>.lane_count()` rather than hard-coding the count in a loop.
+`T` is `byte`, `int`, `long`, `float`, or `double`, and a vector is 16 bytes (16, 4, 2, 4, or 2 lanes). Call `Vector<T>.lane_count()` instead of hard-coding that count.
 
 ## Add two arrays
 
-The first loop handles complete vectors. The second handles any remaining elements.
-All three arrays must have the same length; this function checks that requirement
-before writing the output.
+The first loop handles complete vectors, and the second handles the leftover elements. All three arrays must have the same length; this function checks that before it writes.
 
 ```dream
 import system;
@@ -58,9 +51,7 @@ fun main(): void {
 }
 ```
 
-Save this as `vectors.dream` and run `dream run vectors.dream`. The result array
-contains 11, 22, 33, 44, and 55; the program prints its first and last values.
-Five inputs exercise both a four-lane vector and the one-element remainder.
+Save this as `vectors.dream` and run `dream run vectors.dream`. The array is 11, 22, 33, 44, 55 (first and last are printed), covering one full vector and a one-element remainder.
 
 ## Operations
 

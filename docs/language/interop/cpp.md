@@ -119,32 +119,27 @@ Anything else is a diagnostic on the declaration.
 
 ### Ownership
 
-The real C++ return type decides ownership, and the shim resolves it at compile time:
+The C++ return type decides ownership:
 
-- **By value, `std::unique_ptr<T>`, or `std::optional<T>`: owned.** The object moves to the heap and
-  is deleted once, when the Dream object is released.
-- **`T*` or `T&`: borrowed.** The Dream object holds a strong reference to the object it came from,
-  so an `Entry` from `store.find(...)` keeps the `Store` alive.
-- **`@owned` on a member returning `T*`** takes ownership instead (factories).
+- **By value, `std::unique_ptr<T>`, or `std::optional<T>`: owned.** Dream deletes the object once, when your program no longer uses it.
+- **`T*` or `T&`: borrowed.** The Dream object keeps its source alive, so an `Entry` from `store.find(...)` keeps the `Store` alive.
+- **`@owned` on a member returning `T*`** takes ownership instead. Use this for factories.
 
 A `NULL` pointer returned where the declaration is not `Option` traps with the member's name.
 
 ### Exceptions
 
-Every shim call catches C++ exceptions. With a `Result<T, string>` return, an exception becomes
-`Err(e.what())`. Otherwise the program traps with the message. A `void` C++ member that may throw
-declares `Result<Unit, string>` and yields `Ok(Unit())`, matching the stdlib convention.
+Every call catches C++ exceptions. A `Result<T, string>` becomes `Err(e.what())`, and any other return stops the program with that message.
+
+A `void` C++ member that may throw should return `Result<Unit, string>` and yield `Ok(Unit())`.
 
 ### Callbacks
 
-`fun(...)` parameters map to `std::function`. The shim retains the closure for as long as the
-`std::function` lives and releases it when C++ destroys it, so capturing closures need no
-`NativeCallback`. The same thread rule applies: calls must arrive on a Dream thread.
+`fun(...)` parameters map to `std::function`, and Dream keeps the closure alive for as long as that `std::function` does. The call must arrive on a Dream thread, including when the closure captures values.
 
 ### Structs
 
-A `@cpp` value struct holds only scalar fields. The shim checks its layout with `static_assert`
-on `sizeof` and every `offsetof`. A mismatch fails the C++ compile, reported as:
+A `@cpp` value struct holds only scalar fields. Its size and field offsets are checked against the C++ type, and a mismatch fails the C++ compile:
 
 ```
 @cpp struct 'Point': sizeof(geom::Point) differs from the Dream declaration (16 bytes)
@@ -162,13 +157,10 @@ public struct Point {
 
 ### Checked by the C++ compiler
 
-The shim uses `#line` directives, so a declaration that does not match the header fails the build
-at the `.dream` line that declared it:
+A declaration that does not match the header fails the build at the `.dream` line that declared it:
 
 ```
 src/kvstore.dream:6:5: error: no member named 'value' in 'm::Box'
 ```
 
-The generated `shim.cpp` and `dream_bridge.hpp` are written next to the build output
-(`target/<profile>/native-c/<set>/`) for inspection. A shim covers every `@cpp` declaration of a
-set the program uses.
+`shim.cpp` and `dream_bridge.hpp` are written next to the build output (`target/<profile>/native-c/<set>/`) when you need to inspect them. They include every `@cpp` declaration the program uses.

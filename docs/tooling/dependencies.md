@@ -89,6 +89,4 @@ no separate configuration needed.
 
 ## Dependency resolution
 
-Registry dependencies resolve to the highest version that satisfies every accumulated requirement.
-`path` and `git` dependencies are pinned from their own `dream.toml` and are never subject to
-registry version selection. Conflicting requirements produce a clear error naming both sides.
+Registry dependencies resolve to the highest version that satisfies every requirement. `path` and `git` dependencies stay pinned to their own `dream.toml`, and a conflict names both sides.

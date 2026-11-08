@@ -8,7 +8,7 @@ targets: [native, web, node]
 
 # Variables
 
-Use variables to give values a name. Declare a value with `let` when it can change, or `const` when it should stay the same. Dream usually works out its type from the value you provide.
+Use `let` for a value you can change and `const` for one you cannot. Dream infers the type from the value you provide.
 
 !!! glance "At a glance"
 

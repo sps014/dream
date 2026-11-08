@@ -15,11 +15,13 @@ dreamer run --target android
 dreamer run --target ios
 ```
 
-`mobile` is Android and iOS. `dreamer init app` adds the desktop host and uses it when you omit `--target`. Both start from the same canvas counter.
+`mobile` is Android and iOS. `dreamer init app` adds the desktop host and uses it when you omit `--target`, and both start from the same canvas counter.
 
-`dreamer build --target android` writes a debug APK. `dreamer build --target ios` writes a simulator app. Output is under `target/<triple>/debug/`, or `release/` with `--release`. `dreamer run` installs that build, launches it, and follows its log until you press Ctrl+C.
+`dreamer build --target android` writes a debug APK, and `dreamer build --target ios` writes a simulator app, under `target/<triple>/debug/` or `release/` with `--release`. `dreamer run` installs that build, launches it, and follows its log until you press Ctrl+C.
 
-`--device` picks an id from `dreamer devices`. Without it, `run` uses the only running device. Android follows that device's architecture; a build with no device is `arm64-v8a`. iOS builds an arm64 simulator app on Apple silicon. Store signing and install on a physical iPhone are not supported yet.
+`--device` picks an id from `dreamer devices`; without it, `run` uses the only running device. Android follows that device's architecture, and a build with no device is `arm64-v8a`.
+
+iOS builds an arm64 simulator app on Apple silicon. Store signing and install on a physical iPhone are not supported yet.
 
 Put files the app should read in `[package].assets`. The app starts in the folder that contains them, so open them with `File` and the same relative path:
 
@@ -41,7 +43,7 @@ async fun main(): void {
 
 On Android that folder is the app's private storage, so `File.write` can save files there too. On iOS it is the app bundle.
 
-`main` returns after startup. Timers, input, and drawing continue on the platform's frame loop. A hidden or replaced Android surface pauses drawing until a surface is available again.
+`main` returns after startup. Timers, input, and drawing continue on the platform's frame loop, and a hidden or replaced Android surface pauses drawing until a surface is available again.
 
 Check the SDK before the first build:
 
@@ -50,11 +52,15 @@ dreamer toolchain doctor --target android
 dreamer toolchain doctor --target ios
 ```
 
-Android needs `ANDROID_HOME`, platform-tools, an SDK platform (API 35 or newer), build-tools, an NDK, and JDK 21 or newer. Apps run on Android 8.0 and newer. iOS needs full Xcode and a simulator runtime, on a Mac. `doctor` also reports missing Dream libraries for that phone; `build` and `run` stop until those are present.
+Android needs `ANDROID_HOME`, platform-tools, an SDK platform (API 35 or newer), build-tools, an NDK, and JDK 21 or newer. Apps run on Android 8.0 and newer.
+
+iOS needs full Xcode and a simulator runtime, on a Mac. `doctor` also reports missing Dream libraries for that phone, and `build` and `run` stop until those are present.
 
 ## Library
 
-`dreamer pack --target ios` or `--target android` packages a `type = "lib"` project that is already built for each phone slice. The libraries must contain the guest runtime and their host dependencies. `dream --object --target <triple>` emits the unlinked object, header, and `.abi.json`; you compile and link that object with the platform SDK.
+`dreamer pack --target ios` or `--target android` packages a `type = "lib"` project already built for each phone slice. Those libraries must contain the guest runtime and their host dependencies.
+
+`dream --object --target <triple>` emits the unlinked object, header, and `.abi.json`, which you compile and link with the platform SDK.
 
 ```sh
 dreamer pack --target ios \
@@ -71,7 +77,7 @@ dreamer pack --target android \
 | iOS | `arm64-apple-ios`, `arm64-apple-ios-simulator` (`.a`) | `target/pack/<name>.xcframework` |
 | Android | `aarch64-linux-android`, `x86_64-linux-android` (`.so`) | `target/pack/<name>.aar` |
 
-Each library needs its `.h` and `.abi.json` beside it, and the exported signatures must match across slices. `--ndk` or `ANDROID_NDK_HOME` selects the NDK. `--android-api` defaults to 21. `--android-package` sets the Java package (`dream.generated.<name>` by default).
+Each library needs its `.h` and `.abi.json` beside it, and the exported signatures must match across slices. `--ndk` or `ANDROID_NDK_HOME` selects the NDK, `--android-api` defaults to 21, and `--android-package` sets the Java package (`dream.generated.<name>` by default).
 
 Call an export on an attached thread, then detach. A borrowed argument does not consume a Dream reference; an owned result is released with `releaseHandle`.
 

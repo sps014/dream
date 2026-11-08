@@ -9,7 +9,7 @@ api: reference/api/system-net.md
 
 ## TCP and UDP
 
-`system.net` provides owned `TcpListener`, `TcpStream`, and `UdpSocket` resources on native and Node. `SocketCapabilities.supported` is false in browsers, where raw socket requests return `EUNSUPPORTED`. HTTP remains available through the separate HTTP capabilities.
+`TcpListener`, `TcpStream`, and `UdpSocket` work on native and Node. Browsers report `SocketCapabilities.supported == false` and return `EUNSUPPORTED`; use the HTTP client there.
 
 ```dream
 import system;
@@ -38,9 +38,20 @@ async fun main(): void {
 }
 ```
 
-TCP streams implement `AsyncReader` and `AsyncWriter`. Reads and writes may be partial. Use `write_all_async` or `Streams.copy_async` to retry writes. Zero-length reads consume nothing; positive-size empty reads denote peer EOF. `shutdown_write()` sends FIN after accepted writes and retains the read side. Native and Node support half-open connections. A concurrent read or write of the same direction returns `EBUSY`; a read and write may proceed together. A read asking for more than 1 MiB returns at most 1 MiB; writes have no size limit and report how many bytes were accepted. `set_nodelay` controls TCP_NODELAY.
+TCP streams implement `AsyncReader` and `AsyncWriter`. Reads and writes may return only some of the bytes.
 
-`connect`, `accept`, and `read_with_timeout` expose millisecond deadlines; zero disables a deadline. Async methods inherit structured cancellation unless an explicit token is passed. Cancellation preserves completed side effects. Close wakes pending operations and is idempotent. Accepted streams remain valid after their listener closes. Node bounds queued accepted sockets to 64 and rejects excess pending connections; the native listener uses the OS backlog.
+- Use `write_all_async` or `Streams.copy_async` to write every byte.
+- A zero-length read consumes nothing. An empty read when you asked for bytes means the peer closed.
+- `shutdown_write()` sends FIN after accepted writes and keeps reading open. Native and Node allow a half-open connection.
+- A second read, or a second write, at the same time returns `EBUSY`. One read and one write may run together.
+- A read larger than 1 MiB returns at most 1 MiB. A write has no size cap and returns how many bytes were accepted.
+- `set_nodelay` turns `TCP_NODELAY` on or off.
+
+`connect`, `accept`, and `read_with_timeout` take a millisecond deadline. Zero means no deadline.
+
+- Async methods use the current task's cancellation unless you pass a token. Bytes already transferred stay transferred.
+- `close()` wakes pending operations and is safe to call again. An accepted stream stays valid after its listener closes.
+- Node queues at most 64 accepted sockets and rejects more. The native listener uses the operating system's backlog.
 
 Async methods below also accept an optional trailing `token: Option<CancellationToken>`.
 
@@ -65,7 +76,12 @@ Async methods below also accept an optional trailing `token: Option<Cancellation
 | `set_nodelay(enabled)` | `Result<Unit, IoError>` | Turns `TCP_NODELAY` on or off. |
 | `close()` | `Result<Unit, IoError>` | Closes the socket and wakes pending operations. |
 
-UDP `send(host, port, data)` sends one message, including an empty message. `receive(max_bytes)` returns `UdpDatagram` with `data`, sender `host` and `port`, and an explicit `truncated` flag. Empty messages are valid and never denote EOF. The portable send limit is 65507 bytes; receive buffers support up to 65535 bytes. One receive can be pending per socket. `set_broadcast` and `set_ttl` expose supported options. Node retains up to 64 queued datagrams and drops excess arrivals, consistent with UDP's lossy transport contract. Deadlines, cancellation, and closure wake pending receives.
+`send(host, port, data)` sends one datagram, including an empty one. `receive` returns a `UdpDatagram` with `data`, the sender `host` and `port`, and `truncated`.
+
+- An empty message is valid. It does not mean the socket closed.
+- Sends are at most 65507 bytes, and a receive accepts up to 65535. One receive can be pending per socket.
+- `set_broadcast` and `set_ttl` set those options. Node keeps at most 64 queued datagrams and drops the rest.
+- A deadline, cancellation, or `close()` wakes a pending receive.
 
 | `UdpSocket` member | Returns | Effect |
 | --- | --- | --- |
@@ -86,7 +102,9 @@ UDP `send(host, port, data)` sends one message, including an empty message. `rec
 
 ## Streaming gzip and zlib
 
-`system.compress` reads and writes standard DEFLATE streams (RFC 1951) in gzip (RFC 1952) or zlib (RFC 1950) framing. Output is interchangeable with other gzip and zlib tools, and behaves the same on native, Node, browser, and WASI targets with no extra files to deploy. Wrappers borrow their underlying streams. Encoding and decoding operate in bounded chunks and enforce a total output limit, defaulting to 64 MiB and configurable up to 1 GiB.
+`system.compress` reads and writes gzip and zlib (DEFLATE) streams that match other tools, on every target, with nothing extra to deploy.
+
+A wrapper borrows the underlying stream. It works in chunks and stops at `max_output_bytes` (default 64 MiB, at most 1 GiB).
 
 ```dream
 import system;
@@ -126,12 +144,19 @@ fun main(): void {
 A `max_output_bytes` outside 0 to 1 GiB returns `EINVAL`; corrupt, truncated,
 oversized, or trailing input returns `ECOMPRESS`.
 
-`CompressionWriter` implements `Writer`. `flush()` emits a synchronization boundary and flushes its destination. `finish()` emits the trailer, releases encoder state, and flushes. `close()` abandons the stream without closing or finishing the borrowed destination. Dropping a writer also abandons it, so call `finish()` to observe trailer and flush failures.
+`CompressionWriter` implements `Writer`. `flush()` writes pending bytes and flushes the destination, and `finish()` writes the trailer and flushes.
 
-`CompressionReader` implements `Reader` and verifies checksums and complete stream termination. Corruption, truncation, expansion beyond the configured limit, concatenated members, and trailing bytes return errors. Successful EOF requires the underlying source to reach EOF after exactly one compressed stream. A failure can occur after previously decoded bytes have been consumed; those side effects are preserved.
+`close()` stops the wrapper and does not close or finish the destination. Dropping a writer does the same, so call `finish()` when you need trailer and flush errors.
+
+`CompressionReader` implements `Reader` and checks the checksum and that the stream ended cleanly.
+
+Corruption, truncation, output past the limit, a second member, and trailing bytes are errors. EOF succeeds only when the source ends right after one stream; bytes already decoded stay consumed if a later check fails.
 
 ## Collection capacity
 
-`List`, `Queue`, `Map`, and `Set` provide `reserve(additional) -> Result<bool, CapacityError>`. Reservation preserves values and length. For hash tables it accounts for the load factor and can reclaim tombstones. Negative and unsupported requests return errors before changing capacity. Allocation failure follows the runtime's ordinary allocation policy. `capacity` describes physical element slots or hash buckets, rather than a guaranteed insertion count.
+`List`, `Queue`, `Map`, and `Set` have `reserve(additional)`, which returns `Result<bool, CapacityError>`. Values and length stay the same.
 
-UUID generation adds no speculative cryptographic algorithms. Further cryptography remains driven by concrete application requirements.
+- A hash table request includes load-factor room and can reuse deleted slots.
+- A negative or unsupported count returns an error and does not change capacity.
+- If allocation fails, it fails the same way as any other allocation.
+- `capacity` is physical slots or buckets, not a count of insertions that are guaranteed to fit.

@@ -61,11 +61,11 @@ async fun main(): void {
 | `@file` | A file part of a `multipart/form-data` body | `UploadedFile` or `Option<UploadedFile>` | `@file("attachment")` |
 | `@dep(provider)` | The value returned by a provider function | The provider's value type | — |
 
-Without an override, the parameter name is the input name. A parameter matching a `{path}` segment can bind without an explicit `@path`. A parameter that has no matching segment and no input attribute is a compile-time error. A handler can also take `RequestContext` to read the raw request, or `ServerWebSocket` on a `@websocket` route.
+Without an override, the parameter name is the input name, and a parameter that matches a `{path}` segment can bind without `@path`. A parameter with no matching segment and no input attribute is a compile-time error; a handler can also take `RequestContext`, or `ServerWebSocket` on a `@websocket` route.
 
 Scalar values are parsed with the declared type's `parse`, so `@query limit: int` rejects `?limit=ten`.
 
-For `@body`, a model uses strict [validation](validation.md). `JsonValue` parses any JSON without a model. `string` and `byte[]` give you the raw body for your own processing. A route cannot combine `@body` with `@form` or `@file`.
+For `@body`, a model uses strict [validation](validation.md), `JsonValue` accepts any JSON, and `string` or `byte[]` gives you the raw body. A route cannot combine `@body` with `@form` or `@file`.
 
 ## Defaults and constraints
 

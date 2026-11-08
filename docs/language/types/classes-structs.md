@@ -8,7 +8,7 @@ targets: [native, web, node]
 
 # Classes & Structs
 
-Classes and structs keep related fields and methods together. A class shares the same object when assigned to another variable. A struct creates an independent value copy. Choose the behavior your data needs.
+Classes and structs group fields and methods. A class is shared on assignment, and a struct is copied. Pick the one your data needs.
 
 !!! glance "At a glance"
 
@@ -57,7 +57,7 @@ Classes and structs keep related fields and methods together. A class shares the
 
 ## Classes are reference types
 
-A `class` lives on the heap, and a variable holds a *reference* to it. Assigning or passing a class shares the same object. Heap values also follow [ownership](../memory/ownership.md) (parameters that take ownership, last-use move):
+A `class` lives on the heap, and assigning or passing it shares that object. Parameters that take ownership follow [ownership](../memory/ownership.md):
 
 ```dream
 class Point(x: int, y: int);
@@ -68,9 +68,9 @@ p2.x = 10;
 System.println(p1.x); // 10
 ```
 
-Classes are managed by automatic reference counting (ARC) — no manual frees. Define a `del()` destructor and it runs right before the object is destroyed. See [Memory Management](../memory/index.md).
+You do not free a class yourself. A `del()` destructor runs right before the object is destroyed — see [Memory Management](../memory/index.md).
 
-Header parameters become **public** fields and a synthesized `constructor`. Write `internal` on a parameter to narrow it. Extra overloads in the body are also named `constructor`.
+Header parameters become **public** fields and a `constructor`. Write `internal` to narrow one, and extra constructors in the body are also named `constructor`.
 
 Call sites stay `Point(3, 4)`.
 
@@ -121,7 +121,7 @@ Structs need no heap allocation and no automatic reference tracking, so a struct
 
 ### `ref struct`: a stack-only value type
 
-`ref struct` is a `struct` with one additional restriction: the compiler rejects any use that would let an instance escape the current stack frame. It exists for types like `Span<T>` (see [Arrays](arrays.md)) that wrap a raw address into memory whose lifetime the compiler cannot otherwise track:
+`ref struct` is a `struct` that must stay in the current stack frame. Use it for a view such as `Span<T>` (see [Arrays](arrays.md)):
 
 ```dream
 ref struct Pair {
@@ -143,7 +143,7 @@ A `ref struct` value behaves exactly like an ordinary `struct` as a local variab
 - **Capturing it in a lambda** — a capturing lambda's environment is a heap-allocated cell.
 - **Using it as a parameter of an `async` function**, or **keeping a local of that type in scope at an `await`** — an async function's locals live in its heap-allocated coroutine state across a suspend point. Move the span work into a separate non-async function and `await` around it.
 
-`ref` may only precede `struct`, never `class` (a `class` is already a heap-allocated reference type, so "stack-only class" is meaningless and rejected at parse time).
+`ref` may only precede `struct`. `ref class` is a parse error.
 
 ### When to use which
 
@@ -156,7 +156,7 @@ Both classes and structs support all of the following.
 
 ### Visibility
 
-Members (fields, methods, static members, accessors, constructors) are **class-private by default** — reachable only from the type's own methods, regardless of file. Mark a member `internal` (module-wide) or `public` (everywhere the type is reachable) to expose it. `static` never implies visibility.
+Members are private to the type unless you mark them `internal` or `public`. `static` does not change visibility.
 
 Separately, the type itself is **file-private by default** and needs `public` (or `internal`) to be used from another file. Full rules: [Imports > Visibility](../rules/imports.md#visibility).
 
@@ -287,7 +287,7 @@ let u = Util();
 
 ## Advanced: `shared` classes
 
-Prefix a `class` with `shared` to make it a **shared** reference type that is safe to use across tasks. Counting stays correct from more than one task, and each instance has room for a lock.
+Prefix a `class` with `shared` to use it from more than one task. Each instance can be locked.
 
 A type is **`shared`** (and may be captured by a [`Task`](../concurrency/tasks.md) body, or stored in a `shared class`) when it is unmanaged / blittable, `string`, a value struct whose fields are all `shared`, or a `shared class`. Constrain generics with `T : shared`.
 
@@ -309,7 +309,9 @@ shared class Counter {
 }
 ```
 
-**The closed-graph field rule:** every field of a `shared class` must be either `shared`, or a **managed heap reference** — another ordinary class, an array (`int[]`, `Job[]`), `List<T>`, a union like `Option<Plain>` — whose whole reachable graph then joins this object's shared region. Such fields use the same `lock` discipline as every other field; there are no per-field access rules. What is rejected is anything that would smuggle an *untracked* reference in: a value struct embedding a non-shared class field, or a generic argument that could be one.
+Every field of a `shared class` must be `shared`, or a managed reference whose reachable values join this object: another class, an array (`int[]`, `Job[]`), `List<T>`, or a union such as `Option<Plain>`. Those fields use the same `lock` as every other field.
+
+A value struct that embeds a non-shared class, or a generic argument that could, is rejected.
 
 ```dream
 class Plain {
@@ -340,8 +342,8 @@ shared class Bad {
 
 `shared struct` is not allowed — value structs become `shared` automatically when their fields are. Wrap a reference graph in a `shared class` if it needs to be shared by pointer.
 
-`lock (x)` still requires a `shared class` (a lock word), not every `shared` type. See [`lock (obj) { ... }`](../concurrency/sharing.md#sharing-state-safely).
+`lock (x)` requires a `shared class`, not every `shared` type. See [`lock (obj) { ... }`](../concurrency/sharing.md#sharing-state-safely).
 
 ## Advanced: boxing a struct
 
-When a struct is used where a reference is expected, it is **boxed** into a heap copy. An optional struct (`Option<Vec2>`) is an ordinary `Option` over the value type — and assigning a struct to a bare interface or `object` variable boxes it for dynamic dispatch.
+When a struct is used where a reference is expected, including an interface or `object` variable, Dream copies it onto the heap. `Option<Vec2>` stays an `Option` of the value.

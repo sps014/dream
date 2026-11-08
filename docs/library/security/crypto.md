@@ -8,11 +8,11 @@ api: reference/api/system-crypto.md
 # Crypto
 
 
-Use these APIs for hashes, secure random bytes, and authenticated encryption. They produce byte arrays; use [Encoding](../text/encoding.md) to display or store those bytes as text. Check the availability table before choosing encryption for a browser app.
+These APIs hash data, draw secure random bytes, and encrypt with authentication. They return `byte[]` ([Encoding](../text/encoding.md) turns that into text); check the table before encrypting in a browser.
 
 **Import:** `import system.crypto;`
 
-SHA-2 hashes, HMAC, a secure RNG, and AES-256-GCM. SHA-256, SHA-512, and HMAC-SHA256 give identical results on every target, including the browser. The secure RNG uses the operating system (native or Node) or Web Crypto in the browser. APIs return raw `byte[]` — format with [encoding](../text/encoding.md). Not TLS.
+SHA-256, SHA-512, and HMAC-SHA256 match on every target, including the browser. The secure RNG uses the operating system on native and Node, and Web Crypto in the browser; these calls are not TLS.
 
 ```dream
 import system;

@@ -73,8 +73,8 @@ async fun main(): void {
 
 Scope strings are assigned by the account repository (`AuthAccount.scopes`) and included in issued tokens.
 
-Keep authorization requirements on the route that injects `AuthService.current_user`. Merely adding a metadata attribute does not authenticate a request. The generated security scheme adds Swagger Authorize support; actual enforcement occurs in the middleware and dependency.
+Keep authorization on the route that injects `AuthService.current_user`. A metadata attribute does not authenticate a request; Swagger Authorize is documentation, and the middleware and dependency do the check.
 
-`AuthPrincipal.has_scope` checks an individual permission. For resource-specific policy, define another dependency that injects `AuthService.current_user`, loads the resource, checks ownership, and returns `Result<Resource, HttpStatus>`. Avoid accepting an identity or permission set from request headers without verification.
+`AuthPrincipal.has_scope` checks one permission. For a resource, add a dependency that injects `AuthService.current_user`, loads the resource, checks ownership, and returns `Result<Resource, HttpStatus>`, and do not accept an identity or permission set from request headers without checking it.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

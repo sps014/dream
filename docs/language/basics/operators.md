@@ -8,7 +8,7 @@ targets: [native, web, node]
 
 # Operators
 
-Operators calculate values, compare them, or update a variable. Start with the everyday operators below. The later sections explain custom operators and the order in which expressions are evaluated.
+Operators calculate, compare, or update values. Later sections cover custom operators and evaluation order.
 
 !!! glance "At a glance"
 
@@ -102,13 +102,10 @@ true || boom(); // boom() never runs
 
 ## Bitwise
 
-`&` (and), `|` (or), `^` (xor), `<<` (shift left), `>>` (shift right), and prefix `~` (complement)
-work on any integer type: `int`, `uint`, `long`, `ulong`, `byte`. Both operands of a binary bitwise
-op must be the same type, same as arithmetic. Simple enums are integers at runtime, so `&`/`|`/`^`
-and prefix `~` also work on them and yield the same enum type (`Flags.Read | Flags.Write`). Shifts
-stay integer-only. `>>` is an *arithmetic* (sign-extending) shift on the
-signed types (`int`, `long`) and a *logical* (zero-filling) shift on the unsigned types (`uint`,
-`ulong`, `byte`).
+`&`, `|`, `^`, `<<`, `>>`, and prefix `~` work on `int`, `uint`, `long`, `ulong`, and `byte`. Both operands of a binary operator must be the same type.
+
+- `&`, `|`, `^`, and `~` also work on simple enums and keep the enum type (`Flags.Read | Flags.Write`). Shifts stay on integers.
+- `>>` sign-extends `int` and `long`, and zero-fills `uint`, `ulong`, and `byte`.
 
 ```dream
 let flags: uint = 6u; // 0b0110
@@ -150,8 +147,7 @@ fun quarter(n: int): Result<int, string> {
 }
 ```
 
-Postfix `?` wins over ternary unless a matching `:` follows at the same nesting depth.
-Example: `half(n)? + 1` is try-propagation; `cond ? a : b` is still the ternary.
+Postfix `?` wins over the ternary unless a matching `:` follows at the same nesting depth. `half(n)? + 1` is try-propagation, and `cond ? a : b` is still the ternary.
 
 ## Assignment
 
@@ -183,15 +179,15 @@ let (_, y) = pair;
 let _ = fetch().await;
 ```
 
-Unread `let`/`const` locals produce a warning (compile still succeeds). Use `_` when the value is intentionally ignored. A name starting with `_` (such as `_guard`) is still an ordinary binding that keeps its value alive until the end of the scope, but it is never reported as unused. Naming a local in `nameof(local)` counts as a use.
+Unread `let` and `const` locals warn, and the program still compiles. Use `_` to ignore a value.
+
+A name such as `_guard` is a real binding. It lasts to the end of the scope and is never reported unused, and `nameof(local)` counts as a use.
 
 Any expression can be used as a statement (`expr;`); the result is evaluated and dropped.
 
 ## Range expressions
 
-`a..b` produces a reusable `Range` value with `int` bounds and an excluded end.
-It counts upward or downward toward `b`; equal bounds produce an empty range.
-See [Ranges](../types/ranges.md) for value operations, iteration, and collection conversion.
+`a..b` produces a `Range` with `int` bounds and an excluded end. It steps toward `b`, and equal bounds are empty. See [Ranges](../types/ranges.md).
 
 ## Precedence
 

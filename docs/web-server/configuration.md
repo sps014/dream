@@ -55,7 +55,7 @@ Every `WebAppOptions` constructor argument has a default, so pass only what you 
 
 ## Server settings (`ServerConfig`)
 
-The field names match Uvicorn's options, and every default matches Uvicorn's. Durations are in milliseconds. A limit or timeout of `0` means "none". A negative value makes `listen` fail with `EINVAL`.
+The field names and defaults match Uvicorn, and durations are in milliseconds. A limit or timeout of `0` means none, and a negative value makes `listen` fail with `EINVAL`.
 
 | Field | Default | Effect |
 | --- | --- | --- |
@@ -96,13 +96,13 @@ A missing or unreadable file makes `listen` and `run` fail before the server acc
 
 ### HTTP/2
 
-The server speaks HTTP/1.1 and HTTP/2 on the same port, with no setting to turn on. Over HTTPS, a client that offers HTTP/2 during the TLS handshake gets it. Over plain HTTP, a client that opens the connection with the HTTP/2 preface ("prior knowledge", such as `curl --http2-prior-knowledge`) gets HTTP/2. Everyone else gets HTTP/1.1.
+The server speaks HTTP/1.1 and HTTP/2 on the same port, with no setting to turn HTTP/2 on. A client gets HTTP/2 when it offers it in the HTTPS handshake, or when it sends the HTTP/2 preface on plain HTTP (`curl --http2-prior-knowledge`); everyone else gets HTTP/1.1.
 
-Handlers see no difference between the two. Each HTTP/2 request counts against `limit_concurrency` like an HTTP/1.1 request, and `h2_max_concurrent_streams` caps how many run at once on one connection. WebSockets always use HTTP/1.1, so a WebSocket client connects over HTTP/1.1 even when the server supports HTTP/2.
+Handlers see no difference between the two protocols. Each HTTP/2 request counts against `limit_concurrency`, `h2_max_concurrent_streams` caps one connection, and WebSockets stay on HTTP/1.1.
 
 ### Behind a reverse proxy
 
-A reverse proxy such as nginx connects to your server itself, so every request appears to come from the proxy's address. Proxies report the real client in the `X-Forwarded-For` header and the original scheme in `X-Forwarded-Proto`. Each request exposes the result on `HttpIncoming`:
+A reverse proxy such as nginx connects to your server, so every request appears to come from the proxy. Proxies report the client in `X-Forwarded-For` and the original scheme in `X-Forwarded-Proto`, and `HttpIncoming` exposes the result:
 
 | Field | Value |
 | --- | --- |
@@ -110,7 +110,7 @@ A reverse proxy such as nginx connects to your server itself, so every request a
 | `client_port` | The peer's port, or `0` when `client_host` came from `X-Forwarded-For`. |
 | `scheme` | `"https"` for a TLS connection, otherwise `"http"`, or the trusted proxy's `X-Forwarded-Proto`. |
 
-The server believes these headers only from peers listed in `forwarded_allow_ips`; from anyone else they are ignored, so a client cannot fake its address. When `X-Forwarded-For` lists several hops, the server reads from the right and takes the first address that is not a trusted proxy. Set `forwarded_allow_ips` to your proxy's address:
+The server trusts these headers only from peers in `forwarded_allow_ips`. When `X-Forwarded-For` lists several hops, it reads from the right and keeps the first address that is not a trusted proxy, so set the list to your proxy:
 
 ```dream
 import system;
@@ -147,6 +147,8 @@ Call `shutdown` followed by `wait` to release the listener and finish cleanup. A
 4. When `timeout_graceful_shutdown_ms` is set and requests are still running after it, their connections close and their handlers are cancelled.
 5. Cleanups registered with `App.on_stop` run last, when the server runs inside `App.run`.
 
-Mount routers and install middleware and overrides before startup. Startup freezes configuration; later configuration calls return an error. Duplicate routes and documentation URL collisions fail before accepting traffic. Treat each app as one server lifetime: construct another instance to run a fresh server.
+Mount routers and install middleware and overrides before startup. After startup, configuration is frozen and later configuration calls return an error.
+
+Duplicate routes and documentation URL collisions fail before the server accepts traffic. To run another server, construct another app.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

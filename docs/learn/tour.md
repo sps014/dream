@@ -8,13 +8,13 @@ hide: [toc]
 
 # Language tour
 
-Learn the basics through four short programs. Run each one before moving on, then change a value or add a statement. The examples introduce one idea at a time.
+Learn the basics through four short programs. Run each one and change a value or add a statement before you move on.
 
 <div class="tour-step" markdown>
 
 ## Variables
 
-A **variable** is a named box that holds a value. `let` can be changed later. `const` cannot.
+A **variable** is a named box that holds a value. `let` can be changed later, and `const` cannot.
 
 ```dream
 import system;

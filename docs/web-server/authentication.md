@@ -99,9 +99,11 @@ Issuer, audience, algorithm, signature, expiry, and session activity are verifie
 | `AuthAccounts` | `find_login(login)`, `link_identity(issuer, subject, email, email_verified)` | Look up local accounts and decide how external logins map to them. Return an `AuthAccount(subject, password_hash, scopes)`. |
 | `AuthSessionStore` | Session and login-transaction storage | Persist refresh sessions. `MemoryAuthStore` implements it for tests. |
 
-`MemoryAuthStore` is for tests and single-process examples. Implement `AuthSessionStore` for production persistence. `rotate` must atomically consume the old digest, insert its replacement, and revoke the family if the old digest was consumed. A read followed by a separate write is insufficient under concurrency. Store refresh digests rather than bearer secrets.
+`MemoryAuthStore` is for tests and single-process examples. For production, implement `AuthSessionStore` and store refresh digests, not bearer secrets.
 
-Passwords use Argon2id PHC strings. Verification returns an error for malformed or unsupported hash parameters and false for a password mismatch. The crypto host bounds password and PHC costs. Protect credential endpoints with deployment-appropriate request limits.
+`rotate` must consume the old digest, insert its replacement, and revoke the family if that digest was already used. A separate read and write is not enough when two requests overlap.
+
+Passwords use Argon2id PHC strings. Verification returns an error for a malformed or unsupported hash and false when the password does not match, so protect credential endpoints with request limits.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
 

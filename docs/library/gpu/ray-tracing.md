@@ -7,30 +7,25 @@ api: reference/api/system-gpu.md
 
 # Ray tracing
 
-Ray tracing finds where rays hit triangles. The GPU searches an acceleration structure, a tree
-over your geometry that it builds once and then searches very quickly. Dream offers two ways to
-trace:
+Ray tracing finds where rays hit triangles. Build an acceleration structure once, then search it from a shader:
 
 - Ray queries trace from inside any shader, usually a compute shader, and give you the hit to
   handle in place. They are the simpler choice for shadows, visibility and picking.
 - Ray tracing pipelines run separate shaders for the camera, for hits and for misses. They suit
   full renderers with many materials.
 
-Neither runs on WebGPU. Ray queries need `GpuFeature.RayQuery` and work on Metal, Vulkan and
-Direct3D 12 hardware that has them. Ray tracing pipelines need `GpuFeature.RayTracing` and run on
-Vulkan and Direct3D 12.
+Neither runs on WebGPU.
 
-For inline queries in a fragment shader, declare a `GpuAccelerationStructure`
-shader parameter and bind the top-level scene with `pass.bind(GpuShaders.<shader>.scene, scene)`
-before drawing. Check `device.supports(GpuFeature.RayQuery)` before creating that pipeline.
-Use native shader targets; a WebGPU variant cannot contain ray queries. The same
-`GpuRayQuery` operations shown below work inside the fragment shader.
+- Ray queries need `GpuFeature.RayQuery` (Metal, Vulkan, and Direct3D 12).
+- Ray tracing pipelines need `GpuFeature.RayTracing` (Vulkan and Direct3D 12).
+
+For a query in a fragment shader, declare a `GpuAccelerationStructure` parameter and bind the scene with `pass.bind(GpuShaders.<shader>.scene, scene)` before drawing.
+
+Check `device.supports(GpuFeature.RayQuery)` first and compile for a native target. The `GpuRayQuery` calls below work in a fragment shader; WebGPU cannot contain them.
 
 ## Building a scene
 
-A scene has two levels. A bottom level holds geometry: triangles whose corners are in a
-`GpuBuffer<GpuVec3>`, three per triangle. A top level places bottom levels in the world with a
-transform each:
+A bottom-level structure holds triangles: three `GpuVec3` corners per triangle in a `GpuBuffer`. A top-level structure places those with a transform each:
 
 ```dream
 import system;
@@ -130,17 +125,13 @@ async fun main(): void {
 
 On a GPU with ray queries it prints a triangle of `#` characters, widest near the bottom.
 
-A ray starts at `origin`, travels along `direction`, and only counts hits between `t_min` and
-`t_max` along the way. Hits on opaque triangles are accepted automatically. `proceed` stops at
-each candidate that needs a decision, which is a triangle that is not opaque. `commit_triangle`
-accepts it; skip the call to ignore it, for example where a texture is transparent. With
-`ForceOpaque`, as here, every triangle is opaque and the loop body never runs, but the loop is
-still needed to finish the trace. Afterwards, `has_hit`, `hit_distance`, `hit_instance_id` and the
-other getters describe the closest accepted hit.
+A ray starts at `origin`, travels along `direction`, and counts hits only between `t_min` and `t_max`. Opaque hits are accepted on their own.
 
-`GpuRayFlags` changes the search. `ForceOpaque` treats every triangle as opaque, and
-`AcceptFirstHitAndEndSearch` stops at the first hit, which is all a shadow ray needs. The `255u`
-argument is a mask: the trace only sees instances whose mask shares a bit with it.
+- `proceed` stops at each non-opaque candidate. `commit_triangle` accepts it; skip that call to ignore a hit, for example where a texture is transparent.
+- With `ForceOpaque`, every triangle is opaque, so the loop body never runs. The loop is still required to finish the trace.
+- After that, `has_hit`, `hit_distance`, `hit_instance_id`, and the other getters describe the closest accepted hit.
+
+`ForceOpaque` treats every triangle as opaque, and `AcceptFirstHitAndEndSearch` stops at the first hit, which is enough for a shadow. The `255u` mask hides instances that share no bits with it.
 
 ## Ray tracing pipelines
 
@@ -155,8 +146,7 @@ A ray tracing pipeline splits the work across shaders:
 | `@intersection` | to test custom shapes built with `GpuGeometry.boxes` |
 | `@callable` | when another stage calls `call_shader` |
 
-The stages share a payload struct. Mark its fields with `@ray_payload`. Each stage receives the
-payload by `ref` and writes its result into it:
+The stages share a payload struct. Mark its fields with `@ray_payload`, take it by `ref`, and write the result there:
 
 ```dream
 import system;
@@ -210,11 +200,8 @@ async fun render(
 }
 ```
 
-`ray_tracing_pipeline` takes the ray generation shader, the miss shaders, the hit groups and the
-callable shaders. A hit group always has a closest-hit shader; add `with_any_hit` or
-`with_intersection` for the others. The generated `trace` method runs the ray generation shader
-once per element of a `width` by `height` grid and takes the ray generation shader's own
-parameters after that.
+`ray_tracing_pipeline` takes the ray generation shader, the miss shaders, the hit groups, and the callable shaders. A hit group always has a closest-hit shader; add `with_any_hit` or `with_intersection` for the others.
 
-Only the ray generation shader takes resource parameters. The payload is limited to 128 bytes and
-the hit attributes to 32 bytes, and a hit shader cannot trace further rays.
+The generated `trace` method runs the ray generation shader once per pixel of a `width` by `height` grid. Its remaining arguments are that shader's parameters.
+
+Only the ray generation shader takes resource parameters. The payload is at most 128 bytes, hit attributes at most 32, and a hit shader cannot trace further rays.

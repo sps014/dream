@@ -43,9 +43,9 @@ async fun main(): void {
 }
 ```
 
-The first registered layer is outermost. Requests pass through app layers, router `@use(handler)` layers, route `@use(handler)` layers, dependency extraction, and the handler. Responses return in reverse order. Repeated `@use` attributes preserve source order.
+The first registered layer is outermost. A request passes through app layers, router `@use(handler)` layers, route `@use(handler)` layers, dependency extraction, and the handler, then the response returns in reverse, and repeated `@use` attributes keep source order.
 
-A layer may return early, for example to reject a request or answer a preflight, without calling `next`. Call `next.call().await` once to continue. App middleware also surrounds documentation and unmatched-route responses.
+A layer can return early, for example to reject a request or answer a preflight, without calling `next`. Call `next.call().await` once to continue; app middleware also wraps documentation and unmatched-route responses.
 
 ## Middleware building blocks
 

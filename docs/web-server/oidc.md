@@ -62,7 +62,7 @@ async fun main(): void {
 }
 ```
 
-Register the exact callback URI with the provider, then configure the issuer URL and client ID. Public clients omit the client secret; confidential clients supply it server-side. The demonstration `Accounts` class rejects linking until you implement your application's identity policy.
+Register the exact callback URI with the provider, then set the issuer URL and client ID. Public clients omit the client secret and confidential clients supply it on the server; the sample `Accounts` class rejects linking until you add your identity policy.
 
 | `OidcOptions` argument | Default | Meaning |
 | --- | --- | --- |
@@ -79,12 +79,12 @@ Register the exact callback URI with the provider, then configure the issuer URL
 | `GET /auth/oidc/{name}` | Starts login and redirects to the provider. |
 | `GET /auth/oidc/{name}/callback` | Completes login, links the identity, and returns tokens. |
 
-GET `/auth/oidc/company` starts login. The service discovers provider endpoints, generates state, nonce and an S256 PKCE challenge, stores an expiring transaction, sets a browser-binding cookie, and redirects to the provider. The callback verifies the cookie/state binding and atomically consumes the transaction before exchanging the code.
+GET `/auth/oidc/company` starts login: the service discovers the provider, stores state, a nonce, and an S256 PKCE challenge, sets a browser-binding cookie, and redirects. The callback checks that cookie and state, consumes the transaction once, and then exchanges the code.
 
-The native OIDC library validates the issuer, audience, signature, expiry, nonce, and access-token hash when present. HTTP redirects during discovery and token exchange are disabled. HTTPS is required except for loopback development URLs.
+Login checks the issuer, audience, signature, expiry, nonce, and access-token hash when the provider sends one. Discovery and token exchange do not follow HTTP redirects, and HTTPS is required except on loopback URLs.
 
-`AuthAccounts.link_identity` receives verified issuer/subject plus email and its verification flag. Use issuer and subject as the external identity key. Email equality alone must not silently link an external identity to an existing local account.
+`AuthAccounts.link_identity` receives the verified issuer and subject, plus the email and whether it was verified. Use issuer and subject as the external identity key, and do not link an account from an email match alone.
 
-Successful login returns tokens and sets a `Secure; HttpOnly; SameSite=Lax` host-only session cookie. Authenticated cookie writes require `X-CSRF-Token` matching the session's CSRF value. The callback transaction expires after ten minutes and cannot be reused. Configure TLS before using browser sessions.
+Successful login returns tokens and sets a `Secure; HttpOnly; SameSite=Lax` host-only session cookie. Cookie writes need an `X-CSRF-Token` that matches the session, the callback transaction expires after ten minutes and cannot be reused, and browser sessions need TLS.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

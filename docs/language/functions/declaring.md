@@ -94,7 +94,7 @@ fun fib(n: int): int {
 
 ## Public functions and entry point
 
-Functions are **file-private by default**. Mark one `public` to import it from other files and export it to the WebAssembly host (see [Imports](../rules/imports.md#visibility)). A `public` function cannot expose a non-`public` class:
+Functions are **file-private by default**. Mark one `public` to import it and to export it to the WebAssembly host (see [Imports](../rules/imports.md#visibility)), and do not return a non-`public` class:
 
 ```dream
 // public fun make(): Secret { ... }   // error if Secret is not public

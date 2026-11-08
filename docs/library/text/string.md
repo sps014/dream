@@ -7,7 +7,7 @@ api: reference/api/system-text.md
 
 # Strings
 
-Strings hold text. Join text with `+`, insert values with string interpolation, or use the helpers below to search and change it. The stored text uses UTF-16; use graphemes when you need to work with visible characters.
+Join text with `+`, interpolation, or the helpers below. Stored text is UTF-16, so use graphemes when you need visible characters.
 
 ```dream
 import system;
@@ -20,11 +20,11 @@ fun main() {
 }
 ```
 
-`.length` counts UTF-16 code units, not Unicode scalars. Use `.byte_size()` for the raw UTF-16 payload size (`length * 2`). Every empty string literal `""` shares one allocation.
+`.length` counts UTF-16 code units, not Unicode scalars. `.byte_size()` is that storage in bytes (`length * 2`).
 
 ## Raw strings
 
-A raw string starts and ends with three or more double quotes. Its text is used exactly as written: backslashes are ordinary characters and `"` needs no escape. Raw strings suit file paths, regular expressions, JSON, and other text with many quotes or backslashes.
+A raw string starts and ends with three or more double quotes. Backslashes and `"` are ordinary characters, which suits paths, regular expressions, and JSON.
 
 ```dream
 let path = """C:\temp\new""";
@@ -49,7 +49,7 @@ fun usage(): string {
 }
 ```
 
-The result is `"Usage: tool [options]\n  --verbose  print each step"`. Neither the line break after the opening quotes nor the one before the closing quotes is part of the text. Blank lines stay blank.
+The result is `"Usage: tool [options]\n  --verbose  print each step"`. The line break after the opening quotes and the one before the closing quotes are not part of the text, and blank lines stay blank.
 
 The compiler reports an error when text follows the opening quotes on the same line, when text comes before the closing quotes on their line, or when a nonblank line does not begin with the closing line's whitespace.
 
@@ -96,7 +96,7 @@ fun user_json(name: string, age: int): string {
 | `normalize(form)` / `graphemes()` | Unicode normalize / grapheme clusters |
 | `equals` / `compare` | equality / ordering |
 
-The Unicode helpers follow Unicode 16.0 and give the same result on every target, including the browser. Case mapping does not depend on a locale: `"İ".to_lower_unicode()` is `"i̇"` everywhere, and a capital sigma at the end of a word lowercases to `ς`. Full case mapping can change the length, as in `"straße".to_upper_unicode() == "STRASSE"`.
+These helpers follow Unicode 16.0 and match on every target, including the browser. Case mapping ignores locale: `"İ".to_lower_unicode()` is `"i̇"`, a final capital sigma becomes `ς`, and `"straße".to_upper_unicode()` is `"STRASSE"`.
 
 ## Views without allocating
 
@@ -110,7 +110,7 @@ System.println(value.parse_int().unwrap_or(0)); // 8080
 
 Compare a span with a string using `sp == "text"` or `"text" == sp`; `!=` works in both orders too. These compare contents without allocating.
 
-`split_iter(sep)` and `lines()` walk the pieces as spans, and `Map<string, V>` / `Set<string>` accept a span key. Call `to_string()` when you need an owned copy. See [Spans](../../language/types/spans.md).
+`split_iter(sep)` and `lines()` yield spans, and `Map<string, V>` and `Set<string>` accept a span key. Call `to_string()` for an owned copy ([Spans](../../language/types/spans.md)).
 
 ## `StringBuilder`
 
@@ -127,7 +127,7 @@ Also: `append_char`, `append_int`, `append_long`, `append_double`, `append_bool`
 
 ## Join an array of strings
 
-`parts.join(separator)` combines a string array into one string. For example, `["Ada", "Sam"].join(", ")` returns `"Ada, Sam"`. Use [List.join](../collections/list.md) when you have a list instead.
+`parts.join(separator)` joins a string array, so `["Ada", "Sam"].join(", ")` is `"Ada, Sam"`. Use [List.join](../collections/list.md) for a list.
 
 ## Choose a Unicode normalization form
 
@@ -142,8 +142,8 @@ The same visible text can be represented by different sequences of characters. N
 
 Use `text.normalize(UnicodeNormForm.Nfc)`. Compatibility forms can change distinctions in the original text; choose them deliberately.
 
-`graphemes()` returns the pieces a reader sees as characters. This differs from `.length`, which counts the stored UTF-16 units. Use graphemes when splitting visible text, especially text containing accents or emoji.
+`graphemes()` returns the pieces a reader sees as characters, unlike `.length`, which counts UTF-16 units. Use it to split visible text, including accents and emoji.
 
 For reusable message patterns, read [Formatting](formatting.md). Exact methods and overloads are in the [string reference](../../reference/api/text-string-text.md), [normalization forms reference](../../reference/api/text-unicode-norm-form.md), and [StringBuilder reference](../../reference/api/core-string-builder.md).
 
-`StringBuilder.append_utf8_slice(text, start, byte_len)` is an advanced method: its positions and length refer to the string's stored payload bytes. Use ordinary `append` for whole strings. An invalid nonempty byte range stops the program.
+`append_utf8_slice(text, start, byte_len)` indexes stored bytes, not characters. Use `append` for a whole string; a bad nonempty range stops the program.

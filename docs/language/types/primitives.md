@@ -9,7 +9,7 @@ targets: [native, web, node]
 # Primitives
 
 
-Primitive types hold simple values: whole numbers, decimal numbers, booleans, and characters. Their methods are available without imports. See [Types](index.md) for sizes and literal forms.
+Primitive types hold numbers, booleans, and characters, and their methods need no import. See [Types](index.md) for sizes and literal forms.
 
 !!! glance "At a glance"
 
@@ -22,8 +22,6 @@ Primitive types hold simple values: whole numbers, decimal numbers, booleans, an
     - Their methods are available without imports.
 
 **Package:** `system.primitives` (available without an import)
-
-Primitive types are the built-in scalars: integers, floats, booleans, and characters. Their methods ship in the built-in library, so you can call them anywhere without an import. For the full type list and literal suffixes, see [Types](index.md).
 
 ## Primitive types
 
@@ -117,8 +115,6 @@ checked {
 
 The mode is lexical: it applies to the statements written inside the block (including lambdas written there), not to functions they call. `checked` and `unchecked` are only keywords directly before `{`, so they stay usable as identifiers.
 
-Inside `checked` blocks, the optimizer removes checks it can prove never fire — a loop counter bounded by `i < n`, a masked `x & 255`, an array length.
-
 `Type.parse(str)` reports out-of-range text as `Err(ParseError)` rather than panicking.
 
 ## Floating point
@@ -176,7 +172,7 @@ Conversions follow these rules:
 - Converting between integers and `float16` needs a cast in both directions. Casting to an integer drops the fraction, and NaN becomes `0`.
 - A `float16` literal outside the finite range, such as `70000.0h`, is a compile error.
 
-Arithmetic and comparisons work like the other floating-point types. Each result is rounded to the nearest `float16`, so `2048.0h + 1.0h` is `2048`. Because the result of a binary operator has its left operand's type, put the wider operand first when mixing widths: `1.0f + a` is a `float`, while `a + 1.0f` is a compile error.
+Each `float16` result rounds to the nearest value, so `2048.0h + 1.0h` is `2048`. A binary operator uses the left operand's type: `1.0f + a` is a `float`, and `a + 1.0f` is an error.
 
 Printing a `float16` (or converting it with `to_string`) produces the shortest decimal text that reads back as the same value, so `float16.parse(x.to_string())` always returns `x`. Infinity and NaN print as `inf`, `-inf`, and `nan`, and `float16.parse` accepts those words too.
 

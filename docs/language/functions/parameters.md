@@ -101,9 +101,7 @@ Rules:
   the survivors (an ambiguous name layout across overloads is an error). Use positional arguments
   when you prefer not to involve names.
 
-Named arguments and defaults compose: they're the mechanism that lets a call skip a *middle*
-optional parameter while still supplying a later one, which trailing-only default omission alone
-cannot express:
+Named arguments and defaults together let a call skip a middle optional parameter and still pass a later one:
 
 ```dream
 class Rect {
@@ -162,15 +160,11 @@ sum_with_base(10, 1, 2, 3); // 16
 Rules:
 
 - Only the **last** parameter may be variadic; a required or defaulted parameter cannot follow it.
-- Its declared type must be an array type (`T[]`); the caller passes bare `T` values, not an
-  already-built array — there is exactly one calling convention, not two.
+- Its declared type must be an array (`T[]`). The caller passes bare `T` values, not an already-built array.
 - Variadic parameters work for **free functions, constructors, and instance methods**, including
   overloaded callees: trailing arguments are matched against the variadic element type during
   overload resolution, then packed into the `T[]` parameter.
-- Named arguments and variadic parameters compose in one call: name the **fixed** parameters, then
-  supply any trailing variadic elements positionally — e.g. `sum_with_base(base: 10, 1, 2, 3)`.
-  The variadic parameter itself cannot be passed by name (there is one calling convention: bare
-  `T` values, not a pre-built array).
+- Name the fixed parameters, then pass variadic elements by position, as in `sum_with_base(base: 10, 1, 2, 3)`. The variadic parameter cannot be passed by name.
 
 
 ## Ownership: sink-default and `borrow`
@@ -236,11 +230,7 @@ Rules:
   inc(ref a);
   System.println(a); // 6
   ```
-- A lambda **cannot capture** an enclosing function's `ref` parameter, even though it can capture
-  an ordinary `let`/parameter (see [Capturing closures](values.md#capturing-closures)). A `ref`
-  parameter's storage is only guaranteed to live for the duration of the call it came from; a
-  capturing lambda could outlive that call (e.g. by being returned), which would leave it holding
-  a dangling reference. This is a compile-time error.
+- A lambda cannot capture an enclosing `ref` parameter, because that storage lasts only for the call. Capturing an ordinary `let` is allowed — see [Capturing closures](values.md#capturing-closures).
 
 ### `ref` and closures {#ref-and-closures}
 

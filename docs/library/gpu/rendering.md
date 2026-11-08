@@ -7,22 +7,16 @@ api: reference/api/system-gpu.md
 
 # Rendering
 
-Rendering runs two shaders. The vertex shader places each vertex on screen, and the fragment shader
-colors each covered pixel. A render pipeline pairs them with the format of the image they draw into.
+The vertex shader places each vertex, and the fragment shader colors each covered pixel. A pipeline pairs them with the format of the image they draw into.
 
-Use `GpuTextureFormat.Rgba16Float` for an HDR lighting target. Values above `1.0`
-survive rendering and texture reads; apply exposure and tone mapping in a later
-presentation shader before writing to an ordinary window surface. Create both the
-texture and its pipeline with the same format. A texture also needs
-`GpuTextureDesc(...).render_target(true)`. Floating-point scene targets store linear
-color; sRGB conversion belongs at the final surface, not between lighting passes.
+Use `GpuTextureFormat.Rgba16Float` for an HDR lighting target. Values above `1.0` survive until a later shader applies exposure and tone mapping.
 
-`R32Float`, `Rg32Float` and `Rgba32Float` are also accepted as color target formats.
-Device-specific unsupported render/blend combinations return a GPU error rather
-than silently changing the format. Integer and depth formats cannot be used as
-floating-point shader color targets. `device.adapter_name` reports a display label
-for diagnostics; browsers may return an empty label for privacy. Check capabilities
-with `device.supports` rather than matching the label.
+- Create the texture and its pipeline with the same format, and set `render_target(true)`.
+- A floating-point scene target stores linear color. Convert to sRGB only at the final surface.
+
+`R32Float`, `Rg32Float`, and `Rgba32Float` are also color-target formats. An unsupported render or blend combination returns an error instead of changing the format.
+
+Integer and depth formats cannot be floating-point color targets. `adapter_name` may be empty in a browser, so check `device.supports` instead of matching the label.
 
 ## Vertex and fragment shaders
 
@@ -56,10 +50,9 @@ fun colored_fragment(input: Varying): GpuVec4 {
 }
 ```
 
-The vertex shader's `@location` parameters are read from vertex buffers. A shader that computes its
-corners from `vertex_id()` needs no vertex buffer at all; the window example below works that way.
-Both shaders of one pipeline must come from the same module, and the vertex shader's `@location`
-numbers must count up from 0.
+`@location` inputs are read from vertex buffers. A shader that builds its corners from `vertex_id()` needs none, as in the window example below.
+
+Both shaders of one pipeline must come from the same module, and `@location` numbers count up from 0.
 
 ## Drawing into a texture
 
@@ -140,11 +133,8 @@ the top corners keep the black clear color.
 The pieces:
 
 - `GpuTextureDesc(...).render_target(true)` creates a texture that pipelines can draw into.
-- `GpuVertexLayout` tells the pipeline where each `@location` input sits inside one `Vertex`: the
-  position at byte 0 and the color at byte 8.
-- `GpuRenderPipelineDesc.defaults(format)` draws triangle lists without blending or depth. Chain
-  `with_topology`, `with_cull_mode`, `with_blend_mode`, `with_depth` or `with_samples` to change
-  that.
+- `GpuVertexLayout` places each `@location` input in one `Vertex`: position at byte 0, color at byte 8.
+- `GpuRenderPipelineDesc.defaults(format)` draws triangle lists without blending or depth. Chain `with_topology`, `with_cull_mode`, `with_blend_mode`, `with_depth`, or `with_samples` to change that.
 - A render pass clears its target with `GpuLoad.Clear(color)`, or keeps what is there with
   `GpuLoad.Keep`.
 - `target.read(0)` returns mip level 0 as tightly packed RGBA bytes, row 0 first.
@@ -278,10 +268,8 @@ async fun main(): void {
 The triangle turns one radian per second until you press Escape or close the window.
 
 - `create_surface` picks the window's color format; create pipelines with `surface.color_format`.
-- `begin_frame` waits for the next image to draw into and clears it. With vsync on, this is where
-  the loop waits for the display, so the loop runs at the monitor's refresh rate.
-- `frame.pass` is the render pass for the frame. `frame.draw(pipeline, count)` is a shortcut for
-  shaders without parameters, and `frame.encoder` records extra passes such as post-processing.
+- `begin_frame` waits for the next image, clears it, and with vsync waits for the display so the loop runs at the refresh rate.
+- `frame.pass` is the frame's render pass. `frame.draw(pipeline, count)` is the shortcut for shaders without parameters, and `frame.encoder` records extra passes such as post-processing.
 - Nothing appears until `present`.
 - Pass the size from `WindowEvent.Resized` to `surface.resize`. It is in physical pixels, which is
   what the surface needs on high-DPI displays.

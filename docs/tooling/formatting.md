@@ -13,9 +13,7 @@ dream fmt src/
 dream fmt app.dream tests/
 ```
 
-Files are updated in place. A directory is searched recursively; generated output in
-`target`, `.dream`, `node_modules`, `.git`, and `site` is skipped. Directory searches do
-not follow symbolic links. You can pass a specific file or output directory explicitly.
+Files are updated in place. A directory search is recursive, skips `target`, `.dream`, `node_modules`, `.git`, and `site`, does not follow symbolic links, and you can also pass a specific file or output directory.
 
 ## Check formatting in CI
 
@@ -29,10 +27,7 @@ retrying a skipped file.
 
 ## Style
 
-The formatter uses four spaces and a target width of 100 characters. Nonempty bodies
-use separate lines. Long argument lists and expressions wrap; short calls stay compact.
-Attributes appear above their declarations, and documentation comments stay with the
-item they describe.
+The formatter uses four spaces and a target width of 100 characters. Nonempty bodies use separate lines, long argument lists and expressions wrap, short calls stay compact, and attributes and documentation comments stay with the item they describe.
 
 ```dream
 class Greeting {
@@ -42,10 +37,7 @@ class Greeting {
 }
 ```
 
-One blank line separates declarations. Within a function, use blank lines to separate
-setup, validation, work, and cleanup when that helps readers follow the task. The
-formatter preserves one blank line between those groups. String contents and comments
-are retained; long literals and comments can exceed the target width.
+One blank line separates declarations, and within a function the formatter keeps a single blank line between setup, validation, work, and cleanup. String contents and comments are kept, and long literals and comments can exceed the target width.
 
 In the editor, use **Format Document**, or enable format on save for Dream files.
 See [editor setup](editor.md) if the language tools are not available.

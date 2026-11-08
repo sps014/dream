@@ -97,9 +97,9 @@ public fun add(a: int, b: int): int {
 ```
 
 - At most one `module` declaration per file, and it must be the first thing in the file (before `import` and before any other declaration).
-- A module path is purely a name — `module utils.math;` does **not** need to live in a `utils/math` directory. File resolution for plain `import`s is still directory-based, exactly as before; `module` only tags a file's declarations with a logical namespace, independent of where the file sits on disk.
-- Files that don't declare a `module` stay in the implicit, unnamed **root module** — today's flat, unqualified behavior is unchanged for any file that never writes `module`.
-- Two files in **different** modules may declare the same name (e.g. two `public fun add(...)`) without colliding. Two declarations in the **same** module (or both in the unnamed root module) with the same name still collide exactly as before — a module is still one namespace.
+- A module path is only a name. `module utils.math;` need not live in `utils/math`, and a plain `import` still finds files by directory.
+- A file with no `module` declaration is in the unnamed root module, and its names stay unqualified.
+- Two files in **different** modules may declare the same name, such as two `public fun add(...)`, without colliding. Two declarations in the **same** module, or both in the root module, still collide.
 - Same-module overloads and cross-module duplicate names compose: within one module you may overload `add` by signature; across modules each side keeps its own overload set. Call sites and `import … as` aliases still use the source names.
 
 ## Aliased imports (resolving duplicate names)
@@ -141,7 +141,7 @@ The two `import` forms are told apart by the trailing `as` clause, not by a diff
 
 The aliased item must be `public` or `internal`; importing a `private` declaration this way is always an error, regardless of which module the importing file belongs to. If `<alias>` collides with another name already in scope in the importing file, that's a normal "already defined" diagnostic — pick a different alias.
 
-There is no wildcard `import pkg.*;` in this version — only single-item aliased imports. This affects convenience, not reachability: it just means one `import ... as` line per name you want to consume unqualified from another module.
+There is no `import pkg.*;`. Write one `import ... as` line for each name you want to use unqualified.
 
 ## Visibility
 
@@ -220,7 +220,7 @@ public class Vector {
 
 ### How they compose
 
-To use a member from another file you need **both**: the type must be reachable from the caller (its axis-1 visibility, evaluated against the caller's module), and the member must be reachable too (its axis-2 visibility, evaluated the same way). Effective accessibility from a given caller is the **minimum** of the two — an `internal class` only exposes its `public` members within the declaring module; even a `public` member is invisible outside it, because the type itself isn't reachable there.
+To use a member from another file, both the type and the member must be visible there. An `internal` type exposes its `public` members only inside its module.
 
 ```dream
 public class Point {

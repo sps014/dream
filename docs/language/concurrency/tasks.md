@@ -39,11 +39,15 @@ async fun main(): void {
 }
 ```
 
-`Task.scope` automatically joins children on success, failure, cancellation, and early error return. `scope.spawn` schedules a local async child immediately, without allocating a thread or worker. Local children share ordinary memory and take turns at suspension points. A CPU loop can starve this scheduler unless it yields or checks cancellation.
+`Task.scope` joins children on success, failure, cancellation, and an early `return`. `scope.spawn` starts a local async child immediately and does not create a thread or worker.
 
-For CPU parallelism, `scope.spawn_parallel(body)` uses the shared runtime workers. A fixed `TaskPool` bounds concurrency, and `scope.spawn_on(pool, body)` retains structured ownership of its CPU jobs. Worker captures must satisfy Dream's [shared/move constraints](sharing.md); local async children do not cross that boundary.
+Local children share ordinary memory and take turns when they suspend. A CPU loop can stall them unless it yields or checks cancellation.
 
-Native shared workers run about one job per CPU the process may use; further jobs start in submission order as earlier ones finish. A job waiting on a `Lock` or a `Semaphore` gives its CPU to a waiting job, so jobs may wait on each other through those types. Avoid jobs that loop until another job changes a plain value: when every CPU is busy, the runtime starts an extra worker only after about 50 ms without progress.
+`scope.spawn_parallel(body)` runs on the shared workers, and a `TaskPool` plus `scope.spawn_on(pool, body)` caps that work inside the scope. Worker captures follow the [shared and move rules](sharing.md). Local async children do not.
+
+Native shared workers run about one job per CPU the process may use. Further jobs start in submission order as earlier ones finish.
+
+A job waiting on a `Lock` or a `Semaphore` gives its CPU to a waiting job, so jobs may wait on each other. Do not loop until another job changes a plain value: if every CPU is busy, an extra worker starts only after about 50 ms without progress.
 
 ## `Task` functions
 
@@ -82,9 +86,9 @@ Spawning on a scope that is already cancelled or finished returns a handle whose
 
 ## Worker crashes
 
-On the web and on Node, a worker can stop before it replies. Its job may trap (a failed `unwrap`, an out-of-range index, an explicit `System.panic`), the worker thread may exit, a message may fail to reach it, or the worker may not start within 10 seconds. The program keeps running, and the crash becomes an ordinary error:
+On the web and on Node, a worker can stop before it replies: the job traps, the worker exits, a message fails, or the worker does not start within 10 seconds. The program keeps running, and the crash is an ordinary error:
 
-- `pool.dispatch` and `pool.dispatch_async` return `Err(TaskPoolError.WorkerCrashed)`. A job queued on the same worker gets the same error. The pool then starts a replacement worker, so later dispatches run normally.
+- `pool.dispatch` and `pool.dispatch_async` return `Err(TaskPoolError.WorkerCrashed)`, and a job already queued on that worker gets the same error. The pool then starts a replacement worker, so later dispatches run normally.
 - `scope.spawn_parallel` and `scope.spawn_on` children finish with `Err(TaskFailure.WorkerFailed(TaskPoolError.WorkerCrashed))`, and the scope is cancelled as for any other worker failure.
 - `Task.spawn` and `Task.spawn_async` return the value directly, so they have no error to return. They panic with the worker's failure message instead.
 
@@ -115,7 +119,7 @@ On native targets, workers are threads inside your process, so a trapping job en
 
 ## Low-level workers
 
-`Task.spawn` and `Task.spawn_async` run one function on a worker and return lazy futures. Start them with `Promise.start`, await them, or pass them to a combinator. Merely constructing several futures does not start their work.
+`Task.spawn` and `Task.spawn_async` return a lazy future for one worker function. Start it with `Promise.start`, an await, or a combinator — building the future does not start the work.
 
 ```dream
 let first = Task.spawn(() => 6 * 7);
@@ -126,6 +130,8 @@ System.println(first.await);
 System.println(second.await);
 ```
 
-These low-level calls do not create a structured region. Prefer scopes and reusable pools for application work. Explicit cancellation tokens are available for cooperative worker logic; cancelling a scope requests cleanup instead of forcibly interrupting its children.
+These calls do not create a structured region. Prefer scopes and reusable pools for application work.
 
-Browser workers sharing values require cross-origin isolation headers. Ordinary local async scopes do not require worker support. See [sharing state](sharing.md), [cancellation](cancellation.md), and [pool ownership](task-pool.md).
+Pass a cancellation token when the worker should stop cooperatively. Cancelling a scope asks children to clean up and does not interrupt them.
+
+Browser workers that share values need cross-origin isolation headers. Ordinary local async scopes do not — see [sharing state](sharing.md), [cancellation](cancellation.md), and [pool ownership](task-pool.md).

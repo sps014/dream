@@ -6,7 +6,7 @@ icon: material/shape-outline
 
 # Types
 
-A type describes the values a variable can hold and the operations it supports. Dream checks these rules before your program runs. This page helps you choose a type and find its detailed guide.
+A type describes the values a name can hold and the operations those values support. Dream checks the rules before your program runs.
 
 ## Guides in this section
 
@@ -57,7 +57,9 @@ Decimal scientific notation (`1e-3`, `2.5e10`) is a `float` unless given a `d` s
 
 Bare decimal literals default to `float`. When the surrounding expected type is `double` (typed binding, parameter, return, field, …), an unsuffixed float or int literal is treated as `double`. So `let x: double = 3.14` works without a `d` suffix.
 
-`byte`, `uint`, `ulong`, and `usize` are **unsigned** — division, remainder, comparisons, and right shift use unsigned semantics. `int`, `long`, and `isize` are signed. `isize`/`usize` are 32 bits on wasm32 and 64 bits on 64-bit native targets; their width comes from the selected target, not the compiler host. For storage sizes, use [`sizeof`](../basics/type-queries.md#sizeof-nameof-and-typeof).
+`byte`, `uint`, `ulong`, and `usize` are **unsigned**: division, remainder, comparisons, and right shift use unsigned rules. `int`, `long`, and `isize` are signed.
+
+`isize` and `usize` match the target you build for: 32 bits on wasm32 and 64 bits on 64-bit native. For storage sizes, use [`sizeof`](../basics/type-queries.md#sizeof-nameof-and-typeof).
 
 ### Implicit widening
 

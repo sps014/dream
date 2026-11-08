@@ -41,9 +41,7 @@ Use this before [crypto](../security/crypto.md) hashes, which take `byte[]`.
 
 ## Incremental UTF-8
 
-Import `system.text` for strict incremental decoding. The decoder carries partial
-sequences between chunks and rejects malformed, overlong, surrogate, and
-out-of-range encodings. Call `finish()` to detect a truncated final sequence.
+Import `system.text` for strict incremental decoding. Partial sequences carry across chunks, and malformed, overlong, surrogate, or out-of-range input is rejected; call `finish()` to catch a truncated ending.
 
 ```dream
 import system.text;

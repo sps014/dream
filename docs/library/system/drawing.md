@@ -5,8 +5,7 @@ summary: Draw shapes, shadows, images, text and backdrop panels on CPU or GPU, a
 
 # Drawing
 
-Import `system.drawing` to draw into an offscreen image. Create a canvas, record shapes, then render
-it into a surface. The same canvas works with the CPU and GPU backends.
+Import `system.drawing` to draw into an offscreen image. Create a canvas, record shapes, then render it into a CPU or GPU surface.
 
 ```dream
 import system;
@@ -38,35 +37,33 @@ async fun main(): void {
 }
 ```
 
-`DrawingBackend.Auto`, the default, attempts GPU initialization and falls back to CPU. Pass
-`DrawingBackend.Cpu` to render without a GPU, or `DrawingBackend.Gpu` to require one. The surface's
-`backend` property reports the selected backend. A surface permits dimensions from 1 to 8192 pixels
-per side, with at most 16777216 pixels in total. Canvas dimensions must match the surface.
+`DrawingBackend.Auto`, the default, tries the GPU and falls back to the CPU. Pass `DrawingBackend.Cpu` to skip the GPU, or `DrawingBackend.Gpu` to require one.
 
-Coordinates start at the top-left corner, with positive y downward. RGB color channels are integers
-from 0 to 255; alpha is a float from 0 to 1. `read_pixels` returns tightly packed premultiplied sRGB
-RGBA8 bytes, top row first. Reading GPU pixels waits for submitted work. Each render replaces the
-previous image, including transparent regions.
+- `backend` reports which one was selected.
+- Each side is 1 to 8192 pixels, and the total is at most 16,777,216. The canvas size must match the surface.
+
+Coordinates start at the top-left, with positive y downward. RGB channels are 0 to 255, and alpha is a float from 0 to 1.
+
+- `read_pixels` returns tightly packed premultiplied sRGB RGBA8, top row first. A GPU read waits for submitted work.
+- Each render replaces the previous image, including transparent pixels.
 
 ## Backdrop panels
 
-`canvas.backdrop(rect, effect)` filters earlier drawing in its current isolated group, or the
-canvas root when no group is open. Parent groups and later siblings are excluded. The blur can sample
-outside the panel, but the result and tint are clipped to the panel and the current clip. Drawing
-recorded afterward stays sharp. A zero blur sigma applies only the tint. Sigma is measured in physical
-pixels, ranges from 0 to 128, and does not scale with the current transform.
+`canvas.backdrop(rect, effect)` filters earlier drawing in the current group, or the canvas root when no group is open. Parent groups and later siblings are left out.
 
-The effect sees only this canvas. It cannot sample the desktop or other application windows. A
-picture permits at most 64 backdrop panels across all groups, including panels inside pictures
-drawn with `draw_picture`. Every panel after the first in the same group adds one full-canvas
-render, so the cost grows with the number of panels. An enclosing group applies its filters,
-opacity and blending after its nested panels have been composed.
+- Blur may sample outside the panel. The result and tint are clipped to the panel and the current clip, and later drawing stays sharp.
+- A sigma of 0 applies only the tint. Sigma is in physical pixels, from 0 to 128, and ignores the current transform.
 
-Add `.noise(opacity, seed: 0)` for acrylic-style grain after blur and tint. Opacity is 0..1;
-noise preserves the filtered panel's alpha. A seed selects a deterministic 64 by 64 monochrome
-tile shared by CPU and GPU rendering. The tile is anchored in device pixels so repeated renders
-and changing transforms do not animate the grain. Later edits to a `Backdrop` do not change
-panels already recorded.
+The effect samples only this canvas, not the desktop or other windows.
+
+- A picture allows at most 64 backdrop panels, including panels inside `draw_picture`.
+- Each panel after the first in the same group renders the whole canvas again.
+- An enclosing group applies its filters, opacity, and blending after nested panels are composed.
+
+`.noise(opacity, seed: 0)` adds grain after blur and tint. Opacity is 0 to 1, and the panel's alpha is kept.
+
+- The seed picks a fixed 64 by 64 tile, the same on CPU and GPU, anchored in device pixels so transforms do not move the grain.
+- Later edits to a `Backdrop` do not change panels already recorded.
 
 ```dream
 canvas.backdrop(
@@ -77,8 +74,7 @@ canvas.backdrop(
 
 ## Paths, gradients and clipping
 
-Use `DrawingPath` for reusable shapes. A draw captures the path and paint at the time of the call.
-Changing them afterward does not change earlier drawing.
+Use `DrawingPath` for a shape you draw more than once. A draw captures the path and paint at that moment.
 
 ```dream
 let canvas = Canvas(320, 240);
@@ -98,30 +94,28 @@ canvas.fill_circle(160.0f, 120.0f, 60.0f, Color.white);
 canvas.restore();
 ```
 
-Pair every `save` or `save_layer` with `restore`. `save_layer(opacity)` composites its contents as
-one isolated group, so overlapping shapes do not each apply the group opacity. Save depth and clip
-depth are limited to 64. `finish()` captures an immutable `Picture` for reuse; rendering a canvas
-captures one automatically. `clear` discards the previous recording and resets canvas state.
+Pair every `save` or `save_layer` with `restore`. `save_layer(opacity)` draws its contents as one group, so shapes inside share that opacity.
 
-Pass `CornerRadii(top_left, top_right, bottom_right, bottom_left)` instead of a single radius to
-round each corner separately, for example a sheet with rounded top corners. Radii larger than half
-the rectangle's smaller side are clamped, and negative radii draw square corners.
+- Save depth and clip depth are limited to 64.
+- `finish()` returns an immutable `Picture`, and rendering a canvas captures one automatically. `clear` drops the recording and resets canvas state.
+
+Pass `CornerRadii(top_left, top_right, bottom_right, bottom_left)` to round each corner on its own. Radii larger than half the smaller side are clamped, and negative radii draw square corners.
 
 ```dream
 let sheet = DrawingPath.rect(Rect(0, 120, 320, 120), CornerRadii(16, 16, 0, 0));
 canvas.fill(sheet, Paint.solid(Color.white));
 ```
 
-`finish` rejects unbalanced state. Rendering additionally validates colors, paths, transforms, blur
-sigma and command limits. Invalid input returns `DrawingError`. Geometry values must be finite and
-within +/-1000000; a picture permits at most 4000000 encoded float values.
+`finish` rejects unbalanced `save` and `restore`. Rendering also checks colors, paths, transforms, blur, and command limits, and returns `DrawingError` when they fail.
+
+Geometry must be finite and within +/-1000000. A picture allows at most 4,000,000 encoded float values.
 
 ## Stroke styles and blending
 
-Pass `StrokeStyle(width)` and a `Paint` to `canvas.stroke`. The style's `cap`, `join`,
-`miter_limit`, `dashes` and `dash_offset` are captured when recorded. Dash lengths must be positive;
-an empty list draws a continuous stroke. Gradient paints accept 2..256 stops sorted within 0..1.
-Equal offsets produce hard transitions. `Paint.sweep` measures clockwise angles in radians.
+Pass `StrokeStyle(width)` and a `Paint` to `canvas.stroke`. Cap, join, miter limit, dashes, and dash offset are captured when you record the stroke.
+
+- Dash lengths must be positive. An empty list draws a solid stroke.
+- A gradient accepts 2 to 256 stops, sorted from 0 to 1. Equal offsets are a hard edge, and `Paint.sweep` uses clockwise radians.
 
 ```dream
 let outline = StrokeStyle(2);
@@ -134,14 +128,11 @@ canvas.fill_circle(160, 120, 60, Color.rgb(80, 120, 220));
 canvas.restore();
 ```
 
-Blending applies to the whole isolated group after group opacity, using earlier parent content
-as its destination. Choose SourceOver, Multiply, Screen, Overlay, Darken, Lighten, Difference or
-Exclusion. Invalid styles, colors and stop arrays return `DrawingError` at render.
+Blending applies to the whole group after its opacity, against earlier parent content. Modes are SourceOver, Multiply, Screen, Overlay, Darken, Lighten, Difference, and Exclusion; an invalid style returns `DrawingError` at render.
 
 ## Group filters and shadows
 
-An `Effects()` chain runs in call order on an isolated group. Pair `save_layer` with `restore`.
-Effects run before group opacity and parent blending; the active clip bounds their output.
+An `Effects()` chain runs in call order on an isolated group, before group opacity and parent blending. Pair `save_layer` with `restore`; the clip bounds the result.
 
 ```dream
 let effects = Effects().shadow(0, 8, 16, Color.rgba(0, 0, 0, 0.25f)).saturation(0.8f);
@@ -150,18 +141,18 @@ canvas.fill_rect(40, 40, 240, 120, Color.white, 16);
 canvas.restore();
 ```
 
-`blur(sigma)` and `shadow(dx, dy, sigma, color)` use physical pixels, independent of transforms.
-Sigma is 0..128; shadow offsets are within +/-8192. Shadows include the original input.
-`brightness`, `contrast` and `saturation` accept factors in 0..8; one preserves the input.
-Brightness multiplies straight sRGB channels; contrast scales their distance from 0.5;
-saturation scales their distance from luminance. Channels are clamped after every operation,
-then premultiplied again. Color operations preserve alpha and keep transparent pixels colorless.
+`blur` and `shadow` use physical pixels and ignore transforms. Sigma is 0 to 128, and shadow offsets stay within +/-8192.
 
-Recording captures the chain, so later changes do not affect earlier groups. A chain permits at
-most 16 operations. Invalid values and exceeding 256 MiB of pooled full-surface scratch targets
-return `DrawingError` at render. GPU filters stay on the GPU. `read_pixels` explicitly synchronizes and downloads pixels;
-native GPU presentation also currently reads pixels through its upload bridge. Inset shadows, spread and arbitrary filter
-graphs are not provided.
+- A shadow includes the original picture.
+- `brightness`, `contrast`, and `saturation` take 0 to 8. A factor of 1 leaves the input unchanged.
+- Brightness multiplies straight sRGB channels, contrast scales distance from 0.5, and saturation scales distance from luminance.
+- Channels are clamped after each step, then premultiplied again. Color steps keep alpha and leave transparent pixels colorless.
+
+The recorded group keeps the chain from that moment. A later edit does not change it.
+
+- A chain allows at most 16 operations. Invalid values, or more than 256 MiB of full-surface scratch, return `DrawingError` at render.
+- `read_pixels` waits and downloads pixels. Native GPU presentation also reads pixels back.
+- Inset shadows, spread, and arbitrary filter graphs are not available.
 
 ## Box shadows
 
@@ -175,20 +166,17 @@ canvas.box_shadow(card, 16, 0, 8, 12, Color.rgba(0, 0, 0, 0.25f));
 canvas.fill_rect(card.x, card.y, card.width, card.height, Color.white, 16);
 ```
 
-`rect` and `radius` describe the box being shadowed. `dx` and `dy` move the shadow, and `spread`
-(default zero) grows it on every side, or shrinks it when negative, and grows the corner radius by
-the same amount. Unlike group shadows, these values are canvas units and follow the current
-transform. `sigma` is the blur's standard deviation, 0..128; zero paints a sharp shape. The shadow
-is also painted under the box, so draw the box afterwards; a translucent box shows its own shadow
-through it. Inset shadows are not provided.
+`rect` and `radius` describe the box, and `dx` and `dy` move the shadow. `spread` (default 0) grows or shrinks every side and changes the corner radius by the same amount.
+
+- These values are canvas units and follow the current transform. Group shadows do not.
+- `sigma` is the blur's standard deviation, from 0 to 128. Zero is a sharp shape.
+- The shadow is also painted under the box, so draw the box afterward. A translucent box shows that shadow; inset shadows are not available.
 
 ## Reusing pictures
 
-`canvas.draw_picture(picture)` draws a finished `Picture` into another canvas, under the current
-transform and clip, as if its commands had been recorded there. Record a part of the scene that
-rarely changes once, then draw it every frame. The nested picture's `clear` color fills only its own
-bounds, and its drawing is clipped to them. Backdrop panels inside it filter what the outer canvas
-drew before it.
+`canvas.draw_picture(picture)` draws a finished `Picture` under the current transform and clip. Record a part that rarely changes, then draw it every frame.
+
+The nested `clear` color fills only that picture's bounds, and its drawing is clipped to them. A backdrop inside it filters what the outer canvas drew before it.
 
 ```dream
 let badge = Canvas(48, 48);
@@ -210,9 +198,9 @@ times count toward the 4000000-value limit.
 
 ## Images and text
 
-Decode PNG or JPEG bytes with `Image.decode(bytes).await`, or create an image from straight RGBA8
-bytes with `Image.from_rgba(width, height, bytes).await`. Both return `Result<Image, DrawingError>`.
-Decoded images are immutable. A recorded picture retains its images and text layouts.
+`Image.decode(bytes).await` decodes PNG or JPEG, and `Image.from_rgba(width, height, bytes).await` builds an image from straight RGBA8. Both return `Result<Image, DrawingError>`.
+
+The image cannot be changed later. A recorded picture keeps its images and text layouts.
 
 ```dream
 import system;
@@ -233,25 +221,20 @@ async fun draw_label(): Result<byte[], DrawingError> {
 }
 ```
 
-Text positions identify the top-left of the paragraph. Text shaping handles ligatures, text direction,
-wrapping and alignment. The bundled Noto Sans supplies Latin, Greek, Cyrillic and Devanagari glyphs;
-other scripts require a font containing their glyphs. Native rendering can use installed fonts.
-`Fonts.register(font_bytes).await` registers a font and returns its first family name, which can be
-assigned to `style.family`. Registered fonts are available to subsequent layouts on that drawing host.
+A text position is the top-left of the paragraph. Shaping handles ligatures, direction, wrapping, and alignment.
 
-For a frequently reused label, create `TextLayout.create(text, style).await`, inspect its `width` and
-`height`, and draw it with `canvas.fill_text(layout, x, y, color)`. Layout captures the style's font
-and paragraph settings; the draw call supplies its color. The simple string overload caches shaping
-internally, keeping the 256 most recently used layouts up to 16 MiB. Each distinct string is stored
-once per canvas recording, however many times it is drawn. `draw_image` accepts an optional source rectangle, opacity and nearest-neighbor filtering.
+- Bundled Noto Sans covers Latin, Greek, Cyrillic, and Devanagari. Other scripts need a font with those glyphs, and native rendering can use installed fonts.
+- `Fonts.register(font_bytes).await` returns the first family name for `style.family`. Later layouts on that drawing host can use it.
+
+For a label you draw often, call `TextLayout.create(text, style).await`, read `width` and `height`, and draw with `canvas.fill_text(layout, x, y, color)`.
+
+- The layout keeps the font and paragraph settings. The draw call supplies the color.
+- The string overload keeps the 256 most recent layouts, up to 16 MiB. Each distinct string is stored once per recording.
+- `draw_image` takes an optional source rectangle, opacity, and nearest-neighbor filtering.
 
 ### Measuring text
 
-`TextLayout.measure(text, style)` returns `Result<TextMetrics, DrawingError>` without waiting or
-keeping a layout, so layout code can size a label before drawing it. `TextMetrics` reports the
-`width` of the widest line, the total `height`, the `line_count` after wrapping and explicit
-newlines, and the `baseline`: the distance from the top to the first line's baseline, for aligning
-text with icons. A `TextLayout` exposes the same `line_count` and `baseline` properties.
+`TextLayout.measure(text, style)` returns `TextMetrics` without keeping a layout: widest-line `width`, total `height`, `line_count`, and `baseline` (top to the first baseline). A `TextLayout` has the same `line_count` and `baseline`.
 
 ```dream
 let style = TextStyle(14, Color.black);
@@ -261,11 +244,9 @@ canvas.fill_rect(10, 10, size.width + 16, size.height + 16, Color.rgb(240, 240, 
 canvas.fill_text("A paragraph that wraps onto several lines", 18, 18, style);
 ```
 
-Measuring and then drawing the same text with the same style shapes it once: both share the
-layout cache. Invalid style values return `EINVAL`. In browsers and Node, the drawing engine loads
-in the background when the program starts. A measurement made before it is ready returns
-`EUNAVAILABLE`; awaiting any async drawing call, such as `TextLayout.create` or
-`DrawingSurface.create`, guarantees it is ready.
+Measuring and then drawing the same text with the same style shares one cached layout. An invalid style returns `EINVAL`.
+
+In browsers and Node, the drawing engine loads in the background at startup. Measure only after awaiting `TextLayout.create` or `DrawingSurface.create`; an earlier call returns `EUNAVAILABLE`.
 
 ### Carets and selections
 
@@ -300,10 +281,10 @@ of that character.
 
 ## Existing GPU windows
 
-Import `system.drawing.gpu` to display a drawing through an existing `GpuSurface` with
-`drawing.present(surface).await`. The drawing and window surface dimensions must match. The first
-presentation creates a pipeline and texture; later calls reuse them. `close()` releases
-those cached resources. Presenting to another surface replaces the cache.
+Import `system.drawing.gpu` and call `drawing.present(surface).await` to show a drawing on an existing `GpuSurface`. The drawing and the surface must be the same size.
+
+- The first present creates a pipeline and texture, and later calls reuse them. `close()` releases that cache.
+- Presenting to another surface replaces the cache.
 
 ```dream
 import system;
@@ -335,32 +316,22 @@ async fun main(): void {
 }
 ```
 
-This opens a native window, or creates a canvas when compiled for a browser. To use an existing
-HTML canvas, use `Window.canvas("canvas-id")` instead of `Window.open`. The example stops on setup
-or rendering errors through `unwrap`; handle each returned `Result` to recover in an application.
-For resizable windows, pass `WindowEvent.Resized` sizes to `screen.resize`, then recreate the
-`DrawingSurface` and `Canvas` at the new physical dimensions before presenting again.
+This opens a native window, or a canvas in the browser. Use `Window.canvas("canvas-id")` for an existing HTML canvas.
 
-Presentation replaces the entire window image. Use `copy_to(texture).await` instead when your own
-GPU pipeline composites a UI texture with other rendering. In a browser, GPU drawings share the
-window device and transfer on the GPU, without a pixel download or CPU upload. The first transfer
-to a device replays the recorded picture there; later renders and transfers reuse that device.
-Transferring to another device replays the picture again, preserving its recorded configuration.
-RGBA textures copy directly; BGRA textures use a cached GPU conversion pass. Copies preserve the
-stored sRGB bytes and premultiplied alpha, including sRGB texture formats. The destination must
-match the drawing dimensions and be single-sampled.
+The example uses `unwrap` and stops on errors. For a resizable window, pass `WindowEvent.Resized` sizes to `screen.resize`, then recreate the `DrawingSurface` and `Canvas`.
 
-CPU drawings upload pixels. Native GPU drawings currently download then upload pixels because
-native device sharing between wgpu and slang-rhi is still pending. Use CPU drawing for native
-window updates until that bridge is replaced. Explicit `read_pixels` always remains a
-synchronization point. Configure your consuming pipeline for premultiplied alpha when compositing
-UI textures.
+`present` replaces the whole window image. Use `copy_to(texture).await` when your own pipeline composites the UI with other rendering.
+
+- In a browser, a GPU drawing stays on the GPU. The first transfer to a device replays the picture, later transfers reuse it, and another device replays it again.
+- RGBA copies directly, and BGRA uses a cached conversion. Bytes stay sRGB and premultiplied; the destination must match the drawing size and be single-sampled.
+
+CPU drawings upload pixels. Native GPU drawings currently download pixels and upload them again, so use CPU drawing for native window updates.
+
+`read_pixels` always waits for the GPU. Set your pipeline to premultiplied alpha when you composite a UI texture.
 
 ## A complete visual card
 
-First record the card. The isolated outer group supplies the shadow. Its backdrop samples the
-colored shapes drawn inside that same group; the gradient outline and filtered label stay sharp.
-The logical 640 by 400 composition is scaled to the physical surface size.
+The outer group supplies the shadow, and its backdrop samples shapes drawn in that group. The outline and label stay sharp, and the 640 by 400 layout is scaled to the surface.
 
 ```dream
 import system;
@@ -416,10 +387,7 @@ fun card(width: int, height: int): Canvas {
 }
 ```
 
-Then create the existing window/GPU surface and present the card. This example uses CPU drawing
-to avoid native GPU readback. In a browser, change the backend to `DrawingBackend.Gpu` to keep
-rendering and presentation on the GPU. `unwrap` stops on errors; inspect the
-returned `Result` values in an application that needs recovery.
+This example uses CPU drawing so native presentation does not read pixels back. In a browser, use `DrawingBackend.Gpu` to stay on the GPU; `unwrap` stops on errors.
 
 ```dream
 async fun main(): void {
@@ -443,17 +411,16 @@ async fun main(): void {
 
 ## Browser host
 
-Browser rendering uses the same Vello engine in a separate drawing WASM host. Build it once:
+Browser rendering uses a separate drawing WASM host. Build it once:
 
 ```bash
 cargo install wasm-bindgen-cli --version 0.2.129 --locked
 python scripts/build-drawing-web.py
 ```
 
-Compile the Dream program with `--runtime --web`. The compiler copies `dream_drawing.js` and
-`dream_drawing_bg.wasm` next to the generated runtime. Deploy both companions and the accompanying `NotoSans-OFL.txt` license with it. Set
-`DREAM_DRAWING_WEB` to a prebuilt host directory when building outside this checkout. The same host
-supports CPU rendering under Node when emitted with `--runtime --node`.
+Compile with `--runtime --web`. The compiler copies `dream_drawing.js` and `dream_drawing_bg.wasm` next to the runtime.
+
+Deploy both files and `NotoSans-OFL.txt` with the page. Set `DREAM_DRAWING_WEB` outside this checkout, and use `--runtime --node` for CPU rendering on Node.
 
 ## Current coverage
 

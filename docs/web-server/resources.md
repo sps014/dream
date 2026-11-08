@@ -52,10 +52,14 @@ async fun main(): void {
 | `app.override_dependencies(overrides)` | Install those replacements on one app before it starts. |
 | `ctx.add_cleanup(cleanup)` | Register cleanup by hand from code that has the `RequestContext`. |
 
-Without the override, `connection` registers a release operation immediately after acquisition. Cleanup runs once, in reverse acquisition order, after the response or stream finishes. It also runs when later dependency extraction fails or a client disconnect cancels the handler. A fresh cleanup token is separate from request cancellation. Pass that token to cleanup I/O rather than reusing the cancelled request token. Process aborts do not run asynchronous cleanup.
+Without the override, `connection` registers its release as soon as it is acquired. Cleanup runs once, newest first, after the response or stream finishes, and also when later dependency extraction fails or the client disconnects.
 
-`Overrides.dependencies()` is generated from static methods carrying `@dependency_override(original)`. Install it on an app before startup. A replacement may have its own extracted parameters and dependencies, and must produce the original provider's value type. It may add or remove resource acquisition while preserving that value type.
+Pass cleanup I/O the cleanup token, not the cancelled request token. A process abort does not run asynchronous cleanup.
 
-Overrides belong to the app, so tests can replace a provider without changing another running app. A request still caches the resolved provider identity. Replacing a provider with an incompatible type, an unresolved function, or a cyclic dependency is a compile-time error.
+`Overrides.dependencies()` collects the static methods marked `@dependency_override(original)`. Install it on an app before startup.
+
+A replacement can take its own parameters and dependencies, and it must return the original provider's value type. It may add or drop resource acquisition as long as that type stays the same.
+
+Overrides belong to one app, so a test can replace a provider without changing another running app, and a request still caches the resolved provider. An incompatible type, an unresolved function, or a cycle is a compile-time error.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

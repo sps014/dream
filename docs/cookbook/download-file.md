@@ -6,9 +6,7 @@ icon: material/download-outline
 
 # Download a file from the command line
 
-This program accepts a URL, an output path, and a timeout. It rejects unsuccessful
-HTTP status codes and copies the response body without loading the whole file into
-memory. The exit status tells a script whether argument parsing or the transfer failed.
+This program accepts a URL, an output path, and a timeout. It rejects an unsuccessful HTTP status, copies the body without loading the whole file, and uses the exit status to report a bad argument or a failed transfer.
 
 Create `download.dream` and add the following three blocks in order.
 
@@ -28,9 +26,7 @@ standard error.
 
 ## 2. Download and close resources
 
-The function validates the URL before sending a request. It opens the destination
-only after receiving a successful HTTP status. Each error path closes the resources
-that have already been opened.
+The function checks the URL before sending a request, and opens the destination only after a successful HTTP status. Each error path closes the resources already opened.
 
 ```dream
 async fun download(url: string, path: string, timeout: int): Result<long, string> {
@@ -87,10 +83,7 @@ async fun download(url: string, path: string, timeout: int): Result<long, string
 }
 ```
 
-After copying, it attempts all three close operations. A transfer error takes
-precedence over a later cleanup error. A failed transfer can leave a partial file;
-use a temporary file followed by `persist_replace` when the previous destination
-must remain intact until success.
+After copying, it closes the response, the file, and the client, and a transfer error wins over a later cleanup error. A failed transfer can leave a partial file; use a temporary file and `persist_replace` when the previous destination must stay intact until success.
 
 ## 3. Parse arguments and report the result
 
@@ -153,6 +146,4 @@ dream run download.dream -- --help
 dream run download.dream -- https://example.com/file -o download.bin -v
 ```
 
-Replace the URL with an accessible resource. `-v` prints the byte count and destination
-after success. The default timeout is 10,000 milliseconds and the default output is
-`download.bin`.
+Replace the URL with a file you can reach. `-v` prints the byte count and destination after success, the default timeout is 10,000 milliseconds, and the default output is `download.bin`.

@@ -8,9 +8,7 @@ targets: [native, web, node]
 
 # C and C++ Interop
 
-Dream calls C and C++ directly on native and wasm32 builds, including Dream Task workers. A package puts portable C or C++ sources in `native/`,
-then writes a thin Dream wrapper: one declaration per native function or method, plus whatever
-idiomatic Dream API it wants on top. Consumers just `import` the package.
+Dream calls C and C++ on native and wasm32 builds, including Dream Task workers. Put portable sources in a package's `native/` directory, declare each native function in Dream, and let callers `import` the package.
 
 !!! glance "At a glance"
 
@@ -23,19 +21,13 @@ idiomatic Dream API it wants on top. Consumers just `import` the package.
     - Package C sources in `native/`; they build for native and WebAssembly targets.
 
 - **C** is bound with `@c` externs.
-- **C++** is bound with `@cpp` declarations. The compiler generates a small C++ shim that implements
-  them, and the C++ compiler checks each declaration against the real header.
-- The compiler never parses headers. Declarations are ordinary Dream source, so completion, hover,
-  and go-to-definition work on them.
-- Native builds can link package sources or host system libraries. WASM builds compile portable
-  package sources into the same guest module; WASI libc/libm bindings (`@c("c", ...)` / `@c("m", ...)`) also work. Host libraries such as
-  system libsqlite3 cannot be linked into it. Unused bindings are pruned before checking target availability.
+- **C++** is bound with `@cpp`. Each declaration is checked against the real header.
+- The compiler does not read headers. Declarations are ordinary Dream source, so completion, hover, and go-to-definition work on them.
+- Native builds can link package sources or host libraries. A WASM build compiles portable package sources into the guest module, including WASI libc and libm (`@c("c", ...)` / `@c("m", ...)`).
+- A host library such as system libsqlite3 cannot be linked into WASM. A binding the program never calls is not checked for the target.
 
 
-Native and WASM package builds compile the C/C++ with the pinned clang that ships with Dream, and
-the native link uses the same clang. C++ code uses the target platform's C++ standard library:
-libc++ on Apple platforms, libstdc++ from the system or `DREAM_SYSROOT` on Linux, and the MSVC
-library on Windows.
+Package C and C++ are compiled with Dream's clang, and a native program links with that same clang. C++ uses the target's standard library: libc++ on Apple platforms, libstdc++ from the system or `DREAM_SYSROOT` on Linux, and the MSVC library on Windows.
 
 Runnable samples: [`sample/native_c/`](https://github.com/sps014/dream/tree/main/sample/native_c) and
 [`sample/native_cpp/`](https://github.com/sps014/dream/tree/main/sample/native_cpp).
@@ -57,13 +49,11 @@ ticker/
     └── vendor/lz4.c      # mixed C and C++ is fine
 ```
 
-Everything under `native/` compiles as one **native set** named after the package (`kv-store` →
-`kv_store`). `native/include/` is on the include path. `.c` files compile as `gnu11`, and `.cpp` /
-`.cc` / `.cxx` files as `gnu++20`. libc++ is linked only when the set contains C++.
+Everything under `native/` compiles as one native set named after the package (`kv-store` becomes `kv_store`). `native/include/` is on the include path.
 
-A set is built only when the program calls into it. Native objects live in
-`target/<profile>/native-c/<set>/` and are rebuilt when a source is newer. WASM package bitcode
-is rebuilt beside the module in its `.wasm-c/` directory.
+`.c` files compile as `gnu11`, and `.cpp`, `.cc`, and `.cxx` files as `gnu++20`. The C++ standard library is linked only when the set contains C++.
+
+A set is built only when the program calls into it. Native objects live in `target/<profile>/native-c/<set>/` and rebuild when a source is newer, and WASM output for the set is rebuilt in the module's `.wasm-c/` directory.
 
 ### `dream.toml`
 
@@ -95,37 +85,31 @@ libs = ["dl"]
 | `frameworks` | macOS frameworks to link |
 | `libs` | System libraries to link (`-l`) |
 
-Target subtables (`macos`, `linux`, `windows`, `wasm`) take the same keys and are appended for the build target. A WASM build never inherits the host OS overlay.
-A set with no sources for the selected target, or a source that does not exist, is an error. So are an
-unknown key, two packages declaring the same set name, and two packages declaring the same
-`[package] links` value. Each of these errors names the manifests involved.
+Target subtables (`macos`, `linux`, `windows`, `wasm`) take the same keys and apply only to that target. A WASM build does not inherit the host OS table.
+
+A set with no sources for the selected target, or a missing source file, is an error. An unknown key, two packages with the same set name, or two packages with the same `[package] links` value is also an error, and the message names the manifests.
 
 ## WebAssembly
 
-The existing `native/` directory and `@c` / `@cpp` declarations also work for portable WASM
-packages. Add guest-only flags with `[native.<set>.wasm]`. Use `usize` / `isize` for C `size_t` /
-`ptrdiff_t`; `long` in Dream is always 64 bits. Scalar signature mismatches between a binding
-and its compiled package implementation produce a build diagnostic.
+The same `native/` directory and `@c` / `@cpp` declarations work for portable WASM packages. Add guest-only flags with `[native.<set>.wasm]`.
 
-Portable package sources become part of your WebAssembly program. Dream can optimize calls between your code and the package, though a particular speed improvement is not guaranteed. A prebuilt desktop library cannot be used this way.
+Use `usize` and `isize` for C `size_t` and `ptrdiff_t`. Dream `long` is always 64 bits, and a scalar signature that does not match the compiled function is a build error.
 
-C++ uses the WASI SDK 33 exception-enabled libc++, libc++abi and libunwind. Generated `@cpp`
-shims preserve exception-to-`Result` conversion. Global constructors run after Dream heap
-initialization; exit hooks run registered destructors and flush stdio after `main` completes.
-The JS loader supports output during constructors in both full and selective runtimes.
+Portable package sources become part of the WebAssembly program. A prebuilt desktop library cannot be used this way.
 
-C allocation uses the same linear memory and heap as Dream, with C-compatible alignment.
-Pointers and callbacks remain within that module. Stored callbacks must be invoked and released
-on the instance that created them. Owned pointers, UTF-8 strings, array data, unmanaged structs,
-and callbacks use the same bindings as native builds.
+C++ uses the WASI SDK 33 libc++ with exceptions, plus libc++abi and libunwind. A thrown exception still becomes a `Result` when the Dream declaration says so.
 
-Supported libc services include stdout/stderr, realtime/monotonic clocks and an empty process environment. OS-specific
-functions or unresolved library symbols fail during the build, instead of becoming broken host
-imports. Use `@js` for browser/Node platform services. In `Task` / shared-memory modules,
-each instance gets initialized, aligned C thread-local storage. A worker pool retains its
-thread-local values between dispatches. Global constructors run once after the primary
-instance's TLS is ready. Workers come from Dream's Task runtime; WASI `pthread_create` is
-not supplied. Use `@native`, `@node` or `@web` to restrict a binding to specific runtimes.
+Global constructors run after Dream's heap is ready. Exit hooks run registered destructors and flush stdio after `main`, and the JS loader prints constructor output in both runtimes.
+
+C allocation uses the same memory as Dream. Pointers and callbacks stay inside that module, and a stored callback must be called and released on the instance that created it.
+
+Owned pointers, UTF-8 strings, array data, unmanaged structs, and callbacks use the same declarations as a native build.
+
+Supported libc covers stdout, stderr, clocks, and an empty process environment. An OS-specific function or a missing library symbol fails the build, so use `@js` for browser and Node services.
+
+In a `Task` module, a worker pool keeps C thread-local values between dispatches. Global constructors run once after the primary instance is ready.
+
+Workers come from Dream's task runtime, so WASI `pthread_create` is not available. Use `@native`, `@node`, or `@web` to limit a binding to one runtime.
 
 Development installs need the full WASI sysroot next to the installed build tools; update it with
 `scripts/fetch-dev-llvm.sh` or `scripts/fetch-dev-llvm.ps1` on Windows. Release packaging includes
@@ -179,12 +163,7 @@ Pointers and `ref` arguments expose Dream storage: a `char` occupies four bytes,
 | `Option<fun(...)>`, `Option<NativeCallback<F>>` | a nullable function pointer |
 | `OwnedCPtr` result with `@owned("free_fn")` | `void*` that Dream frees with `free_fn` |
 
-Every `@c` call goes through a small C shim the compiler generates and compiles with the pinned
-clang, so the platform C ABI (struct passing and return, `bool`/`char` widths, calling
-conventions) is clang's, not a hand-written copy.
-
-Classes, unions, and arrays of managed elements are rejected in `@c` signatures. They are heap
-references that C does not understand. Wrap them in a Dream function that passes C what it needs.
+Classes, unions, and arrays of managed elements are rejected in `@c` signatures. Wrap them in a Dream function that passes C only what it needs.
 
 A `NULL` returned where the declaration says `string` traps with a message naming the function.
 Declare the result as `Option<string>` when C may return `NULL`.
@@ -205,8 +184,7 @@ public fun fingerprint(data: byte[]): int {
 
 ### `CPtr`
 
-`CPtr` (in `system`) is an opaque C pointer. It has `CPtr.null()`, `is_null()`, `==`,
-`address(): usize`, and `offset(bytes: isize)`. Its single address field is target-sized. Use it for handles, and use `ref` for C's out-parameters:
+`CPtr` (in `system`) is an opaque pointer: `CPtr.null()`, `is_null()`, `==`, `address(): usize`, and `offset(bytes: isize)`, with a target-sized address. Use it for handles, and `ref` for C out-parameters:
 
 ```dream
 import system.interop;
@@ -225,10 +203,9 @@ through pointers C hands to Dream (`char**` rows and similar).
 
 ### Owned pointers
 
-When C hands back a pointer the caller must free, return `OwnedCPtr` and name the C function that
-frees it with `@owned("free_fn")`. The object calls `free_fn(ptr)` when its last reference goes
-away. `get()` reads the pointer while the object keeps owning it; `take()` hands ownership back to
-you and leaves the object holding `NULL`.
+When C returns a pointer the caller must free, return `OwnedCPtr` and name the free function with `@owned("free_fn")`. Dream calls `free_fn(ptr)` when your program no longer uses the object.
+
+`get()` reads the pointer while Dream still owns it. `take()` gives ownership back and leaves the object holding `NULL`.
 
 ```dream
 import system.interop;
@@ -249,10 +226,9 @@ ticker_run(t.get(), 3); // ticker_free runs when `t` goes out of scope
 
 ### Structs
 
-A value struct whose fields are numbers, `bool`/`char`/`byte`, or other such structs maps to the C
-struct with the same fields in the same order. Pass it by value, return it by value, or pass it by
-`ref`, which C sees as `T*`. Mark structs `@packed` when the C header uses `#pragma pack(1)` /
-`__attribute__((packed))`. Otherwise fields are naturally aligned, as in C.
+A value struct of numbers, `bool`, `char`, `byte`, or other such structs matches a C struct with the same fields in the same order. Pass or return it by value, or pass `ref` so C sees `T*`.
+
+Mark it `@packed` when the C header uses `#pragma pack(1)` or `__attribute__((packed))`. Otherwise fields are naturally aligned, as in C.
 
 ```dream
 import system.interop;
@@ -275,19 +251,17 @@ extern fun vec2_origin(ref out: Vec2): void;
 ### Strings
 
 `string` parameters are copied into a NUL-terminated UTF-8 buffer that is freed after the call.
-`@marshal(MarshalKind.LpWStr)` passes UTF-16 instead (Windows `LPWSTR`):
+`@marshal(StringEncoding.Utf16)` passes UTF-16 instead (`char16_t*` / Windows `LPWSTR`, not `wchar_t`). The same encoding applies to the extern's string result and to string parameters of its callbacks:
 
 ```dream
 import system.interop;
 
 @c("user32", "MessageBoxW")
-@marshal(MarshalKind.LpWStr)
+@marshal(StringEncoding.Utf16)
 extern fun MessageBoxW(hwnd: CPtr, text: string, caption: string, flags: int): int;
 ```
 
-Externs use the platform C calling convention. `@c_call(CCallConv.Cdecl)` spells that out explicitly.
-`@c_call(CCallConv.Stdcall)` selects `__stdcall` on 32-bit x86 Windows and is the default convention
-everywhere else. Any other convention is a compile error.
+Externs use the platform C calling convention.
 
 ## Packages
 

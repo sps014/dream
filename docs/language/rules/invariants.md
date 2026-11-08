@@ -85,9 +85,9 @@ public fun to_string(): string {
 
 `public` exposes a symbol to other modules (and, for functions, to the host that runs the program). A function therefore cannot be both `public` and `extern` — an `extern` is an imported host symbol, not an exported one.
 
-`@intrinsic` declarations are the exception: `@intrinsic` operations use ordinary member visibility.
-A `public static extern` intrinsic is callable from other types; an `internal` one requires the
-same module; a default-private one is callable only by its declaring type. They bind built-in operations rather than importing host functions.
+`@intrinsic` uses ordinary member visibility. A `public` one is callable from other types, an `internal` one only in the same module, and a private one only in its declaring type.
+
+An intrinsic calls a built-in operation. It does not import a host function.
 
 ```dream
 // bad — public and extern are exclusive

@@ -41,12 +41,12 @@ fun main() {
 }
 ```
 
-This prints each name on a separate line. The `List<string>` type tells Dream to make a growable list. Without that expected type, square brackets create a fixed [array](../../language/types/arrays.md).
+This prints each name on its own line. The `List<string>` type makes a growable list; without it, square brackets create a fixed [array](../../language/types/arrays.md).
 
 Typed `{value, value}` creates a set, and typed `{key: value}` creates a map. Empty collections need a type, such as `let names: Set<string> = {};`.
 
 ## Missing items and positions
 
-Check each collection's result type before assuming an item exists. Map lookups and queue removals can return `None`. List indexing uses a position and stops the program if that position is outside the list.
+Check the result type before assuming an item exists. Map lookups and queue removals can return `None`, and a list index outside the list stops the program.
 
 See [Option and Result](../core/option-result.md) for handling absence and [the API catalog](../../reference/api/system-collections.md) for all public members.

@@ -20,9 +20,7 @@ through `GpuDiff` with a `GpuDiffPair` for each parameter, holding the value and
 
 ### Gradients with backward mode
 
-Backward mode computes how the result changes with respect to every input at once. It is what
-training needs. This program fits `weight` so that `weight * x` matches `3 * x`. Each GPU thread
-computes the gradient of one sample's squared error, and the CPU takes a gradient-descent step:
+Backward mode computes how the result changes with every input at once, which is what training needs. This program fits `weight` so that `weight * x` matches `3 * x`: each thread computes one sample's gradient, and the CPU takes a step.
 
 ```dream
 import system;
@@ -99,11 +97,9 @@ async fun main(): void {
 
 It prints `learned weight: 3`.
 
-`GpuDiff.backward3` differentiates a three-parameter helper; the number in the name is the
-parameter count, and `backward` and `backward2` cover one and two. Pass each pair by `ref`, then the
-derivative of whatever uses the result: `1.0f` when you want the gradient of the result itself.
-Afterwards each pair's `derivative()` holds the gradient for that parameter. Inputs you are not
-training are `GpuDiffPair.constant`.
+`backward`, `backward2`, and `backward3` differentiate helpers with one, two, or three parameters. Pass each pair by `ref`, then the derivative of the result (`1.0f` for the result itself).
+
+Afterwards `derivative()` is that parameter's gradient. An input you are not training is `GpuDiffPair.constant`.
 
 ### Derivatives with forward mode
 
@@ -136,11 +132,9 @@ fun slopes(@readonly xs: GpuBuffer<float>, out: GpuBuffer<float>, n: int): void 
 Parameters and results can be `float`, `float16`, GPU vectors, and structs whose fields are all of
 those. A struct parameter's gradient is a struct of the same type, with one derivative per field.
 
-- `@no_diff` on a parameter leaves it out: it takes a plain value instead of a pair.
-- `@custom_derivative(name)` replaces the automatic backward derivative with your own shader
-  helper. Use it when the automatic one is slow or numerically unstable.
-- Most of `GpuMath` is differentiable. `step`, `sign`, `floor`, `ceil`, `round` and `fract` are
-  not, and calling them from a `@differentiable` helper is a build error.
+- `@no_diff` leaves a parameter out, so it takes a plain value instead of a pair.
+- `@custom_derivative(name)` replaces the automatic backward derivative with your own helper when that derivative is slow or unstable.
+- Most of `GpuMath` is differentiable. `step`, `sign`, `floor`, `ceil`, `round`, and `fract` are not, and calling them from a `@differentiable` helper is a build error.
 
 Differentiation works on every target, WebGPU included.
 
@@ -211,10 +205,7 @@ fun upload(
 }
 ```
 
-`weights` holds `outputs` rows of `inputs` values, and `biases` one value per output. On the CPU a
-`GpuBuffer<GpuCoopVec<float16>>` parameter is a plain `GpuBuffer<float16>`, with `@coop_shape`
-values per element: 16 per feature vector here. Passing a layer whose sizes differ from the
-parameter's `@coop_shape` fails with `GpuError.InvalidResource`.
+`weights` holds `outputs` rows of `inputs` values, and `biases` holds one value per output. On the CPU, `GpuBuffer<GpuCoopVec<float16>>` is a `GpuBuffer<float16>` with that many values per element, and a size that differs from `@coop_shape` returns `GpuError.InvalidResource`.
 
 Cooperative vectors compile for Vulkan, Direct3D 12 and CUDA, and run on devices with
 `GpuFeature.CooperativeVectors`. A shader that uses them with only Metal or WebGPU as targets is a
@@ -244,7 +235,6 @@ fun multiply(
 }
 ```
 
-`load(buffer, offset, row_stride, rows, columns)` reads a tile, `multiply_add(a, b, c)` computes
-`a * b + c`, and `store` writes the result back. Sizes must be constants. Cooperative matrices need
-`GpuFeature.CooperativeMatrices`: Vulkan devices with the cooperative matrix extension and
-Apple-silicon Metal GPUs, where tiles are always 8 by 8.
+`load` reads a tile, `multiply_add(a, b, c)` computes `a * b + c`, and `store` writes it back. Sizes must be constants.
+
+Cooperative matrices need `GpuFeature.CooperativeMatrices`: Vulkan devices with that extension, and Apple-silicon Metal, where tiles are always 8 by 8.

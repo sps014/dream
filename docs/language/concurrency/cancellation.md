@@ -43,9 +43,9 @@ src.cancel();
 let _ = w.await;
 ```
 
-**Hard abort:** `Promise.cancel(w)` (or dropping the Future) stops the task immediately. The browser terminates the worker; native `dream run` detaches the OS thread if the body is still running. Hard abort does **not** unwind the task — its pending releases and `del` destructors never run, and its private memory may be abandoned — prefer the token when `shared` state must stay consistent.
+**Hard abort:** `Promise.cancel(w)`, or dropping the future, stops the task immediately. The browser ends the worker. `dream run` detaches the thread if the body is still running. Destructors do not run, so prefer the token when shared state must stay consistent.
 
-A task that has already finished its body is joined and its env is released (`Debug.live_objects` stays flat across repeated `spawn`).
+A task that has already finished is joined.
 
 ## Ways to stop work
 

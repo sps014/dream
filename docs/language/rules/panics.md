@@ -41,7 +41,7 @@ System.panic("unreachable: config was never validated");
 
 ## What a panic looks like
 
-A panic prints its message and the source location of the statement that panicked to standard error, then aborts the process — diagnostics stay out of the program's own output, so piping stdout is unaffected:
+A panic prints its message and a source location to standard error, then stops the process. The program's own output is unchanged:
 
 ```
 panic: index out of bounds
@@ -50,9 +50,12 @@ panic: index out of bounds
 
 `System.panic(message)` prints exactly the `message` you pass, followed by the same location line.
 
-The location names the file as the compiler saw it and the line of the statement. A panic inside library code — the standard library or a package in `dream_packages/` — names the line in your program that called into the library, not the library's own source: `xs[10]` on a `List`, `Option.unwrap()` on `None`, or a package function that misuses a `List` all point at your call. A library function reached only through a function value or an interface call names its own line instead. Your own lambdas keep their own lines, even when a library function calls them. Panics raised by the runtime itself, such as running out of memory, have no location.
+- The location is the file and line of the statement.
+- A panic inside the standard library or a package points at your call: `xs[10]`, `Option.unwrap()` on `None`, and a package bug in a direct call.
+- A library function reached through a function value or an interface names its own line. Your lambdas keep their own lines.
+- Running out of memory has no location.
 
-A panic never unwinds: no destructor, `defer`, or caller code runs after it, and it never crosses into C as an exception.
+Nothing runs after a panic. `del`, `defer`, and the rest of the caller are skipped. It is not a C exception.
 
 ## Embedding a panic hook
 
@@ -68,8 +71,8 @@ static void on_panic(const char *message, const char *location) {
 void install(void) { dream_set_panic_hook(on_panic); }
 ```
 
-The hook runs on the panicking thread, in place of the default stderr message, with the message in UTF-8 and `location` as the same `file:line` the default message prints. `location` is `NULL` for panics raised by the runtime itself, which have no source line. When the hook returns, the process still aborts. A panic raised inside the hook skips the hook and aborts with the default message.
+The hook runs on the panicking thread instead of the default message. `message` is UTF-8. `location` is `file:line`, or `NULL` when there is no source line. The process still stops after the hook returns. A panic inside the hook uses the default message.
 
 ## Why panics, not undefined behavior
 
-Out-of-bounds indexes, bad casts, and similar checks halt with a message instead of reading or writing arbitrary memory. Bugs fail loudly during development rather than becoming mysterious wrong answers later.
+An out-of-bounds index or a bad cast stops the program with a message.

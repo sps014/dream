@@ -170,9 +170,11 @@ Set `API_JWT_KEY` to at least 32 bytes and `DEMO_PASSWORD` to your demonstration
 dream run app.dream
 ```
 
-Open `/docs`. POST JSON credentials with username `demo` to `/auth/login`, copy the returned access token into Swagger's Bearer Authorize control, then call `POST /messages` with `{"text":"Hello"}`. An empty message returns 422. A missing access token returns 401. A user without `messages:write` receives 403.
+Open `/docs`. POST JSON credentials with username `demo` to `/auth/login`, copy the access token into Swagger's Bearer Authorize control, then POST `/messages` with `{"text":"Hello"}`.
 
-This example uses HS256 explicitly. Production services may use the RS256 default with separate PEM keys. The example's account lookup and `MemoryAuthStore` are deliberately process-local; replace them with your application's repositories and atomic persistent session store.
+An empty message returns 422, a missing access token returns 401, and a user without `messages:write` receives 403.
+
+This example uses HS256; production services can use the RS256 default with separate PEM keys. The account lookup and `MemoryAuthStore` stay in this process, so replace them with your repositories and a session store that updates atomically.
 
 ## Test it
 

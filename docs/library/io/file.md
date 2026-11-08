@@ -8,7 +8,7 @@ api: reference/api/system-io.md
 # Files
 
 
-Use File to read or write a whole file, inspect a path, or manage directories. Methods that wait for work are async and return Result values. Handle the error when the file cannot be accessed.
+Use `File` to read or write a whole file, inspect a path, or manage directories. Methods that wait are `async` and return `Result`, including when the file cannot be accessed.
 
 **Import:** `import system.io;`
 

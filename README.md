@@ -72,17 +72,19 @@ Dream is **pre-1.0 and actively evolving**. Expect breaking changes as the langu
 
 ## Why choose Dream?
 
-Dream is for people who want familiar application code, ahead-of-time compilation, and control over where their program runs. If you know TypeScript, Rust, or C#, much of the syntax will feel familiar. The interesting part is how the pieces fit together.
+Dream is for application code that compiles ahead of time and runs where you choose. If you know TypeScript, Rust, or C#, much of the syntax will feel familiar.
 
 ### Compile to the machine. Bring the same language to the web.
 
-Build native executables for command-line tools and services, or compile to WebAssembly for the browser and Node. Share your core logic across targets, then use each environment's APIs where you need them. Code goes through LLVM's optimizer either way, and builds are deterministic: the same source produces byte-identical output. See [environments](docs/learn/environments.md).
+Build a native executable, or compile to WebAssembly for the browser and Node. Share core logic across targets, then use each environment's APIs where you need them. See [environments](docs/learn/environments.md).
 
 ### Write GPU shaders in Dream.
 
 Import `system.gpu` and write compute, vertex, and fragment shaders as Dream functions. Typed buffers and generated shader calls connect your application to the GPU. Shaders compile ahead of time, so no shader source or shader compiler ships with your program.
 
-Start with WebGPU for native and browser programs, or choose Metal, Vulkan, Direct3D, or CUDA for platform-specific work. Rendering, ray tracing, automatic differentiation, and tensor hardware operations are available where the selected backend and GPU support them; CUDA is compute-only, and ray tracing requires a native backend.
+- Start with WebGPU for native and browser programs, or choose Metal, Vulkan, Direct3D, or CUDA.
+- Rendering, ray tracing, and tensor operations depend on the backend and the GPU.
+- CUDA is compute-only. Ray tracing needs a native backend.
 
 Install the shader compiler before building a program with shaders:
 
@@ -90,35 +92,34 @@ Install the shader compiler before building a program with shaders:
 dreamer toolchain install slang
 ```
 
-Follow the [GPU setup and first compute shader](docs/library/gpu/index.md), draw with the [rendering guide](docs/library/gpu/rendering.md), or try the [interactive spotlight](docs/cookbook/gpu-spotlight.md). Explore [ray tracing](docs/library/gpu/ray-tracing.md) and [machine learning](docs/library/gpu/machine-learning.md) for advanced workloads. The setup guide lists additional tools required by specific targets; GPU failures are returned as `Result` values with `GpuError` details.
+Start with [GPU setup](docs/library/gpu/index.md), then [rendering](docs/library/gpu/rendering.md), the [spotlight](docs/cookbook/gpu-spotlight.md), [ray tracing](docs/library/gpu/ray-tracing.md), or [machine learning](docs/library/gpu/machine-learning.md). A GPU failure is a `Result` with a `GpuError`.
 
-### Automatic memory that mostly compiles away.
+### Memory is cleaned up for you.
 
-Dream manages heap values with automatic reference counting (ARC). Objects are freed the moment their last owner lets go, with no garbage collector and no tracing pauses. Most of the counting is removed at compile time:
+Objects are freed when nothing uses them. There is no garbage collector.
 
-- **Moves on last use.** Passing or storing a value for the last time hands it over instead of copying a reference. There is no `move` keyword to sprinkle through your code.
-- **Borrow inference.** Release builds work out which parameters only read their arguments and pass those without touching the count. Write `borrow` when you want the contract spelled out.
-- **Retain/release elision.** Pairs that cancel out are removed across branches, loops, and inlined calls.
-- **Retain-free traversal.** Walking a linked structure (`node = node.next`) or reading fields in a loop does no counting when the compiler can prove the source stays alive.
-- **Cheap counts where it matters.** Counts are plain, non-atomic integers unless a type is declared `shared` for tasks. Interned strings never change their count, and objects that never escape a function can be split into local values with no heap allocation.
-- **Zero-cost generics.** Generic code is specialized for each concrete type, so there is no runtime type dispatch.
+- Classes, strings, and arrays are shared. Structs are copied.
+- Passing a value for the last time hands it over. There is no `move` keyword.
+- Write `borrow` when a function should only look at a value.
+- An out-of-bounds index stops the program with an error.
+- A reference cycle is a compile error. Use `@allow_cycle` only when your code breaks the cycle.
 
-Classes share identity; structs copy as values and live inline. Ordinary code cannot read freed memory, out-of-bounds indexing stops with a clear error instead of reading past the end, and the compiler rejects stores that would form a strong reference cycle unless the class is marked `@allow_cycle`, which makes leaks visible. Read about [ownership](docs/language/memory/ownership.md), [memory management](docs/language/memory/index.md), and [reference cycles](docs/language/memory/cycles.md).
+Read [ownership](docs/language/memory/ownership.md), [memory](docs/language/memory/index.md), and [cycles](docs/language/memory/cycles.md).
 
 ### Call C, C++, and JavaScript directly.
 
-Declare a foreign function with the right attribute and call it like any Dream function. The compiler generates the glue and converts values at the boundary.
+Declare a foreign function and call it like any Dream function. Dream converts values at the boundary.
 
 
 | Interop | Runs on | What you get |
 | --- | --- | --- |
-| [C](docs/language/interop/c.md) | Native, browser, Node | `@c` externs. Package C sources are built with the pinned clang for native and WebAssembly; desktop builds can also link system libraries. [Native callbacks](docs/language/interop/native-callbacks.md) let C call back into Dream. |
+| [C](docs/language/interop/c.md) | Native, browser, Node | `@c` functions, C sources in a package, and [callbacks from C](docs/language/interop/native-callbacks.md). |
 | [C++](docs/language/interop/cpp.md) | Same as C | `@cpp` maps classes, methods, constructors, and templates. `std::optional`, exceptions, and `std::function` map to `Option`, `Result`, and Dream closures. |
 | [JavaScript](docs/language/interop/index.md) | Browser, Node | `extern fun` for known signatures, the dynamic [`js` type](docs/language/interop/js-type.md) for DOM nodes and other live values, [callbacks](docs/language/interop/callbacks.md) in both directions, and `extern async fun` for Promises. An optional tree-shaken runtime ships only the host code your program uses. |
 
 ### Serve typed web APIs.
 
-`system.webapi` builds native HTTP services. Routes are typed static methods, and the router is generated at compile time, so a handler cannot receive an argument of the wrong type.
+`system.webapi` builds native HTTP services. A route is a typed static method, so a handler cannot receive an argument of the wrong type.
 
 ```typescript
 import system;
@@ -153,23 +154,26 @@ Run it with `dream run app.dream` and open `http://127.0.0.1:8000/hello/Dream`. 
 
 The framework also includes [validated request models](docs/web-server/validation.md), [dependency injection](docs/web-server/dependencies.md), [middleware and CORS](docs/web-server/middleware.md), [password and token authentication](docs/web-server/authentication.md), [OAuth2/OIDC login](docs/web-server/oidc.md), [scopes](docs/web-server/authorization.md), [uploads](docs/web-server/uploads.md), [server-sent events](docs/web-server/streaming.md), [WebSockets](docs/web-server/websockets.md), and [TLS](docs/deploy/web-server.md). Servers run on native targets. Start with the [web server guide](docs/web-server/index.md).
 
-### Keep abstractions in your source, specialize them at build time.
+### Keep abstractions in your source.
 
-Write reusable collections and algorithms with generics. Dream specializes generic code for the concrete types you use, avoiding runtime type dispatch for those generic operations.
+Generics are specialized for the concrete types you use.
 
-Use classes and interfaces for object-oriented designs, structs for value data, and enums and discriminated unions to model alternatives. `Option` and `Result` make missing values and recoverable failures part of a function's type. Explore the [type system](docs/language/types/index.md) and [error handling](docs/library/core/option-result.md).
+- Use classes and interfaces for shared objects, structs for copied values, and enums for alternatives.
+- `Option` and `Result` put missing values and recoverable failures in the type.
+
+See [types](docs/language/types/index.md) and [errors](docs/library/core/option-result.md).
 
 ### Wait concurrently. Compute in parallel. Own the lifetime of both.
 
-Use `async`/`await` for work that waits and worker tasks for CPU parallelism. Structured task scopes join their children on success, failure, cancellation, and early error return, so concurrent work has a clear lifetime.
+Use `async`/`await` for work that waits, and tasks for CPU work. A task scope joins its children when it finishes, fails, or is cancelled.
 
 Start with [structured concurrency](docs/language/concurrency/structured.md), then use [tasks](docs/language/concurrency/tasks.md) and pools when you need parallel execution.
 
 ### Extend the language using the language.
 
-**Dream source generators are ordinary Dream functions.** They can inspect declarations, generate methods, and turn custom syntax blocks into checked Dream code during a build.
+Source generators are ordinary Dream functions. They can add methods and turn a custom block into checked Dream code during a build.
 
-The `@json` in the opening example uses this same mechanism. Your own packages can ship derives and small domain-specific notations, too. See [source generators](docs/language/metaprogramming/generators.md) for a complete example.
+`@json` in the first example is one of these. See [source generators](docs/language/metaprogramming/generators.md).
 
 ## Build something useful
 

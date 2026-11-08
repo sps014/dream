@@ -22,31 +22,25 @@ Per host:
 - **node** — write `run.mjs` from `package.entry` if it is missing, compile with `--runtime --node`
   (refreshing `target/node/`), then `node run.mjs`.
 - **web** — compile with `--runtime --web` (wasm in `target/web/`), then serve the project root on
-  `http://127.0.0.1:8787/index.html` by default (colored log; Ctrl-C to stop). A later
-  `dreamer run --target web` restarts that server on the same port. Override with `--port`.
+  `http://127.0.0.1:8787/index.html` (colored log; Ctrl-C to stop). A later
+  `dreamer run --target web` restarts that server; override the port with `--port`.
 
-Canvas apps created with `dreamer init app` are an exception to the multi-host rule:
-they select `native` by default. `dreamer init desktop` also selects the desktop host.
-Mobile-only canvas projects require `--target android` or `--target ios`. See
-[Mobile apps](../deploy/mobile.md).
+Canvas apps from `dreamer init app` select `native` by default, and `dreamer init desktop` selects the desktop host. Mobile-only canvas projects require `--target android` or `--target ios` ([Mobile apps](../deploy/mobile.md)).
 
-`dreamer build --target web` or `--target node` builds only that host's output. Without
-`--target`, a console/web/Node project keeps its declared build outputs; a canvas app
-builds its default host. Run the command again after edits to rebuild. Watch mode and
-automatic restart are deferred.
+`dreamer build --target web` or `--target node` builds only that host. Without `--target`, a console, web, or Node project keeps its declared outputs, and a canvas app builds its default host.
+
+Run the command again after edits. Watch mode and automatic restart are not available yet.
 
 Use `dreamer run --release` (optionally with `--target`) so release artifacts feed the same stable
 alias paths the scaffolds already reference.
 
 ### Exit status of a native run
 
-A native run exits with the program's own status: 0 when `main` finishes normally, or the value a
-`main(): int` returns, or a failure status when `main` returns a failing `Result`. When the program crashes, the
-run prints what stopped it, for example `guest crashed: killed by signal 11 (SIGSEGV)` on Linux and
-macOS or `guest crashed: terminated by exception 0xC00000FD (STATUS_STACK_OVERFLOW)` on Windows. The
-exit status is then `128 + signal` on Linux and macOS, as shells report it, and 255 on Windows. A
-panic prints its message before the crash line. To find where a crash happened, rebuild with `-g`
-and run the binary under a debugger.
+A native run exits with the program's own status: `0` when `main` finishes normally, the value a `main(): int` returns, or a failure status when `main` returns a failing `Result`.
+
+When the program crashes, the run prints what stopped it, for example `guest crashed: killed by signal 11 (SIGSEGV)` on Linux and macOS or `guest crashed: terminated by exception 0xC00000FD (STATUS_STACK_OVERFLOW)` on Windows. The exit status is then `128 + signal` on Linux and macOS, and 255 on Windows.
+
+A panic prints its message before the crash line. Rebuild with `-g` and run the binary under a debugger to find where it stopped.
 
 
 ### Profile-guided native builds
@@ -61,7 +55,4 @@ dreamer run --release --use-profile    # 2. merge <bin>.pgo/*.profraw → <bin>.
 dreamer build --release --use-profile=path/to/app.profdata   # or a .profraw / directory of them
 ```
 
-`--profile` and `--use-profile` are mutually exclusive, and both require `--release`. Profiles accumulate across runs of the
-same instrumented binary; rebuilding it (changed source or flags) clears the old ones. The
-instrumented binary links through the pinned clang like any other native build, and the merge uses
-the pinned `llvm-profdata` that ships with Dream.
+`--profile` and `--use-profile` are mutually exclusive, and both require `--release`. Profiles accumulate across runs of the same instrumented binary, and a rebuild with changed source or flags clears the old ones.

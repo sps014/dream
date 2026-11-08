@@ -95,7 +95,7 @@ A one-field payload may be positional (`Circle(float)`) or named (`Full(value: i
 
 ### Pattern-matching switch
 
-The pattern form of `switch` runs the first arm whose pattern fits and binds the payload. The variant qualifier is optional inside the arms because the subject type is known. It works in both expression and statement position:
+The pattern form of `switch` runs the first matching arm and binds the payload. The variant name is optional inside the arms, and the `switch` can be an expression or a statement:
 
 ```dream
 // expression position: yields a value
@@ -225,18 +225,17 @@ Unions are heap values by default.
 
 A union becomes a **value union** when every payload is a value (`int`, `bool`, `float`, a `struct`, and so on):
 
-- It is stored inline and copied on assignment.
-- It does not allocate on the heap.
-- This is decided for each concrete type. `Option<int>` is a value union. `Option<string>` holds a reference payload, so it is a [niche union](#niche-unions) instead.
+- It is stored inline, copied on assignment, and does not use the heap.
+- The choice is per concrete type: `Option<int>` is a value union, and `Option<string>` is a [niche union](#niche-unions).
 
 #### `enum struct`: a value union, plus a reference-payload relaxation
 
 `enum struct` is a value union you ask for, the same split as `class` vs `struct`.
 
-- If it cannot be stored inline, that is an error. Dream does not silently put it on the heap.
-- Adding a payload that refers to the same union is an error, and the message names that field.
-- Reference payloads are allowed: `string`, `class`, arrays, and so on. Each is stored as a pointer inside the value, the same way a `struct` field holds one.
-- A union cannot contain itself inline. That value would have no finite size.
+- If it cannot be stored inline, the declaration is an error.
+- A payload that refers to the same union is an error, and the message names that field.
+- Reference payloads such as `string`, `class`, and arrays are allowed. Each is stored inside the value, the same way a `struct` field holds one.
+- A union cannot contain itself inline.
 
 ```dream
 enum struct Outcome {
@@ -260,11 +259,11 @@ A union with exactly one reference payload is handled on its own. See the next s
 
 Some `Option`-like unions store "none" without an extra flag.
 
-That happens when there are exactly two variants: one empty, and one with a single reference payload (`Option<TreeNode>`, `Option<string>`). `None` and `Some(x)` share that slot.
+That happens for exactly two variants: one empty, and one with a single reference payload (`Option<TreeNode>`, `Option<string>`). `None` and `Some(x)` share that slot.
 
 - Pattern matching works the same.
 - A `weak` field typed `Option<Class>` becomes `None` when the object is gone.
-- This is chosen per concrete type. `Option<int>` stays a value union. Unions with more than two variants, or with extra payloads, stay on the heap.
+- The choice is per concrete type. `Option<int>` stays a value union, and a union with more variants or extra payloads stays on the heap.
 
 ### JSON with `@json`
 

@@ -6,7 +6,7 @@ icon: material/cart-outline
 
 # Build a shopping total
 
-You have run your first program. Now combine variables, lists, loops, and functions into a small project. This program adds item prices and reports whether they fit your budget.
+Combine variables, lists, loops, and functions into a small project that adds item prices and reports whether they fit your budget.
 
 ## Create the project
 
@@ -52,13 +52,13 @@ Within budget
 
 ## Understand each part
 
-`List<int>` holds whole-number prices. `push(10)` adds another price. The function receives the list through a borrowed parameter, visits its items, and returns their sum. `const budget` keeps the budget fixed. The `if` statement chooses which message to print.
+`List<int>` holds the prices, `push(10)` adds one, and `total` returns their sum. `const budget` stays fixed, and the `if` chooses which message to print.
 
 The prices are whole numbers to keep this example small. For money that includes fractions, store the smallest currency unit as an integer; for example, store 125 cents rather than 1.25 dollars.
 
 ## Try a change
 
-Set the budget to 30 and run again. The total stays 35, but the message becomes `Over budget`. Add another price and check that the total changes.
+Set the budget to 30 and run again: the total stays 35 and the message becomes `Over budget`. Add another price and check that the total changes.
 
 ## Add a test
 
@@ -73,6 +73,6 @@ fun four_prices(): void {
 }
 ```
 
-Run `dreamer test`. This first test checks the example's arithmetic. As your project grows, put reusable functions in their own [module](../language/rules/imports.md) and test those functions directly.
+Run `dreamer test` to check the example's arithmetic. As the project grows, put reusable functions in their own [module](../language/rules/imports.md) and test those functions.
 
 Continue with [Lists](../library/collections/list.md), [Functions](../language/functions/declaring.md), or [project testing](../tooling/testing.md).

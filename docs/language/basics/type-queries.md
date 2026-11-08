@@ -25,8 +25,7 @@ Use these expressions when you need a name, type description, or storage size.
 
 ## `sizeof`, `nameof`, and `typeof`
 
-`alignof(T)` also reports the target alignment in bytes as an `int` compile-time constant.
-Like `sizeof`, it resolves generic types after instantiation.
+`alignof(T)` reports the target alignment in bytes as an `int` constant. Like `sizeof`, pass a concrete type, including a generic type with its arguments.
 
 None of these names is a reserved keyword — each takes on its meaning only immediately before `(`,
 so you can still declare a variable or function called `typeof`. Written as a call, they are
@@ -47,7 +46,7 @@ let kind: string = typeof(bytes); // "int"
 - **`sizeof(T)`** yields an `int`:
   - primitives and value `struct`s → their storage size in bytes
   - class instances, arrays, `string`, and other heap refs → the target's pointer width
-  - nested value structs, tuples, and value unions use the same target layout as code generation
+  - nested value structs, tuples, and value unions use the target's layout
   - The result is a compile-time constant.
 - **`nameof(a.b.c)`** yields a `string` of the last identifier in a dotted path. The path is not
   type-checked or evaluated (you can write `nameof(future_api)`).
@@ -78,11 +77,8 @@ There are two resolution paths, and which one applies is decided at compile time
 | `object`, or an interface | Reads the value's type tag and returns a string |
 | everything else | Folds to a compile-time string constant |
 
-The folded path costs nothing at runtime and, like `nameof`, **does not evaluate its operand** —
-`typeof(f())` will not call `f`. The runtime path does not allocate.
+The compile-time path does not evaluate its operand, so `typeof(f())` does not call `f`.
 
-Three type tags are shared across every instantiation of their shape, so `typeof` reports a
-coarse name for them when the static type was erased: an array reports `"array"`, a lambda or
-function value reports `"function"`, and a `Future<T>` reports `"future"`. A statically typed
-operand of those shapes still reports precisely (`typeof(nums)` on an `int[]` is `"int[]"`). A null
-reference reports `"null"`.
+When the static type is `object` or an interface, an array reports `"array"`, a function value reports `"function"`, and a `Future<T>` reports `"future"`. A value whose type is written in source still reports that type, so `typeof` of an `int[]` is `"int[]"`.
+
+A null reference reports `"null"`.

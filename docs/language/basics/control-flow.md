@@ -29,7 +29,7 @@ Use `if` to choose what happens, loops to repeat work, and `switch` to handle di
 
 ## if / else
 
-Conditions must be `bool`. Parentheses around the condition are optional. Bodies may be a braced block or a single statement:
+Conditions must be `bool`, and parentheses around them are optional. The body is a braced block or a single statement:
 
 ```dream
 if score >= 90 {
@@ -76,7 +76,7 @@ do {
 
 ### for
 
-A three-part loop: initializer, condition, increment. All three parts are optional. The initializer runs once, the condition is checked before each pass, and the increment runs after each body:
+A three-part loop has an initializer, a condition, and an increment, and any part may be omitted. The initializer runs once, the condition is checked before each pass, and the increment runs after the body:
 
 ```dream
 for (let i = 0; i < 5; i++) {
@@ -131,7 +131,7 @@ for (let i = 0; i < 10; i = i + 1) {
 
 ## checked and unchecked blocks
 
-Integer arithmetic wraps by default. `checked { ... }` runs its statements with overflow panics; `unchecked { ... }` restores wrapping inside it. Both are ordinary blocks otherwise — they open a scope, and `return`/`break`/`continue` pass through them:
+`checked { ... }` panics on integer overflow, and `unchecked { ... }` restores wrapping. Both open a scope, and `return`, `break`, and `continue` pass through them:
 
 ```dream
 fun buffer_bytes(count: int, size: int): int {
@@ -166,7 +166,7 @@ switch (code) {
 }
 ```
 
-Labels must be constants (integers, strings, booleans, or enum members) that match the subject's type. Duplicate labels are an error. Enums work naturally:
+Labels must be constants of the subject's type: integers, strings, booleans, or enum members. Duplicate labels are an error.
 
 ```dream
 enum Color {

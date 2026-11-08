@@ -7,8 +7,7 @@ api: reference/api/system-net.md
 
 # HTTP clients and streamed responses
 
-Import `system.net` for HTTP clients and `system.io` when copying responses to
-files. Native clients use reqwest on Tokio; Node and browsers use Fetch.
+Import `system.net` for HTTP clients, and `system.io` when copying a response to a file.
 
 ```dream
 import system;
@@ -30,9 +29,7 @@ async fun main(): Result<Unit, HttpError> {
 }
 ```
 
-Reuse a client for multiple requests. It snapshots each request's URL, headers,
-options, and byte body when sending begins. HTTP 4xx/5xx statuses are successful
-transport responses; inspect `status` yourself.
+Reuse one client for many requests. `send` copies the URL, headers, options, and body when it starts, and a 4xx or 5xx status is still a successful response.
 
 ## Client
 
@@ -48,10 +45,9 @@ transport responses; inspect `status` yourself.
 
 ## Cookies
 
-Native clients automatically retain cookies received in `Set-Cookie` headers
-and send matching cookies on later requests, including redirects. Each default
-client has its own in-memory jar. Cookies are never persisted to disk.
-Use `HttpClient(use_cookies: false)` to disable both automatic storage and sending.
+A native client stores `Set-Cookie` values and sends matching cookies later, including after redirects. Each default client has its own in-memory jar, and cookies are not written to disk.
+
+`HttpClient(use_cookies: false)` turns storage and sending off.
 
 Supply a `CookieJar` to seed cookies or share a session between clients:
 
@@ -79,26 +75,21 @@ async fun main(): Result<Unit, HttpError> {
 }
 ```
 
-`store(url, set_cookie)` processes one cookie as received from that URL, including
-replacement, `Max-Age`, and `Expires`. Syntactically invalid cookies and cookies
-with unrelated or public-suffix domains are ignored; invalid header bytes or non-HTTP URLs return
-`EINVAL`. Store separate `Set-Cookie` values separately rather than combining them
-with commas. `header(url)` returns the selected request header, or an empty string.
-Selection respects host/domain, path, expiry, and `Secure` restrictions.
-Cookies with longer paths precede broader paths; equal paths retain creation
-order, including when a cookie is replaced. `__Secure-` cookies require HTTPS and
-`Secure`; `__Host-` additionally requires an explicit root path and no Domain.
+`store(url, set_cookie)` applies one cookie from that URL, including replacement, `Max-Age`, and `Expires`.
 
-An explicit request `Cookie` header takes precedence over automatic selection.
-Response cookies are still stored. Cross-origin redirects strip explicit cookies
-and authorization; jar cookies are selected for the destination. Clearing a
-shared jar affects all its clients, but later responses can store new cookies.
-Closing one client does not clear a jar shared with another client.
+- A bad cookie, or one for an unrelated or public-suffix domain, is ignored. Bad header bytes or a non-HTTP URL return `EINVAL`.
+- Store each `Set-Cookie` value on its own. Do not join them with commas.
+- `header(url)` returns the `Cookie` header to send, or `""`. Selection follows host, path, expiry, and `Secure`; longer paths come first, and equal paths keep creation order.
+- `__Secure-` requires HTTPS and `Secure`. `__Host-` also requires path `/` and no `Domain`.
 
-Node, browser, and WASI component hosts do not currently expose managed jars.
-Default clients on these hosts remain stateless; explicitly supplying an enabled
-jar makes `send` return `ENOTSUP`. Jar operations also return `ENOTSUP` there.
-Supplying a jar with `use_cookies: false` leaves it accessible but unused.
+An explicit `Cookie` header wins over the jar. Response cookies are still stored.
+
+- A cross-origin redirect drops that header and `Authorization`. The jar is then chosen for the new URL.
+- Clearing a shared jar affects every client that uses it. A later response can store new cookies, and closing one client does not clear the jar.
+
+Node, browsers, and WASI components have no managed jar. Default clients there stay stateless.
+
+Passing an enabled jar makes `send` and jar methods return `ENOTSUP`. A jar passed with `use_cookies: false` stays readable and is not used.
 
 ## Requests
 
@@ -134,9 +125,7 @@ Header names are case-insensitive and repeated values keep their order.
 | `remove(name)` | `void` | Removes every value for `name`. |
 | `to_json()` | `JsonValue` | Ordered array of `[name, value]` pairs. |
 
-Native response headers preserve repeated values. Fetch can combine
-repeated values and browser CORS rules can hide response headers. Node preserves
-separate `Set-Cookie` values where its Fetch API exposes them.
+Native response headers keep repeated values. Fetch may combine them, and browser CORS can hide some; Node keeps separate `Set-Cookie` values when Fetch exposes them.
 
 ## Responses
 
@@ -154,26 +143,19 @@ separate `Set-Cookie` values where its Fetch API exposes them.
 
 ## Streaming and cleanup
 
-`send` completes when response headers arrive. `response.body` implements
-`AsyncReader` and returns up to the requested bytes; empty successful reads at a
-positive size mean EOF. Use `Streams.copy_async(response.body, destination)` for
-bounded-memory downloads. The native adapter keeps one transport chunk plus the
-requested output; Fetch adapters retain one received chunk between reads.
+`send` finishes when the response headers arrive. `response.body` is an `AsyncReader`: it returns up to the size you ask for, and an empty read means EOF.
 
-`read_text` strictly decodes incremental UTF-8, defaulting to a 1 MiB byte limit.
-It consumes one extra byte when detecting a limit violation. Encoding and limit
-errors do not restore already consumed input. Close the response after errors.
+Use `Streams.copy_async(response.body, destination)` to download without holding the whole body. Native keeps one transport chunk plus your output buffer; Fetch keeps one received chunk between reads.
 
-Close every response, including unfinished bodies. Closure aborts a pending body
-read and is idempotent. A retained `body` remains owned independently of its
-response; closing either closes that body for all aliases. Destructors release
-clients, unfinished bodies, and abandoned operations without throwing.
+`read_text` decodes UTF-8 as it goes, with a default limit of 1 MiB, and reads one extra byte to notice that limit. An encoding or limit error does not put consumed bytes back, so close the response after an error.
 
-Client closure cancels pending sends and releases its connection pools, while
-already received responses remain independently usable. Native clients retain
-at most 32 combinations of connection timeout and redirect policy. Each host
-bounds live clients, bodies, and operation records to 1024 each; exhaustion
-reports `EBUSY` or `ELIMIT`.
+Close every response, including a body you did not finish. `close()` aborts a pending read and is safe to call again.
+
+A `body` you kept is separate from the response value, and closing either one closes that body everywhere. Dropping a client or an unfinished body releases it without throwing.
+
+`client.close()` cancels sends that have not finished and releases connection pools. Responses you already have stay usable.
+
+Native clients keep at most 32 combinations of connection timeout and redirect policy. Each host allows 1024 clients, 1024 bodies, and 1024 operation records; past that, calls return `EBUSY` or `ELIMIT`.
 
 ## Deadlines, redirects, and cancellation
 
@@ -186,16 +168,13 @@ arguments for each field:
 | `max_redirects` | `-1` | `-1` uses the host policy; `0` exposes redirect responses. |
 | `connect_timeout_ms` | `0` | Connection timeout; `0` uses the host default. |
 
-Negative deadlines and redirect limits below `-1` return `EINVAL` from `send`.
-Native and Node host-default redirect policy follows at most ten redirects.
-Explicit zero redirects exposes the redirect response; positive values enforce
-a limit and return `EREDIRECT` when exceeded.
+A negative deadline, or a redirect limit below `-1`, returns `EINVAL` from `send`.
 
-`CancellationToken` is accepted by `send`, `read_text`, and body reads. Cancellation
-returns `ECANCELLED`, abandons pending transport work, and does not roll back
-request side effects or consumed input. Overlapping body reads report `EBUSY`.
-HTTP completion and cancellation wake the scheduler through notifications. No
-periodic timer checks are needed while a request or body read is pending.
+With the default, native and Node follow at most ten redirects. `max_redirects: 0` returns the redirect response, and a positive limit returns `EREDIRECT` when it is exceeded.
+
+`send`, `read_text`, and body reads take a `CancellationToken`. Cancellation returns `ECANCELLED`, drops transport work still in progress, and does not undo a request that already started or bytes already read.
+
+Overlapping body reads return `EBUSY`.
 
 ## Error codes
 
@@ -229,17 +208,13 @@ Inspect `HttpCapabilities` before sending to see which controls the host enforce
 | `unrestricted_headers` | Browser forbidden-header rules do not apply. |
 | `cookie_jars` | Managed in-memory cookie jars are supported (native). |
 
-Fetch hosts reject nonzero `connect_timeout_ms`, since Fetch exposes no separate
-connection timeout. Browser hosts also require `max_redirects: -1`; the browser
-controls redirect following and does not reliably expose redirect responses or
-counts. Native and Node support explicit redirect limits.
+Fetch rejects a nonzero `connect_timeout_ms`. Browsers also require `max_redirects: -1`, because the browser follows redirects and does not reliably show them; native and Node accept an explicit limit.
 
-Browsers reject restricted request headers with `ENOTSUP`, including connection,
-cookie, origin, host, content-length, and `Sec-`/`Proxy-` headers. CORS, mixed-content,
-and browser certificate rules still apply. Opaque responses return `ENOTSUP`.
-Fetch requests omit ambient credentials. No API disables certificate validation.
-Node's Fetch connection pool is managed by the Node host rather than by an
-individual Dream client, so closing a Dream client cannot explicitly drain it.
+Browsers reject restricted request headers with `ENOTSUP`, including connection, cookie, origin, host, content-length, and `Sec-` or `Proxy-` names.
+
+CORS, mixed content, and the browser's certificate rules still apply. An opaque response returns `ENOTSUP`, Fetch does not send ambient credentials, and nothing turns certificate checks off.
+
+Closing a Node client does not drain Node's connection pool. Node owns that pool.
 
 ## Cancellation before sending
 

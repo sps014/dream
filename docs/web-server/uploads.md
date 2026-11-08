@@ -38,7 +38,7 @@ Send `multipart/form-data` with fields named `title` and `upload`, for example `
 | `@form` | A text field | `string`, `bool`, a number, or `Option<T>` of one | 422 `missing`, or `None` for `Option<T>` |
 | `@file` | A file part | `UploadedFile` or `Option<UploadedFile>` | 422 `missing`, or `None` for `Option<UploadedFile>` |
 
-Both match the part by parameter name; pass a positional name to override it, such as `@file("attachment")`. Form values are parsed using their declared types, and the [constraint attributes](validation.md#constraint-attributes) apply to them. JSON body and multipart extractors cannot be combined on one route; the generator reports that combination at compile time.
+Both match the part by parameter name; pass a name to override it, such as `@file("attachment")`. Form values use their declared types and the [constraint attributes](validation.md#constraint-attributes), and a route cannot mix a JSON body with multipart (that combination is a compile-time error).
 
 ## Uploaded files
 
@@ -55,7 +55,7 @@ An `UploadedFile` keeps up to 1 MiB of its contents in memory and moves larger c
 | `close()` | `void` | Deletes the contents now. |
 | `read_async(max_bytes)` | `Result<byte[], IoError>` (async) | The `AsyncReader` form of `read`, so `Streams.copy_async` accepts an `UploadedFile`. |
 
-The temporary file is deleted when you call `close`, when the `UploadedFile` is released, or when the request finishes, whichever comes first. Reading after that fails with `ECLOSED`. To keep an upload, copy it somewhere permanent inside the handler.
+The temporary file is deleted when you call `close`, when the `UploadedFile` is released, or when the request finishes, whichever comes first. Reading after that fails with `ECLOSED`, so copy an upload you want to keep before the handler returns.
 
 File metadata comes from the client. Choose storage paths independently of the submitted filename, and validate the contents for your application.
 

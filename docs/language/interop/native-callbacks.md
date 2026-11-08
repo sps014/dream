@@ -54,7 +54,7 @@ qsort(
 **`NativeCallback<F>`** (in `system`) wraps any `fun`, capturing or not. Use it for C APIs that
 take a function pointer plus a `void* user_data`. The parameter expands to both C arguments. By
 default the callback receives `user_data` as its first C parameter. Mark the parameter
-`@marshal(MarshalKind.UserDataLast)` for APIs that pass it last.
+`@user_data(UserDataPosition.Last)` for APIs that pass it last.
 
 ```c
 typedef int (*ticker_fn)(void* user, int tick);
@@ -114,7 +114,4 @@ past a call) and `dream_set_panic_hook` (see [Panics](../rules/panics.md#embeddi
 | `dream_release(ref)` | Drop a reference previously kept with `dream_retain` |
 | `dream_set_panic_hook(hook)` | Run your own handler when the Dream program panics |
 
-C++ adapters may release their retained callback from any thread. Such releases are queued
-without touching the object's non-atomic reference count; the owner drains them at scheduler
-ticks, worker wakeups, or shutdown. Destructors run on the owner. Join foreign users and release
-their callback handles before the owner exits; a callback that outlives its owner is an error.
+Release a callback on the thread that owns it. Join C or C++ users and release their handles before that owner exits. A callback that outlives its owner is an error.

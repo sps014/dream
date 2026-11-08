@@ -68,6 +68,6 @@ Override external dependencies with a generated replacement class and `app.overr
 | `app.override_dependencies(...)` | Replace external services for this app only. |
 | `app.shutdown()` then `app.wait()` | Stop the app before the test returns. |
 
-HTTP server tests require the native target. Choose an unused port by passing zero to `listen`, and use the returned port in the client URL. Close each response and stop the application before the test returns.
+HTTP server tests need the native target. Pass `0` to `listen`, use the returned port in the client URL, and close each response and stop the app before the test returns.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

@@ -8,10 +8,7 @@ targets: [native, web, node]
 
 # Ranges
 
-`start..end` creates a `Range` value with `int` bounds and an excluded end.
-You can store a range, pass it to a function, inspect its members, or iterate it
-more than once. The operator needs no import; this example imports `system` to
-print the results:
+`start..end` creates a reusable `Range` with `int` bounds and an excluded end. The operator needs no import; this example imports `system` only to print:
 
 ```dream
 import system;
@@ -35,18 +32,15 @@ A range moves toward its end in steps of one:
 - `5..0` contains `5, 4, 3, 2, 1`.
 - `5..5` is empty.
 
-Unlike Rust, a reversed range counts down rather than being empty. In particular,
-`0..n` with negative `n` contains `abs(n)` values.
+A reversed range counts downward. `0..n` with a negative `n` contains `abs(n)` values.
 
-Bounds can be expressions: `-1..n - 1` means `(-1)..(n - 1)`.
-Both bounds must be `int`; they are evaluated once, from left to right, when the
-range is created. There is no inclusive `..=` form or custom step.
-[Switch range patterns](enums-unions.md#or-patterns-and-range-patterns) are separate:
-they match both bounds inclusively and do not construct a `Range`.
+Bounds can be expressions: `-1..n - 1` means `(-1)..(n - 1)`. Both bounds must be `int`, and they are evaluated once, left to right, when the range is created.
 
-`length` is the distance between the bounds. It panics if that distance exceeds
-`2147483647`. Iteration itself supports all `int` bounds. `contains(value)` follows
-the direction: `(5..0).contains(5)` is true, and `(5..0).contains(0)` is false.
+There is no inclusive `..=` form and no custom step. [Switch range patterns](enums-unions.md#or-patterns-and-range-patterns) match both bounds inclusively and do not build a `Range`.
+
+`length` is the distance between the bounds, and it panics if that distance exceeds `2147483647`. Iteration itself allows any `int` bounds.
+
+`contains(value)` follows the direction: `(5..0).contains(5)` is true, and `(5..0).contains(0)` is false.
 
 ## Iteration
 

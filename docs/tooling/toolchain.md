@@ -13,7 +13,7 @@ dreamer toolchain list
 dreamer toolchain doctor
 ```
 
-`doctor` reports the tools and libraries Dream found. It does not change your installation. Add `--json` if you need a machine-readable report.
+`doctor` reports the tools and libraries Dream found, and does not change your installation. Add `--json` for a machine-readable report.
 
 ## Install a component
 
@@ -26,17 +26,15 @@ dreamer toolchain install binaryen
 | `binaryen` | Optimizing WebAssembly output (`--release` / `-O`) |
 | `slang` | Generators that compile shaders with `slangc`. On Windows the install also copies `dxcompiler.dll` and `dxil.dll` from the Windows SDK into the Slang `bin` directory, which DXIL targets need |
 
-Native programs are compiled and linked by the tools that ship with Dream: the pinned clang drives
-every native build, and links with mold for Linux and macOS outputs or lld for Windows outputs. No
-system C compiler or linker is used. Releases include LLVM and mold; development builds install
-both with `scripts/fetch-dev-llvm.sh` (`scripts/fetch-dev-llvm.ps1` on Windows), which builds mold
-from source and needs `cargo`. Binaryen is a prebuilt, pinned executable rather than a Cargo dependency. The first optimized WASM build automatically runs `dreamer toolchain install binaryen` if needed. Set `DREAM_NO_AUTO_INSTALL=1` for offline builds and install it ahead of time.
+Native builds use the compiler and linker that ship with Dream, not a compiler from your system. Releases include those tools, and development builds install them with `scripts/fetch-dev-llvm.sh` (`scripts/fetch-dev-llvm.ps1` on Windows), which needs `cargo`.
 
-Tools are stored under `~/.dream/toolchains/<name>-<version>`. `dreamer toolchain install` without a component installs `binaryen`; `dreamer toolchain list` shows every component and whether it is installed. `dreamer install` installs project packages instead.
+The first optimized WebAssembly build runs `dreamer toolchain install binaryen` when that tool is missing. Set `DREAM_NO_AUTO_INSTALL=1` for an offline build, and install Binaryen ahead of time.
+
+Tools live under `~/.dream/toolchains/<name>-<version>`. `dreamer toolchain install` with no component installs `binaryen` (`dreamer toolchain list` shows what is installed), while `dreamer install` installs project packages.
 
 ## Custom installations
 
-`DREAM_WASM_OPT` selects the pinned `wasm-opt` executable. `DREAM_LLVM` selects your LLVM tools, `DREAM_MOLD` your mold installation and `DREAM_SLANG` your Slang installation (each the install folder or its `bin/`). Use the version Dream expects; a different installation may not support its build commands.
+`DREAM_WASM_OPT`, `DREAM_LLVM`, `DREAM_MOLD`, and `DREAM_SLANG` select those tools (the install folder or its `bin/`). Use the version Dream expects, because another installation may not support its build commands.
 
 Check another platform with `dreamer toolchain doctor --target <target-triple>`. Remove a component with `dreamer toolchain uninstall <component>` when you no longer need it.
 

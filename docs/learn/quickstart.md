@@ -50,7 +50,7 @@ fun main() {
 }
 ```
 
-`import system;` makes console helpers available. `fun main()` is where execution begins. `System.println` writes the text followed by a new line.
+`import system;` makes console helpers available, and `fun main()` is where execution begins. `System.println` writes the text followed by a new line.
 
 ## Run it
 
@@ -78,7 +78,7 @@ Use `dream hello.dream` to build without running. For a project with dependencie
 
 ## Next steps
 
-Continue with the [language tour](tour.md) and [your first small project](first-project.md). Choose the browser or Node later using [Environments](environments.md). Set up completion and error messages with [Editor support](../tooling/editor.md).
+Continue with the [language tour](tour.md) and [your first small project](first-project.md). Choose the browser or Node in [Environments](environments.md), and set up the editor in [Editor support](../tooling/editor.md).
 
 ## Installation options
 

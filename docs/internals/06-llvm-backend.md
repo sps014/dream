@@ -436,7 +436,8 @@ a reverse adapter with the real C signature that calls the Dream body `<wrapper>
 description to C (`src/driver/ffi_shim/c_shim.rs`) next to the `.ll` as `<stem>.cshim.c`. The pinned
 clang compiles it for the target triple (`src/execution/llvm/c_shim.rs`), and `llvm-link` merges it
 before `opt`, so the forward shims (`always_inline`) disappear into their callers. Clang owns
-struct classification, narrow-scalar extension and `__attribute__((stdcall))`. The `@cpp` shim
+struct classification and narrow-scalar extension. Every extern uses the platform C convention.
+The `@cpp` shim
 (`ffi_shim/cpp_shim.rs`) spells scalars with the same `dream_types::CScalar` vocabulary.
 
 Every native program keeps `dream_abi::c_abi::EMBED_EXPORTS` (the `dream_embed.h` API) through

@@ -20,11 +20,14 @@ pub(in crate::backend::llvm) fn build(l: &Lcx<'_>) -> CShim {
             }
         }
         let ret_ty = imp.ret.unwrap_or_else(|| l.interner.int());
-        let ret = c_ty(l, &mut shim, &imp.c_ret, ret_ty);
+        let mut ret = c_ty(l, &mut shim, &imp.c_ret, ret_ty);
+        if imp.is_async {
+            params.insert(0, CTy::Ptr);
+            ret = CTy::Scalar(CScalar::I32);
+        }
         shim.forwards.push(Forward {
             shim: shim_name(imp),
             symbol: import_host_name(imp),
-            stdcall: imp.c_stdcall,
             params,
             ret,
         });
@@ -61,6 +64,7 @@ fn c_ty(l: &Lcx<'_>, shim: &mut CShim, s: &CShape, ty: TypeId) -> CTy {
         CShape::Void => CTy::Void,
         CShape::Scalar(sc) => CTy::Scalar(*sc),
         CShape::Struct => CTy::Struct(c_struct(l, shim, ty)),
+        CShape::StrView => CTy::StrView,
         _ => CTy::Ptr,
     }
 }

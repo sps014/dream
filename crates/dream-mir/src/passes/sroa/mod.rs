@@ -169,6 +169,7 @@ fn expand_in_function(
     func: &mut MirFunction,
     ctor_inits: &BTreeMap<DefId, Vec<(usize, CtorInit)>>,
 ) -> bool {
+    let local_tys: Vec<TypeId> = func.locals.iter().map(|local| local.ty).collect();
     let mut changed = false;
     for block in &mut func.blocks {
         let mut new_stmts: Vec<Statement> = Vec::with_capacity(block.stmts.len());
@@ -195,6 +196,21 @@ fn expand_in_function(
                         ));
                         continue;
                     };
+                    // The destination binding can be a supertype (`object`, an interface). That
+                    // local has no field layout, so a store recovered from it writes every field
+                    // as a pointer and spills past a narrower allocation.
+                    if local_tys.get(o.0 as usize).copied() != Some(ty) {
+                        new_stmts.push(Statement::Assign(
+                            Place::Local(o),
+                            Rvalue::New {
+                                def,
+                                ty,
+                                ctor: Some(ctor),
+                                args,
+                            },
+                        ));
+                        continue;
+                    }
                     // params[0]=this; New.args[i] binds params[i+1].
                     let ok = inits.iter().all(|(_, init)| match init {
                         CtorInit::Const(_) => true,
@@ -777,6 +793,51 @@ mod tests {
             .flat_map(|bb| &bb.stmts)
             .any(|s| matches!(s, Statement::Assign(_, Rvalue::New { .. })));
         assert!(!has_new, "allocation should be gone after SROA");
+    }
+
+    #[test]
+    fn keeps_ctor_when_destination_is_a_supertype() {
+        let i = TypeInterner::new();
+        let ctor_def = DefId::root(1);
+        let class_def = DefId::root(2);
+        let mut ctor_b = FunctionBuilder::new("C.constructor", i.void());
+        ctor_b.set_def(ctor_def, vec![]);
+        let this = ctor_b.new_param(i.int(), Some("this".into()));
+        ctor_b.assign(
+            Place::Field {
+                base: this,
+                field: 0,
+            },
+            Rvalue::Use(Operand::Const(Const::Int(5))),
+        );
+        ctor_b.terminate(Terminator::Return(None));
+        let ctor = ctor_b.finish();
+
+        let mut caller_b = FunctionBuilder::new("f", i.void());
+        let erased = caller_b.new_temp(i.object());
+        caller_b.assign(
+            Place::Local(erased),
+            Rvalue::New {
+                def: class_def,
+                ty: i.int(),
+                ctor: Some(crate::NewCtor {
+                    field_init: false,
+                    def: ctor_def,
+                    take_params: vec![],
+                }),
+                args: vec![],
+            },
+        );
+        caller_b.terminate(Terminator::Return(None));
+        let caller = caller_b.finish();
+        let mut mir = Mir {
+            functions: vec![ctor, caller],
+            ..Mir::default()
+        };
+        assert!(
+            !ExpandSimpleCtors.run(&mut mir, &i),
+            "a supertype binding has no field layout to expand into"
+        );
     }
 
     #[test]

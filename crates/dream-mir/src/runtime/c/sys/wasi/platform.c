@@ -36,5 +36,5 @@ static void *platform_resize(void *p, size_t size) {
 }
 static void platform_object_drop(void *ptr) { (void)ptr; }
 const dream_platform dream_default_platform = {
-    malloc, platform_resize, free, unused_map, unused_release, unused_now, platform_abort, platform_write, platform_lock, platform_unlock, platform_object_drop
+    malloc, platform_resize, free, unused_map, unused_release, unused_now, platform_abort, platform_write, platform_lock, platform_unlock, platform_object_drop, sizeof(dream_platform)
 };

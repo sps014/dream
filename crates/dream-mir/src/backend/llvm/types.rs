@@ -96,6 +96,7 @@ pub(super) fn export_functions(l: &super::lcx::Lcx<'_>) -> Vec<dream_abi::export
                     | dream_types::PrimTy::USize
                     | dream_types::PrimTy::Bool
                     | dream_types::PrimTy::Byte
+                    | dream_types::PrimTy::UShort
                     | dream_types::PrimTy::Char
             )
         );
@@ -150,6 +151,9 @@ pub(super) fn export_functions(l: &super::lcx::Lcx<'_>) -> Vec<dream_abi::export
                             P::ULong => K::ULong,
                             P::Bool => K::Bool,
                             P::Byte => K::Byte,
+                            P::SByte => K::SByte,
+                            P::Short => K::Short,
+                            P::UShort => K::UShort,
                             P::Char => K::Char,
                             P::ISize => K::ISize,
                             P::USize => K::USize,

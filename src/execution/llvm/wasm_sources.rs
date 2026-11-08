@@ -1,7 +1,6 @@
 //! Package C/C++ bodies join the guest before optimization; target libraries remain archives.
 
 use super::tools::LlvmTools;
-use crate::driver::wasi::run_captured;
 use crate::driver::wasm_opt::OptLevel;
 use crate::execution::native::native_c::read_c_sources_from_abi;
 use std::path::{Path, PathBuf};
@@ -20,9 +19,9 @@ pub(super) fn compile(
     threads: bool,
     opt: OptLevel,
 ) -> Result<PackageSources, String> {
-    let sets = read_c_sources_from_abi(&ll.with_extension("abi.json"));
+    let sets = read_c_sources_from_abi(&ll.with_extension("abi.json"))?;
     let libraries =
-        crate::execution::native::c_link::read_c_libs_from_abi(&ll.with_extension("abi.json"));
+        crate::execution::native::c_link::read_c_libs_from_abi(&ll.with_extension("abi.json"))?;
     let mut out = PackageSources::default();
     if sets.is_empty()
         && !libraries
@@ -102,7 +101,14 @@ pub(super) fn compile(
                 cmd.arg(format!("-D{define}"));
             }
             cmd.args(&set.cflags).arg(src).arg("-o").arg(&bc);
-            run_captured(&mut cmd, &format!("WASM C/C++ set '{}' ({src})", set.name))?;
+            crate::execution::native::native_c::compile_if_stale(
+                &tools.config,
+                &clang,
+                &dream_abi::target::TargetSpec::wasm32(),
+                &mut cmd,
+                &bc,
+                &format!("WASM C/C++ set '{}' ({src})", set.name),
+            )?;
             out.bitcode.push(bc);
         }
         for name in set.libs {
@@ -174,7 +180,7 @@ pub(super) fn validate_signatures(
                 && declared.fty != defined.fty
             {
                 return Err(format!(
-                    "WASM C ABI mismatch for '{name}': Dream declares {}, package source uses {}; use usize/isize for pointer-sized C integers",
+                    "C ABI mismatch for '{name}': Dream declares {}, package source uses {}; use usize/isize for pointer-sized C integers",
                     declared.fty, defined.fty
                 ));
             }

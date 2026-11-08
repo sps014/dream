@@ -17,7 +17,7 @@ pub enum SimdLane {
 impl SimdLane {
     pub fn from_elem(interner: &TypeInterner, ty: TypeId) -> Option<Self> {
         match interner.kind(ty) {
-            TyKind::Prim(PrimTy::Byte) => Some(SimdLane::I8),
+            TyKind::Prim(PrimTy::Byte | PrimTy::SByte) => Some(SimdLane::I8),
             TyKind::Prim(PrimTy::Int) => Some(SimdLane::I32),
             TyKind::Prim(PrimTy::Long) => Some(SimdLane::I64),
             TyKind::Prim(PrimTy::Float) => Some(SimdLane::F32),

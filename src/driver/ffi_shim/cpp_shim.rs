@@ -7,6 +7,7 @@ use std::fmt::Write as _;
 use super::desugar::last_error_symbol;
 use super::model::{Class, Member, MemberKind, SetDecls, Struct};
 use super::types::{Bridge, Elem, Known, Ret};
+use dream_types::CScalar;
 
 pub(crate) const BRIDGE_HEADER: &str = include_str!("../../../runtime/cpp/dream_bridge.hpp");
 pub(crate) const BRIDGE_HEADER_NAME: &str = "dream_bridge.hpp";
@@ -19,6 +20,8 @@ fn c_string(s: &str) -> String {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
             '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c if c.is_control() => out.push_str(&format!("\\x{:02x}", u32::from(c))),
             c => out.push(c),
         }
     }
@@ -28,6 +31,10 @@ fn c_string(s: &str) -> String {
 
 fn line(out: &mut String, line: usize, file: &str) {
     let _ = writeln!(out, "#line {} {}", line.max(1), c_string(file));
+}
+
+fn reset_line(out: &mut String) {
+    let _ = writeln!(out, "#line 1 \"<shim>\"");
 }
 
 pub(super) fn shim_source(set: &str, decls: &SetDecls, known: &Known) -> String {
@@ -51,9 +58,12 @@ pub(super) fn shim_source(set: &str, decls: &SetDecls, known: &Known) -> String 
             line(&mut out, c.line, &fd.file);
             let _ = writeln!(
                 out,
-                "extern \"C\" void {}(void* h) {{ delete static_cast<{}*>(h); }}\n",
-                c.delete_symbol, c.cpp
+                "extern \"C\" void {}(void* h) {{ dream::trap({}, [&]() {{ delete static_cast<{}*>(h); }}); }}\n",
+                c.delete_symbol,
+                c_string(&format!("{} destructor", c.cpp)),
+                c.cpp
             );
+            reset_line(&mut out);
             for m in &c.members {
                 member(&mut out, &fd.file, Some(c), m, known);
             }
@@ -65,12 +75,12 @@ pub(super) fn shim_source(set: &str, decls: &SetDecls, known: &Known) -> String 
     out
 }
 
-/// Dream lays a value struct out in declaration order with natural alignment and a minimum
-/// struct alignment of 4 (`dream_hir::layout::TypeLayout`); `@packed` drops all padding.
-fn dream_layout(s: &Struct) -> (Vec<u32>, u32) {
+/// Dream lays a value struct out in declaration order. Alignment is the max field alignment
+/// (1 when empty or `@packed`), matching `LayoutTable` for value types — not a minimum of 4.
+fn dream_layout(s: &Struct) -> (Vec<u32>, u32, u32) {
     let mut offsets = Vec::with_capacity(s.fields.len());
     let mut off = 0u32;
-    let mut max_align = 4u32;
+    let mut max_align = 1u32;
     for (_, sc) in &s.fields {
         let (size, align) = sc.prim().size_align();
         if !s.packed {
@@ -80,31 +90,48 @@ fn dream_layout(s: &Struct) -> (Vec<u32>, u32) {
         offsets.push(off);
         off += size;
     }
+    let align = if s.packed { 1 } else { max_align };
     let size = if s.packed {
         off
     } else {
-        off.div_ceil(max_align) * max_align
+        off.div_ceil(align) * align
     };
-    (offsets, size)
+    (offsets, size, align)
 }
 
 fn layout_checks(out: &mut String, file: &str, s: &Struct) {
-    let (offsets, size) = dream_layout(s);
+    let (offsets, size, align) = dream_layout(s);
     line(out, s.line, file);
+    let size_msg = c_string(&format!(
+        "@cpp struct '{}': sizeof({}) differs from the Dream declaration ({size} bytes)",
+        s.name, s.cpp
+    ));
+    let align_msg = c_string(&format!(
+        "@cpp struct '{}': alignof({}) differs from the Dream declaration ({align})",
+        s.name, s.cpp
+    ));
     let _ = writeln!(
         out,
-        "static_assert(sizeof({cpp}) == {size}, \"@cpp struct '{name}': sizeof({cpp}) differs from the Dream declaration ({size} bytes)\");",
+        "static_assert(sizeof({cpp}) == {size}, {size_msg});",
         cpp = s.cpp,
-        name = s.name,
+    );
+    let _ = writeln!(
+        out,
+        "static_assert(alignof({cpp}) == {align}, {align_msg});",
+        cpp = s.cpp,
     );
     for ((field, _), off) in s.fields.iter().zip(offsets) {
+        let msg = c_string(&format!(
+            "@cpp struct '{}': field '{field}' is not at offset {off} in {}",
+            s.name, s.cpp
+        ));
         let _ = writeln!(
             out,
-            "static_assert(offsetof({cpp}, {field}) == {off}, \"@cpp struct '{name}': field '{field}' is not at offset {off} in {cpp}\");",
+            "static_assert(offsetof({cpp}, {field}) == {off}, {msg});",
             cpp = s.cpp,
-            name = s.name,
         );
     }
+    reset_line(out);
     out.push('\n');
 }
 
@@ -114,6 +141,15 @@ fn cpp_type<'k>(known: &'k Known, dream: &'k str) -> &'k str {
         .get(dream)
         .or_else(|| known.structs.get(dream))
         .map_or(dream, String::as_str)
+}
+
+/// The C++ type a scalar is passed as. Pointer-sized integers use the standard spellings.
+fn cpp_scalar(s: CScalar) -> &'static str {
+    match s {
+        CScalar::ISize => "std::ptrdiff_t",
+        CScalar::USize => "std::size_t",
+        other => other.c_name(),
+    }
 }
 
 /// The C return type for a result bridge (also the `attempt` value type).
@@ -135,12 +171,23 @@ fn member(out: &mut String, file: &str, class: Option<&Class>, m: &Member, known
         let c = format!("p{i}");
         match &p.bridge {
             Bridge::Scalar(s) if p.is_ref => {
-                params.push(format!("{}* {c}", s.c_name()));
-                args.push(format!("*{c}"));
+                let mem = s.mem_name();
+                let cpp = cpp_scalar(*s);
+                params.push(format!("{mem}* {c}"));
+                args.push(if cpp == mem {
+                    format!("*{c}")
+                } else {
+                    format!("dream::lvalue<{cpp}, {mem}>({c})")
+                });
             }
             Bridge::Scalar(s) => {
+                let cpp = cpp_scalar(*s);
                 params.push(format!("{} {c}", s.c_name()));
-                args.push(c);
+                args.push(if cpp == s.c_name() {
+                    c
+                } else {
+                    format!("static_cast<{cpp}>({c})")
+                });
             }
             Bridge::Str { optional } => {
                 params.push(format!("const char* {c}"));
@@ -175,7 +222,7 @@ fn member(out: &mut String, file: &str, class: Option<&Class>, m: &Member, known
             }
             Bridge::Array(elem) => {
                 let t = match elem {
-                    Elem::Scalar(s) => s.c_name().to_string(),
+                    Elem::Scalar(s) => cpp_scalar(*s).to_string(),
                     Elem::Struct(n) => cpp_type(known, n).to_string(),
                 };
                 params.push(format!("const void* {c}"));
@@ -261,15 +308,15 @@ fn member(out: &mut String, file: &str, class: Option<&Class>, m: &Member, known
     } else {
         params.join(", ")
     };
-    let _ = writeln!(out, "extern \"C\" {ret_c} {}({params}) {{", m.symbol);
     line(out, m.line, file);
+    let _ = writeln!(out, "extern \"C\" {ret_c} {}({params}) {{", m.symbol);
     let _ = writeln!(out, "    return {wrapped};\n}}\n");
+    reset_line(out);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dream_types::CScalar;
 
     #[test]
     fn layout_matches_dream_value_structs() {
@@ -280,8 +327,20 @@ mod tests {
             packed: false,
             fields: vec![("a".into(), CScalar::U8), ("b".into(), CScalar::F64)],
         };
-        assert_eq!(dream_layout(&s), (vec![0, 8], 16));
+        assert_eq!(dream_layout(&s), (vec![0, 8], 16, 8));
         let packed = Struct { packed: true, ..s };
-        assert_eq!(dream_layout(&packed), (vec![0, 1], 9));
+        assert_eq!(dream_layout(&packed), (vec![0, 1], 9, 1));
+        let bytes = Struct {
+            name: "B".into(),
+            cpp: "B".into(),
+            line: 1,
+            packed: false,
+            fields: vec![
+                ("a".into(), CScalar::U8),
+                ("b".into(), CScalar::U8),
+                ("c".into(), CScalar::U8),
+            ],
+        };
+        assert_eq!(dream_layout(&bytes), (vec![0, 1, 2], 3, 1));
     }
 }

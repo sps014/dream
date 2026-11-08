@@ -1,0 +1,9 @@
+module system.interop;
+
+/// How a `@c` extern exchanges `string` with C.
+public enum StringEncoding {
+    /// A null-terminated `const char*` of UTF-8.
+    Utf8,
+    /// A null-terminated `const uint16_t*` (`char16_t*` / Windows `LPWSTR`, not `wchar_t`).
+    Utf16
+}

@@ -117,7 +117,7 @@ v2.x = 10;
 System.println(v1.x); // 3 (unaffected)
 ```
 
-Structs need no heap allocation and no automatic reference tracking, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct slot may be empty.
+Structs need no heap allocation and no automatic reference tracking, so a struct held by value is never absent and cannot recursively contain itself by value. Use `Option<S>` when a struct value may be empty.
 
 ### `ref struct`: a stack-only value type
 

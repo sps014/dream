@@ -82,6 +82,9 @@ fn scalar(interner: &TypeInterner, ty: TypeId) -> bool {
                     | PrimTy::ISize
                     | PrimTy::USize
                     | PrimTy::Byte
+                    | PrimTy::SByte
+                    | PrimTy::Short
+                    | PrimTy::UShort
                     | PrimTy::Bool
                     | PrimTy::Char
                     | PrimTy::Float16

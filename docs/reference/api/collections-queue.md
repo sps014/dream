@@ -4,7 +4,7 @@
 
 ## `Queue`
 
-FIFO queue backed by a ring buffer (`T[]` + head/count).  Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
+FIFO queue backed by a ring buffer (`T[]` + head/count).  Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any `(head + k) % items.length` with `k >= 0` is a valid index for `Buffer.get_unchecked`.
 
 ```dream
 public class Queue<T>: Collection<T>
@@ -52,7 +52,7 @@ public fun enqueue(value: T): void
 
 ## `dequeue`
 
-Removes and returns the front element, or `None` when empty. The vacated slot is zeroed so managed elements release immediately instead of staying retained until overwritten.
+Removes and returns the front element, or `None` when empty. The vacated element is zeroed so managed elements release immediately instead of staying retained until overwritten.
 
 ```dream
 public fun dequeue(): Option<T>

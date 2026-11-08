@@ -121,14 +121,12 @@ pub struct HImport {
     /// `@async_host` extern: on native the host takes the future as its leading argument and
     /// completes it from a foreign thread, so its poll delegates instead of blocking inline.
     pub async_host: bool,
-    /// `@marshal(MarshalKind.LpWStr)` on a `@c` extern: string args become UTF-16 rather than UTF-8.
+    /// `@marshal(StringEncoding.Utf16)` on a `@c` extern: strings cross as UTF-16.
     pub c_wide_strings: bool,
     /// `@c` only: how each parameter crosses the C boundary, parallel to `params`.
     pub c_params: Vec<CShape>,
     /// `@c` only: how the C result becomes the Dream result.
     pub c_ret: CShape,
-    /// `@c_call(CCallConv.Stdcall)`: `x86_stdcallcc` on 32-bit x86 Windows, the C convention elsewhere.
-    pub c_stdcall: bool,
 }
 
 /// How one Dream value crosses the C boundary, decided (and validated) by the analyzer so the
@@ -139,7 +137,7 @@ pub enum CShape {
     Void,
     /// Numbers, `bool`, `char`, `byte`, as the C scalar of the same width and signedness.
     Scalar(CScalar),
-    /// `string` as `const char*` (UTF-16 under `@marshal(MarshalKind.LpWStr)`); `optional` maps `None` to `NULL`.
+    /// `string` as `const char*` (UTF-16 under `@marshal(StringEncoding.Utf16)`); `optional` maps `None` to `NULL`.
     Str { optional: bool },
     /// `CPtr` as `void*`; `optional` is `Option<CPtr>`.
     Ptr { optional: bool },
@@ -160,10 +158,15 @@ pub enum CShape {
         optional: bool,
         user_data_last: bool,
     },
-    /// `T[]` of unmanaged `T` as `T*` to its first element (`NULL` when empty), valid for the call.
+    /// `T[]` of unmanaged `T`. A parameter is `T*` to its first element (`NULL` when empty), valid
+    /// for the call. A result is the Dream array itself, built by the C side.
     Array,
     /// A `ref` out-param: the address of the caller's storage.
     Ref,
+    /// `@owned` on a `string` result: C returns a Dream string it built, and Dream owns it.
+    OwnedStr,
+    /// `borrow string`: `{ units, len }` for this call only. C must not keep the pointer.
+    StrView,
 }
 
 impl CShape {

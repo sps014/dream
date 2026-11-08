@@ -196,6 +196,9 @@ impl<'l, 'a> Fx<'l, 'a> {
                                     | PrimTy::UInt
                                     | PrimTy::Bool
                                     | PrimTy::Byte
+                                    | PrimTy::SByte
+                                    | PrimTy::Short
+                                    | PrimTy::UShort
                                     | PrimTy::Char
                             ) | TyKind::Enum(_)
                         ) =>
@@ -877,7 +880,12 @@ impl<'l, 'a> Fx<'l, 'a> {
                 i32s(self, &src)
             }
             (_, TyKind::Object) => {
-                if matches!(fk, TyKind::Prim(P::ISize | P::USize | P::Float16)) {
+                if matches!(
+                    fk,
+                    TyKind::Prim(
+                        P::ISize | P::USize | P::Float16 | P::SByte | P::Short | P::UShort
+                    )
+                ) {
                     let size = elem_size(&self.l.cx, from) as i64;
                     let tag = runtime_tag(&self.l.cx, from);
                     let boxed = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
@@ -921,6 +929,16 @@ impl<'l, 'a> Fx<'l, 'a> {
                     P::ISize => "dream_unbox_int",
                     P::USize => "dream_unbox_uint",
                     P::Byte => "dream_unbox_byte",
+                    P::SByte | P::Short | P::UShort => {
+                        let boxed = self.check_box_tag(&src, to);
+                        let address = self.ptr(&boxed);
+                        let (ty, align, unsigned) = match p {
+                            P::SByte => (Ty::I8, 1, false),
+                            P::Short => (Ty::I16, 2, false),
+                            _ => (Ty::I16, 2, true),
+                        };
+                        return self.load_ty(ty, &address, align, unsigned);
+                    }
                     P::String => return src,
                     P::Float16 => unreachable!("float16 unboxes inline above"),
                 };

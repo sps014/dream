@@ -32,6 +32,9 @@ TAG_CLOSURE_ENV: i32 = 258 => "TAG_CLOSURE_ENV";
 /// Boxed `float16` (an `object` holding a binary16 payload). Numbered after the special tags
 /// rather than next to `TAG_FLOAT` so struct tags keep starting at `TAG_STRUCT_BASE`.
 TAG_FLOAT16: i32 = 259 => "TAG_FLOAT16";
+TAG_SBYTE: i32 = 260 => "TAG_SBYTE";
+TAG_SHORT: i32 = 261 => "TAG_SHORT";
+TAG_USHORT: i32 = 262 => "TAG_USHORT";
 /// Nominal identities start here in layout insertion order, skipping reserved runtime tags.
 TAG_STRUCT_BASE: i32 = 14 => "TAG_STRUCT_BASE";
 /// Header tag high bit: object is concurrently refcounted (`@shared` / published worker

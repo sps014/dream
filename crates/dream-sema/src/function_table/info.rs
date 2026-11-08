@@ -176,7 +176,12 @@ impl FunctionTableInfo {
         info.intrinsic_name = intrinsic_name;
         // Intrinsics are language operations, so their declared member visibility applies even
         // though their implementation is external to Dream source.
-        info.visibility = if func.is_extern && info.intrinsic_name.is_none() {
+        // Host externs stay public: the runtime calls them by name from outside the file.
+        // `@c` keeps the declared visibility, so a private binding does not become an export.
+        info.visibility = if func.is_extern
+            && info.intrinsic_name.is_none()
+            && !dream_abi::attributes::has_c_attr(&func.attributes)
+        {
             Visibility::Public
         } else {
             func.visibility

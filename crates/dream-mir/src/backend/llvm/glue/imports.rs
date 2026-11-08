@@ -171,18 +171,23 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
     let mut poll_i = 0usize;
     let mut bridges = indexmap::IndexSet::new();
     for imp in &imports {
-        if is_c_import(imp) {
-            if l.cx.target.spec().capabilities.c_interop {
-                c_marshal::trampoline(l, imp);
-            }
-        } else if imp.is_async {
+        if crate::backend::shared::abi_types::lazy_import_poll(imp).is_some() {
             let idx = l.cx.import_poll_base() + poll_i;
             poll_i += 1;
             // Multiple stdlib modules can declare the same host. Its shared bridge still
-            // occupies each registered poll-table slot, but its body/metadata are emitted once.
-            if bridges.insert(import_call_name(imp)) {
+            // occupies each registered poll-table entry, but its body is emitted once.
+            if !bridges.insert(import_call_name(imp)) {
+                continue;
+            }
+            if is_c_import(imp) {
+                if l.cx.target.spec().capabilities.c_interop {
+                    c_marshal::async_trampoline(l, imp, idx);
+                }
+            } else {
                 async_bridge(l, imp, idx);
             }
+        } else if is_c_import(imp) && l.cx.target.spec().capabilities.c_interop {
+            c_marshal::trampoline(l, imp);
         }
     }
 }

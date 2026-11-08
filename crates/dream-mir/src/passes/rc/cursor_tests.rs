@@ -899,9 +899,10 @@ fn copy_cursor_keeps_base_alive_across_blocks() {
     RcInsertion.run(&mut func, &ctx.interner);
     assert!(func.locals[y.0 as usize].is_cursor);
     let releases_c = |blk: crate::BlockId| {
-        func.blocks[blk.0 as usize].stmts.iter().any(|s| {
-            matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == c)
-        })
+        func.blocks[blk.0 as usize]
+            .stmts
+            .iter()
+            .any(|s| matches!(s, Statement::Release(Operand::Copy(Place::Local(l))) if *l == c))
     };
     assert!(
         !releases_c(func.entry) && !releases_c(mid),

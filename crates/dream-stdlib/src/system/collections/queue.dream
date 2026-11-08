@@ -3,7 +3,7 @@ module system.collections;
 /// FIFO queue backed by a ring buffer (`T[]` + head/count).
 ///
 /// Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any
-/// `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.
+/// `(head + k) % items.length` with `k >= 0` is a valid index for `Buffer.get_unchecked`.
 @slot_walk("length", "at_offset", "")
 public class Queue<T>: Collection<T> {
     items: T[];
@@ -72,7 +72,7 @@ public class Queue<T>: Collection<T> {
         this.count = this.count + 1;
     }
 
-    /// Removes and returns the front element, or `None` when empty. The vacated slot is zeroed
+    /// Removes and returns the front element, or `None` when empty. The vacated element is zeroed
     /// so managed elements release immediately instead of staying retained until overwritten.
     public fun dequeue(): Option<T> {
         if this.count == 0 {

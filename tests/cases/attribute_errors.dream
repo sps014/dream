@@ -57,7 +57,7 @@ public fun undeclared_user_attribute(): void {
 public fun route_wrong_arity(): void {
 }
 
-@c("c", "puts") @c_call(CCallConv.Fastcall) extern fun puts(s: string): int;
+@c("c", "puts") @marshal(StringEncoding.Fastcall) extern fun puts(s: string): int;
 
 @gpu_targets(GpuTarget.Vulkan, GpuTarget.OpenGl)
 fun gpu_helper(): void {}

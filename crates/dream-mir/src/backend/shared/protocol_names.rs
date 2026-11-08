@@ -28,6 +28,9 @@ pub(crate) fn to_string_fn(cx: &Cx<'_>, ty: TypeId) -> String {
         }
         .into(),
         TyKind::Prim(PrimTy::Byte) => "dream_byte_to_string".into(),
+        TyKind::Prim(PrimTy::SByte | PrimTy::Short | PrimTy::UShort) => {
+            "dream_int_to_string_fast".into()
+        }
         TyKind::Prim(PrimTy::Bool) => "dream_bool_to_string".into(),
         TyKind::Prim(PrimTy::Char) => "dream_char_to_string".into(),
         TyKind::Prim(PrimTy::Float | PrimTy::Float16 | PrimTy::Double) => {
@@ -93,6 +96,9 @@ pub(crate) fn runtime_tag(cx: &Cx<'_>, ty: TypeId) -> i32 {
         TyKind::Prim(PrimTy::ISize) => crate::abi::TAG_ISIZE,
         TyKind::Prim(PrimTy::USize) => crate::abi::TAG_USIZE,
         TyKind::Prim(PrimTy::Byte) => crate::abi::TAG_BYTE,
+        TyKind::Prim(PrimTy::SByte) => crate::abi::TAG_SBYTE,
+        TyKind::Prim(PrimTy::Short) => crate::abi::TAG_SHORT,
+        TyKind::Prim(PrimTy::UShort) => crate::abi::TAG_USHORT,
         TyKind::Array(_) => crate::abi::TAG_ARRAY,
         _ => cx.type_tag(ty),
     }

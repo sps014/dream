@@ -29,10 +29,16 @@ impl Analyzer<'_> {
         };
         let constant = match e {
             E::Literal(lit) => match lit {
-                Type::Integer(t) | Type::Long(t) | Type::ISize(t) => {
-                    value("int", dream_syntax::number::parse_int_literal(&t.text)?)
-                }
-                Type::UInt(t) | Type::ULong(t) | Type::USize(t) | Type::Byte(t) => {
+                Type::Integer(t)
+                | Type::Long(t)
+                | Type::ISize(t)
+                | Type::SByte(t)
+                | Type::Short(t) => value("int", dream_syntax::number::parse_int_literal(&t.text)?),
+                Type::UInt(t)
+                | Type::ULong(t)
+                | Type::USize(t)
+                | Type::Byte(t)
+                | Type::UShort(t) => {
                     value("uint", dream_syntax::number::parse_u64_literal(&t.text)?)
                 }
                 Type::Boolean(t) => value("bool", &t.text),

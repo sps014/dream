@@ -69,13 +69,7 @@ pub(in super::super) fn emit_strings(l: &mut Lcx<'_>) {
 fn string_block_type(units: Ty) -> Ty {
     Ty::Struct {
         packed: false,
-        fields: vec![
-            Ty::I32,
-            Ty::I32,
-            Ty::I32,
-            Ty::I32,
-            units,
-        ],
+        fields: vec![Ty::I32, Ty::I32, Ty::I32, Ty::I32, units],
     }
 }
 

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `CppNameAttribute`
 
-The C++ member (or expression) a `@cpp` extern calls, for renames and template instantiations: `@cpp_name("get_as<int>")`.
+The C++ member a `@cpp` method calls, for renames and template instantiations: `@cpp_name("get_as<int>")`. Free functions pass that name as the second `@cpp` argument instead.
 
 ```dream
 public struct CppNameAttribute

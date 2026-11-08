@@ -15,6 +15,10 @@ pub struct NativeTable {
     pub cflags: Vec<String>,
     pub frameworks: Vec<String>,
     pub libs: Vec<String>,
+    /// Package-relative globs dropped from this set on the target that lists them.
+    pub exclude: Vec<String>,
+    /// `Some(false)` keeps this set's objects out of release link-time optimization.
+    pub lto: Option<bool>,
 }
 
 /// One `[native.<set>]` table: shared settings plus `macos` / `linux` / `windows` overlays.
@@ -46,6 +50,10 @@ impl NativeSetSpec {
         t.cflags.extend(os.cflags.iter().cloned());
         t.frameworks.extend(os.frameworks.iter().cloned());
         t.libs.extend(os.libs.iter().cloned());
+        t.exclude.extend(os.exclude.iter().cloned());
+        if os.lto.is_some() {
+            t.lto = os.lto;
+        }
         t
     }
 }
@@ -232,16 +240,22 @@ impl ProjectManifest {
 }
 
 const OS_KEYS: [&str; 4] = ["macos", "linux", "windows", "wasm"];
-const LIST_KEYS: [&str; 6] = [
+const LIST_KEYS: [&str; 7] = [
     "sources",
     "include",
     "defines",
     "cflags",
     "frameworks",
     "libs",
+    "exclude",
 ];
 
 fn parse_set(name: &str, set: &toml::Table) -> Result<NativeSetSpec, String> {
+    if !is_set_name(name) {
+        return Err(format!(
+            "[native.{name}] is not a set name; use letters, digits, '_' or '-'"
+        ));
+    }
     let mut spec = NativeSetSpec::default();
     for (key, value) in set {
         if OS_KEYS.contains(&key.as_str()) {
@@ -260,9 +274,9 @@ fn parse_set(name: &str, set: &toml::Table) -> Result<NativeSetSpec, String> {
                 "windows" => spec.windows = parsed,
                 _ => spec.wasm = parsed,
             }
-        } else if !LIST_KEYS.contains(&key.as_str()) {
+        } else if key != "lto" && !LIST_KEYS.contains(&key.as_str()) {
             return Err(format!(
-                "unknown key '{key}' in [native.{name}] (expected one of {}, or an OS table: {})",
+                "unknown key '{key}' in [native.{name}] (expected lto, one of {}, or an OS table: {})",
                 LIST_KEYS.join(", "),
                 OS_KEYS.join(", ")
             ));
@@ -280,14 +294,30 @@ fn parse_set(name: &str, set: &toml::Table) -> Result<NativeSetSpec, String> {
 fn parse_table(ctx: &str, t: &toml::Table) -> Result<NativeTable, String> {
     let mut out = NativeTable::default();
     for (key, value) in t {
+        if key == "lto" {
+            out.lto = Some(
+                value
+                    .as_bool()
+                    .ok_or_else(|| format!("[{ctx}].lto must be true or false"))?,
+            );
+            continue;
+        }
         let list = string_list(ctx, key, value)?;
         match key.as_str() {
             "sources" => out.sources = list,
             "include" => out.include = list,
             "defines" => out.defines = list,
-            "cflags" => out.cflags = list,
+            "cflags" => {
+                if let Some(flag) = list.iter().find(|flag| overrides_builtin_cflag(flag)) {
+                    return Err(format!(
+                        "[{ctx}].cflags cannot override the compiler's -std, -O, or -g (found '{flag}')"
+                    ));
+                }
+                out.cflags = list;
+            }
             "frameworks" => out.frameworks = list,
             "libs" => out.libs = list,
+            "exclude" => out.exclude = list,
             other => {
                 return Err(format!(
                     "unknown key '{other}' in [{ctx}] (expected one of {})",
@@ -297,6 +327,22 @@ fn parse_table(ctx: &str, t: &toml::Table) -> Result<NativeTable, String> {
         }
     }
     Ok(out)
+}
+
+fn is_set_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// User flags are appended after the compiler's own `-std`, `-O` and `-g`, so these would
+/// silently win. Reject them instead of letting the manifest pick a language or opt level.
+fn overrides_builtin_cflag(flag: &str) -> bool {
+    let flag = flag.trim();
+    if flag.starts_with("-std") || flag == "-g" || flag.starts_with("-g=") {
+        return true;
+    }
+    flag.starts_with("-O") && !flag.starts_with("-ObjC")
 }
 
 fn string_list(ctx: &str, key: &str, value: &toml::Value) -> Result<Vec<String>, String> {
@@ -389,7 +435,7 @@ timeout_secs = 20
 options = { prefix = "Api", strict = true }
 
 [native.kv_store]
-cflags = ["-O2"]
+cflags = ["-Wall"]
 defines = ["A=1"]
 
 [native.kv_store.macos]
@@ -415,7 +461,7 @@ sources = ["third_party/x.c"]
         assert_eq!(m.native.len(), 2);
         assert_eq!(m.native[0].0, "extra");
         let kv = &m.native[1].1;
-        assert_eq!(kv.base.cflags, vec!["-O2"]);
+        assert_eq!(kv.base.cflags, vec!["-Wall"]);
         assert_eq!(kv.macos.frameworks, vec!["Security"]);
         assert_eq!(kv.linux.libs, vec!["dl"]);
         let host = kv.for_target(&dream_abi::target::TargetSpec::host());
@@ -424,6 +470,8 @@ sources = ["third_party/x.c"]
 
     #[test]
     fn rejects_unknown_native_keys() {
+        let err = ProjectManifest::parse("[native.a]\ncflags = [\"-O2\"]\n").unwrap_err();
+        assert!(err.contains("cannot override"), "{}", err);
         let err = ProjectManifest::parse("[native.a]\nsource = [\"x.c\"]\n").unwrap_err();
         assert!(err.contains("unknown key 'source'"), "{}", err);
         let err = ProjectManifest::parse("[native.a.freebsd]\nlibs = []\n").unwrap_err();

@@ -37,6 +37,8 @@ pub enum CTy {
     Ptr,
     /// A by-value struct: an index into [`CShim::structs`].
     Struct(usize),
+    /// `borrow string`: Dream passes a pointer to `{ units, len }`; the shim loads `dream_str_view`.
+    StrView,
 }
 
 /// A field of a by-value struct.
@@ -59,7 +61,6 @@ pub struct CStruct {
 pub struct Forward {
     pub shim: String,
     pub symbol: String,
-    pub stdcall: bool,
     pub params: Vec<CTy>,
     pub ret: CTy,
 }

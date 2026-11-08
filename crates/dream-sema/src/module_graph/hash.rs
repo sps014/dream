@@ -209,6 +209,9 @@ fn hash_signature(hash: &mut blake3::Hasher, function: &FunctionNode<'_>) {
                 | dream_syntax::nodes::Type::UInt(token)
                 | dream_syntax::nodes::Type::ULong(token)
                 | dream_syntax::nodes::Type::Byte(token)
+                | dream_syntax::nodes::Type::SByte(token)
+                | dream_syntax::nodes::Type::Short(token)
+                | dream_syntax::nodes::Type::UShort(token)
                 | dream_syntax::nodes::Type::ISize(token)
                 | dream_syntax::nodes::Type::USize(token)
                 | dream_syntax::nodes::Type::Struct(token, _) => Some(token),

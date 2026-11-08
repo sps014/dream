@@ -69,6 +69,24 @@ fun bool_parse(): void {
 
 @test
 @timeout(180000)
+fun small_integers(): void {
+    let s: sbyte = -1sb;
+    let h: short = -2s;
+    let u: ushort = 40000us;
+    Assert.eq(s.to_string(), "-1");
+    Assert.eq(h.to_string(), "-2");
+    Assert.eq(u.to_string(), "40000");
+    let wrapped: sbyte = 127sb;
+    Assert.eq((wrapped + 1sb).to_string(), "-128");
+    Assert.eq(sbyte.parse("-128").unwrap_or(0sb).to_string(), "-128");
+    Assert.is_true(sbyte.parse("128").is_err());
+    Assert.eq(short.parse("-32768").unwrap_or(0s).to_string(), "-32768");
+    Assert.eq(ushort.parse("65535").unwrap_or(0us).to_string(), "65535");
+    Assert.is_true(ushort.parse("65536").is_err());
+}
+
+@test
+@timeout(180000)
 fun parse_error(): void {
     Assert.eq(int.parse("42").unwrap_or(0), 42);
     switch (int.parse("nope")) {

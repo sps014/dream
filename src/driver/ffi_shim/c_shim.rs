@@ -16,7 +16,6 @@ struct Render<'a> {
 struct Proto {
     ret: CTy,
     params: Vec<CTy>,
-    stdcall: bool,
 }
 
 impl Render<'_> {
@@ -26,6 +25,16 @@ impl Render<'_> {
              #include <stdbool.h>\n#include <stdint.h>\n\n\
              #define DREAM_SHIM __attribute__((always_inline))\n\n",
         );
+        if self
+            .shim
+            .forwards
+            .iter()
+            .any(|f| f.params.contains(&CTy::StrView))
+        {
+            out.push_str(
+                "typedef struct { const uint16_t *units; uintptr_t len; } dream_str_view;\n\n",
+            );
+        }
         for (i, s) in self.shim.structs.iter().enumerate() {
             self.render_struct(&mut out, i, s);
         }
@@ -52,7 +61,6 @@ impl Render<'_> {
         let destructor = Proto {
             ret: CTy::Void,
             params: vec![CTy::Ptr],
-            stdcall: false,
         };
         let uses = self
             .shim
@@ -180,6 +188,16 @@ impl Render<'_> {
                     params.push(format!("void* p{i}"));
                     args.push(format!("p{i}"));
                 }
+                CTy::StrView => {
+                    params.push(format!("const void* p{i}"));
+                    let _ = writeln!(
+                        body,
+                        "    dream_str_view a{i};\n    \
+                         a{i}.units = *(const uint16_t *const *)p{i};\n    \
+                         a{i}.len = *(const uintptr_t *)((const char *)p{i} + sizeof(void *));"
+                    );
+                    args.push(format!("a{i}"));
+                }
             }
         }
         let call = format!(
@@ -194,7 +212,7 @@ impl Render<'_> {
             CTy::Scalar(s) => {
                 let _ = writeln!(body, "    return {};", s.to_carrier(&call));
             }
-            CTy::Ptr => {
+            CTy::Ptr | CTy::StrView => {
                 let _ = writeln!(body, "    return {call};");
             }
             CTy::Struct(k) => {
@@ -250,22 +268,12 @@ impl Render<'_> {
 
     fn decl(&self, p: &Proto, name: &str) -> String {
         let params: Vec<String> = p.params.iter().map(|t| self.c_ty(*t)).collect();
-        format!(
-            "{}{} {name}({})",
-            self.c_ty(p.ret),
-            conv(p.stdcall),
-            param_list(&params)
-        )
+        format!("{} {name}({})", self.c_ty(p.ret), param_list(&params))
     }
 
     fn fn_ptr_ty(&self, p: &Proto) -> String {
         let params: Vec<String> = p.params.iter().map(|t| self.c_ty(*t)).collect();
-        let conv = if p.stdcall {
-            "__attribute__((stdcall)) "
-        } else {
-            ""
-        };
-        format!("{} ({conv}*)({})", self.c_ty(p.ret), param_list(&params))
+        format!("{} (*)({})", self.c_ty(p.ret), param_list(&params))
     }
 
     fn c_ty(&self, t: CTy) -> String {
@@ -273,6 +281,7 @@ impl Render<'_> {
             CTy::Void => "void".into(),
             CTy::Scalar(s) => s.c_name().into(),
             CTy::Ptr => "void*".into(),
+            CTy::StrView => "dream_str_view".into(),
             CTy::Struct(i) => struct_name(i),
         }
     }
@@ -297,7 +306,6 @@ fn proto(f: &Forward) -> Proto {
     Proto {
         ret: f.ret,
         params: f.params.clone(),
-        stdcall: f.stdcall,
     }
 }
 
@@ -307,14 +315,6 @@ fn callee(symbol: &str, proto: &Proto, declared: &[(&str, Proto)], r: &Render<'_
     match declared.iter().find(|(s, _)| *s == symbol) {
         Some((_, p)) if p == proto => symbol.to_string(),
         _ => format!("(({})&{symbol})", r.fn_ptr_ty(proto)),
-    }
-}
-
-fn conv(stdcall: bool) -> &'static str {
-    if stdcall {
-        " __attribute__((stdcall))"
-    } else {
-        ""
     }
 }
 
@@ -340,7 +340,6 @@ mod tests {
         Forward {
             shim: format!("{SHIM_PREFIX}{symbol}"),
             symbol: symbol.into(),
-            stdcall: false,
             params,
             ret,
         }
@@ -400,22 +399,16 @@ mod tests {
         let mut shim = CShim::default();
         shim.forwards
             .push(forward("free", vec![CTy::Ptr], CTy::Void));
-        shim.forwards.push(Forward {
-            shim: format!("{SHIM_PREFIX}free_other"),
-            stdcall: true,
-            ..forward("free", vec![CTy::Scalar(CScalar::USize)], CTy::Void)
-        });
+        let mut other = forward("free", vec![CTy::Scalar(CScalar::USize)], CTy::Void);
+        other.shim = format!("{SHIM_PREFIX}free_other");
+        shim.forwards.push(other);
         shim.destructors.push(Destructor {
             getter: format!("{SHIM_PREFIX}free__dtor"),
             symbol: "free".into(),
         });
         let c = render(&shim);
         assert_eq!(c.matches("extern void free(").count(), 1, "{}", c);
-        assert!(
-            c.contains("((void (__attribute__((stdcall)) *)(uintptr_t))&free)(p0);"),
-            "{}",
-            c
-        );
+        assert!(c.contains("((void (*)(uintptr_t))&free)(p0);"), "{}", c);
         assert!(c.contains("return (void*)&free;"), "{}", c);
     }
 
@@ -444,5 +437,23 @@ mod tests {
             "{}",
             c
         );
+    }
+
+    #[test]
+    fn borrowed_string_is_a_view_passed_by_value() {
+        let mut shim = CShim::default();
+        shim.forwards.push(forward(
+            "span_len",
+            vec![CTy::StrView],
+            CTy::Scalar(CScalar::I32),
+        ));
+        let c = render(&shim);
+        assert!(c.contains("dream_str_view"), "{}", c);
+        assert!(
+            c.contains("extern int32_t span_len(dream_str_view);"),
+            "{}",
+            c
+        );
+        assert!(c.contains("span_len(a0)"), "{}", c);
     }
 }

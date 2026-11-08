@@ -7,15 +7,9 @@ use dream_abi::c_abi::{C_PTR_TYPE, NATIVE_CALLBACK_TYPE};
 use dream_syntax::nodes::Type;
 use dream_types::CScalar;
 
-/// The scalar a `@cpp` signature names. Pointer-sized integers stay out: a `@cpp` struct's layout
-/// is checked against the Dream declaration before the target's pointer width is known.
+/// The scalar a `@cpp` signature names, including pointer-sized integers.
 pub(super) fn scalar_of(ty: &Type) -> Option<CScalar> {
-    CScalar::of_type(ty).filter(|s| !matches!(s, CScalar::ISize | CScalar::USize))
-}
-
-/// Whether a `ref` of this type binds to the same C++ lvalue type Dream stores.
-fn ref_ok(s: CScalar) -> bool {
-    !s.is_narrow()
+    CScalar::of_type(ty)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,15 +81,11 @@ impl Known {
     pub(super) fn param(&self, ty: &Type, is_ref: bool) -> Result<Bridge, String> {
         let b = self.value(ty)?;
         if is_ref {
-            let ok = match &b {
-                Bridge::Scalar(s) => ref_ok(*s),
-                Bridge::Struct(_) => true,
-                _ => false,
-            };
+            let ok = matches!(b, Bridge::Scalar(_) | Bridge::Struct(_));
             if !ok {
                 return Err(format!(
-                    "`ref` type '{}' has no C++ lvalue form; use `int`, `uint`, `long`, `ulong`, \
-                     `float`, `double`, or a `@cpp` struct",
+                    "`ref` type '{}' has no C++ lvalue form; use a number, `bool`, `char`, \
+                     `byte`, or a `@cpp` struct",
                     ty.display_name()
                 ));
             }

@@ -158,7 +158,7 @@ shaders is public, and `internal` otherwise.
 
 Wrapper parameters named `device`, `dispatch`, `pass`, `pipeline`, `width` or `height` get an
 `_arg` suffix so they do not clash with the wrapper's own. A shader parameter named `descriptor`
-gets the slot getter `descriptor_slot`.
+gets the binding getter `descriptor_slot`.
 
 `GpuDispatch` says how many threads to start:
 

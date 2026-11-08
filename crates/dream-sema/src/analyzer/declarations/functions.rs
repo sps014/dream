@@ -214,6 +214,15 @@ impl<'a> Analyzer<'a> {
                 self.check_declared_type(&p.type_, &parameters, diagnostics);
             }
             if function.generic_parameters.is_some() {
+                if function.is_extern && dream_abi::attributes::has_c_attr(&function.attributes) {
+                    diagnostics.report_error(
+                        format!(
+                            "'@c' extern '{}' cannot be generic; C has no type parameters",
+                            function.name.text
+                        ),
+                        Some(function.name.position),
+                    );
+                }
                 if dream_abi::attributes::has_test_attr(&function.attributes) {
                     diagnostics.report_error(
                         format!("@test function '{}' cannot be generic", function.name.text),

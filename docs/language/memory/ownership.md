@@ -200,7 +200,7 @@ class Counter {
 
 - A last read does not free the value early. It is freed at the end of the function.
 - Assigning or passing a `struct` always copies it.
-- Reading `obj.field` or `xs[i]` into a sink: always a copy; the object/array still owns its slot.
+- Reading `obj.field` or `xs[i]` into a sink: always a copy; the object or array still owns that element.
 - `borrow` / `ref` arguments: never consumed.
 
 ## What to write in practice

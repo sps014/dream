@@ -35,6 +35,17 @@ template <class T, class D> struct is_unique_ptr<std::unique_ptr<T, D>> : std::t
 
 template <class T> using bare = std::remove_cv_t<std::remove_reference_t<T>>;
 
+// Dream stores `bool` and `char` in a different width than C++. The temporary lives for the
+// call and writes the C++ value back into Dream's slot.
+template <class T, class Mem>
+struct lvalue {
+    Mem* slot;
+    T value;
+    explicit lvalue(Mem* slot) : slot(slot), value(static_cast<T>(*slot)) {}
+    ~lvalue() { *slot = static_cast<Mem>(value); }
+    operator T&() { return value; }
+};
+
 inline std::string& last_error_buf() {
     static thread_local std::string s;
     return s;
@@ -146,6 +157,9 @@ void* out_obj(const char* site, F&& f, int32_t* owned) {
         p = const_cast<void*>(static_cast<const void*>(&static_cast<const T&>(f())));
         *owned = 0;
     } else if constexpr (is_unique_ptr<D>::value) {
+        static_assert(
+            std::is_same_v<typename D::deleter_type, std::default_delete<typename D::element_type>>,
+            "std::unique_ptr with a custom deleter is not supported; Dream frees the object with delete");
         p = static_cast<T*>(f().release());
         *owned = 1;
     } else if constexpr (is_optional<D>::value) {

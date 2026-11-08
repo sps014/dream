@@ -54,6 +54,18 @@ impl<'a> Analyzer<'a> {
                 if self.function_info(&id.text).is_ok() {
                     let identity = self.function_info(&id.text).map(|info| info.identity).ok();
                     if let Some(identity) = identity {
+                        if self.c_wrapped_fun_params.contains_key(&identity.0) {
+                            diagnostics.report_error(
+                                format!(
+                                    "'@c' extern '{}' cannot be used as a function value: a \
+                                     parameter needs a wrapper generated per call; call it directly",
+                                    id.text
+                                ),
+                                Some(id.position),
+                            );
+                            self.hir_fail();
+                            return Ok(Type::Unknown);
+                        }
                         return Ok(self.function_value(id, &identity));
                     }
                 }

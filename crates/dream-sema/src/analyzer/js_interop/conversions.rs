@@ -113,6 +113,9 @@ impl<'a> Analyzer<'a> {
             | PrimTy::Float16
             | PrimTy::UInt
             | PrimTy::Byte
+            | PrimTy::SByte
+            | PrimTy::Short
+            | PrimTy::UShort
             | PrimTy::Char
             | PrimTy::ULong => HExpr::new(target, HExprKind::Cast(Box::new(raw))),
             _ => {

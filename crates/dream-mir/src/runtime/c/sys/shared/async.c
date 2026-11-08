@@ -1,6 +1,8 @@
 #include "dream_core.h"
 
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #ifndef DREAM_WASM32
@@ -124,7 +126,67 @@ static int64_t vclock;
 
 #ifndef DREAM_WASM32
 #include "../native/foreign_queue.h"
+static dream_mutex cancel_mu = DREAM_MUTEX_INIT;
 #endif
+
+typedef struct CancelHook {
+    dream_ptr future;
+    void (*fn)(void *);
+    void *ud;
+    struct CancelHook *next;
+} CancelHook;
+
+static CancelHook *cancel_hooks;
+
+static void fire_cancel_hooks(dream_ptr future) {
+    CancelHook *mine = NULL;
+    CancelHook **link;
+#ifndef DREAM_WASM32
+    dream_mutex_lock(&cancel_mu);
+#endif
+    link = &cancel_hooks;
+    while (*link) {
+        if ((*link)->future == future) {
+            CancelHook *hook = *link;
+            *link = hook->next;
+            hook->next = mine;
+            mine = hook;
+        } else {
+            link = &(*link)->next;
+        }
+    }
+#ifndef DREAM_WASM32
+    dream_mutex_unlock(&cancel_mu);
+#endif
+    while (mine) {
+        CancelHook *hook = mine;
+        mine = hook->next;
+        hook->fn(hook->ud);
+        free(hook);
+    }
+}
+
+void dream_future_on_cancel(void *future, void (*fn)(void *), void *ud) {
+    CancelHook *hook;
+    if (!future || !fn) {
+        return;
+    }
+    hook = (CancelHook *)calloc(1, sizeof *hook);
+    if (!hook) {
+        DREAM_PANIC_LITERAL(u"panic: out of memory registering a cancel hook");
+    }
+    hook->future = DREAM_FROM_PUBLIC(future);
+    hook->fn = fn;
+    hook->ud = ud;
+#ifndef DREAM_WASM32
+    dream_mutex_lock(&cancel_mu);
+#endif
+    hook->next = cancel_hooks;
+    cancel_hooks = hook;
+#ifndef DREAM_WASM32
+    dream_mutex_unlock(&cancel_mu);
+#endif
+}
 
 #ifdef DREAM_WASM32
 DREAM_WASM_EXPORT(DREAM_SYM_NEW_FUTURE)
@@ -237,13 +299,19 @@ DREAM_WASM_EXPORT(DREAM_SYM_HOST_UNPIN)
 void dream_async_host_unpin(dream_ptr f) { dream_release(f); }
 #endif
 
-void dream_async_complete(dream_ptr f, dream_result res) {
+static void settle(dream_ptr f, dream_result res, int32_t status, int owned) {
     dream_ptr w;
     int32_t wk;
-    if (!f) { return; }
-    if (status_of(f)) { return; }
+    if (!f) {
+        if (owned) { dream_release((dream_ptr)(uintptr_t)res); }
+        return;
+    }
+    if (status_of(f)) {
+        if (owned) { dream_release((dream_ptr)(uintptr_t)res); }
+        return;
+    }
     *result_at(f) = res;
-    status_store(f, 1);
+    status_store(f, status);
     w = ptr_at(f, F_WAKER)[0];
     if (w) {
         ptr_at(f, F_WAKER)[0] = 0;
@@ -255,6 +323,50 @@ void dream_async_complete(dream_ptr f, dream_result res) {
         }
     }
     scheduler_drop_start_retain(f);
+}
+
+void dream_async_complete(dream_ptr f, dream_result res) {
+    settle(f, res, 1, 0);
+}
+
+static void complete_public(void *future, dream_result value, int owned, int32_t status) {
+    dream_ptr f = DREAM_FROM_PUBLIC(future);
+#ifndef DREAM_WASM32
+    int local = f && __atomic_load_n(scheduler_at(f), __ATOMIC_ACQUIRE) == &sched;
+    if (!local) {
+        dream_complete_foreign_status(f, value, owned, status);
+        return;
+    }
+    if (!dream_foreign_work_end(f)) {
+        if (owned) { dream_release((dream_ptr)(uintptr_t)value); }
+        return;
+    }
+    if (status_of(f) == 2) {
+        if (owned) { dream_release((dream_ptr)(uintptr_t)value); }
+        scheduler_drop_start_retain(f);
+        return;
+    }
+#endif
+    settle(f, value, status, owned);
+}
+
+void dream_future_complete_u64(void *future, uint64_t value) {
+    complete_public(future, (dream_result)value, 0, 1);
+}
+
+void dream_future_complete_ref(void *future, void *ref) {
+    complete_public(future, (dream_result)DREAM_FROM_PUBLIC(ref), 1, 1);
+}
+
+void dream_future_complete_error(void *future, int32_t code, const char *message) {
+    char buf[256];
+    dream_ptr text;
+    int n = snprintf(buf, sizeof buf, "%d: %s", (int)code, message ? message : "");
+    if (n < 0 || (size_t)n >= sizeof buf) {
+        n = (int)strlen(buf);
+    }
+    text = DREAM_FROM_PUBLIC(dream_string_from_utf8(buf, (size_t)n));
+    complete_public(future, (dream_result)text, 1, 3);
 }
 
 /* A cancelled future takes the child it awaits down with it when nothing else can observe that
@@ -295,6 +407,7 @@ void dream_cancel(dream_ptr f) {
     }
     status_store(f, 2);
 #endif
+    fire_cancel_hooks(f);
 #ifdef DREAM_WASM32
     async_host_cancel(f);
 #endif
@@ -337,6 +450,12 @@ int32_t dream_async_await(dream_ptr future, dream_result *dest, int32_t resume_p
         }
         return 1;
     }
+    if (status_of(future) == 3) {
+        dream_panic((dream_ptr)*result_at(future));
+    }
+    if (status_of(future) == 2) {
+        DREAM_PANIC_LITERAL(u"panic: awaited a cancelled future");
+    }
     if (status_of(future)) {
         if (dest) {
             *dest = *result_at(future);
@@ -364,9 +483,12 @@ void dream_await(dream_ptr parent, dream_ptr child) {
     /* A foreign completion landing after this check is routed by foreign_drain on this thread,
      * which reads the waker only once it is set. */
     if (status_of(child)) {
-        /* A cancelled frame never wrote the result slot the resumed parent would read. */
+        /* A cancelled frame never wrote the result the resumed parent would read. */
         if (DREAM_UNLIKELY(status_of(child) == 2)) {
             DREAM_PANIC_LITERAL(u"panic: awaited a cancelled future");
+        }
+        if (DREAM_UNLIKELY(status_of(child) == 3)) {
+            dream_panic((dream_ptr)*result_at(child));
         }
         dream_enqueue(parent);
         return;

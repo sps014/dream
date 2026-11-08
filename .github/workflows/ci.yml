@@ -106,15 +106,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.11
-        with:
-          version: "v0.16.0"
+      - name: Install sccache
+        shell: bash
+        run: scripts/ci/install-sccache.sh
       - name: Cache MSVC C and C++ compilation
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          "CC=sccache cl" >> $env:GITHUB_ENV
-          "CXX=sccache cl" >> $env:GITHUB_ENV
+          if (Get-Command sccache -ErrorAction SilentlyContinue) {
+            "CC=sccache cl" >> $env:GITHUB_ENV
+            "CXX=sccache cl" >> $env:GITHUB_ENV
+          }
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-o1-${{ runner.os }}-${{ runner.arch }}
@@ -168,15 +170,15 @@ jobs:
       - name: Build GPU host bundles with Windows shader targets
         if: runner.os == 'Windows'
         run: python crates/dream-host-gpu/tests/fixtures/make_bundles.py
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
       - run: cargo test --workspace --no-fail-fast --timings
       - name: X11 windows and GPU presentation under a real display server
         if: runner.os == 'Linux'
         run: |
           xvfb-run -a env DREAM_WINDOW_DISPLAY_TEST=1 cargo test -p dream-host-window --test main_thread
           xvfb-run -a env DREAM_GPU_SURFACE_TEST=1 cargo test -p dream-host-gpu --test backends
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
       - name: Check capability artifacts and native CLI
         run: |
           python scripts/generate-capabilities.py --check
@@ -255,6 +257,15 @@ jobs:
         run: |
           python scripts/test_corpus.py 2>&1 | Tee-Object -FilePath target/probe-native.log
           exit $LASTEXITCODE
+      - name: Windows Node corpus
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python scripts/test_corpus.py --node 2>&1 | Tee-Object -FilePath target/probe-node.log
+          exit $LASTEXITCODE
+      - name: macOS interop corpus
+        if: runner.os == 'macOS'
+        run: python3 scripts/test_corpus.py interop
       - name: Preserve Windows corpus results
         if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@v7
@@ -330,9 +341,9 @@ jobs:
           path: ${{ runner.temp }}/dream-gpu-cache
           key: gpu-host-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/pins.toml', 'crates/dream-host-gpu/patches/*') }}
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.11
-        with:
-          version: "v0.16.0"
+      - name: Install sccache
+        shell: bash
+        run: scripts/ci/install-sccache.sh
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -544,6 +555,24 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache/restore@v6
+        id: llvm-cache
+        with:
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
+          key: dev-llvm-22.1.8-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-dev-llvm.sh') }}
+      - name: Install pinned LLVM
+        shell: bash
+        run: scripts/fetch-dev-llvm.sh
+      - name: Cache the validated pinned toolchain
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.dream/toolchains/llvm-22.1.8
+            ~/.dream/toolchains/mold-3.0.0-331ac66
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
       - run: "cargo test --test integration runtime_worker:: -- --nocapture"
       - run: "cargo test --test integration runtime_ownership:: -- --nocapture"
       - run: "cargo test --test integration runtime_weak:: -- --nocapture"

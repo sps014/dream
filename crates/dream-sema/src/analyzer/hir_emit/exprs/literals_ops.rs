@@ -19,7 +19,12 @@ impl<'a> Analyzer<'a> {
                 dream_syntax::number::parse_signed_literal(&t.text, self.target_layout.ptr_size * 8)
                     .map(HExprKind::IntLit)
             }
-            Type::Long(t) | Type::UInt(t) | Type::Byte(t) => {
+            Type::Long(t)
+            | Type::UInt(t)
+            | Type::Byte(t)
+            | Type::SByte(t)
+            | Type::Short(t)
+            | Type::UShort(t) => {
                 dream_syntax::number::parse_signed_literal(&t.text, 64).map(HExprKind::IntLit)
             }
             Type::Float16(t) | Type::Float(t) | Type::Double(t) => {

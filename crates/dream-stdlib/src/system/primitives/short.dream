@@ -1,0 +1,78 @@
+module system.primitives;
+
+// The `short` primitive.
+extend short: Comparable<short> {
+    /// Orders this value against `other`.
+    public fun compare(other: short): int {
+        if this < other {
+            return 0 - 1;
+        }
+        if this > other {
+            return 1;
+        }
+        return 0;
+    }
+
+    /// The smaller of this and `other`.
+    public fun min(other: short): short {
+        if this < other {
+            return this;
+        }
+        return other;
+    }
+
+    /// The larger of this and `other`.
+    public fun max(other: short): short {
+        if this > other {
+            return this;
+        }
+        return other;
+    }
+
+    /// This value constrained to the inclusive range [lo, hi].
+    public fun clamp(lo: short, hi: short): short {
+        if this < lo {
+            return lo;
+        }
+        if this > hi {
+            return hi;
+        }
+        return this;
+    }
+
+    /// Parses a signed decimal `short` from `text`.
+    public static fun parse(borrow text: string): Result<short, ParseError> {
+        let n = text.length;
+        if n == 0 {
+            return Result.Err(ParseError.invalid("cannot parse short from empty string"));
+        }
+        let i = 0;
+        let sign = 1;
+        if text.char_at(0) == '-' {
+            if n == 1 {
+                return Result.Err(ParseError.invalid("cannot parse short: invalid digit"));
+            }
+            sign = 0 - 1;
+            i = 1;
+        }
+        let result = 0;
+        while i < n {
+            let c = text.char_at(i);
+            if (c < '0') || (c > '9') {
+                return Result.Err(ParseError.invalid("cannot parse short: invalid digit"));
+            }
+            result = result * 10 + ((int)c - 48);
+            if result > 32768 {
+                return Result.Err(ParseError.invalid("cannot parse short: value out of range"));
+            }
+            i = i + 1;
+        }
+        if sign < 0 {
+            result = 0 - result;
+        }
+        if result < (0 - 32768) || result > 32767 {
+            return Result.Err(ParseError.invalid("cannot parse short: value out of range"));
+        }
+        return Result.Ok((short)result);
+    }
+}

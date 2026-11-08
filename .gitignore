@@ -16,6 +16,8 @@ site/
 
 
 tests/**/*.C
+!tests/projects/**/native/**/*.c
+!tests/projects/**/native/**/*.C
 !/tests/runtime_ownership.c
 !/tests/runtime_publish.c
 !/tests/runtime_weak.c

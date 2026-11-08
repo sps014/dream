@@ -202,7 +202,7 @@ static void callback_wake(void *context) {
 }
 
 static void serve_on_this_thread(Worker *w) {
-    dream_thread_attach();
+    dream_thread_bind_worker();
     dream_mutex_lock(&w->mu);
     w->thread_id = dream_thread_self();
     dream_mutex_unlock(&w->mu);

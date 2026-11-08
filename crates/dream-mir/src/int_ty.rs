@@ -13,6 +13,9 @@ use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntTy {
     Byte,
+    SByte,
+    Short,
+    UShort,
     Int,
     UInt,
     Long,
@@ -25,6 +28,9 @@ impl IntTy {
     pub fn of(interner: &TypeInterner, ty: TypeId, ptr_size: u32) -> Option<IntTy> {
         match interner.kind(ty) {
             TyKind::Prim(PrimTy::Byte) => Some(IntTy::Byte),
+            TyKind::Prim(PrimTy::SByte) => Some(IntTy::SByte),
+            TyKind::Prim(PrimTy::Short) => Some(IntTy::Short),
+            TyKind::Prim(PrimTy::UShort) => Some(IntTy::UShort),
             TyKind::Prim(PrimTy::Int | PrimTy::Char) | TyKind::Enum(_) => Some(IntTy::Int),
             TyKind::Prim(PrimTy::UInt) => Some(IntTy::UInt),
             TyKind::Prim(PrimTy::Long) => Some(IntTy::Long),
@@ -55,14 +61,15 @@ impl IntTy {
 
     pub fn bits(self) -> u32 {
         match self {
-            IntTy::Byte => 8,
+            IntTy::Byte | IntTy::SByte => 8,
+            IntTy::Short | IntTy::UShort => 16,
             IntTy::Int | IntTy::UInt => 32,
             IntTy::Long | IntTy::ULong => 64,
         }
     }
 
     pub fn signed(self) -> bool {
-        matches!(self, IntTy::Int | IntTy::Long)
+        matches!(self, IntTy::SByte | IntTy::Short | IntTy::Int | IntTy::Long)
     }
 
     pub fn is_64(self) -> bool {
@@ -90,6 +97,9 @@ impl IntTy {
     pub fn value(self, payload: i64) -> i128 {
         match self {
             IntTy::Byte => (payload as u8) as i128,
+            IntTy::SByte => (payload as i8) as i128,
+            IntTy::Short => (payload as i16) as i128,
+            IntTy::UShort => (payload as u16) as i128,
             IntTy::Int => (payload as i32) as i128,
             IntTy::UInt => (payload as u32) as i128,
             IntTy::Long => payload as i128,
@@ -101,6 +111,9 @@ impl IntTy {
     pub fn wrap(self, v: i128) -> i64 {
         match self {
             IntTy::Byte => (v as u8) as i64,
+            IntTy::SByte => (v as i8) as i64,
+            IntTy::Short => (v as i16) as i64,
+            IntTy::UShort => (v as u16) as i64,
             IntTy::Int => (v as i32) as i64,
             IntTy::UInt => (v as u32) as i64,
             IntTy::Long => v as i64,

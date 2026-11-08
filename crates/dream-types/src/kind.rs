@@ -15,6 +15,12 @@ pub enum PrimTy {
     ISize,
     USize,
     Byte,
+    /// Signed 8-bit integer (`sbyte`).
+    SByte,
+    /// Signed 16-bit integer (`short`).
+    Short,
+    /// Unsigned 16-bit integer (`ushort`).
+    UShort,
     Float,
     /// IEEE 754 binary16 (`float16`).
     Float16,
@@ -36,6 +42,9 @@ impl PrimTy {
             PrimTy::ISize => "isize",
             PrimTy::USize => "usize",
             PrimTy::Byte => "byte",
+            PrimTy::SByte => "sbyte",
+            PrimTy::Short => "short",
+            PrimTy::UShort => "ushort",
             PrimTy::Float => "float",
             PrimTy::Float16 => "float16",
             PrimTy::Double => "double",
@@ -55,6 +64,9 @@ impl PrimTy {
             "isize" => PrimTy::ISize,
             "usize" => PrimTy::USize,
             "byte" => PrimTy::Byte,
+            "sbyte" => PrimTy::SByte,
+            "short" => PrimTy::Short,
+            "ushort" => PrimTy::UShort,
             "float" => PrimTy::Float,
             "float16" => PrimTy::Float16,
             "double" => PrimTy::Double,
@@ -76,6 +88,9 @@ impl PrimTy {
                 | PrimTy::ISize
                 | PrimTy::USize
                 | PrimTy::Byte
+                | PrimTy::SByte
+                | PrimTy::Short
+                | PrimTy::UShort
                 | PrimTy::Float
                 | PrimTy::Float16
                 | PrimTy::Double
@@ -91,7 +106,7 @@ impl PrimTy {
     pub fn is_unsigned_integer(self) -> bool {
         matches!(
             self,
-            PrimTy::Byte | PrimTy::UInt | PrimTy::ULong | PrimTy::USize
+            PrimTy::Byte | PrimTy::UShort | PrimTy::UInt | PrimTy::ULong | PrimTy::USize
         )
     }
 
@@ -102,8 +117,8 @@ impl PrimTy {
     /// must be queried through the HIR layout table, which also overrides `string`'s width.
     pub fn size_align(self) -> (u32, u32) {
         match self {
-            PrimTy::Bool | PrimTy::Byte => (1, 1),
-            PrimTy::Float16 => (2, 2),
+            PrimTy::Bool | PrimTy::Byte | PrimTy::SByte => (1, 1),
+            PrimTy::Float16 | PrimTy::Short | PrimTy::UShort => (2, 2),
             PrimTy::Double | PrimTy::Long | PrimTy::ULong => (8, 8),
             PrimTy::Char | PrimTy::Int | PrimTy::UInt | PrimTy::Float | PrimTy::String => (4, 4),
             PrimTy::ISize | PrimTy::USize => {

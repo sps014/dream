@@ -28,15 +28,15 @@ Use ordinary arrays first. This guide explains the extra care required when buil
 
 `T[]` is safe to use as the storage of your own container.
 
-- Writing a slot drops the old element.
-- Reading a slot gives you a valid value. The array still holds its own.
-- Dropping the array drops every slot, including ones your counter no longer counts.
+- Writing an element drops the old element.
+- Reading an element gives you a valid value. The array still holds its own.
+- Dropping the array drops every element, including ones your counter no longer counts.
 
 Rewinding `count` without clearing slots is safe. Old elements stay until they are overwritten or the array is dropped.
 
 Use `List<T>` when the logical size changes. Removing an element or calling `clear()`
 releases the list's ownership of its elements. When an array needs empty slots, choose
-an optional element type and assign `Option.None` to release a slot's previous value.
+an optional element type and assign `Option.None` to release an element's previous value.
 
 ## `@unsafe`: manual memory management
 

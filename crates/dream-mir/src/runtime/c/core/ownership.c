@@ -39,6 +39,11 @@ int64_t debug_get_runtime_counter(int32_t id) {
     return (int64_t)__atomic_load_n(&dream_runtime_counters[id], __ATOMIC_RELAXED);
 }
 
+__attribute__((weak)) int dream_rc_on_owner_thread(void) { return 1; }
+void dream_rc_owner_fail(void) {
+    DREAM_PANIC_LITERAL(u"panic: dream_retain/dream_release on a thread that does not own the runtime");
+}
+
 __attribute__((weak)) const dream_type_info *dream_type_info_for_tag(int32_t tag) {
     (void)tag;
     return dream_builtin_type_info(tag);

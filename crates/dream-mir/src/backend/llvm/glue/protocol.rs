@@ -21,6 +21,9 @@ fn builtin_tag(name: &str) -> i32 {
         "TAG_LONG" => abi::TAG_LONG,
         "TAG_ULONG" => abi::TAG_ULONG,
         "TAG_BYTE" => abi::TAG_BYTE,
+        "TAG_SBYTE" => abi::TAG_SBYTE,
+        "TAG_SHORT" => abi::TAG_SHORT,
+        "TAG_USHORT" => abi::TAG_USHORT,
         "TAG_ISIZE" => abi::TAG_ISIZE,
         "TAG_USIZE" => abi::TAG_USIZE,
         "TAG_BOOL" => abi::TAG_BOOL,
@@ -150,7 +153,8 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>, p: &Plan) {
 
 fn elem_units_bound(l: &Lcx<'_>, elem: TypeId) -> i64 {
     match l.interner.kind(elem) {
-        TyKind::Prim(PrimTy::Byte | PrimTy::Bool) => 6,
+        TyKind::Prim(PrimTy::Byte | PrimTy::Bool | PrimTy::SByte) => 6,
+        TyKind::Prim(PrimTy::Short | PrimTy::UShort) => 8,
         TyKind::Prim(PrimTy::Char) => 4,
         TyKind::Prim(PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) => 14,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => 24,

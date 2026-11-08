@@ -309,8 +309,8 @@ impl<'a> Analyzer<'a> {
             }
             let (module, field) = extern_import_target(func);
             let param_by_ref: Vec<bool> = func.parameters.iter().map(|p| p.is_ref).collect();
-            let c_wide_strings = dream_abi::attributes::marshal_kind(&func.attributes)
-                == Some(dream_abi::attributes::MarshalKind::LpWStr);
+            let c_wide_strings = dream_abi::attributes::string_encoding(&func.attributes)
+                == dream_abi::attributes::StringEncoding::Utf16;
             let async_host = dream_abi::attributes::has_async_host_attr(&func.attributes);
             let params = func
                 .parameters
@@ -346,8 +346,6 @@ impl<'a> Analyzer<'a> {
                 c_wide_strings,
                 c_params,
                 c_ret,
-                c_stdcall: dream_abi::attributes::c_call_conv(&func.attributes)
-                    == dream_abi::attributes::CCallConv::Stdcall,
             });
         }
         imports

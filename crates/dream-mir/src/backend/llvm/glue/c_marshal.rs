@@ -45,6 +45,10 @@ fn shim_param_tys(l: &Lcx<'_>, imp: &HImport, i: usize) -> Vec<Ty> {
 
 /// Declares the shim and the Dream-callable trampoline for a `@c` import.
 pub(super) fn register_import(l: &mut Lcx<'_>, imp: &HImport) {
+    if imp.is_async {
+        register_async(l, imp);
+        return;
+    }
     let mut abi: Vec<Ty> = (0..imp.params.len())
         .flat_map(|i| shim_param_tys(l, imp, i))
         .collect();
@@ -82,6 +86,141 @@ pub(super) fn register_import(l: &mut Lcx<'_>, imp: &HImport) {
         .map(|t| ll_ty(l.interner, t, &l.h(), &l.word()))
         .unwrap_or(Ty::Void);
     register(l, &import_call_name(imp), dream_ret, params);
+}
+
+/// An async `@c` import: the shim takes the future first and returns 0 when it completed
+/// before returning, or nonzero when completion comes later.
+fn register_async(l: &mut Lcx<'_>, imp: &HImport) {
+    let mut abi = vec![Ty::Ptr];
+    for i in 0..imp.params.len() {
+        abi.extend(shim_param_tys(l, imp, i));
+    }
+    l.host(&shim_name(imp), FnSig::plain(FnTy::new(Ty::I32, abi)));
+    let params: Vec<Ty> = imp
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            if imp.param_by_ref.get(i).copied().unwrap_or(false) {
+                l.h()
+            } else {
+                ll_ty(l.interner, *t, &l.h(), &l.word())
+            }
+        })
+        .collect();
+    let name = import_call_name(imp);
+    register(l, &name, l.h(), params);
+    register(l, &format!("{name}_poll"), Ty::I32, vec![l.h()]);
+}
+
+/// Calling the extern builds a future. Its first poll converts the arguments and calls C.
+pub(super) fn async_trampoline(l: &mut Lcx<'_>, imp: &HImport, poll_idx: usize) {
+    let name = import_call_name(imp);
+    let params: Vec<Ty> = imp
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            if imp.param_by_ref.get(i).copied().unwrap_or(false) {
+                l.h()
+            } else {
+                ll_ty(l.interner, *t, &l.h(), &l.word())
+            }
+        })
+        .collect();
+    let fut = l.cx.target.abi().future;
+    let slot_base = fut.slots as i64;
+    let frame_size = slot_base + params.len() as i64 * 8;
+    let result = imp
+        .ret
+        .and_then(|ty| match l.interner.kind(ty) {
+            dream_types::TyKind::Struct(_, args) => args.first().copied(),
+            _ => None,
+        })
+        .unwrap_or_else(|| l.interner.void());
+    let owned: Vec<_> = imp
+        .params
+        .iter()
+        .enumerate()
+        .filter(|(i, ty)| {
+            !imp.param_by_ref.get(*i).copied().unwrap_or(false)
+                && l.interner.is_rc_tracked(**ty)
+                && !l.interner.is_value_type(**ty)
+        })
+        .map(|(i, ty)| (*ty, slot_base + i as i64 * 8))
+        .collect();
+    let metadata = super::future_ownership::bridge(l, &name, result, &owned);
+
+    let mut fx = glue(l, &name);
+    let s = fx.call_v(
+        "dream_new_future",
+        &[
+            V::i32(frame_size),
+            V::i32(poll_idx as i64),
+            V::i32(crate::abi::FUTURE_KIND_TASK as i64),
+        ],
+    );
+    fx.call(
+        "dream_set_type",
+        &[s.clone(), V::s(Value::global(metadata))],
+    );
+    for (i, t) in params.iter().enumerate() {
+        let a = fx.arg(i);
+        if owned
+            .iter()
+            .any(|(_, offset)| *offset == slot_base + i as i64 * 8)
+        {
+            fx.call(
+                crate::backend::shared::glue::retain_sym(&fx.l.cx, imp.params[i]),
+                std::slice::from_ref(&a),
+            );
+        }
+        let at = fx.addr(&s, slot_base + i as i64 * 8);
+        fx.store_ty(t, &at, &a, 8);
+    }
+    let r = fx.as_ref(&s);
+    fx.w.ret(Some(&r.v));
+    fx.finish();
+
+    let shim = shim_name(imp);
+    let mut fx = glue(l, &format!("{name}_poll"));
+    let s = fx.arg(0);
+    let st_at = fx.addr(&s, fut.state as i64);
+    let st = fx.load_ty(Ty::I32, &st_at, 4, false);
+    let pending = fx.w.icmp("eq", &st.v, &Value::i32(0));
+    fx.if_then(&pending, |fx| {
+        let saved: Vec<V> = params
+            .iter()
+            .enumerate()
+            .map(|(i, t)| {
+                let at = fx.addr(&s, slot_base + i as i64 * 8);
+                fx.load_ty(t.clone(), &at, 8, *t == fx.h())
+            })
+            .collect();
+        let native = !fx.l.cx.target.spec().capabilities.linear_memory;
+        if native {
+            fx.call("dream_foreign_work_begin", std::slice::from_ref(&s));
+        }
+        let mut args = vec![s.clone()];
+        let mut frees = Vec::new();
+        for (i, ty) in imp.params.iter().enumerate() {
+            fx.c_arg(imp, i, *ty, &saved[i], &mut args, &mut frees);
+        }
+        let deferred = fx.call_v(&shim, &args);
+        for f in frees {
+            fx.call("free", std::slice::from_ref(&f));
+        }
+        if native {
+            let sync = fx.w.icmp("eq", &deferred.v, &Value::i32(0));
+            fx.if_then(&sync, |fx| {
+                fx.call("dream_foreign_work_end", std::slice::from_ref(&s));
+            });
+        }
+        let st_at = fx.addr(&s, fut.state as i64);
+        fx.store_ty(&Ty::I32, &st_at, &V::i32(1), 4);
+    });
+    fx.w.ret(Some(&Value::i32(0)));
+    fx.finish();
 }
 
 pub(super) fn trampoline(l: &mut Lcx<'_>, imp: &HImport) {
@@ -205,9 +344,11 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let name = imp.name.clone();
                 let fun_ty = callback_fun_ty(self.l, ty);
                 let fp = if optional {
-                    self.null_or(a, |fx| fx.fun_to_c(a, &s, fun_ty, &name))
+                    self.null_or(a, |fx| {
+                        fx.fun_to_c(a, &s, fun_ty, &name, imp.c_wide_strings)
+                    })
                 } else {
-                    self.fun_to_c(a, &s, fun_ty, &name)
+                    self.fun_to_c(a, &s, fun_ty, &name, imp.c_wide_strings)
                 };
                 args.push(fp);
             }
@@ -219,6 +360,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let rev = Reverse::Callback {
                     fun_ty: callback_fun_ty(self.l, ty),
                     user_data_last,
+                    wide: imp.c_wide_strings,
                 };
                 let tramp = V::s(self.l.fn_ref(&rev.symbol(self.l)));
                 let (fp, ud) = if optional {
@@ -235,12 +377,26 @@ impl<'l, 'a> Fx<'l, 'a> {
                     self.null_or(a, |fx| V::s(fx.addr(a, crate::abi::LEN_PREFIX_SIZE as i64)));
                 args.push(data);
             }
+            CShape::StrView => {
+                let units = self.call_v("dream_string_units", std::slice::from_ref(a));
+                let len = self.call_v("dream_string_length", std::slice::from_ref(a));
+                let word = self.l.cx.mir.layouts.target.ptr_size as u64;
+                let buf = self.alloca_bytes(word * 2, word as u32);
+                self.store_ty(&Ty::Ptr, &buf, &units, word as u32);
+                let len_at = self.addr(&V::s(buf.clone()), word as i64);
+                let wide = self.l.word();
+                self.store_ty(&wide, &len_at, &len, word as u32);
+                args.push(V::s(buf));
+            }
+            CShape::OwnedStr => {
+                crate::internal_error!("an owned string is a C result, not a parameter")
+            }
         }
     }
 
     /// A C function pointer for the funcbox `a`: the Dream function itself when the signatures
     /// agree, else the per-target adapter selected by its function-table index.
-    fn fun_to_c(&mut self, a: &V, s: &CShape, fun_ty: TypeId, import: &str) -> V {
+    fn fun_to_c(&mut self, a: &V, s: &CShape, fun_ty: TypeId, import: &str, wide: bool) -> V {
         let env = self.call_v("dream_funcbox_env", std::slice::from_ref(a));
         let captures = self.w.icmp("ne", &env.v, &Value::zero(env.ty().clone()));
         let msg = panic_msgs::c_capturing_closure(import);
@@ -255,6 +411,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             let rev = Reverse::Direct {
                 symbol: self.l.abi_sym(&self.l.user_fn(f)),
                 fun_ty,
+                wide,
             };
             let slot = self.l.cx.func_index(f) as i64;
             let hit = self.w.icmp("eq", &idx.v, &Value::i32(slot));
@@ -343,19 +500,24 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     /// A Dream `string` from a C string; `NULL` traps with `what` unless `optional`.
-    pub(super) fn c_string(&mut self, p: &V, optional: bool, what: &str) -> V {
+    pub(super) fn c_string(&mut self, p: &V, optional: bool, wide: bool, what: &str) -> V {
+        let helper = if wide {
+            "dream_utf16z_to_string"
+        } else {
+            "dream_utf8_to_string"
+        };
         let z = self.is_zero(p);
         if optional {
             let h = self.h();
             return self.if_else_v(
                 &z,
                 |_| V::u(Value::zero(h)),
-                |fx| fx.call_v("dream_utf8_to_string", std::slice::from_ref(p)),
+                |fx| fx.call_v(helper, std::slice::from_ref(p)),
             );
         }
         let msg = panic_msgs::c_null_string(what);
         self.if_then(&z, |fx| fx.panic_with(&msg));
-        self.call_v("dream_utf8_to_string", std::slice::from_ref(p))
+        self.call_v(helper, std::slice::from_ref(p))
     }
 
     fn c_result(&mut self, imp: &HImport, r: &V) -> V {
@@ -363,13 +525,20 @@ impl<'l, 'a> Fx<'l, 'a> {
         match imp.c_ret.clone() {
             CShape::Str { optional } => {
                 let what = panic_msgs::c_result_what(&imp.name);
-                self.c_string(r, optional, &what)
+                self.c_string(r, optional, imp.c_wide_strings, &what)
             }
             CShape::Ptr { optional: false } => self.cptr_new(ret_ty, r),
             CShape::Ptr { optional: true } => self.option_cptr_new(ret_ty, r),
             CShape::OwnedPtr { .. } => {
                 let free = self.call_v(&destructor_getter(imp), &[]);
                 self.owned_cptr_new(ret_ty, r, &free)
+            }
+            CShape::OwnedStr | CShape::Array => {
+                let missing = self.is_zero(r);
+                let what = panic_msgs::c_result_what(&imp.name);
+                let msg = panic_msgs::c_null_managed(&what);
+                self.if_then(&missing, |fx| fx.panic_with(&msg));
+                r.clone()
             }
             _ => r.clone(),
         }

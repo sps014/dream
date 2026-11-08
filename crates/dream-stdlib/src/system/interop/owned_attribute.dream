@@ -1,0 +1,8 @@
+module system.interop;
+
+/// The extern's result transfers ownership to Dream. On a `@cpp` member returning `T*`, the Dream object deletes it. On a `@c` extern, bare `@owned` means the result is a Dream `string` that C built. `@owned("free_fn")` on an `OwnedCPtr` names the C function that frees the pointer when the last reference is released.
+@attribute(AttributeTarget.ExternFunction)
+public struct OwnedAttribute {
+    /// Optional function used to release foreign storage.
+    public free_function: Option<string>;
+}

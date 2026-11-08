@@ -82,9 +82,9 @@ fn shim_covers_each_member_shape() {
     for needle in [
         "#include \"dream_bridge.hpp\"",
         "#include \"kv.hpp\"",
-        "extern \"C\" void* dream__kv__Store____new(",
+        "extern \"C\" void* dream__2xkv__5xStore__5x__new__0(",
         "new kv::Store(",
-        "dream__kv__Store__put(",
+        "dream__2xkv__5xStore__3xput__0(",
         "dream::out_opt_str",
         "dream::attempt<",
         "dream::out_obj<kv::Store",
@@ -92,7 +92,7 @@ fn shim_covers_each_member_shape() {
         "->get_as<int>(",
         "kv::Store::open()",
         "kv::greet(",
-        "dream__kv__Store____delete(",
+        "dream__2xkv__5xStore__8x__delete__0(",
         "#line 5 ",
     ] {
         assert!(shim.contains(needle), "missing {:?} in:\n{}", needle, shim);

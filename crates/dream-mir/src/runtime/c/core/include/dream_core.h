@@ -47,13 +47,17 @@ typedef int32_t dream_ptr;
 typedef int32_t dream_size;
 typedef int32_t dream_result;
 #define DREAM_SIZE_MAX INT32_MAX
+#define DREAM_FROM_PUBLIC(p) ((dream_ptr)(intptr_t)(p))
+#define DREAM_TO_PUBLIC(p) ((void *)(intptr_t)(p))
 #else
 typedef unsigned char *dream_ptr;
 typedef size_t dream_size;
-/* Completion slots transport both scalar bits and reference addresses, unlike ordinary refs. */
+/* Completion values transport both scalar bits and reference addresses, unlike ordinary refs. */
 typedef uint64_t dream_result;
 /* Pointer differences must remain representable even though sizes are unsigned. */
 #define DREAM_SIZE_MAX PTRDIFF_MAX
+#define DREAM_FROM_PUBLIC(p) ((dream_ptr)(p))
+#define DREAM_TO_PUBLIC(p) ((void *)(p))
 #endif
 
 /* Foreign handoff enables publication through erased/interior owners. RC uses `TAG_SHARED`. */
@@ -292,12 +296,20 @@ int dream_rc_last_slow(int32_t *rc, int32_t v);
 int dream_release_nonlast_slow(int32_t *rc, int32_t v);
 void dream_weak_prepare_destroy(dream_ptr ptr);
 
+int dream_rc_on_owner_thread(void);
+void dream_rc_owner_fail(void);
+
 DREAM_ALWAYS_INLINE void dream_retain(dream_ptr ptr) {
     int32_t *rc;
     int32_t v;
     if (ptr == 0) {
         return;
     }
+#if defined(DREAM_DEBUG) || defined(__SANITIZE_ADDRESS__)
+    if (!dream_rc_on_owner_thread()) {
+        dream_rc_owner_fail();
+    }
+#endif
     dream_count(DREAM_COUNT_RETAIN, 1);
     rc = dream_rc_word(ptr);
     v = __atomic_load_n(rc, __ATOMIC_RELAXED);
@@ -584,6 +596,11 @@ DREAM_ALWAYS_INLINE void dream_release(dream_ptr ptr) {
     if (ptr == 0) {
         return;
     }
+#if defined(DREAM_DEBUG) || defined(__SANITIZE_ADDRESS__)
+    if (!dream_rc_on_owner_thread()) {
+        dream_rc_owner_fail();
+    }
+#endif
     if (dream_rc_last(ptr)) {
         dream_free(ptr);
     }
@@ -1518,14 +1535,41 @@ void dream_set_panic_hook(dream_panic_hook hook);
 
 char *dream_string_to_utf8(dream_ptr s);
 uint16_t *dream_string_to_utf16z(dream_ptr s);
+dream_ptr dream_utf16z_to_string(const uint16_t *s);
 dream_ptr dream_utf8_to_string(const char *s);
+void *dream_bytes_new(int32_t len);
+void *dream_scalar_array_new(int32_t element_size, int32_t len);
+void *dream_array_data(void *array);
+void *dream_string_from_utf8(const char *bytes, size_t len);
+void *dream_string_from_utf16(const uint16_t *units, size_t len);
+const uint16_t *dream_string_units(void *s);
+int32_t dream_string_length(void *s);
 void dream_ffi_free_with(uintptr_t free_fn, uintptr_t ptr);
-uintptr_t dream_ffi_read_ptr(uintptr_t base, int32_t index);
-int32_t dream_ffi_read_i32(uintptr_t base, int32_t index);
-int64_t dream_ffi_read_i64(uintptr_t base, int32_t index);
-double dream_ffi_read_f64(uintptr_t base, int32_t index);
+uintptr_t dream_ffi_read_ptr(uintptr_t base, intptr_t index);
+uint8_t dream_ffi_read_u8(uintptr_t base, intptr_t index);
+int32_t dream_ffi_read_i32(uintptr_t base, intptr_t index);
+uint32_t dream_ffi_read_u32(uintptr_t base, intptr_t index);
+int64_t dream_ffi_read_i64(uintptr_t base, intptr_t index);
+uint64_t dream_ffi_read_u64(uintptr_t base, intptr_t index);
+float dream_ffi_read_f32(uintptr_t base, intptr_t index);
+double dream_ffi_read_f64(uintptr_t base, intptr_t index);
+intptr_t dream_ffi_read_isize(uintptr_t base, intptr_t index);
+uintptr_t dream_ffi_read_usize(uintptr_t base, intptr_t index);
+void dream_ffi_write_ptr(uintptr_t base, intptr_t index, uintptr_t value);
+void dream_ffi_write_u8(uintptr_t base, intptr_t index, uint8_t value);
+void dream_ffi_write_i32(uintptr_t base, intptr_t index, int32_t value);
+void dream_ffi_write_u32(uintptr_t base, intptr_t index, uint32_t value);
+void dream_ffi_write_i64(uintptr_t base, intptr_t index, int64_t value);
+void dream_ffi_write_u64(uintptr_t base, intptr_t index, uint64_t value);
+void dream_ffi_write_f32(uintptr_t base, intptr_t index, float value);
+void dream_ffi_write_f64(uintptr_t base, intptr_t index, double value);
+void dream_ffi_write_isize(uintptr_t base, intptr_t index, intptr_t value);
+void dream_ffi_write_usize(uintptr_t base, intptr_t index, uintptr_t value);
+dream_ptr dream_ffi_read_bytes(uintptr_t ptr, intptr_t len);
 dream_ptr dream_ffi_read_cstring(uintptr_t ptr);
+dream_ptr dream_ffi_read_cstring_n(uintptr_t ptr, intptr_t max);
 void dream_thread_attach(void);
+void dream_thread_bind_worker(void);
 void dream_thread_detach(void);
 void dream_callback_enter(void);
 void dream_callback_register(dream_ptr obj);
@@ -1748,6 +1792,13 @@ void dream_capability_bind(uint32_t (*bind)(const dream_guest_context *));
 /* Complete an @async_host future from a foreign thread and wake the parked loop. */
 void dream_complete_foreign_owned(dream_ptr f, dream_ptr res);
 void dream_complete_foreign(dream_ptr f, dream_result res);
+void dream_complete_foreign_status(dream_ptr f, dream_result res, int owned, int32_t status);
+void dream_future_complete_u64(void *future, uint64_t value);
+void dream_future_complete_ref(void *future, void *ref);
+void dream_future_complete_error(void *future, int32_t code, const char *message);
+void dream_future_on_cancel(void *future, void (*fn)(void *), void *ud);
+void *dream_current_owner(void);
+void dream_post(void *owner, void (*fn)(void *), void *ud);
 /* Called by a delegate-shape poll thunk before handing `future` to a deferred host: binds it to
  * this thread's scheduler, which stays in dream_run_loop while the work is in flight. */
 void dream_foreign_work_begin(dream_ptr future);

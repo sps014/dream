@@ -429,6 +429,9 @@ impl<'a> Analyzer<'a> {
                 | Type::Double(_)
                 | Type::Boolean(_)
                 | Type::Byte(_)
+                | Type::SByte(_)
+                | Type::Short(_)
+                | Type::UShort(_)
                 | Type::Char(_)
                 | Type::Long(_)
                 | Type::UInt(_)
@@ -442,9 +445,11 @@ impl<'a> Analyzer<'a> {
     /// (`0`, `0.0`, `false`, `0` bytes), letting `[v; n]` skip the per-slot fill loop.
     fn is_zero_like_literal(expr: &ExpressionNode) -> bool {
         match expr {
-            ExpressionNode::Literal(Type::Integer(t)) | ExpressionNode::Literal(Type::Byte(t)) => {
-                t.text == "0"
-            }
+            ExpressionNode::Literal(Type::Integer(t))
+            | ExpressionNode::Literal(Type::Byte(t))
+            | ExpressionNode::Literal(Type::SByte(t))
+            | ExpressionNode::Literal(Type::Short(t))
+            | ExpressionNode::Literal(Type::UShort(t)) => t.text == "0",
             ExpressionNode::Literal(Type::Float16(t))
             | ExpressionNode::Literal(Type::Float(t))
             | ExpressionNode::Literal(Type::Double(t)) => {
@@ -520,6 +525,9 @@ impl<'a> Analyzer<'a> {
             (Some(Type::ISize(_)), Type::Integer(t)) => Type::ISize(t.clone()),
             (Some(Type::USize(_)), Type::Integer(t) | Type::UInt(t)) => Type::USize(t.clone()),
             (Some(Type::Byte(_)), Type::Integer(t)) => Type::Byte(t.clone()),
+            (Some(Type::SByte(_)), Type::Integer(t)) => Type::SByte(t.clone()),
+            (Some(Type::Short(_)), Type::Integer(t)) => Type::Short(t.clone()),
+            (Some(Type::UShort(_)), Type::Integer(t)) => Type::UShort(t.clone()),
             _ => lit.clone(),
         }
     }

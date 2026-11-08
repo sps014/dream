@@ -1,6 +1,7 @@
 #include "dream_core.h"
 #include "dream_thread.h"
 
+#include <limits.h>
 #include <stdlib.h>
 
 static dream_mutex callback_mu = DREAM_MUTEX_INIT;
@@ -14,11 +15,20 @@ static dream_cond callback_cv = DREAM_COND_INIT;
 typedef struct CallbackOwner CallbackOwner;
 typedef struct Callback Callback;
 
+typedef struct Post {
+    void (*fn)(void *);
+    void *ud;
+    struct Post *next;
+} Post;
+
 struct CallbackOwner {
     Callback *head;
     Callback *ready_head;
     Callback *ready_tail;
+    Post *posts;
     int attached;
+    int refs;
+    int sticky;
     void (*wake)(void *);
     void *context;
     uint32_t waking;
@@ -36,6 +46,20 @@ struct Callback {
 
 static Callback *callbacks;
 static _Thread_local CallbackOwner *current_owner;
+static dream_thread_id runtime_home;
+static int runtime_home_ready;
+
+int dream_rc_on_owner_thread(void) {
+    if (current_owner && current_owner->attached) {
+        return 1;
+    }
+    if (__atomic_load_n(&runtime_home_ready, __ATOMIC_ACQUIRE)) {
+        return dream_thread_id_eq(runtime_home, dream_thread_self());
+    }
+    runtime_home = dream_thread_self();
+    __atomic_store_n(&runtime_home_ready, 1, __ATOMIC_RELEASE);
+    return 1;
+}
 
 static void callback_failure(void) {
     dream_mutex_unlock(&callback_mu);
@@ -44,6 +68,10 @@ static void callback_failure(void) {
 
 void dream_thread_attach(void) {
     if (current_owner) {
+        if (current_owner->refs == INT_MAX) {
+            DREAM_PANIC_LITERAL(u"panic: dream_thread_attach nested past its limit");
+        }
+        current_owner->refs += 1;
         return;
     }
     current_owner = (CallbackOwner *)calloc(1, sizeof(*current_owner));
@@ -51,9 +79,25 @@ void dream_thread_attach(void) {
         DREAM_PANIC_LITERAL(u"panic: out of memory registering a callback owner thread");
     }
     current_owner->attached = 1;
+    current_owner->refs = 1;
+}
+
+void dream_thread_bind_worker(void) {
+    dream_thread_attach();
+    current_owner->sticky = 1;
 }
 
 void dream_thread_detach(void) {
+    if (!current_owner) {
+        return;
+    }
+    if (current_owner->refs > 1) {
+        current_owner->refs -= 1;
+        return;
+    }
+    if (current_owner->sticky) {
+        return;
+    }
     dream_callback_owner_finish();
     dream_heap_thread_exit();
 }
@@ -192,9 +236,56 @@ void dream_callback_set_waker(void (*wake)(void *), void *context) {
     dream_mutex_unlock(&callback_mu);
 }
 
+void *dream_current_owner(void) {
+    return current_owner;
+}
+
+void dream_post(void *owner, void (*fn)(void *), void *ud) {
+    CallbackOwner *target = owner ? (CallbackOwner *)owner : current_owner;
+    Post *post;
+    void (*wake)(void *);
+    void *context;
+    if (!target || !fn) {
+        return;
+    }
+    if (target == current_owner) {
+        fn(ud);
+        return;
+    }
+    post = (Post *)calloc(1, sizeof *post);
+    if (!post) {
+        DREAM_PANIC_LITERAL(u"panic: out of memory posting work to a Dream thread");
+    }
+    post->fn = fn;
+    post->ud = ud;
+    dream_mutex_lock(&callback_mu);
+    post->next = target->posts;
+    target->posts = post;
+    wake = target->wake;
+    context = target->context;
+    dream_mutex_unlock(&callback_mu);
+    if (wake) {
+        wake(context);
+    }
+}
+
 void dream_callback_drain(void) {
     if (!current_owner) {
         return;
+    }
+    for (;;) {
+        Post *post;
+        dream_mutex_lock(&callback_mu);
+        post = current_owner->posts;
+        if (post) {
+            current_owner->posts = post->next;
+        }
+        dream_mutex_unlock(&callback_mu);
+        if (!post) {
+            break;
+        }
+        post->fn(post->ud);
+        free(post);
     }
     for (;;) {
         Callback *callback;
@@ -230,6 +321,9 @@ void dream_callback_owner_finish(void) {
     }
     dream_callback_drain();
     dream_defer_drain_all();
+    if (owner->refs > 1) {
+        DREAM_PANIC_LITERAL(u"panic: dream_thread_detach is still owed on this Dream worker");
+    }
     dream_mutex_lock(&callback_mu);
     owner->attached = 0;
 #ifdef DREAM_CALLBACK_TEST_FINISH

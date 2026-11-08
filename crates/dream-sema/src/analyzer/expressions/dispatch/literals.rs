@@ -63,7 +63,10 @@ impl<'a> Analyzer<'a> {
                 | Type::ULong(t)
                 | Type::ISize(t)
                 | Type::USize(t)
-                | Type::Byte(t) = &ty
+                | Type::Byte(t)
+                | Type::SByte(t)
+                | Type::Short(t)
+                | Type::UShort(t) = &ty
                 {
                     if matches!(ty, Type::ULong(_) | Type::USize(_)) {
                         let parsed = dream_syntax::number::parse_u64_literal(&t.text);
@@ -89,6 +92,9 @@ impl<'a> Analyzer<'a> {
                         let err = match &ty {
                             Type::Integer(_) => !fits_signed(32),
                             Type::Byte(_) => !(0i64..=255).contains(&val),
+                            Type::SByte(_) => !(-128i64..=127).contains(&val),
+                            Type::Short(_) => !(-32768i64..=32767).contains(&val),
+                            Type::UShort(_) => !(0i64..=65535).contains(&val),
                             Type::UInt(_) => !(0..=u32::MAX as i64).contains(&val),
                             Type::Long(_) => false,
                             Type::ISize(_) => self.target_layout.ptr_size == 4 && !fits_signed(32),

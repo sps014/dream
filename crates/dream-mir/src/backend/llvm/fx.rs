@@ -77,6 +77,9 @@ pub(super) struct Fx<'l, 'a> {
 pub(super) fn mem_ll(m: MemTy, h: &Ty, word: &Ty) -> (Ty, bool) {
     match m {
         MemTy::U8 => (Ty::I8, true),
+        MemTy::I8 => (Ty::I8, false),
+        MemTy::I16 => (Ty::I16, false),
+        MemTy::U16 => (Ty::I16, true),
         MemTy::I32 => (Ty::I32, false),
         MemTy::I64 => (Ty::I64, false),
         MemTy::Word => (word.clone(), false),

@@ -34,13 +34,15 @@ pub fn search_roots_for_artifact(
     roots
 }
 
-pub fn read_c_libs_from_abi(abi_path: &Path) -> Vec<String> {
-    let Ok(text) = std::fs::read_to_string(abi_path) else {
-        return Vec::new();
+pub fn read_c_libs_from_abi(abi_path: &Path) -> Result<Vec<String>, String> {
+    let text = match std::fs::read_to_string(abi_path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(format!("cannot read {}: {error}", abi_path.display())),
     };
     serde_json::from_str::<AbiFile>(&text)
-        .map(|a| a.c_libs)
-        .unwrap_or_default()
+        .map(|abi| abi.c_libs)
+        .map_err(|error| format!("{}: invalid ABI JSON: {error}", abi_path.display()))
 }
 
 pub fn library_file_names(lib_name: &str, spec: &dream_abi::target::TargetSpec) -> Vec<String> {
@@ -73,10 +75,21 @@ pub fn system_library_dirs(
                 dirs.push(PathBuf::from(win).join("System32"));
             }
         } else {
-            dirs.extend(["/usr/local/lib", "/usr/lib", "/lib"].map(PathBuf::from));
             if spec.is_apple() {
-                dirs.extend(["/opt/homebrew/lib", "/opt/local/lib"].map(PathBuf::from));
+                dirs.extend(
+                    [
+                        "/opt/homebrew/lib",
+                        "/usr/local/lib",
+                        "/opt/local/lib",
+                        "/usr/lib",
+                        "/lib",
+                    ]
+                    .map(PathBuf::from),
+                );
             } else {
+                dirs.extend(
+                    ["/usr/local/lib", "/usr/lib64", "/usr/lib", "/lib"].map(PathBuf::from),
+                );
                 dirs.push(PathBuf::from(format!(
                     "/usr/lib/{}-linux-gnu",
                     spec.triple.architecture

@@ -33,9 +33,9 @@ Ordinary code cannot read freed memory or index past the end. This page lists th
 
 ## Arrays and fields
 
-- Writing a slot drops the old value.
-- Reading a slot gives you a valid value. The array or object still holds its own.
-- Dropping an array drops every slot, including ones a counter no longer counts.
+- Writing an element drops the old value.
+- Reading an element gives you a valid value. The array or object still holds its own.
+- Dropping an array drops every element, including ones a counter no longer counts.
 
 Rewinding a counter without clearing slots is safe. Old elements stay until they are overwritten or the array is dropped.
 
@@ -203,5 +203,5 @@ Setting `count = 0` without clearing slots is safe. Old elements stay until over
 ### Drop a value now
 
 - `List.clear()`, or removing an entry, drops that value immediately.
-- Assign `Option.None` to drop the value in an optional slot.
+- Assign `Option.None` to drop the value in an optional element.
 - Writing a new element drops the previous one.

@@ -153,6 +153,15 @@ impl<'a> Analyzer<'a> {
             self.note_generator_only(def, &method.attributes, method.file_path.as_deref());
 
             if method.generic_parameters.is_some() {
+                if method.is_extern && dream_abi::attributes::has_c_attr(&method.attributes) {
+                    diagnostics.report_error(
+                        format!(
+                            "'@c' extern '{}' cannot be generic; C has no type parameters",
+                            method.name.text
+                        ),
+                        Some(method.name.position),
+                    );
+                }
                 let renamed_template: &'a FunctionNode<'a> = self.arena.alloc(new_method);
                 self.type_ctx
                     .defs
@@ -185,11 +194,10 @@ impl<'a> Analyzer<'a> {
                 &info.identity,
                 diagnostics,
             );
-            if bindings.is_empty()
-                && method.is_extern
-                && dream_abi::attributes::has_c_attr(&method.attributes)
-            {
-                self.validate_c_extern_signature(method, def, diagnostics);
+            if method.is_extern && dream_abi::attributes::has_c_attr(&method.attributes) {
+                // Validate the stored signature, including the implicit `this`, so callback
+                // parameter indices match the call.
+                self.validate_c_extern_signature(method_ref, def, diagnostics);
             }
             self.record_ide_definition(info.identity.0, &method.name, method.file_path.as_deref());
             if let Some(key) = dream_abi::intrinsics::intrinsic_key(&method.attributes) {

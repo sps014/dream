@@ -2,6 +2,8 @@
 #define DREAM_PLATFORM_H
 #include <stddef.h>
 #include <stdint.h>
+
+#define DREAM_EMBED_ABI_VERSION 1
 /* Supply before any runtime use; retain the table and allocator for the process lifetime.
  * map returns zero-filled, 16-byte-aligned storage. release hands the whole pages inside a mapped
  * range back to the OS and returns how many bytes it released; the range stays mapped and usable,
@@ -21,6 +23,9 @@ typedef struct dream_platform {
     void (*lock)(unsigned);
     void (*unlock)(unsigned);
     void (*object_drop)(void *);
+    /* `sizeof(dream_platform)` as this table was compiled. Zero is accepted; any other value
+     * that does not match the runtime's layout is rejected by `dream_set_platform`. */
+    size_t size;
 } dream_platform;
 enum { DREAM_LOCK_HEAP, DREAM_LOCK_WEAK };
 enum { DREAM_TEXT_UTF8, DREAM_TEXT_UTF16 };

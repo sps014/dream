@@ -39,7 +39,6 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [NodeAttribute](core-node-attribute.md)
 - [NoinlineAttribute](core-noinline-attribute.md)
 - [Option](core-option.md)
-- [OwnedAttribute](core-owned-attribute.md)
 - [ParseError](core-parse-error.md)
 - [Promise](core-promise.md)
 - [Range](core-range.md)

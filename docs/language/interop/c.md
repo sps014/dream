@@ -1,257 +1,115 @@
 ---
 title: C
-summary: Call C and C++ sources and system libraries from Dream.
+summary: Call C from Dream, and let C call back into a Dream program.
 icon: material/language-c
 status: stable
 targets: [native, web, node]
 ---
 
-# C and C++ Interop
+# C interop
 
-Dream calls C and C++ on native and wasm32 builds, including Dream Task workers. Put portable sources in a package's `native/` directory, declare each native function in Dream, and let callers `import` the package.
-
-!!! glance "At a glance"
-
-    ```dream
-    @c("m", "cbrt")
-    extern fun cube_root(x: double): double;
-    ```
-
-    - Declare C functions with `@c` and call them like Dream functions.
-    - Package C sources in `native/`; they build for native and WebAssembly targets.
-
-- **C** is bound with `@c` externs.
-- **C++** is bound with `@cpp`. Each declaration is checked against the real header.
-- The compiler does not read headers. Declarations are ordinary Dream source, so completion, hover, and go-to-definition work on them.
-- Native builds can link package sources or host libraries. A WASM build compiles portable package sources into the guest module, including WASI libc and libm (`@c("c", ...)` / `@c("m", ...)`).
-- A host library such as system libsqlite3 cannot be linked into WASM. A binding the program never calls is not checked for the target.
-
-
-Package C and C++ are compiled with Dream's clang, and a native program links with that same clang. C++ uses the target's standard library: libc++ on Apple platforms, libstdc++ from the system or `DREAM_SYSROOT` on Linux, and the MSVC library on Windows.
-
-Runnable samples: [`sample/native_c/`](https://github.com/sps014/dream/tree/main/sample/native_c) and
-[`sample/native_cpp/`](https://github.com/sps014/dream/tree/main/sample/native_cpp).
-
-## Explore this topic
-
-- [Callbacks from native libraries](native-callbacks.md)
-- [Connect to a C++ library](cpp.md)
-
-## Package layout
-
-```
-ticker/
-├── dream.toml            # [package] name = "ticker"
-├── src/ticker.dream      # the thin wrapper
-└── native/
-    ├── include/ticker.h  # on the include path
-    ├── ticker.c
-    └── vendor/lz4.c      # mixed C and C++ is fine
-```
-
-Everything under `native/` compiles as one native set named after the package (`kv-store` becomes `kv_store`). `native/include/` is on the include path.
-
-`.c` files compile as `gnu11`, and `.cpp`, `.cc`, and `.cxx` files as `gnu++20`. The C++ standard library is linked only when the set contains C++.
-
-A set is built only when the program calls into it. Native objects live in `target/<profile>/native-c/<set>/` and rebuild when a source is newer, and WASM output for the set is rebuilt in the module's `.wasm-c/` directory.
-
-### `dream.toml`
-
-A `[native.<set>]` table is optional. It adds build settings to the implicit set, or declares an
-extra set with explicit `sources`:
-
-```toml
-[package]
-name = "kvstore"
-links = "kv"                  # optional: at most one package in the graph may provide "kv"
-
-[native.kvstore]
-cflags  = ["-fno-exceptions"]
-defines = ["KV_THREADSAFE=1"]
-
-[native.kvstore.macos]
-frameworks = ["Security"]
-
-[native.kvstore.linux]
-libs = ["dl"]
-```
-
-| Key | Meaning |
-|-----|---------|
-| `sources` | Extra source files, relative to the package root |
-| `include` | Extra include directories |
-| `defines` | `-D` definitions |
-| `cflags` | Extra compiler flags |
-| `frameworks` | macOS frameworks to link |
-| `libs` | System libraries to link (`-l`) |
-
-Target subtables (`macos`, `linux`, `windows`, `wasm`) take the same keys and apply only to that target. A WASM build does not inherit the host OS table.
-
-A set with no sources for the selected target, or a missing source file, is an error. An unknown key, two packages with the same set name, or two packages with the same `[package] links` value is also an error, and the message names the manifests.
-
-## WebAssembly
-
-The same `native/` directory and `@c` / `@cpp` declarations work for portable WASM packages. Add guest-only flags with `[native.<set>.wasm]`.
-
-Use `usize` and `isize` for C `size_t` and `ptrdiff_t`. Dream `long` is always 64 bits, and a scalar signature that does not match the compiled function is a build error.
-
-Portable package sources become part of the WebAssembly program. A prebuilt desktop library cannot be used this way.
-
-C++ uses the WASI SDK 33 libc++ with exceptions, plus libc++abi and libunwind. A thrown exception still becomes a `Result` when the Dream declaration says so.
-
-Global constructors run after Dream's heap is ready. Exit hooks run registered destructors and flush stdio after `main`, and the JS loader prints constructor output in both runtimes.
-
-C allocation uses the same memory as Dream. Pointers and callbacks stay inside that module, and a stored callback must be called and released on the instance that created it.
-
-Owned pointers, UTF-8 strings, array data, unmanaged structs, and callbacks use the same declarations as a native build.
-
-Supported libc covers stdout, stderr, clocks, and an empty process environment. An OS-specific function or a missing library symbol fails the build, so use `@js` for browser and Node services.
-
-In a `Task` module, a worker pool keeps C thread-local values between dispatches. Global constructors run once after the primary instance is ready.
-
-Workers come from Dream's task runtime, so WASI `pthread_create` is not available. Use `@native`, `@node`, or `@web` to limit a binding to one runtime.
-
-Development installs need the full WASI sysroot next to the installed build tools; update it with
-`scripts/fetch-dev-llvm.sh` or `scripts/fetch-dev-llvm.ps1` on Windows. Release packaging includes
-clang, its resource headers, and the wasm32 WASI headers/libraries needed by package builds.
-
-## C: `@c`
+Declare a C function in Dream and call it like any other function. Put the C source in the package's `native/` directory, or link a system library by name.
 
 ```dream
 import system.interop;
-
-module ticker;
-
-import system;
-
-@c
-extern fun ticker_new(name: string): CPtr;
-
-@c
-extern fun ticker_run(t: CPtr, ticks: int): int;
 
 @c("m", "cbrt")
 extern fun cube_root(x: double): double;
 ```
 
-- **Bare `@c`** binds to the declaring package's own `native/` set. The Dream name is the C symbol.
-- **`@c("lib")`** names another library, and **`@c("lib", "symbol")`** also renames the symbol. A
-  library that is not a native set is linked from the system (`-l<lib>`); see
-  [Linking system libraries](#linking-system-libraries).
-- `@c` cannot be combined with `@js`, `@runtime`, or `@intrinsic`.
+C++ uses [`@cpp`](cpp.md). A library that calls back into Dream uses [`NativeCallback`](native-callbacks.md).
 
-### Types at the boundary
+The compiler does not read C headers. You write the Dream declaration yourself, so the editor can complete and jump to it. Dream checks that the declaration matches the compiled C function. A mismatch is a build error.
+
+## Where the C lives
+
+```
+ticker/
+├── dream.toml
+├── src/ticker.dream
+└── native/
+    ├── include/ticker.h
+    └── ticker.c
+```
+
+Files under `native/` are one set, named after the package. `native/include/` is on the include path. `.c` files compile as C11. `.cpp`, `.cc`, and `.cxx` compile as C++20. On Apple, `.m` is Objective-C and `.mm` is Objective-C++. Other targets reject those two.
+
+A set is built only when the program calls into it. Change a source and the next build recompiles that file.
+
+```toml
+[native.ticker]
+defines = ["TICKER_THREADSAFE=1"]
+libs = ["m"]
+
+[native.ticker.macos]
+frameworks = ["Security"]
+```
+
+| Key | Meaning |
+|-----|---------|
+| `sources` | Extra source files, relative to the package |
+| `include` | Extra include directories |
+| `defines` | Macros passed to the compiler |
+| `cflags` | Extra compiler flags. `-std`, `-O`, and `-g` are reserved |
+| `frameworks` | Apple frameworks |
+| `libs` | System libraries (`-l`) |
+| `exclude` | Globs to leave out. `*` stays in one directory. `**` crosses directories |
+| `lto` | `true` by default. Release builds compile the set with the rest of the program. Set `false` for assembly or a function that is not the platform C calling convention |
+
+`macos`, `linux`, `windows`, and `wasm` tables add keys for that target only. A WebAssembly build does not use the host operating-system table.
+
+## Declaring a function
+
+```dream
+import system.interop;
+
+@c
+extern fun ticker_new(name: string): CPtr;
+
+@c("m", "cbrt")
+extern fun cube_root(x: double): double;
+```
+
+- Bare `@c` uses this package's `native/` set. The Dream name is the C name.
+- `@c("lib")` uses another set or a system library. `@c("lib", "symbol")` also picks the C name.
+- One declaration cannot also be `@js`, `@runtime`, or `@intrinsic`.
+- `@c` functions are not generic and not variadic. Write one declaration per argument count.
+
+## Types
 
 | Dream | C |
 |-------|---|
 | `int`, `long`, `float`, `double` | `int32_t`, `int64_t`, `float`, `double` |
 | `isize`, `usize` | `intptr_t`, `uintptr_t` (`usize` also matches `size_t`) |
 | `bool`, `char`, `byte` | `bool`, `char`, `uint8_t` |
-| `string` parameter | `const char*`: NUL-terminated UTF-8, valid for the call |
-| `string` result | `const char*`, copied into a Dream `string`; C keeps ownership |
-| `CPtr` | `void*` / `T*` |
-| `Option<string>`, `Option<CPtr>` | a pointer where `NULL` is `None` |
-| `T[]` (numbers, `byte`, plain-data structs) | `T*` to the first element, valid for the call |
-| plain-data value struct (see [Structs](cpp.md#structs)) | the C struct by value, or `T*` as `ref x: T` |
-| `ref x: T` | `T*`: C writes through it (`ref p: CPtr` is `T**`) |
-| `fun(...)` | a C function pointer (see [Callbacks](cpp.md#callbacks)) |
-| `NativeCallback<F>` | a `(fn, void* user_data)` pair |
+| `sbyte`, `short`, `ushort` | `int8_t`, `int16_t`, `uint16_t` |
+| `string` argument | `const char *`, UTF-8, valid for the call |
+| `borrow string` | `dream_str_view` `{ units, len }`, valid for the call |
+| `string` result | `const char *`, copied into a Dream string |
+| `@owned` `string` result | a Dream string that C built |
+| `byte[]` or `T[]` argument | pointer to the first element, or `NULL` when empty |
+| `byte[]` or `T[]` result | the Dream array C built |
+| `CPtr`, `Option<CPtr>` | `void *`. `NULL` is `None` for `Option` |
+| `Option<string>` | `const char *`. `NULL` is `None` |
+| value struct of numbers | the C struct, same fields in the same order |
+| `ref x: T` | `T *` |
+| `fun(...)` | a function pointer |
+| `NativeCallback<F>` | a function pointer and a `void *` |
+| `OwnedCPtr` with `@owned("free_fn")` | `void *` that Dream later passes to `free_fn` |
 
-By-value `char` converts to C’s narrow `char`, including fields of structs passed by value.
-Pointers and `ref` arguments expose Dream storage: a `char` occupies four bytes, so use
-`int32_t*` for a character slot and `byte[]` for a raw C character buffer.
-| `Option<fun(...)>`, `Option<NativeCallback<F>>` | a nullable function pointer |
-| `OwnedCPtr` result with `@owned("free_fn")` | `void*` that Dream frees with `free_fn` |
+`long` is always 64 bits. Use `usize` and `isize` for `size_t` and `ptrdiff_t`.
 
-Classes, unions, and arrays of managed elements are rejected in `@c` signatures. Wrap them in a Dream function that passes C only what it needs.
+`char` in a struct is C `char`. A `ref` to a Dream `char` is not a `char *`: Dream stores a character in four bytes. Pass a `byte[]` when C wants a byte buffer.
 
-A `NULL` returned where the declaration says `string` traps with a message naming the function.
-Declare the result as `Option<string>` when C may return `NULL`.
+Classes, unions, and arrays of objects cannot cross this boundary. Pass the fields C needs.
 
-Arrays pass only the pointer. When C needs the length, declare it as a separate parameter and pass
-`xs.length`:
+## Strings, arrays, and pointers
 
-```dream
-import system.interop;
+A normal `string` argument is a temporary UTF-8 copy. A normal `string` result is copied from a `const char *` that C still owns. `NULL` is an error unless the result is `Option<string>`.
 
-@c
-extern fun checksum(data: byte[], len: long): int;
+`borrow text: string` does not copy. C receives `dream_str_view`, a pointer to UTF-16 units and a length. Do not store that pointer.
 
-public fun fingerprint(data: byte[]): int {
-    return checksum(data, data.length);
-}
-```
-
-### `CPtr`
-
-`CPtr` (in `system`) is an opaque pointer: `CPtr.null()`, `is_null()`, `==`, `address(): usize`, and `offset(bytes: isize)`, with a target-sized address. Use it for handles, and `ref` for C out-parameters:
-
-```dream
-import system.interop;
-
-@c("sqlite3")
-extern fun sqlite3_open(path: string, ref db: CPtr): int;
-
-let db = CPtr.null();
-if sqlite3_open("app.db", ref db) != 0 {
-    ...
-}
-```
-
-`Ffi.read_ptr`, `Ffi.read_int`, `Ffi.read_long`, `Ffi.read_double`, and `Ffi.read_cstring` read
-through pointers C hands to Dream (`char**` rows and similar).
-
-### Owned pointers
-
-When C returns a pointer the caller must free, return `OwnedCPtr` and name the free function with `@owned("free_fn")`. Dream calls `free_fn(ptr)` when your program no longer uses the object.
-
-`get()` reads the pointer while Dream still owns it. `take()` gives ownership back and leaves the object holding `NULL`.
-
-```dream
-import system.interop;
-
-@c
-@owned("ticker_free")
-extern fun ticker_new(name: string): OwnedCPtr;
-
-@c
-extern fun ticker_run(t: CPtr, ticks: int): int;
-
-let t = ticker_new("demo");
-ticker_run(t.get(), 3); // ticker_free runs when `t` goes out of scope
-```
-
-`free_fn` must be a C identifier with the signature `void free_fn(void*)`. A `@c` extern returning
-`OwnedCPtr` without `@owned("free_fn")`, or `@owned("free_fn")` on any other result, is an error.
-
-### Structs
-
-A value struct of numbers, `bool`, `char`, `byte`, or other such structs matches a C struct with the same fields in the same order. Pass or return it by value, or pass `ref` so C sees `T*`.
-
-Mark it `@packed` when the C header uses `#pragma pack(1)` or `__attribute__((packed))`. Otherwise fields are naturally aligned, as in C.
-
-```dream
-import system.interop;
-
-public struct Vec2 {
-    public x: double;
-    public y: double;
-}
-
-@c
-extern fun vec2_scale(v: Vec2, k: double): Vec2; // C: Vec2 vec2_scale(Vec2 v, double k)
-
-@c
-extern fun vec2_len(ref v: Vec2): double; // C: double vec2_len(const Vec2* v)
-
-@c
-extern fun vec2_origin(ref out: Vec2): void;
-```
-
-### Strings
-
-`string` parameters are copied into a NUL-terminated UTF-8 buffer that is freed after the call.
-`@marshal(StringEncoding.Utf16)` passes UTF-16 instead (`char16_t*` / Windows `LPWSTR`, not `wchar_t`). The same encoding applies to the extern's string result and to string parameters of its callbacks:
+`@marshal(StringEncoding.Utf16)` uses UTF-16 (`char16_t *`, Windows `LPWSTR`) for the copied form. It is not `wchar_t`.
 
 ```dream
 import system.interop;
@@ -261,44 +119,119 @@ import system.interop;
 extern fun MessageBoxW(hwnd: CPtr, text: string, caption: string, flags: int): int;
 ```
 
-Externs use the platform C calling convention.
+An array argument is a pointer to the first element for the duration of the call. Pass the length yourself:
 
-## Packages
-
-- Packages under `dream_packages/` bring their own `native/` sets. A consumer only imports the
-  package; its sets are built and linked when the program calls into them.
-- Shim symbols are namespaced by native set, so two packages can each bind a C++ class called
-  `Store`. Dream class names are program-wide, so give the Dream classes distinct names
-  (`@cpp("alpha.hpp", "alpha::Store") public class AlphaStore`).
-- `[package] links = "sqlite3"` declares that a package provides a native library, and at most one
-  package in the dependency graph may do so.
-- `dreamer pack` produces a single executable. Native sets are linked in statically.
-
-## Linking system libraries
-
-On native targets, `@c("lib", ...)` with a library that is not a native set links `-l<lib>`. Search order:
-
-1. `native/<lib>` next to the source (vendored shared libraries).
-2. The directory containing the source, then the current working directory.
-3. Standard system directories:
-   - macOS: `/opt/homebrew/lib`, `/usr/local/lib`, `/opt/local/lib`, `/usr/lib`
-   - Linux: `/usr/local/lib`, `/usr/lib/x86_64-linux-gnu`, `/usr/lib/aarch64-linux-gnu`,
-     `/usr/lib64`, `/usr/lib`, `/lib`
-   - Windows: `%WINDIR%\System32`
-4. The OS loader's own path (`DYLD_FALLBACK_LIBRARY_PATH` / `LD_LIBRARY_PATH`).
-
-[`sample/sqlite/`](https://github.com/sps014/dream/tree/main/sample/sqlite) binds the system libsqlite3 this way:
-
-```bash
-dream run sample/sqlite/db.dream
+```dream
+@c
+extern fun checksum(data: byte[], len: int): int;
 ```
 
-## Compared to `@js` and `@runtime`
+An array result is a Dream array. C builds it and returns the pointer from `dream_bytes_new` or `dream_scalar_array_new`. `dream_array_data` is the first byte. Dream frees the array.
 
-| Concern | `@js("mod", "field")` | `@runtime("name")` | `@c` / `@cpp` |
-|---------|-----------------------|--------------------|---------------|
-| Host | JS (Node / browser) | Dream runtime (WASM + native) | Native and portable wasm32 package builds |
-| Async | `async` + `Promise` bridge | `async` + host future | Not supported; C runs on the caller's thread |
-| Out-params | Return a wrapper struct / tuple | Return a wrapper struct / tuple | `ref` parameters |
-| Callbacks into Dream | `fun(...)` values | host-defined | `fun` pointers, `NativeCallback`, `std::function` |
-| Null | `Option` | `Option` | `Option` |
+```c
+#include <dream_embed.h>
+
+void *take_bytes(int32_t n) {
+    void *array = dream_bytes_new(n);
+    unsigned char *bytes = dream_array_data(array);
+    for (int32_t i = 0; i < n; i++) {
+        bytes[i] = (unsigned char)(i + 1);
+    }
+    return array;
+}
+```
+
+```dream
+@c
+extern fun take_bytes(n: int): byte[];
+```
+
+`@owned` on a `string` result means C returns a Dream string from `dream_string_from_utf8` or `dream_string_from_utf16`. Dream owns that string. A raw pointer that C allocated uses `OwnedCPtr` and `@owned("free_fn")` instead. Dream calls `void free_fn(void *)` when the value is dropped.
+
+```dream
+@c
+@owned("ticker_free")
+extern fun ticker_new(name: string): OwnedCPtr;
+```
+
+`CPtr` is an opaque pointer: `CPtr.null()`, `is_null()`, `address()`, and `offset(bytes)`. Use `ref` for an out-parameter:
+
+```dream
+@c("sqlite3")
+extern fun sqlite3_open(path: string, ref db: CPtr): int;
+```
+
+`Ffi` reads and writes memory through a `CPtr`. The index is an `isize` byte offset. A null pointer stops the program. `Ffi.read_cstring` returns `Option.None` for `NULL`.
+
+A value struct used with `@c` contains only numbers, `bool`, `char`, `byte`, or more of the same structs. Field order matches the C struct. Add `@packed` when the C type is packed.
+
+## Async
+
+An `async` `@c` function receives the Dream future as its first C argument and returns `int`. Return `0` when the work finished before the return. Return anything else when another thread will finish it later.
+
+```c
+int32_t add_later(void *future, int32_t a, int32_t b) {
+    dream_future_complete_u64(future, (uint64_t)(a + b));
+    return 0;
+}
+```
+
+```dream
+@c
+extern async fun add_later(a: int, b: int): int;
+```
+
+| Call | Result |
+|------|--------|
+| `dream_future_complete_u64(future, bits)` | a number, `bool`, or `CPtr` bits |
+| `dream_future_complete_ref(future, value)` | a Dream string or array that C built. Dream owns it |
+| `dream_future_complete_error(future, code, message)` | the awaiting Dream code stops with `code: message` |
+| `dream_future_on_cancel(future, fn, data)` | `fn(data)` runs when Dream cancels the call |
+
+A second completion does nothing. Completing and also returning `0` is only correct when the completion happened on this thread before the return.
+
+`dream_post(owner, fn, data)` runs `fn(data)` on that Dream thread. `dream_current_owner()` is the owner of the thread you are on. On that thread, `dream_post` runs `fn` immediately.
+
+## Callbacks
+
+A named function, or a lambda written at the call that captures nothing, becomes a C function pointer. It may be called from any thread. A thread that C created calls `dream_thread_attach` first and `dream_thread_detach` before it exits.
+
+`NativeCallback` can capture values. C receives a function pointer and a `void *`. It may be called only on the Dream thread that created it. Keep the object alive while C can call it. See [Callbacks](native-callbacks.md).
+
+## System libraries
+
+`@c("sqlite3", "sqlite3_open")` links `-lsqlite3` when `sqlite3` is not a native set. Dream looks in this order:
+
+1. `native/<lib>` next to the source.
+2. The source directory, then the current directory.
+3. The usual system directories (`/opt/homebrew/lib`, `/usr/local/lib`, `/usr/lib`, and the Windows system directory).
+4. The loader path (`DYLD_FALLBACK_LIBRARY_PATH` or `LD_LIBRARY_PATH`).
+
+`[package] links = "sqlite3"` says this package provides that library. Only one package in the program may claim a given name.
+
+## WebAssembly
+
+The same `native/` sources and `@c` declarations compile into a wasm32 program, with WASI libc and libm. A desktop `.so` or `.dylib` does not. Use `@js` for browser and Node services.
+
+`usize` and `isize` still match `size_t` and `ptrdiff_t`. A signature that does not match the compiled function fails the build.
+
+Workers are Dream tasks. WASI `pthread_create` is not available. A callback stays on the instance that created it.
+
+## Embedding
+
+`#include <dream_embed.h>` works from every `native/` file.
+
+`dream_embed_abi_version()` returns `DREAM_EMBED_ABI_VERSION` (1). Compare it before calling anything else.
+
+`dream_thread_attach` can nest. Each attach needs a detach. Detach does not shut down a Dream worker. `dream_callback_release` is safe from any thread. The Dream thread that created the callback applies the release.
+
+`dream_retain` and `dream_release` count a Dream reference. Debug builds reject them on a thread that has not attached. A panic hook sees at most 1024 bytes of the message.
+
+`dream_set_platform` checks `dream_platform.size`. `0` is accepted. Any other value must be `sizeof(dream_platform)`.
+
+## What v1 does not do
+
+- Read C or C++ headers for you.
+- C variadic functions. Write one declaration per argument count.
+- A callback from one WebAssembly instance into another.
+- `@c` combined with `@js` or `@runtime`.

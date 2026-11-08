@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::driver::ffi_shim::{CppBridge, SHIM_RUNTIME_EXPORTS, WrittenShim};
 use crate::driver::native_sets::{NativeGraph, NativeSet};
-use dream_abi::attributes::{c_import_target, extern_import_target, has_c_attr, marshal_kind};
+use dream_abi::attributes::{c_import_target, extern_import_target, has_c_attr, string_encoding};
 use dream_sema::module_graph::ProgramView;
 use dream_syntax::nodes::function::ParameterNode;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
@@ -184,8 +184,8 @@ pub(crate) fn build_abi_json(
             Type::Function(params, ret) => fn_tag_from_types(params, ret, ptr_size),
             Type::Array(inner) if matches!(**inner, Type::Byte(_)) => "bytes".to_string(),
             Type::String(_)
-                if marshal_kind(extern_attrs)
-                    == Some(dream_abi::attributes::MarshalKind::LpWStr) =>
+                if string_encoding(extern_attrs)
+                    == dream_abi::attributes::StringEncoding::Utf16 =>
             {
                 "string_utf16".to_string()
             }
@@ -374,7 +374,7 @@ fn c_sources_json(sets: &[&NativeSet], shims: &BTreeMap<String, WrittenShim>) ->
                 exports.extend(SHIM_RUNTIME_EXPORTS.iter().map(|e| e.to_string()));
             }
             format!(
-                "    {{ \"name\": \"{}\", \"sources\": {}, \"include\": {}, \"defines\": {}, \"cflags\": {}, \"frameworks\": {}, \"libs\": {}, \"runtime_exports\": {} }}",
+                "    {{ \"name\": \"{}\", \"sources\": {}, \"include\": {}, \"defines\": {}, \"cflags\": {}, \"frameworks\": {}, \"libs\": {}, \"runtime_exports\": {}, \"lto\": {} }}",
                 json_escape(&s.name),
                 path_list(&sources),
                 path_list(&include),
@@ -383,6 +383,7 @@ fn c_sources_json(sets: &[&NativeSet], shims: &BTreeMap<String, WrittenShim>) ->
                 list(s.frameworks.iter().cloned()),
                 list(s.libs.iter().cloned()),
                 list(exports),
+                if s.lto { "true" } else { "false" },
             )
         })
         .collect();
@@ -662,6 +663,7 @@ mod tests {
                 cflags: vec![],
                 frameworks: vec![],
                 libs: vec!["m".into()],
+                lto: true,
             },
         );
         let mut shims = BTreeMap::new();

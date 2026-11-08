@@ -1,8 +1,16 @@
 #include "dream_core.h"
 #include "dream_platform_internal.h"
+#include <stdlib.h>
 const dream_platform *dream_platform_current = &dream_default_platform;
 void dream_set_platform(const dream_platform *platform) {
+    if (platform->size != 0 && platform->size != sizeof(dream_platform)) {
+        abort();
+    }
     dream_platform_current = platform;
+}
+
+uint32_t dream_embed_abi_version(void) {
+    return DREAM_EMBED_ABI_VERSION;
 }
 void *dream_raw_calloc(size_t count, size_t size) {
     if (size && count > SIZE_MAX / size) { return NULL; }

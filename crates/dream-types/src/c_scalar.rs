@@ -10,6 +10,9 @@ pub enum CScalar {
     Bool,
     Char,
     U8,
+    I8,
+    I16,
+    U16,
     I32,
     U32,
     I64,
@@ -26,6 +29,9 @@ impl CScalar {
             PrimTy::Bool => CScalar::Bool,
             PrimTy::Char => CScalar::Char,
             PrimTy::Byte => CScalar::U8,
+            PrimTy::SByte => CScalar::I8,
+            PrimTy::Short => CScalar::I16,
+            PrimTy::UShort => CScalar::U16,
             PrimTy::Int => CScalar::I32,
             PrimTy::UInt => CScalar::U32,
             PrimTy::Long => CScalar::I64,
@@ -44,6 +50,9 @@ impl CScalar {
             Type::Boolean(_) => CScalar::Bool,
             Type::Char(_) => CScalar::Char,
             Type::Byte(_) => CScalar::U8,
+            Type::SByte(_) => CScalar::I8,
+            Type::Short(_) => CScalar::I16,
+            Type::UShort(_) => CScalar::U16,
             Type::Integer(_) => CScalar::I32,
             Type::UInt(_) => CScalar::U32,
             Type::Long(_) => CScalar::I64,
@@ -61,6 +70,9 @@ impl CScalar {
             CScalar::Bool => PrimTy::Bool,
             CScalar::Char => PrimTy::Char,
             CScalar::U8 => PrimTy::Byte,
+            CScalar::I8 => PrimTy::SByte,
+            CScalar::I16 => PrimTy::Short,
+            CScalar::U16 => PrimTy::UShort,
             CScalar::I32 => PrimTy::Int,
             CScalar::U32 => PrimTy::UInt,
             CScalar::I64 => PrimTy::Long,
@@ -72,12 +84,27 @@ impl CScalar {
         }
     }
 
+    /// The C type of this scalar in memory. `bool` is one byte, and `char` is a 32-bit scalar.
+    pub fn mem_name(self) -> &'static str {
+        match self {
+            CScalar::Bool | CScalar::U8 => "uint8_t",
+            CScalar::I8 => "int8_t",
+            CScalar::I16 => "int16_t",
+            CScalar::U16 => "uint16_t",
+            CScalar::Char => "int32_t",
+            other => other.c_name(),
+        }
+    }
+
     /// The C spelling (`<stdint.h>`/`<stdbool.h>` names, valid in C and C++).
     pub fn c_name(self) -> &'static str {
         match self {
             CScalar::Bool => "bool",
             CScalar::Char => "char",
             CScalar::U8 => "uint8_t",
+            CScalar::I8 => "int8_t",
+            CScalar::I16 => "int16_t",
+            CScalar::U16 => "uint16_t",
             CScalar::I32 => "int32_t",
             CScalar::U32 => "uint32_t",
             CScalar::I64 => "int64_t",
@@ -92,7 +119,10 @@ impl CScalar {
     /// Narrower than the 32-bit register Dream keeps it in: C only defines the low bits, so
     /// values must be re-extended at the boundary rather than passed through.
     pub fn is_narrow(self) -> bool {
-        matches!(self, CScalar::Bool | CScalar::Char | CScalar::U8)
+        matches!(
+            self,
+            CScalar::Bool | CScalar::Char | CScalar::U8 | CScalar::I8 | CScalar::I16 | CScalar::U16
+        )
     }
 
     /// The C type of Dream's in-register representation of this scalar.
@@ -107,7 +137,9 @@ impl CScalar {
     /// C expression converting `e` (of [`Self::c_name`]) to [`Self::carrier`].
     pub fn to_carrier(self, e: &str) -> String {
         match self {
-            CScalar::Bool | CScalar::U8 => format!("(int32_t)({e})"),
+            CScalar::Bool | CScalar::U8 | CScalar::U16 => format!("(int32_t)({e})"),
+            CScalar::I8 => format!("(int32_t)(int8_t)({e})"),
+            CScalar::I16 => format!("(int32_t)(int16_t)({e})"),
             CScalar::Char => format!("(int32_t)(unsigned char)({e})"),
             _ => e.to_string(),
         }
@@ -119,6 +151,9 @@ impl CScalar {
             CScalar::Bool => format!("(({e}) != 0)"),
             CScalar::Char => format!("(char)({e})"),
             CScalar::U8 => format!("(uint8_t)({e})"),
+            CScalar::I8 => format!("(int8_t)({e})"),
+            CScalar::I16 => format!("(int16_t)({e})"),
+            CScalar::U16 => format!("(uint16_t)({e})"),
             _ => e.to_string(),
         }
     }
@@ -130,7 +165,14 @@ mod tests {
 
     #[test]
     fn narrow_scalars_round_trip_through_an_int32_carrier() {
-        for s in [CScalar::Bool, CScalar::Char, CScalar::U8] {
+        for s in [
+            CScalar::Bool,
+            CScalar::Char,
+            CScalar::U8,
+            CScalar::I8,
+            CScalar::I16,
+            CScalar::U16,
+        ] {
             assert!(s.is_narrow());
             assert_eq!(s.carrier(), "int32_t");
             assert_eq!(CScalar::of_prim(s.prim()), Some(s));

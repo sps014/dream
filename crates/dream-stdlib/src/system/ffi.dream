@@ -1,46 +1,203 @@
 module system;
 import system.interop;
 
-/// Reads through C pointers from `@c` callbacks (`char**`, `char*`).
+/// Reads and writes foreign memory from `@c` callbacks. An indexed access panics when `base` is null.
 public static class Ffi {
-    /// Reads the pointer at `index` from a valid foreign pointer array.
+    /// Reads the pointer at `index` from a foreign pointer array.
     @intrinsic(Intrinsic.DreamFfiReadPtr)
-    public static extern fun host_read_ptr(base: usize, index: int): usize;
+    internal static extern fun host_read_ptr(base: usize, index: isize): usize;
 
-    /// Copies a valid null-terminated foreign string into a Dream string.
+    /// Copies a null-terminated foreign string into a Dream string.
     @intrinsic(Intrinsic.DreamFfiReadCstring)
-    public static extern fun host_read_cstring(ptr: usize): string;
+    internal static extern fun host_read_cstring(ptr: usize): string;
 
-    /// Reads the 32-bit integer at `index` from valid foreign storage.
+    /// Copies at most `max` bytes of a foreign string, stopping at the first NUL.
+    @intrinsic(Intrinsic.DreamFfiReadCstringN)
+    internal static extern fun host_read_cstring_n(ptr: usize, max: isize): string;
+
+    /// Copies `len` bytes of foreign memory into a Dream array.
+    @intrinsic(Intrinsic.DreamFfiReadBytes)
+    internal static extern fun host_read_bytes(ptr: usize, len: isize): byte[];
+
+    /// Reads the byte at `index`.
+    @intrinsic(Intrinsic.DreamFfiReadU8)
+    internal static extern fun host_read_u8(base: usize, index: isize): byte;
+
+    /// Reads the 32-bit integer at `index`.
     @intrinsic(Intrinsic.DreamFfiReadI32)
-    public static extern fun host_read_i32(base: usize, index: int): int;
+    internal static extern fun host_read_i32(base: usize, index: isize): int;
 
-    /// Reads the 64-bit integer at `index` from valid foreign storage.
+    /// Reads the unsigned 32-bit integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiReadU32)
+    internal static extern fun host_read_u32(base: usize, index: isize): uint;
+
+    /// Reads the 64-bit integer at `index`.
     @intrinsic(Intrinsic.DreamFfiReadI64)
-    public static extern fun host_read_i64(base: usize, index: int): long;
+    internal static extern fun host_read_i64(base: usize, index: isize): long;
 
-    /// Reads the double at `index` from valid foreign storage.
+    /// Reads the unsigned 64-bit integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiReadU64)
+    internal static extern fun host_read_u64(base: usize, index: isize): ulong;
+
+    /// Reads the float at `index`.
+    @intrinsic(Intrinsic.DreamFfiReadF32)
+    internal static extern fun host_read_f32(base: usize, index: isize): float;
+
+    /// Reads the double at `index`.
     @intrinsic(Intrinsic.DreamFfiReadF64)
-    public static extern fun host_read_f64(base: usize, index: int): double;
+    internal static extern fun host_read_f64(base: usize, index: isize): double;
+
+    /// Reads the pointer-sized signed integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiReadIsize)
+    internal static extern fun host_read_isize(base: usize, index: isize): isize;
+
+    /// Reads the pointer-sized unsigned integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiReadUsize)
+    internal static extern fun host_read_usize(base: usize, index: isize): usize;
+
+    /// Writes a pointer at `index`.
+    @intrinsic(Intrinsic.DreamFfiWritePtr)
+    internal static extern fun host_write_ptr(base: usize, index: isize, value: usize): void;
+
+    /// Writes a byte at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteU8)
+    internal static extern fun host_write_u8(base: usize, index: isize, value: byte): void;
+
+    /// Writes a 32-bit integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteI32)
+    internal static extern fun host_write_i32(base: usize, index: isize, value: int): void;
+
+    /// Writes an unsigned 32-bit integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteU32)
+    internal static extern fun host_write_u32(base: usize, index: isize, value: uint): void;
+
+    /// Writes a 64-bit integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteI64)
+    internal static extern fun host_write_i64(base: usize, index: isize, value: long): void;
+
+    /// Writes an unsigned 64-bit integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteU64)
+    internal static extern fun host_write_u64(base: usize, index: isize, value: ulong): void;
+
+    /// Writes a float at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteF32)
+    internal static extern fun host_write_f32(base: usize, index: isize, value: float): void;
+
+    /// Writes a double at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteF64)
+    internal static extern fun host_write_f64(base: usize, index: isize, value: double): void;
+
+    /// Writes a pointer-sized signed integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteIsize)
+    internal static extern fun host_write_isize(base: usize, index: isize, value: isize): void;
+
+    /// Writes a pointer-sized unsigned integer at `index`.
+    @intrinsic(Intrinsic.DreamFfiWriteUsize)
+    internal static extern fun host_write_usize(base: usize, index: isize, value: usize): void;
+
+    /// `((uint8_t*)base)[index]`.
+    public static fun read_byte(base: CPtr, index: isize): byte {
+        return Ffi.host_read_u8(base.address(), index);
+    }
 
     /// `((int32_t*)base)[index]`.
-    public static fun read_int(base: CPtr, index: int): int {
+    public static fun read_int(base: CPtr, index: isize): int {
         return Ffi.host_read_i32(base.address(), index);
     }
 
+    /// `((uint32_t*)base)[index]`.
+    public static fun read_uint(base: CPtr, index: isize): uint {
+        return Ffi.host_read_u32(base.address(), index);
+    }
+
     /// `((int64_t*)base)[index]`.
-    public static fun read_long(base: CPtr, index: int): long {
+    public static fun read_long(base: CPtr, index: isize): long {
         return Ffi.host_read_i64(base.address(), index);
     }
 
+    /// `((uint64_t*)base)[index]`.
+    public static fun read_ulong(base: CPtr, index: isize): ulong {
+        return Ffi.host_read_u64(base.address(), index);
+    }
+
+    /// `((float*)base)[index]`.
+    public static fun read_float(base: CPtr, index: isize): float {
+        return Ffi.host_read_f32(base.address(), index);
+    }
+
     /// `((double*)base)[index]`.
-    public static fun read_double(base: CPtr, index: int): double {
+    public static fun read_double(base: CPtr, index: isize): double {
         return Ffi.host_read_f64(base.address(), index);
     }
 
-    /// `((void**)base)[index]`. A `NULL` base reads `NULL`.
-    public static fun read_ptr(base: CPtr, index: int): CPtr {
+    /// `((ptrdiff_t*)base)[index]`.
+    public static fun read_isize(base: CPtr, index: isize): isize {
+        return Ffi.host_read_isize(base.address(), index);
+    }
+
+    /// `((size_t*)base)[index]`.
+    public static fun read_usize(base: CPtr, index: isize): usize {
+        return Ffi.host_read_usize(base.address(), index);
+    }
+
+    /// `((void**)base)[index]`.
+    public static fun read_ptr(base: CPtr, index: isize): CPtr {
         return CPtr(Ffi.host_read_ptr(base.address(), index));
+    }
+
+    /// `((uint8_t*)base)[index] = value`.
+    public static fun write_byte(base: CPtr, index: isize, value: byte): void {
+        Ffi.host_write_u8(base.address(), index, value);
+    }
+
+    /// `((int32_t*)base)[index] = value`.
+    public static fun write_int(base: CPtr, index: isize, value: int): void {
+        Ffi.host_write_i32(base.address(), index, value);
+    }
+
+    /// `((uint32_t*)base)[index] = value`.
+    public static fun write_uint(base: CPtr, index: isize, value: uint): void {
+        Ffi.host_write_u32(base.address(), index, value);
+    }
+
+    /// `((int64_t*)base)[index] = value`.
+    public static fun write_long(base: CPtr, index: isize, value: long): void {
+        Ffi.host_write_i64(base.address(), index, value);
+    }
+
+    /// `((uint64_t*)base)[index] = value`.
+    public static fun write_ulong(base: CPtr, index: isize, value: ulong): void {
+        Ffi.host_write_u64(base.address(), index, value);
+    }
+
+    /// `((float*)base)[index] = value`.
+    public static fun write_float(base: CPtr, index: isize, value: float): void {
+        Ffi.host_write_f32(base.address(), index, value);
+    }
+
+    /// `((double*)base)[index] = value`.
+    public static fun write_double(base: CPtr, index: isize, value: double): void {
+        Ffi.host_write_f64(base.address(), index, value);
+    }
+
+    /// `((ptrdiff_t*)base)[index] = value`.
+    public static fun write_isize(base: CPtr, index: isize, value: isize): void {
+        Ffi.host_write_isize(base.address(), index, value);
+    }
+
+    /// `((size_t*)base)[index] = value`.
+    public static fun write_usize(base: CPtr, index: isize, value: usize): void {
+        Ffi.host_write_usize(base.address(), index, value);
+    }
+
+    /// `((void**)base)[index] = value`.
+    public static fun write_ptr(base: CPtr, index: isize, value: CPtr): void {
+        Ffi.host_write_ptr(base.address(), index, value.address());
+    }
+
+    /// Copies `len` bytes starting at `ptr`. A null pointer or a negative length panics.
+    public static fun read_bytes(ptr: CPtr, len: isize): byte[] {
+        return Ffi.host_read_bytes(ptr.address(), len);
     }
 
     /// Copies the NUL-terminated UTF-8 C string at `ptr` into a Dream `string`; `None` for `NULL`.
@@ -49,5 +206,13 @@ public static class Ffi {
             return Option.None;
         }
         return Option.Some(Ffi.host_read_cstring(ptr.address()));
+    }
+
+    /// Copies at most `max` bytes of the UTF-8 C string at `ptr`, stopping at the first NUL. `None` for `NULL`.
+    public static fun read_cstring(ptr: CPtr, max: isize): Option<string> {
+        if ptr.is_null() {
+            return Option.None;
+        }
+        return Option.Some(Ffi.host_read_cstring_n(ptr.address(), max));
     }
 }

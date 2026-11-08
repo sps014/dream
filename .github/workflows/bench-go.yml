@@ -33,9 +33,9 @@ jobs:
             build-essential clang cmake libclang-dev ninja-build pkg-config python3 xz-utils zlib1g-dev \
             libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxss-dev libxtst-dev libfontconfig1-dev
       - uses: dtolnay/rust-toolchain@stable
-      - uses: mozilla-actions/sccache-action@v0.0.11
-        with:
-          version: "v0.16.0"
+      - name: Install sccache
+        shell: bash
+        run: scripts/ci/install-sccache.sh
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: bench-release

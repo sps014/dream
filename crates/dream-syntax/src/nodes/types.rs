@@ -56,6 +56,9 @@ pub fn primitive_type(name: &str, token: SyntaxToken) -> Option<Type> {
         "isize" => Type::ISize(token),
         "usize" => Type::USize(token),
         "byte" => Type::Byte(token),
+        "sbyte" => Type::SByte(token),
+        "short" => Type::Short(token),
+        "ushort" => Type::UShort(token),
         _ => return None,
     })
 }
@@ -63,9 +66,9 @@ pub fn primitive_type(name: &str, token: SyntaxToken) -> Option<Type> {
 /// The scalar primitive type names that own runtime metadata (boxing, array helpers, tags).
 /// `string` is included here because it is a first-class value type even though it is a heap
 /// reference.
-pub const PRIMITIVE_TYPE_NAMES: [&str; 13] = [
-    "int", "float", "double", "bool", "char", "string", "long", "uint", "ulong", "byte", "isize",
-    "usize", "float16",
+pub const PRIMITIVE_TYPE_NAMES: [&str; 16] = [
+    "int", "float", "double", "bool", "char", "string", "long", "uint", "ulong", "byte", "sbyte",
+    "short", "ushort", "isize", "usize", "float16",
 ];
 
 /// Returns the given type name with a single trailing array (`[]`) suffix removed.
@@ -136,6 +139,12 @@ pub enum Type {
     /// An unsigned 8-bit integer. Stored as an `i32` on the stack but only one byte in memory
     /// (`i32.load8_u`/`i32.store8`, like `char`). A value type (not ref-counted).
     Byte(SyntaxToken),
+    /// A signed 8-bit integer. Stored as an `i32` on the stack and one byte in memory.
+    SByte(SyntaxToken),
+    /// A signed 16-bit integer. Stored as an `i32` on the stack and two bytes in memory.
+    Short(SyntaxToken),
+    /// An unsigned 16-bit integer. Stored as an `i32` on the stack and two bytes in memory.
+    UShort(SyntaxToken),
     /// The universal top type. At runtime an `object` is an `i32` pointer to a tagged heap
     /// block: primitives are boxed, reference types are stored directly (their block carries
     /// the tag in its header).
@@ -192,6 +201,9 @@ impl Type {
             Type::ISize(_) => "isize".to_string(),
             Type::USize(_) => "usize".to_string(),
             Type::Byte(_) => "byte".to_string(),
+            Type::SByte(_) => "sbyte".to_string(),
+            Type::Short(_) => "short".to_string(),
+            Type::UShort(_) => "ushort".to_string(),
             Type::Array(inner) => format!("{}[]", inner.get_type()),
             Type::Tuple(elems) => {
                 let inner = elems
@@ -298,6 +310,9 @@ impl Type {
                 | Type::UInt(_)
                 | Type::ULong(_)
                 | Type::Byte(_)
+                | Type::SByte(_)
+                | Type::Short(_)
+                | Type::UShort(_)
                 | Type::ISize(_)
                 | Type::USize(_)
         )
@@ -337,6 +352,9 @@ impl Type {
             | Type::ISize(token)
             | Type::USize(token)
             | Type::Byte(token)
+            | Type::SByte(token)
+            | Type::Short(token)
+            | Type::UShort(token)
             | Type::Object(token)
             | Type::Struct(token, _) => Some(token.position),
             Type::Array(inner) => inner.get_span(),
@@ -364,7 +382,9 @@ impl Type {
             Type::UInt(token) => token.position.get_point_str(),
             Type::ULong(token) => token.position.get_point_str(),
             Type::ISize(token) | Type::USize(token) => token.position.get_point_str(),
-            Type::Byte(token) => token.position.get_point_str(),
+            Type::Byte(token) | Type::SByte(token) | Type::Short(token) | Type::UShort(token) => {
+                token.position.get_point_str()
+            }
             Type::Array(inner) => inner.get_line_str(),
             Type::Tuple(elems) => elems.first().map(|e| e.get_line_str()).unwrap_or_default(),
             Type::Struct(token, _) => token.position.get_point_str(),

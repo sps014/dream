@@ -29,6 +29,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("range_expressions", "core", true),
     Case::project("borrow_after_last_use", "ownership", true),
     Case::project("c_array_memchr", "interop", true),
+    Case::project("c_managed", "interop", true),
     Case::project("c_qsort_callback", "interop", true),
     Case::project("char_storage_unicode", "text", true),
     Case::project("raw_strings", "text", true),

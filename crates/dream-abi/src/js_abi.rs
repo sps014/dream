@@ -49,7 +49,13 @@ pub enum JsBridgeClass {
 impl JsBridgeClass {
     pub fn of(p: PrimTy) -> Self {
         match p {
-            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => Self::Int,
+            PrimTy::Int
+            | PrimTy::UInt
+            | PrimTy::Byte
+            | PrimTy::SByte
+            | PrimTy::Short
+            | PrimTy::UShort
+            | PrimTy::Char => Self::Int,
             PrimTy::Long | PrimTy::ULong | PrimTy::ISize | PrimTy::USize => Self::Long,
             PrimTy::Float16 | PrimTy::Float | PrimTy::Double => Self::Double,
             PrimTy::Bool => Self::Bool,
@@ -164,7 +170,13 @@ pub fn slot_desc(interner: &TypeInterner, ty: TypeId) -> (i32, i32, &'static str
             PrimTy::ISize => (tag::ISIZE, 0, "i32.store"),
             PrimTy::USize => (tag::USIZE, 0, "i32.store"),
             PrimTy::Long | PrimTy::ULong => (tag::LONG, 0, "i64.store"),
-            PrimTy::Int | PrimTy::UInt | PrimTy::Byte | PrimTy::Char => (tag::INT, 0, "i32.store"),
+            PrimTy::Int
+            | PrimTy::UInt
+            | PrimTy::Byte
+            | PrimTy::SByte
+            | PrimTy::Short
+            | PrimTy::UShort
+            | PrimTy::Char => (tag::INT, 0, "i32.store"),
         },
         // The analyzer rejects other types as `js` arguments; treat any leftover as a handle.
         _ => (tag::JS, 0, "i32.store"),

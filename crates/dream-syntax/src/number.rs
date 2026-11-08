@@ -210,11 +210,14 @@ fn suffix_len(rest: &[u8], allow_byte: bool, is_float: bool) -> Option<usize> {
     } else if allow_byte {
         matches!(
             lower.as_slice(),
-            b"b" | b"u" | b"l" | b"ul" | b"lu" | b"f" | b"d" | b"h"
+            b"b" | b"sb" | b"s" | b"us" | b"u" | b"l" | b"ul" | b"lu" | b"f" | b"d" | b"h"
         )
     } else {
         // Hex: `b`/`d`/`f` are digits, so only unsigned/long suffixes.
-        matches!(lower.as_slice(), b"u" | b"l" | b"ul" | b"lu")
+        matches!(
+            lower.as_slice(),
+            b"u" | b"l" | b"ul" | b"lu" | b"s" | b"sb" | b"us"
+        )
     };
     ok.then_some(len)
 }

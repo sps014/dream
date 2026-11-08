@@ -22,7 +22,10 @@ pub(super) fn const_elem_bytes(prim: PrimTy, size: usize, elems: &[Operand]) -> 
                 | PrimTy::ULong
                 | PrimTy::ISize
                 | PrimTy::USize
-                | PrimTy::Byte,
+                | PrimTy::Byte
+                | PrimTy::SByte
+                | PrimTy::Short
+                | PrimTy::UShort,
                 Const::Int(n) | Const::Long(n),
             ) if size <= 8 => out.extend_from_slice(&n.to_le_bytes()[..size]),
             (PrimTy::Bool, Const::Bool(b)) if size == 1 => out.push(u8::from(*b)),

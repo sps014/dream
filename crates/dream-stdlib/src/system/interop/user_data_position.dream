@@ -1,0 +1,9 @@
+module system.interop;
+
+/// Where a `NativeCallback` parameter places `user_data` among the C arguments.
+public enum UserDataPosition {
+    /// `user_data` is the first argument.
+    First,
+    /// `user_data` is the last argument.
+    Last
+}

@@ -7,7 +7,8 @@ fn c_type(kind: &K) -> &'static str {
     match kind {
         K::Void => "void",
         K::Int => "int32_t",
-        K::UInt | K::Bool | K::Byte | K::Char => "uint32_t",
+        K::UInt | K::Bool | K::Byte | K::Char | K::UShort => "uint32_t",
+        K::SByte | K::Short => "int32_t",
         K::Long => "int64_t",
         K::ULong => "uint64_t",
         K::ISize => "intptr_t",

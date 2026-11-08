@@ -1,0 +1,34 @@
+import system.interop;
+import system.testing;
+import system;
+
+@c("corpus_interop", "take_bytes")
+extern fun take_bytes(n: int): byte[];
+
+@owned
+@c("corpus_interop", "owned_hello")
+extern fun owned_hello(): string;
+
+@c("corpus_interop", "view_len")
+extern fun view_len(borrow text: string): int;
+
+@c("corpus_interop", "add_later")
+extern async fun add_later(a: int, b: int): int;
+
+@test
+@timeout(180000)
+fun c_managed_results(): void {
+    let bytes = take_bytes(3);
+    Assert.eq(bytes.length.to_string(), "3");
+    Assert.eq(bytes[0].to_string(), "1");
+    Assert.eq(bytes[2].to_string(), "3");
+    Assert.eq(owned_hello(), "hello");
+    Assert.eq(view_len("abcd").to_string(), "4");
+}
+
+@test
+@timeout(180000)
+async fun c_async_add(): void {
+    let n = add_later(2, 3).await;
+    Assert.eq(n, 5);
+}

@@ -7,6 +7,15 @@ use std::fmt::Write as _;
 use dream_abi::c_abi::cpp_shim_symbol;
 
 use super::model::{Class, FileDecls, Member, MemberKind};
+use dream_syntax::nodes::Visibility;
+
+fn visibility_prefix(visibility: Visibility) -> &'static str {
+    match visibility {
+        Visibility::Public => "public ",
+        Visibility::Internal => "internal ",
+        Visibility::Private => "",
+    }
+}
 use super::types::{Bridge, Ret};
 
 /// Private to each generated file, so every file gets its own Dream name for the set's
@@ -71,7 +80,7 @@ fn class_source(
     if c.allow_cycle {
         out.push_str("@allow_cycle\n");
     }
-    let vis = if c.public { "public " } else { "" };
+    let vis = visibility_prefix(c.visibility);
     let _ = write!(
         out,
         "{vis}class {n} {{\n\
@@ -85,11 +94,11 @@ fn class_source(
          \x20       this.__cpp_owner = __cpp_owner;\n\
          \x20   }}\n\
          \n\
-         \x20   public static fun __cpp_wrap(h: CPtr, owned: bool, owner: Option<object>): {n} {{\n\
+         \x20   internal static fun __cpp_wrap(h: CPtr, owned: bool, owner: Option<object>): {n} {{\n\
          \x20       return {n}(h, owned, owner);\n\
          \x20   }}\n\
          \n\
-         \x20   public static fun __cpp_handle_of(o: {n}): CPtr {{\n\
+         \x20   internal static fun __cpp_handle_of(o: {n}): CPtr {{\n\
          \x20       return o.__cpp_handle;\n\
          \x20   }}\n\
          \n\
@@ -224,7 +233,13 @@ fn member_source(
         ext_ret
     ));
 
-    let vis = if m.internal { "internal" } else { "public" };
+    // Unmarked members stay callable, matching a binding rather than a Dream default of private.
+    // `internal` is preserved; it used to be the only non-public spelling.
+    let vis = match m.visibility {
+        Visibility::Internal => "internal",
+        Visibility::Public | Visibility::Private => "public",
+    };
+    let hosts = &m.hosts;
     let params: Vec<String> = m
         .params
         .iter()
@@ -235,15 +250,17 @@ fn member_source(
         .collect();
     let params = params.join(", ");
     let _ = match m.kind {
-        MemberKind::Constructor => writeln!(out, "{indent}{vis} constructor({params}) {{"),
+        MemberKind::Constructor => {
+            writeln!(out, "{indent}{hosts}{vis} constructor({params}) {{")
+        }
         MemberKind::Static => writeln!(
             out,
-            "{indent}{vis} static fun {}({params}): {} {{",
+            "{indent}{hosts}{vis} static fun {}({params}): {} {{",
             m.name, m.ret_dream
         ),
         MemberKind::Instance | MemberKind::Free => writeln!(
             out,
-            "{indent}{vis} fun {}({params}): {} {{",
+            "{indent}{hosts}{vis} fun {}({params}): {} {{",
             m.name, m.ret_dream
         ),
     };

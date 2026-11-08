@@ -14,11 +14,13 @@
  *
  * Panics. A panic never unwinds into C. By default it prints its message to stderr and aborts the
  * process. A hook installed with `dream_set_panic_hook()` runs first, on the panicking thread,
- * with the UTF-8 message; the process still aborts when the hook returns.
+ * with the UTF-8 message; the process still aborts when the hook returns. The hook sees at most
+ * 1024 bytes of that message, including the terminating NUL.
  */
 #ifndef DREAM_EMBED_H
 #define DREAM_EMBED_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "dream_platform.h"
@@ -27,16 +29,28 @@
 extern "C" {
 #endif
 
-/* Registers the calling thread with the Dream runtime. Idempotent. */
+/* The layout version of this header. Compare it with `dream_embed_abi_version()` from the
+ * binary before calling anything else. */
+uint32_t dream_embed_abi_version(void);
+
+/* Registers the calling thread with the Dream runtime. Repeated calls nest; each one needs
+ * its own `dream_thread_detach`. A detach never tears down a Dream worker's own registration. */
 void dream_thread_attach(void);
 
-/* Runs the thread's pending Dream work and unregisters it. Every `NativeCallback` created on the
- * thread must already be released. A no-op on a thread that never attached. */
+/* Drops one nested registration. The matching call for a thread's last registration runs its
+ * pending Dream work and unregisters it. Every `NativeCallback` created on the thread must
+ * already be released. A no-op on a thread that never attached, and on a Dream worker thread. */
 void dream_thread_detach(void);
 
-/* Takes and gives back one count on a Dream object reference. Both accept NULL. */
+/* Takes and gives back one count on a Dream object reference. Both accept NULL.
+ * Debug and sanitizer builds reject a call from a thread that is neither the runtime's
+ * first thread nor a thread that has called `dream_thread_attach`. */
 void dream_retain(void *ref);
 void dream_release(void *ref);
+
+/* Gives back one count on a `NativeCallback` from any thread. The Dream thread that created
+ * the callback applies the release. */
+void dream_callback_release(void *callback);
 
 /* Completes the future an `@async_host` extern handed to its `<name>Async` host, from any thread.
  * `result` carries the value as the host's synchronous return would (zero for `void`). The
@@ -63,6 +77,51 @@ void dream_set_platform(const dream_platform *platform);
  * completion was outstanding. A call made while a pump is already running returns 1 without
  * running anything. Call it from the platform event loop on the thread that attached the runtime. */
 int dream_scheduler_pump(void);
+
+/* A `byte[]` of `len` zero bytes. The pointer is the Dream array. `dream_array_data` is its
+ * first byte. Dream frees the array when the `@c` result is dropped. */
+void *dream_bytes_new(int32_t len);
+
+/* An array of `len` elements, each `element_size` bytes, zeroed. Return it from an `@c`
+ * function whose result is that array type. */
+void *dream_scalar_array_new(int32_t element_size, int32_t len);
+
+/* The first byte of a Dream array, or NULL when `array` is NULL. */
+void *dream_array_data(void *array);
+
+/* A Dream string copied from UTF-8 or UTF-16. Return it from an `@owned` `@c` function.
+ * `len` is the number of bytes or UTF-16 units, not a NUL-terminated length. */
+void *dream_string_from_utf8(const char *bytes, size_t len);
+void *dream_string_from_utf16(const uint16_t *units, size_t len);
+
+/* The UTF-16 units and unit count of a Dream string. A `borrow string` parameter arrives as
+ * `dream_str_view` instead; that view is valid only for the call. */
+const uint16_t *dream_string_units(void *s);
+int32_t dream_string_length(void *s);
+
+typedef struct dream_str_view {
+    const uint16_t *units;
+    uintptr_t len;
+} dream_str_view;
+
+/* Finish an async `@c` call. The C function receives the future as its first argument and
+ * returns 0 when it has already completed, or any other value when it will complete later
+ * from any thread. A second completion is ignored. `dream_future_complete_ref` takes ownership
+ * of a Dream string or array. `dream_future_complete_error` makes the awaiting Dream code panic
+ * with `code` and `message`. */
+void dream_future_complete_u64(void *future, uint64_t value);
+void dream_future_complete_ref(void *future, void *ref);
+void dream_future_complete_error(void *future, int32_t code, const char *message);
+
+/* Runs `fn(ud)` on the thread that cancels the future. The future is already cancelled. */
+void dream_future_on_cancel(void *future, void (*fn)(void *), void *ud);
+
+/* The Dream thread this call is running on, or NULL when the thread is not attached. */
+void *dream_current_owner(void);
+
+/* Runs `fn(ud)` on `owner`'s Dream thread. A call on that thread runs `fn` immediately.
+ * Pass NULL to use the calling thread's owner. */
+void dream_post(void *owner, void (*fn)(void *), void *ud);
 
 #ifdef __cplusplus
 }

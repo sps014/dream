@@ -30,7 +30,7 @@ Use an enum to name a fixed set of choices. A choice can also carry data, such a
 | Simple enum | `enum` where no variant has a payload | An integer |
 | Discriminated union | `enum` where any variant has a `(...)` payload | A heap value |
 | Value union | A union whose payloads are all values, such as `Option<int>` | Inline; copied on assignment |
-| Niche union | Exactly two variants: one empty, one with a single reference payload, such as `Option<string>` | One reference slot; the empty variant uses no extra flag |
+| Niche union | Exactly two variants: one empty, one with a single reference payload, such as `Option<string>` | One reference; the empty variant uses no extra flag |
 | `enum struct` | Written explicitly; payloads may include references | Inline, or a compile error if that is impossible |
 
 The sections below explain each form.
@@ -259,7 +259,7 @@ A union with exactly one reference payload is handled on its own. See the next s
 
 Some `Option`-like unions store "none" without an extra flag.
 
-That happens for exactly two variants: one empty, and one with a single reference payload (`Option<TreeNode>`, `Option<string>`). `None` and `Some(x)` share that slot.
+That happens for exactly two variants: one empty, and one with a single reference payload (`Option<TreeNode>`, `Option<string>`). `None` and `Some(x)` share that storage.
 
 - Pattern matching works the same.
 - A `weak` field typed `Option<Class>` becomes `None` when the object is gone.

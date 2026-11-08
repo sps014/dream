@@ -4828,7 +4828,7 @@
       },
       {
         "signature": "public fun this[key: K] = value: V",
-        "description": "The first probe hits an empty or matching slot on the usual insert. That case stays in the caller; collisions fall through to the full probe.",
+        "description": "The first probe hits an empty or matching entry on the usual insert. That case stays in the caller; collisions fall through to the full probe.",
         "line": 196,
         "page": "reference/api/collections-map.md"
       },
@@ -5060,7 +5060,7 @@
     "declarations": [
       {
         "signature": "public class Queue<T>: Collection<T>",
-        "description": "FIFO queue backed by a ring buffer (`T[]` + head/count).  Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any `(head + k) % items.length` with `k >= 0` is a valid slot for `Buffer.get_unchecked`.",
+        "description": "FIFO queue backed by a ring buffer (`T[]` + head/count).  Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any `(head + k) % items.length` with `k >= 0` is a valid index for `Buffer.get_unchecked`.",
         "line": 8,
         "page": "reference/api/collections-queue.md"
       },
@@ -5096,7 +5096,7 @@
       },
       {
         "signature": "public fun dequeue(): Option<T>",
-        "description": "Removes and returns the front element, or `None` when empty. The vacated slot is zeroed so managed elements release immediately instead of staying retained until overwritten.",
+        "description": "Removes and returns the front element, or `None` when empty. The vacated element is zeroed so managed elements release immediately instead of staying retained until overwritten.",
         "line": 77,
         "page": "reference/api/collections-queue.md"
       },
@@ -7178,25 +7178,6 @@
         "description": "This option when `Some`, otherwise `fallback`.",
         "line": 103,
         "page": "reference/api/core-option.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/core/owned_attribute.dream",
-    "package": "system.core",
-    "page": "reference/api/core-owned-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct OwnedAttribute",
-        "description": "The extern's result transfers ownership to Dream. On a `@cpp` member returning `T*`, the Dream object deletes it. On a `@c` extern returning `OwnedCPtr`, `@owned(\"free_fn\")` names the C function that frees the pointer when the last reference is released.",
-        "line": 5,
-        "page": "reference/api/core-owned-attribute.md"
-      },
-      {
-        "signature": "public free_function: Option<string>",
-        "description": "Optional function used to release foreign storage.",
-        "line": 7,
-        "page": "reference/api/core-owned-attribute.md"
       }
     ]
   },
@@ -10196,68 +10177,146 @@
     "declarations": [
       {
         "signature": "public static class Ffi",
-        "description": "Reads through C pointers from `@c` callbacks (`char**`, `char*`).",
+        "description": "Reads and writes foreign memory from `@c` callbacks. An indexed access panics when `base` is null.",
         "line": 5,
         "page": "reference/api/ffi.md"
       },
       {
-        "signature": "public static extern fun host_read_ptr(base: usize, index: int): usize",
-        "description": "Reads the pointer at `index` from a valid foreign pointer array.",
-        "line": 8,
+        "signature": "public static fun read_byte(base: CPtr, index: isize): byte",
+        "description": "`((uint8_t*)base)[index]`.",
+        "line": 99,
         "page": "reference/api/ffi.md"
       },
       {
-        "signature": "public static extern fun host_read_cstring(ptr: usize): string",
-        "description": "Copies a valid null-terminated foreign string into a Dream string.",
-        "line": 12,
-        "page": "reference/api/ffi.md"
-      },
-      {
-        "signature": "public static extern fun host_read_i32(base: usize, index: int): int",
-        "description": "Reads the 32-bit integer at `index` from valid foreign storage.",
-        "line": 16,
-        "page": "reference/api/ffi.md"
-      },
-      {
-        "signature": "public static extern fun host_read_i64(base: usize, index: int): long",
-        "description": "Reads the 64-bit integer at `index` from valid foreign storage.",
-        "line": 20,
-        "page": "reference/api/ffi.md"
-      },
-      {
-        "signature": "public static extern fun host_read_f64(base: usize, index: int): double",
-        "description": "Reads the double at `index` from valid foreign storage.",
-        "line": 24,
-        "page": "reference/api/ffi.md"
-      },
-      {
-        "signature": "public static fun read_int(base: CPtr, index: int): int",
+        "signature": "public static fun read_int(base: CPtr, index: isize): int",
         "description": "`((int32_t*)base)[index]`.",
-        "line": 27,
+        "line": 104,
         "page": "reference/api/ffi.md"
       },
       {
-        "signature": "public static fun read_long(base: CPtr, index: int): long",
+        "signature": "public static fun read_uint(base: CPtr, index: isize): uint",
+        "description": "`((uint32_t*)base)[index]`.",
+        "line": 109,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun read_long(base: CPtr, index: isize): long",
         "description": "`((int64_t*)base)[index]`.",
-        "line": 32,
+        "line": 114,
         "page": "reference/api/ffi.md"
       },
       {
-        "signature": "public static fun read_double(base: CPtr, index: int): double",
+        "signature": "public static fun read_ulong(base: CPtr, index: isize): ulong",
+        "description": "`((uint64_t*)base)[index]`.",
+        "line": 119,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun read_float(base: CPtr, index: isize): float",
+        "description": "`((float*)base)[index]`.",
+        "line": 124,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun read_double(base: CPtr, index: isize): double",
         "description": "`((double*)base)[index]`.",
-        "line": 37,
+        "line": 129,
         "page": "reference/api/ffi.md"
       },
       {
-        "signature": "public static fun read_ptr(base: CPtr, index: int): CPtr",
-        "description": "`((void**)base)[index]`. A `NULL` base reads `NULL`.",
-        "line": 42,
+        "signature": "public static fun read_isize(base: CPtr, index: isize): isize",
+        "description": "`((ptrdiff_t*)base)[index]`.",
+        "line": 134,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun read_usize(base: CPtr, index: isize): usize",
+        "description": "`((size_t*)base)[index]`.",
+        "line": 139,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun read_ptr(base: CPtr, index: isize): CPtr",
+        "description": "`((void**)base)[index]`.",
+        "line": 144,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_byte(base: CPtr, index: isize, value: byte): void",
+        "description": "`((uint8_t*)base)[index] = value`.",
+        "line": 149,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_int(base: CPtr, index: isize, value: int): void",
+        "description": "`((int32_t*)base)[index] = value`.",
+        "line": 154,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_uint(base: CPtr, index: isize, value: uint): void",
+        "description": "`((uint32_t*)base)[index] = value`.",
+        "line": 159,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_long(base: CPtr, index: isize, value: long): void",
+        "description": "`((int64_t*)base)[index] = value`.",
+        "line": 164,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_ulong(base: CPtr, index: isize, value: ulong): void",
+        "description": "`((uint64_t*)base)[index] = value`.",
+        "line": 169,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_float(base: CPtr, index: isize, value: float): void",
+        "description": "`((float*)base)[index] = value`.",
+        "line": 174,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_double(base: CPtr, index: isize, value: double): void",
+        "description": "`((double*)base)[index] = value`.",
+        "line": 179,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_isize(base: CPtr, index: isize, value: isize): void",
+        "description": "`((ptrdiff_t*)base)[index] = value`.",
+        "line": 184,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_usize(base: CPtr, index: isize, value: usize): void",
+        "description": "`((size_t*)base)[index] = value`.",
+        "line": 189,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun write_ptr(base: CPtr, index: isize, value: CPtr): void",
+        "description": "`((void**)base)[index] = value`.",
+        "line": 194,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun read_bytes(ptr: CPtr, len: isize): byte[]",
+        "description": "Copies `len` bytes starting at `ptr`. A null pointer or a negative length panics.",
+        "line": 199,
         "page": "reference/api/ffi.md"
       },
       {
         "signature": "public static fun read_cstring(ptr: CPtr): Option<string>",
         "description": "Copies the NUL-terminated UTF-8 C string at `ptr` into a Dream `string`; `None` for `NULL`.",
-        "line": 47,
+        "line": 204,
+        "page": "reference/api/ffi.md"
+      },
+      {
+        "signature": "public static fun read_cstring(ptr: CPtr, max: isize): Option<string>",
+        "description": "Copies at most `max` bytes of the UTF-8 C string at `ptr`, stopping at the first NUL. `None` for `NULL`.",
+        "line": 212,
         "page": "reference/api/ffi.md"
       }
     ]
@@ -14130,50 +14189,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/interop/c_call_attribute.dream",
-    "package": "system.interop",
-    "page": "reference/api/interop-c-call-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct CCallAttribute",
-        "description": "C calling convention for `@c` externs: `@c_call(CCallConv.Cdecl)` (the platform default) or `@c_call(CCallConv.Stdcall)` (Win32 APIs; identical to cdecl on every target but 32-bit x86 Windows).",
-        "line": 5,
-        "page": "reference/api/interop-c-call-attribute.md"
-      },
-      {
-        "signature": "public convention: CCallConv",
-        "description": "Calling convention used by the foreign function.",
-        "line": 7,
-        "page": "reference/api/interop-c-call-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/interop/c_call_conv.dream",
-    "package": "system.interop",
-    "page": "reference/api/interop-c-call-conv.md",
-    "declarations": [
-      {
-        "signature": "public enum CCallConv",
-        "description": "Calling convention for C imports.",
-        "line": 4,
-        "page": "reference/api/interop-c-call-conv.md"
-      },
-      {
-        "signature": "Cdecl",
-        "description": "The platform default C calling convention.",
-        "line": 6,
-        "page": "reference/api/interop-c-call-conv.md"
-      },
-      {
-        "signature": "Stdcall",
-        "description": "The stdcall convention on 32-bit Windows; equivalent to the default convention on other targets.",
-        "line": 9,
-        "page": "reference/api/interop-c-call-conv.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/interop/cpp_attribute.dream",
     "package": "system.interop",
     "page": "reference/api/interop-cpp-attribute.md",
@@ -14205,7 +14220,7 @@
     "declarations": [
       {
         "signature": "public struct CppNameAttribute",
-        "description": "The C++ member (or expression) a `@cpp` extern calls, for renames and template instantiations: `@cpp_name(\"get_as<int>\")`.",
+        "description": "The C++ member a `@cpp` method calls, for renames and template instantiations: `@cpp_name(\"get_as<int>\")`. Free functions pass that name as the second `@cpp` argument instead.",
         "line": 5,
         "page": "reference/api/interop-cpp-name-attribute.md"
       },
@@ -14224,46 +14239,34 @@
     "declarations": [
       {
         "signature": "public struct MarshalAttribute",
-        "description": "`@c` marshaling: on the extern, string encoding (`@marshal(MarshalKind.LpStr)` / `@marshal(MarshalKind.LpWStr)`); on a `NativeCallback` parameter, `@marshal(MarshalKind.UserDataLast)` passes `user_data` after the callback's own arguments.",
-        "line": 5,
+        "description": "String encoding of a `@c` extern: `@marshal(StringEncoding.Utf8)` or `@marshal(StringEncoding.Utf16)`. It covers string parameters, the string result, and string parameters of callbacks.",
+        "line": 6,
         "page": "reference/api/interop-marshal-attribute.md"
       },
       {
-        "signature": "public kind: MarshalKind",
-        "description": "Marshaling rule applied to the extern or parameter.",
-        "line": 7,
+        "signature": "public encoding: StringEncoding",
+        "description": "Encoding used for every `string` that crosses this extern.",
+        "line": 8,
         "page": "reference/api/interop-marshal-attribute.md"
       }
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/interop/marshal_kind.dream",
+    "source": "crates/dream-stdlib/src/system/interop/owned_attribute.dream",
     "package": "system.interop",
-    "page": "reference/api/interop-marshal-kind.md",
+    "page": "reference/api/interop-owned-attribute.md",
     "declarations": [
       {
-        "signature": "public enum MarshalKind",
-        "description": "C string encoding or callback context placement.",
-        "line": 4,
-        "page": "reference/api/interop-marshal-kind.md"
+        "signature": "public struct OwnedAttribute",
+        "description": "The extern's result transfers ownership to Dream. On a `@cpp` member returning `T*`, the Dream object deletes it. On a `@c` extern, bare `@owned` means the result is a Dream `string` that C built. `@owned(\"free_fn\")` on an `OwnedCPtr` names the C function that frees the pointer when the last reference is released.",
+        "line": 5,
+        "page": "reference/api/interop-owned-attribute.md"
       },
       {
-        "signature": "LpStr",
-        "description": "Marshal text as a null-terminated narrow C string.",
-        "line": 6,
-        "page": "reference/api/interop-marshal-kind.md"
-      },
-      {
-        "signature": "LpWStr",
-        "description": "Marshal text as a null-terminated wide C string.",
-        "line": 8,
-        "page": "reference/api/interop-marshal-kind.md"
-      },
-      {
-        "signature": "UserDataLast",
-        "description": "Pass the callback context after the callback arguments.",
-        "line": 10,
-        "page": "reference/api/interop-marshal-kind.md"
+        "signature": "public free_function: Option<string>",
+        "description": "Optional function used to release foreign storage.",
+        "line": 7,
+        "page": "reference/api/interop-owned-attribute.md"
       }
     ]
   },
@@ -14277,6 +14280,75 @@
         "description": "Packs a value struct with no padding for C ABI layout (`@packed`).",
         "line": 5,
         "page": "reference/api/interop-packed-attribute.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/interop/string_encoding.dream",
+    "package": "system.interop",
+    "page": "reference/api/interop-string-encoding.md",
+    "declarations": [
+      {
+        "signature": "public enum StringEncoding",
+        "description": "How a `@c` extern exchanges `string` with C.",
+        "line": 4,
+        "page": "reference/api/interop-string-encoding.md"
+      },
+      {
+        "signature": "Utf8",
+        "description": "A null-terminated `const char*` of UTF-8.",
+        "line": 6,
+        "page": "reference/api/interop-string-encoding.md"
+      },
+      {
+        "signature": "Utf16",
+        "description": "A null-terminated `const uint16_t*` (`char16_t*` / Windows `LPWSTR`, not `wchar_t`).",
+        "line": 8,
+        "page": "reference/api/interop-string-encoding.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/interop/user_data_attribute.dream",
+    "package": "system.interop",
+    "page": "reference/api/interop-user-data-attribute.md",
+    "declarations": [
+      {
+        "signature": "public struct UserDataAttribute",
+        "description": "Where a `NativeCallback` parameter receives `user_data`. The default is `UserDataPosition.First`.",
+        "line": 5,
+        "page": "reference/api/interop-user-data-attribute.md"
+      },
+      {
+        "signature": "public position: UserDataPosition",
+        "description": "Position of `user_data` among the C arguments.",
+        "line": 7,
+        "page": "reference/api/interop-user-data-attribute.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/interop/user_data_position.dream",
+    "package": "system.interop",
+    "page": "reference/api/interop-user-data-position.md",
+    "declarations": [
+      {
+        "signature": "public enum UserDataPosition",
+        "description": "Where a `NativeCallback` parameter places `user_data` among the C arguments.",
+        "line": 4,
+        "page": "reference/api/interop-user-data-position.md"
+      },
+      {
+        "signature": "First",
+        "description": "`user_data` is the first argument.",
+        "line": 6,
+        "page": "reference/api/interop-user-data-position.md"
+      },
+      {
+        "signature": "Last",
+        "description": "`user_data` is the last argument.",
+        "line": 8,
+        "page": "reference/api/interop-user-data-position.md"
       }
     ]
   },
@@ -16978,12 +17050,6 @@
         "page": "reference/api/owned-c-ptr.md"
       },
       {
-        "signature": "public static extern fun free_with(free: usize, ptr: usize): void",
-        "description": "Releases `ptr` by calling the foreign function at address `free`.",
-        "line": 12,
-        "page": "reference/api/owned-c-ptr.md"
-      },
-      {
         "signature": "public fun get(): CPtr",
         "description": "The pointer, still owned (and later freed) by this object.",
         "line": 15,
@@ -17494,6 +17560,80 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/primitives/sbyte.dream",
+    "package": "system.primitives",
+    "page": "reference/api/primitives-sbyte.md",
+    "declarations": [
+      {
+        "signature": "public fun compare(other: sbyte): int",
+        "description": "Orders this value against `other`.",
+        "line": 6,
+        "page": "reference/api/primitives-sbyte.md"
+      },
+      {
+        "signature": "public fun min(other: sbyte): sbyte",
+        "description": "The smaller of this and `other`.",
+        "line": 17,
+        "page": "reference/api/primitives-sbyte.md"
+      },
+      {
+        "signature": "public fun max(other: sbyte): sbyte",
+        "description": "The larger of this and `other`.",
+        "line": 25,
+        "page": "reference/api/primitives-sbyte.md"
+      },
+      {
+        "signature": "public fun clamp(lo: sbyte, hi: sbyte): sbyte",
+        "description": "This value constrained to the inclusive range [lo, hi].",
+        "line": 33,
+        "page": "reference/api/primitives-sbyte.md"
+      },
+      {
+        "signature": "public static fun parse(borrow text: string): Result<sbyte, ParseError>",
+        "description": "Parses a signed decimal `sbyte` from `text`.",
+        "line": 44,
+        "page": "reference/api/primitives-sbyte.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/primitives/short.dream",
+    "package": "system.primitives",
+    "page": "reference/api/primitives-short.md",
+    "declarations": [
+      {
+        "signature": "public fun compare(other: short): int",
+        "description": "Orders this value against `other`.",
+        "line": 6,
+        "page": "reference/api/primitives-short.md"
+      },
+      {
+        "signature": "public fun min(other: short): short",
+        "description": "The smaller of this and `other`.",
+        "line": 17,
+        "page": "reference/api/primitives-short.md"
+      },
+      {
+        "signature": "public fun max(other: short): short",
+        "description": "The larger of this and `other`.",
+        "line": 25,
+        "page": "reference/api/primitives-short.md"
+      },
+      {
+        "signature": "public fun clamp(lo: short, hi: short): short",
+        "description": "This value constrained to the inclusive range [lo, hi].",
+        "line": 33,
+        "page": "reference/api/primitives-short.md"
+      },
+      {
+        "signature": "public static fun parse(borrow text: string): Result<short, ParseError>",
+        "description": "Parses a signed decimal `short` from `text`.",
+        "line": 44,
+        "page": "reference/api/primitives-short.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/primitives/uint.dream",
     "package": "system.primitives",
     "page": "reference/api/primitives-uint.md",
@@ -17564,6 +17704,43 @@
         "description": "Parses an unsigned decimal integer from `text`.",
         "line": 44,
         "page": "reference/api/primitives-ulong.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/primitives/ushort.dream",
+    "package": "system.primitives",
+    "page": "reference/api/primitives-ushort.md",
+    "declarations": [
+      {
+        "signature": "public fun compare(other: ushort): int",
+        "description": "Orders this value against `other`.",
+        "line": 6,
+        "page": "reference/api/primitives-ushort.md"
+      },
+      {
+        "signature": "public fun min(other: ushort): ushort",
+        "description": "The smaller of this and `other`.",
+        "line": 17,
+        "page": "reference/api/primitives-ushort.md"
+      },
+      {
+        "signature": "public fun max(other: ushort): ushort",
+        "description": "The larger of this and `other`.",
+        "line": 25,
+        "page": "reference/api/primitives-ushort.md"
+      },
+      {
+        "signature": "public fun clamp(lo: ushort, hi: ushort): ushort",
+        "description": "This value constrained to the inclusive range [lo, hi].",
+        "line": 33,
+        "page": "reference/api/primitives-ushort.md"
+      },
+      {
+        "signature": "public static fun parse(borrow text: string): Result<ushort, ParseError>",
+        "description": "Parses an unsigned decimal `ushort` from `text`.",
+        "line": 44,
+        "page": "reference/api/primitives-ushort.md"
       }
     ]
   },

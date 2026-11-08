@@ -63,3 +63,16 @@ void dream_callback_release(dream_ptr object) {
     dream_callback_check(object);
     dream_release_object(object);
 }
+
+static int wasm_owner;
+
+void *dream_current_owner(void) {
+    return &wasm_owner;
+}
+
+void dream_post(void *owner, void (*fn)(void *), void *ud) {
+    (void)owner;
+    if (fn) {
+        fn(ud);
+    }
+}

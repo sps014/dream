@@ -1,4 +1,4 @@
-//! The `@c` family: C ABI bindings, calling conventions, marshaling and packing.
+//! The `@c` family: C ABI bindings, string encoding, and packing.
 
 use super::*;
 
@@ -26,21 +26,47 @@ pub fn has_packed_attr(attributes: &[AttributeNode]) -> bool {
         .any(|a| is_compiler_attribute(a, "packed"))
 }
 
+/// How a `@c` extern exchanges `string`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MarshalKind {
-    LpStr,
-    LpWStr,
-    UserDataLast,
+pub enum StringEncoding {
+    /// A null-terminated `const char*` of UTF-8.
+    Utf8,
+    /// A null-terminated `const uint16_t*` (`char16_t*` / `LPWSTR`, not `wchar_t`).
+    Utf16,
 }
 
-pub fn marshal_kind(attributes: &[AttributeNode]) -> Option<MarshalKind> {
-    let attr = attributes
+/// Where a `NativeCallback` parameter places `user_data`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UserDataPosition {
+    /// `user_data` is the first C argument.
+    First,
+    /// `user_data` is the last C argument.
+    Last,
+}
+
+/// The `@marshal` encoding. An extern without the attribute uses UTF-8.
+#[must_use]
+pub fn string_encoding(attributes: &[AttributeNode]) -> StringEncoding {
+    match attributes
         .iter()
-        .find(|a| is_compiler_attribute(a, "marshal"))?;
-    match enum_member(attr)? {
-        "LpStr" => Some(MarshalKind::LpStr),
-        "LpWStr" => Some(MarshalKind::LpWStr),
-        "UserDataLast" => Some(MarshalKind::UserDataLast),
+        .find(|a| is_compiler_attribute(a, "marshal"))
+        .and_then(enum_member)
+    {
+        Some("Utf16") => StringEncoding::Utf16,
+        _ => StringEncoding::Utf8,
+    }
+}
+
+/// The `@user_data` position, when the parameter declares one.
+#[must_use]
+pub fn user_data_position(attributes: &[AttributeNode]) -> Option<UserDataPosition> {
+    match attributes
+        .iter()
+        .find(|a| is_compiler_attribute(a, "user_data"))
+        .and_then(enum_member)?
+    {
+        "Last" => Some(UserDataPosition::Last),
+        "First" => Some(UserDataPosition::First),
         _ => None,
     }
 }
@@ -52,43 +78,13 @@ fn enum_member(attr: &AttributeNode) -> Option<&str> {
     Some(&path.last()?.text)
 }
 
-/// A `@c_call` calling convention.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CCallConv {
-    Cdecl,
-    Stdcall,
-}
-
-impl CCallConv {
-    fn parse(name: &str) -> Option<Self> {
-        match name {
-            "Cdecl" => Some(CCallConv::Cdecl),
-            "Stdcall" => Some(CCallConv::Stdcall),
-            _ => None,
-        }
-    }
-}
-
-/// The extern's `@c_call` convention (cdecl when absent or invalid; validation reports the latter).
-pub fn c_call_conv(attributes: &[AttributeNode]) -> CCallConv {
-    attributes
-        .iter()
-        .find(|a| is_compiler_attribute(a, "c_call"))
-        .and_then(enum_member)
-        .and_then(CCallConv::parse)
-        .unwrap_or(CCallConv::Cdecl)
-}
-
 /// Reports `@c`-family placement errors on one extern's attribute list:
 /// - `@c` combined with `@js` / `@runtime` / `@intrinsic` (incompatible binding hosts),
 /// - `@runtime` combined with `@js` / `@c` / `@intrinsic`,
-/// - `@marshal(...)` without `@c` (only meaningful for the C ABI),
-/// - `@c_call(...)` without `@c` (ditto),
-/// - `@c_call` naming a convention other than `"cdecl"` / `"stdcall"`.
+/// - `@marshal(...)` without `@c` (only meaningful for the C ABI).
 ///
 /// Call after generic attribute shape validation.
 pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut DiagnosticBag) {
-    validate_marshal_context(attrs, false, diagnostics);
     if extern_binding_conflict(attrs) {
         let pos = attrs
             .iter()
@@ -110,31 +106,26 @@ pub fn validate_c_extern_attrs(attrs: &[AttributeNode], diagnostics: &mut Diagno
             pos,
         );
     }
-    if !has_c_attr(attrs) {
-        for name in ["marshal", "c_call"] {
-            if let Some(attr) = attrs.iter().find(|a| is_compiler_attribute(a, name)) {
-                diagnostics.report_error(
-                    format!("'@{name}' requires '@c' on the same extern (it only applies to C ABI imports)"),
-                    Some(attr.name.position),
-                );
-            }
-        }
+    if !has_c_attr(attrs)
+        && let Some(attr) = attrs.iter().find(|a| is_compiler_attribute(a, "marshal"))
+    {
+        diagnostics.report_error(
+            "'@marshal' requires '@c' on the same extern (it only applies to C ABI imports)"
+                .to_string(),
+            Some(attr.name.position),
+        );
     }
 }
 
-pub fn validate_marshal_context(
-    attrs: &[AttributeNode],
-    parameter: bool,
-    diagnostics: &mut DiagnosticBag,
-) {
-    if let Some(attr) = attrs.iter().find(|a| is_compiler_attribute(a, "marshal")) {
-        let valid = match marshal_kind(attrs) {
-            Some(MarshalKind::UserDataLast) => parameter,
-            Some(MarshalKind::LpStr | MarshalKind::LpWStr) => !parameter,
-            None => true,
-        };
-        if !valid {
-            diagnostics.report_error("marshaling choice does not apply here: use LpStr/LpWStr on C externs or UserDataLast on NativeCallback parameters".to_string(), Some(attr.name.position));
-        }
+/// `@user_data` names a known position. Placement on a parameter is the attribute's target.
+pub fn validate_user_data(attrs: &[AttributeNode], diagnostics: &mut DiagnosticBag) {
+    let Some(attr) = attrs.iter().find(|a| is_compiler_attribute(a, "user_data")) else {
+        return;
+    };
+    if !matches!(enum_member(attr), Some("First" | "Last")) {
+        diagnostics.report_error(
+            "'@user_data' must be `UserDataPosition.First` or `UserDataPosition.Last`".to_string(),
+            Some(attr.name.position),
+        );
     }
 }

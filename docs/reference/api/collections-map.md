@@ -46,7 +46,7 @@ public get capacity(): int
 
 ## `this`
 
-The first probe hits an empty or matching slot on the usual insert. That case stays in the caller; collisions fall through to the full probe.
+The first probe hits an empty or matching entry on the usual insert. That case stays in the caller; collisions fall through to the full probe.
 
 ```dream
 public fun this[key: K] = value: V

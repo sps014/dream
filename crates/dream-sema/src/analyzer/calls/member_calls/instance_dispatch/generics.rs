@@ -193,6 +193,13 @@ impl<'a> Analyzer<'a> {
         };
 
         self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_c_fun_args(
+            store_sig.identity.0,
+            params,
+            1,
+            ctx.symbol_table,
+            diagnostics,
+        );
         self.check_runtime_call(
             &format!("{}.{}", struct_name, method.text),
             store_sig.runtime_support,

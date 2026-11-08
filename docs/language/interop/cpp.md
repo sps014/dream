@@ -98,13 +98,14 @@ extern fun greet(who: string): string;
 - **Default arguments.** Declare fewer parameters and C++ fills in the rest. Dream-side defaults
   and variadics are rejected.
 - `@cpp` members cannot be generic, `async`, operators, indexers, or accessors. Bind a named C++
-  function instead.
+  function instead. Async C calls use `@c`, not `@cpp`.
 
 ### Bridgeable types
 
 | Dream | C++ |
 |-------|-----|
-| numbers, `bool`, `char`, `byte` | the matching arithmetic type |
+| numbers, `bool`, `char`, `byte`, `sbyte`, `short`, `ushort` | the matching arithmetic type |
+| `isize`, `usize` | `std::ptrdiff_t`, `std::size_t` |
 | `string` | `std::string`, `const std::string&`, `std::string_view`, `const char*` |
 | `Option<string>` | `std::optional<std::string>`, or a nullable `const char*` |
 | `CPtr`, `Option<CPtr>` | any pointer |

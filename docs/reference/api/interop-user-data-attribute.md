@@ -1,29 +1,21 @@
-# CCallConv
+# UserDataAttribute
 
 **Import:** `import system.interop;`
 
 Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `CCallConv`
+## `UserDataAttribute`
 
-Calling convention for C imports.
+Where a `NativeCallback` parameter receives `user_data`. The default is `UserDataPosition.First`.
 
 ```dream
-public enum CCallConv
+public struct UserDataAttribute
 ```
 
-## `Cdecl`
+## `position`
 
-The platform default C calling convention.
-
-```dream
-Cdecl
-```
-
-## `Stdcall`
-
-The stdcall convention on 32-bit Windows; equivalent to the default convention on other targets.
+Position of `user_data` among the C arguments.
 
 ```dream
-Stdcall
+public position: UserDataPosition
 ```

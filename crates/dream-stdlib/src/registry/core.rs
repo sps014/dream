@@ -86,10 +86,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/consuming_attribute.dream"),
         ),
         (
-            "<std>/system/core/owned_attribute.dream",
-            include_str!("../system/core/owned_attribute.dream"),
-        ),
-        (
             "<std>/system/core/js_attribute.dream",
             include_str!("../system/core/js_attribute.dream"),
         ),

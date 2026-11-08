@@ -402,11 +402,82 @@ dream_ptr string_from_utf8_prefix_n(dream_ptr bytes, int32_t len, int32_t scalar
     return p;
 }
 
+dream_ptr dream_utf16z_to_string(const uint16_t *s) {
+    int32_t n = 0;
+    dream_ptr p;
+    if (!s) {
+        return dream_string_alloc(0);
+    }
+    while (s[n] != 0) {
+        n++;
+    }
+    p = dream_string_alloc(n);
+    if (n > 0) {
+        memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, s, (size_t)n * sizeof(uint16_t));
+    }
+    return p;
+}
+
 dream_ptr dream_utf8_to_string(const char *s) {
     if (!s) {
         return dream_string_alloc(0);
     }
     return utf8_to_utf16((const uint8_t *)s, (int32_t)strlen(s));
+}
+
+void *dream_bytes_new(int32_t len) {
+    return DREAM_TO_PUBLIC(dream_array_new(len, 1));
+}
+
+void *dream_scalar_array_new(int32_t element_size, int32_t len) {
+    if (element_size < 1) {
+        element_size = 1;
+    }
+    return DREAM_TO_PUBLIC(dream_array_new(len, element_size));
+}
+
+void *dream_array_data(void *array) {
+    if (!array) {
+        return NULL;
+    }
+    return dream_array_bytes(DREAM_FROM_PUBLIC(array));
+}
+
+void *dream_string_from_utf8(const char *bytes, size_t len) {
+    if (!bytes || len == 0) {
+        return DREAM_TO_PUBLIC(dream_string_alloc(0));
+    }
+    if (len > (size_t)INT32_MAX) {
+        DREAM_PANIC_LITERAL(u"panic: UTF-8 text is too long for a Dream string");
+    }
+    return DREAM_TO_PUBLIC(utf8_to_utf16((const uint8_t *)bytes, (int32_t)len));
+}
+
+void *dream_string_from_utf16(const uint16_t *units, size_t len) {
+    dream_ptr p;
+    if (!units || len == 0) {
+        return DREAM_TO_PUBLIC(dream_string_alloc(0));
+    }
+    if (len > (size_t)INT32_MAX) {
+        DREAM_PANIC_LITERAL(u"panic: UTF-16 text is too long for a Dream string");
+    }
+    p = dream_string_alloc((int32_t)len);
+    memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, units, len * sizeof(uint16_t));
+    return DREAM_TO_PUBLIC(p);
+}
+
+const uint16_t *dream_string_units(void *s) {
+    if (!s) {
+        return NULL;
+    }
+    return dream_str_units(DREAM_FROM_PUBLIC(s));
+}
+
+int32_t dream_string_length(void *s) {
+    if (!s) {
+        return 0;
+    }
+    return dream_str_len(DREAM_FROM_PUBLIC(s));
 }
 
 char *dream_string_to_utf8(dream_ptr s) {

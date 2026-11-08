@@ -4,6 +4,9 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 
 - [Bool](primitives-bool.md)
 - [Byte](primitives-byte.md)
+- [SByte](primitives-sbyte.md)
+- [Short](primitives-short.md)
+- [UShort](primitives-ushort.md)
 - [Char](primitives-char.md)
 - [Double](primitives-double.md)
 - [Float](primitives-float.md)

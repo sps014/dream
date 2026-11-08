@@ -113,5 +113,10 @@ past a call) and `dream_set_panic_hook` (see [Panics](../rules/panics.md#embeddi
 | `dream_retain(ref)` | Keep a Dream reference alive after the call that handed it to C returns |
 | `dream_release(ref)` | Drop a reference previously kept with `dream_retain` |
 | `dream_set_panic_hook(hook)` | Run your own handler when the Dream program panics |
+| `dream_callback_release(callback)` | Release a `NativeCallback` from any thread |
+| `dream_bytes_new` / `dream_string_from_utf8` | Build a Dream array or string to return from C |
+| `dream_post(owner, fn, data)` | Run `fn(data)` on a Dream thread |
 
 Release a callback on the thread that owns it. Join C or C++ users and release their handles before that owner exits. A callback that outlives its owner is an error.
+
+`dream_embed_abi_version()` is 1. Check it before using the header. Details of strings, arrays, and async calls are in [C interop](c.md).

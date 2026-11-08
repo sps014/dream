@@ -15,8 +15,8 @@ use crate::driver::project_manifest::{NativeTable, ProjectManifest, import_segme
 use crate::driver::source_loader::{ProgramAccumulator, find_dream_packages_dir};
 use dream_abi::project::{MANIFEST_FILE_NAME, find_project_root};
 
-pub const C_EXTENSIONS: [&str; 1] = ["c"];
-pub const CXX_EXTENSIONS: [&str; 3] = ["cpp", "cc", "cxx"];
+pub const C_EXTENSIONS: [&str; 2] = ["c", "m"];
+pub const CXX_EXTENSIONS: [&str; 4] = ["cpp", "cc", "cxx", "mm"];
 pub const WASM_C_LIBRARIES: &[&str] = &["c", "m"];
 
 /// One resolved set, with absolute paths, ready to compile on this host.
@@ -31,6 +31,8 @@ pub struct NativeSet {
     pub cflags: Vec<String>,
     pub frameworks: Vec<String>,
     pub libs: Vec<String>,
+    /// Release builds llvm-link this set. `false` keeps the compiled objects.
+    pub lto: bool,
 }
 
 impl NativeSet {
@@ -181,6 +183,7 @@ fn sets_for_package(
         include.push(native_dir.clone());
         let set = build_set(root, name, sources, include, &extra)?;
         if !set.sources.is_empty() {
+            reject_objc(target, &set)?;
             out.push(set);
         }
     }
@@ -190,12 +193,8 @@ fn sets_for_package(
         }
         let table = spec.for_target(target);
         let set = build_set(root, name, Vec::new(), Vec::new(), &table)?;
-        if set.sources.is_empty() {
-            return Err(format!(
-                "[native.{name}] in {} has no C/C++ sources on this host (add `sources = [...]`)",
-                root.join(MANIFEST_FILE_NAME).display()
-            ));
-        }
+        reject_objc(target, &set)?;
+        // An empty set is kept. It is an error only when something binds to it.
         out.push(set);
     }
     Ok(out)
@@ -208,6 +207,13 @@ fn build_set(
     mut include: Vec<PathBuf>,
     table: &NativeTable,
 ) -> Result<NativeSet, String> {
+    for rel in table.sources.iter().chain(&table.include) {
+        if Path::new(rel).is_absolute() || rel.split(['/', '\\']).any(|part| part == "..") {
+            return Err(format!(
+                "[native.{name}] path '{rel}' must stay inside the package"
+            ));
+        }
+    }
     for rel in &table.sources {
         let path = root.join(rel);
         if path.is_dir() {
@@ -226,6 +232,14 @@ fn build_set(
     }
     let mut seen = BTreeSet::new();
     sources.retain(|s| seen.insert(canonical(s)));
+    sources.retain(|s| {
+        let rel = s.strip_prefix(root).unwrap_or(s);
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        !table
+            .exclude
+            .iter()
+            .any(|pattern| glob_match(pattern, &rel))
+    });
     sources.sort();
     Ok(NativeSet {
         name: name.to_string(),
@@ -236,7 +250,76 @@ fn build_set(
         cflags: table.cflags.clone(),
         frameworks: table.frameworks.clone(),
         libs: table.libs.clone(),
+        lto: table.lto.unwrap_or(true),
     })
+}
+
+fn reject_objc(target: &dream_abi::target::TargetSpec, set: &NativeSet) -> Result<(), String> {
+    if target.is_apple() {
+        return Ok(());
+    }
+    if let Some(src) = set
+        .sources
+        .iter()
+        .find(|s| matches!(s.extension().and_then(|e| e.to_str()), Some("m" | "mm")))
+    {
+        return Err(format!(
+            "native set '{}' includes Objective-C source '{}', which compiles only for Apple targets",
+            set.name,
+            src.display()
+        ));
+    }
+    Ok(())
+}
+
+/// `pattern` is package-relative. `*` stays inside one path segment; `**` crosses separators.
+fn glob_match(pattern: &str, path: &str) -> bool {
+    fn rec(pattern: &[u8], path: &[u8]) -> bool {
+        if pattern.is_empty() {
+            return path.is_empty();
+        }
+        if pattern.starts_with(b"**") {
+            let rest = if pattern.len() > 2 && pattern[2] == b'/' {
+                &pattern[3..]
+            } else {
+                &pattern[2..]
+            };
+            if rec(rest, path) {
+                return true;
+            }
+            for (i, _) in path.iter().enumerate() {
+                if rec(rest, &path[i + 1..]) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if pattern[0] == b'*' {
+            let rest = &pattern[1..];
+            let mut i = 0;
+            loop {
+                if rec(rest, &path[i..]) {
+                    return true;
+                }
+                if i == path.len() || path[i] == b'/' {
+                    break;
+                }
+                i += 1;
+            }
+            return false;
+        }
+        if path.is_empty() {
+            return false;
+        }
+        if (pattern[0] == b'?' && path[0] != b'/') || pattern[0] == path[0] {
+            return rec(&pattern[1..], &path[1..]);
+        }
+        false
+    }
+    rec(
+        pattern.replace('\\', "/").as_bytes(),
+        path.replace('\\', "/").as_bytes(),
+    )
 }
 
 fn walk_sources(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -380,10 +463,22 @@ mod tests {
         let root = temp_root("empty");
         write(
             &root.join("dream.toml"),
+            "[package]\nname = \"x\"\n\n[native.extra]\ncflags = [\"-Wall\"]\n",
+        );
+        let graph = load(&root).unwrap();
+        assert!(graph.sets.get("extra").unwrap().sources.is_empty());
+        write(
+            &root.join("dream.toml"),
             "[package]\nname = \"x\"\n\n[native.extra]\ncflags = [\"-O2\"]\n",
         );
         let err = load(&root).unwrap_err();
-        assert!(err.contains("has no C/C++ sources"), "{}", err);
+        assert!(err.contains("cannot override"), "{}", err);
+        write(
+            &root.join("dream.toml"),
+            "[package]\nname = \"x\"\n\n[native.bad]\nsources = [\"../outside.c\"]\n",
+        );
+        let err = load(&root).unwrap_err();
+        assert!(err.contains("must stay inside"), "{}", err);
         write(
             &root.join("dream.toml"),
             "[package]\nname = \"x\"\n\n[native.extra]\nsources = [\"missing.c\"]\n",

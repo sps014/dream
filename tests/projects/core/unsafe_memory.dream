@@ -145,6 +145,27 @@ fun arena(): void {
 @test
 @timeout(180000)
 fun ffi_null_reads(): void {
-    Assert.is_true(Ffi.read_ptr(CPtr.null(), 0).is_null());
     Assert.is_true(Ffi.read_cstring(CPtr.null()).is_none());
+    Assert.is_true(Ffi.read_cstring(CPtr.null(), 4).is_none());
+}
+
+@unsafe
+@test
+@timeout(180000)
+fun ffi_round_trip(): void {
+    let buf = RawPtr<byte>.alloc(32);
+    let p = CPtr(buf.address());
+    Ffi.write_int(p, 0, -7);
+    Assert.eq(Ffi.read_int(p, 0), -7);
+    Ffi.write_uint(p, 1, (uint)3);
+    Assert.eq(Ffi.read_uint(p, 1), (uint)3);
+    Ffi.write_byte(p, 8, (byte)104);
+    Ffi.write_byte(p, 9, (byte)105);
+    Ffi.write_byte(p, 10, (byte)0);
+    let text = Ffi.read_cstring(CPtr(buf.address() + (usize)8));
+    Assert.eq(text.unwrap(), "hi");
+    Assert.eq(Ffi.read_cstring(CPtr(buf.address() + (usize)8), 1).unwrap(), "h");
+    let copied = Ffi.read_bytes(p, 11);
+    Assert.eq((int)copied[8], 104);
+    buf.free();
 }

@@ -79,7 +79,12 @@ impl<'a> Analyzer<'a> {
         };
         let (target_prim, expr_prim) = (prim(target_id), prim(expr_id));
         let numeric = |p: Option<PrimTy>| p.is_some_and(PrimTy::is_numeric);
-        let code_unit = |p: Option<PrimTy>| matches!(p, Some(PrimTy::Int | PrimTy::Byte));
+        let code_unit = |p: Option<PrimTy>| {
+            matches!(
+                p,
+                Some(PrimTy::Int | PrimTy::Byte | PrimTy::SByte | PrimTy::Short | PrimTy::UShort)
+            )
+        };
         let is_char = |p: Option<PrimTy>| p == Some(PrimTy::Char);
 
         if target_id == expr_id

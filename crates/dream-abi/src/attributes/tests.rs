@@ -211,7 +211,7 @@ fn c_with_web_or_node_restricts_runtime_availability() {
 fn marshal_without_c_is_rejected() {
     // `@marshal` only affects `@c` externs — attaching it to a plain (or `@js`) extern is a
     // no-op and probably a bug, so the validator flags it.
-    let attrs = &[attr("marshal", &["MarshalKind.LpWStr"])];
+    let attrs = &[attr("marshal", &["StringEncoding.Utf16"])];
     let mut diagnostics = DiagnosticBag::new(None);
     validate_attributes(attrs, AttributeTarget::ExternFunction, &mut diagnostics);
     validate_c_extern_attrs(attrs, &mut diagnostics);
@@ -219,48 +219,15 @@ fn marshal_without_c_is_rejected() {
 }
 
 #[test]
-fn c_call_without_c_is_rejected() {
-    let attrs = &[attr("c_call", &["CCallConv.Stdcall"])];
-    let mut diagnostics = DiagnosticBag::new(None);
-    validate_attributes(attrs, AttributeTarget::ExternFunction, &mut diagnostics);
-    validate_c_extern_attrs(attrs, &mut diagnostics);
-    assert!(diagnostics.has_errors());
-}
-
-#[test]
-fn c_with_marshal_and_cdecl_is_accepted() {
+fn c_with_utf16_is_accepted() {
     let attrs = &[
         attr("c", &["\"user32\"", "\"MessageBoxW\""]),
-        attr("marshal", &["MarshalKind.LpWStr"]),
-        attr("c_call", &["CCallConv.Cdecl"]),
+        attr("marshal", &["StringEncoding.Utf16"]),
     ];
     let mut diagnostics = DiagnosticBag::new(None);
     validate_c_extern_attrs(attrs, &mut diagnostics);
     assert!(!diagnostics.has_errors());
-}
-
-#[test]
-fn c_call_stdcall_is_accepted() {
-    let attrs = &[
-        attr("c", &["\"user32\"", "\"MessageBoxW\""]),
-        attr("c_call", &["CCallConv.Stdcall"]),
-    ];
-    let mut diagnostics = DiagnosticBag::new(None);
-    validate_c_extern_attrs(attrs, &mut diagnostics);
-    assert!(!diagnostics.has_errors());
-    assert_eq!(c_call_conv(attrs), CCallConv::Stdcall);
-}
-
-#[test]
-fn c_call_unknown_convention_is_rejected() {
-    let attrs = &[
-        attr("c", &["\"user32\"", "\"MessageBoxW\""]),
-        attr("c_call", &["CCallConv.Fastcall"]),
-    ];
-    let mut diagnostics = DiagnosticBag::new(None);
-    validate_attributes(attrs, AttributeTarget::ExternFunction, &mut diagnostics);
-    validate_c_extern_attrs(attrs, &mut diagnostics);
-    assert!(diagnostics.has_errors());
+    assert_eq!(string_encoding(attrs), StringEncoding::Utf16);
 }
 
 fn catalog() -> &'static UserAttributes {
@@ -321,8 +288,8 @@ fn catalog() -> &'static UserAttributes {
                 include_str!("../../../dream-stdlib/src/system/core/consuming_attribute.dream"),
             ),
             (
-                "system.core",
-                include_str!("../../../dream-stdlib/src/system/core/owned_attribute.dream"),
+                "system.interop",
+                include_str!("../../../dream-stdlib/src/system/interop/owned_attribute.dream"),
             ),
             (
                 "system.core",
@@ -354,11 +321,11 @@ fn catalog() -> &'static UserAttributes {
             ),
             (
                 "system.interop",
-                include_str!("../../../dream-stdlib/src/system/interop/c_call_conv.dream"),
+                include_str!("../../../dream-stdlib/src/system/interop/string_encoding.dream"),
             ),
             (
                 "system.interop",
-                include_str!("../../../dream-stdlib/src/system/interop/marshal_kind.dream"),
+                include_str!("../../../dream-stdlib/src/system/interop/user_data_position.dream"),
             ),
             (
                 "system.interop",
@@ -366,11 +333,11 @@ fn catalog() -> &'static UserAttributes {
             ),
             (
                 "system.interop",
-                include_str!("../../../dream-stdlib/src/system/interop/c_call_attribute.dream"),
+                include_str!("../../../dream-stdlib/src/system/interop/marshal_attribute.dream"),
             ),
             (
                 "system.interop",
-                include_str!("../../../dream-stdlib/src/system/interop/marshal_attribute.dream"),
+                include_str!("../../../dream-stdlib/src/system/interop/user_data_attribute.dream"),
             ),
             (
                 "system.interop",
@@ -434,10 +401,10 @@ fn validate_attributes(
 
 #[test]
 fn closed_choices_reject_strings_and_wrong_enum_owners() {
-    for value in ["\"cdecl\"", "Other.Cdecl", "CCallConv.Unknown"] {
+    for value in ["\"utf8\"", "Other.Utf8", "StringEncoding.Unknown"] {
         let mut diagnostics = DiagnosticBag::new(None);
         validate_attributes(
-            &[attr("c_call", &[value])],
+            &[attr("marshal", &[value])],
             AttributeTarget::ExternFunction,
             &mut diagnostics,
         );
@@ -565,18 +532,29 @@ fn specialization_requires_its_import() {
 }
 
 #[test]
-fn marshaling_choices_are_context_specific() {
-    for (member, parameter, accepted) in [
-        ("MarshalKind.LpStr", false, true),
-        ("MarshalKind.LpWStr", false, true),
-        ("MarshalKind.UserDataLast", true, true),
-        ("MarshalKind.LpWStr", true, false),
-        ("MarshalKind.UserDataLast", false, false),
-    ] {
-        let mut diagnostics = DiagnosticBag::new(None);
-        validate_marshal_context(&[attr("marshal", &[member])], parameter, &mut diagnostics);
-        assert_eq!(!diagnostics.has_errors(), accepted, "{member}");
-    }
+fn string_encoding_and_user_data_are_separate() {
+    assert_eq!(
+        string_encoding(&[attr("marshal", &["StringEncoding.Utf8"])]),
+        StringEncoding::Utf8
+    );
+    assert_eq!(
+        user_data_position(&[attr("user_data", &["UserDataPosition.Last"])]),
+        Some(UserDataPosition::Last)
+    );
+    let mut diagnostics = DiagnosticBag::new(None);
+    validate_attributes(
+        &[attr("marshal", &["StringEncoding.Utf16"])],
+        AttributeTarget::Parameter,
+        &mut diagnostics,
+    );
+    assert!(diagnostics.has_errors());
+    let mut diagnostics = DiagnosticBag::new(None);
+    validate_attributes(
+        &[attr("user_data", &["UserDataPosition.Last"])],
+        AttributeTarget::ExternFunction,
+        &mut diagnostics,
+    );
+    assert!(diagnostics.has_errors());
 }
 
 #[test]

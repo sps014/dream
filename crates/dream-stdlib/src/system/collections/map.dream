@@ -190,7 +190,7 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
         }
     }
 
-    /// The first probe hits an empty or matching slot on the usual insert. That case stays in the
+    /// The first probe hits an empty or matching entry on the usual insert. That case stays in the
     /// caller; collisions fall through to the full probe.
     @inline
     public fun this[key: K] = value: V {

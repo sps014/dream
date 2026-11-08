@@ -6,9 +6,9 @@ use std::rc::Rc;
 
 use dream_abi::attributes::{
     ALLOW_CYCLE, AttributeTarget, OwnedResult, allows_cycle, cpp_attr, cpp_header, cpp_member_name,
-    cpp_target_name, has_packed_attr, owned_result, validate_attributes,
+    cpp_target_name, has_named_attr, has_packed_attr, owned_result, validate_attributes,
 };
-use dream_abi::c_abi::cpp_shim_symbol;
+use dream_abi::c_abi::{cpp_shim_symbol, is_cpp_id_expr};
 use dream_diagnostics::DiagnosticBag;
 use dream_syntax::nodes::{AttributeNode, FunctionNode, StructDeclarationNode, Type, Visibility};
 use dream_syntax::token::syntax_token::SyntaxToken;
@@ -40,7 +40,9 @@ pub(super) struct Member {
     pub ret_dream: String,
     /// `@owned`: a returned `T*` transfers ownership.
     pub owned: bool,
-    pub internal: bool,
+    pub visibility: Visibility,
+    /// `@native` / `@node` / `@web` copied onto the generated member, each already suffixed with a space.
+    pub hosts: String,
     pub line: usize,
     pub at: TextSpan,
 }
@@ -50,7 +52,7 @@ pub(super) struct Class {
     pub allow_cycle: bool,
     pub name: String,
     pub cpp: String,
-    pub public: bool,
+    pub visibility: Visibility,
     pub line: usize,
     pub at: TextSpan,
     pub delete_symbol: String,
@@ -200,10 +202,38 @@ pub(super) fn collect(
                     .structs
                     .push((file, st));
             }
-        } else if let Some(class) = class(&cx.program.known, &set, s, diagnostics) {
+        } else if let Some(class) = class(
+            &cx.program.known,
+            &set,
+            s,
+            no_exceptions(cx.graph, &set),
+            diagnostics,
+        ) {
             file_decls(&mut cx.program, &set, s.file_path.as_ref())
                 .classes
                 .push(class);
+        }
+    }
+    let cpp_values: Vec<String> = acc
+        .all_structs
+        .iter()
+        .filter(|s| s.is_value && cpp_attr(&s.attributes).is_some())
+        .map(|s| s.name.text.clone())
+        .collect();
+    for ext in &acc.all_extends {
+        if !cpp_values.iter().any(|name| name == &ext.target.text) {
+            continue;
+        }
+        for method in &ext.methods {
+            report(
+                diagnostics,
+                ext.file_path.as_ref(),
+                format!(
+                    "`@cpp` value struct '{}' cannot gain methods through `extend`; it is a C layout",
+                    ext.target.text
+                ),
+                &method.name,
+            );
         }
     }
     let mut free_overloads: BTreeMap<(String, String), usize> = BTreeMap::new();
@@ -221,10 +251,27 @@ pub(super) fn collect(
             .or_insert(0);
         let overload = *n;
         *n += 1;
+        if cpp_member_name(&f.attributes).is_some() {
+            report(
+                diagnostics,
+                file,
+                "`@cpp_name` applies only to members; pass the C++ name as the second `@cpp` argument"
+                    .to_string(),
+                &f.name,
+            );
+        }
         let cpp = cpp_target_name(&f.attributes)
-            .or_else(|| cpp_member_name(&f.attributes))
             .map(str::to_string)
             .unwrap_or_else(|| f.name.text.clone());
+        if !is_cpp_id_expr(&cpp) {
+            report(
+                diagnostics,
+                file,
+                format!("`@cpp` name '{cpp}' is not a C++ id-expression"),
+                &f.name,
+            );
+            continue;
+        }
         if let Some(m) = member(
             &cx.program.known,
             &set,
@@ -233,6 +280,7 @@ pub(super) fn collect(
             MemberKind::Free,
             cpp,
             overload,
+            no_exceptions(cx.graph, &set),
             diagnostics,
         ) {
             file_decls(&mut cx.program, &set, f.file_path.as_ref())
@@ -269,8 +317,33 @@ fn value_struct(s: &StructDeclarationNode<'_>, diagnostics: &mut DiagnosticBag) 
     let file = s.file_path.as_ref();
     let mut fields = Vec::with_capacity(s.fields.len());
     let mut ok = true;
+    for m in &s.methods {
+        report(
+            diagnostics,
+            file,
+            format!(
+                "`@cpp` value struct '{}' cannot declare methods; it is a C layout, not a class",
+                s.name.text
+            ),
+            &m.name,
+        );
+        ok = false;
+    }
     for f in &s.fields {
         match scalar_of(&f.field_type) {
+            Some(sc @ (CScalar::ISize | CScalar::USize)) => {
+                report(
+                    diagnostics,
+                    file,
+                    format!(
+                        "`@cpp` struct field '{}' cannot be `{}`; use it as a parameter or result",
+                        f.name.text,
+                        sc.prim().name()
+                    ),
+                    &f.name,
+                );
+                ok = false;
+            }
             Some(sc) => fields.push((f.name.text.clone(), sc)),
             None => {
                 report(
@@ -286,9 +359,19 @@ fn value_struct(s: &StructDeclarationNode<'_>, diagnostics: &mut DiagnosticBag) 
             }
         }
     }
+    let cpp = cpp_target_name(&s.attributes).map_or_else(|| s.name.text.clone(), str::to_string);
+    if !is_cpp_id_expr(&cpp) {
+        report(
+            diagnostics,
+            file,
+            format!("`@cpp` name '{cpp}' is not a C++ id-expression"),
+            &s.name,
+        );
+        ok = false;
+    }
     ok.then(|| Struct {
         name: s.name.text.clone(),
-        cpp: cpp_target_name(&s.attributes).map_or_else(|| s.name.text.clone(), str::to_string),
+        cpp,
         line: s.name.position.line_no,
         packed: has_packed_attr(&s.attributes),
         fields,
@@ -307,10 +390,25 @@ fn class(
     known: &Known,
     set: &str,
     s: &StructDeclarationNode<'_>,
+    exceptions_off: bool,
     diagnostics: &mut DiagnosticBag,
 ) -> Option<Class> {
     let file = s.file_path.as_ref();
     let name = s.name.text.clone();
+    let class_cpp = known
+        .classes
+        .get(&name)
+        .cloned()
+        .unwrap_or_else(|| name.clone());
+    if !is_cpp_id_expr(&class_cpp) {
+        report(
+            diagnostics,
+            file,
+            format!("`@cpp` name '{class_cpp}' is not a C++ id-expression"),
+            &s.name,
+        );
+        return None;
+    }
     if s.generic_parameters.is_some() {
         report(
             diagnostics,
@@ -364,19 +462,35 @@ fn class(
         *n += 1;
         let cpp =
             cpp_member_name(&m.attributes).map_or_else(|| m.name.text.clone(), str::to_string);
-        match member(known, set, &name, m, kind, cpp, overload, diagnostics) {
+        if !is_cpp_id_expr(&cpp) {
+            report(
+                diagnostics,
+                file,
+                format!("`@cpp` name '{cpp}' is not a C++ id-expression"),
+                &m.name,
+            );
+            ok = false;
+            continue;
+        }
+        match member(
+            known,
+            set,
+            &name,
+            m,
+            kind,
+            cpp,
+            overload,
+            exceptions_off,
+            diagnostics,
+        ) {
             Some(mem) => members.push(mem),
             None => ok = false,
         }
     }
     ok.then(|| Class {
         allow_cycle: allows_cycle(&s.attributes),
-        cpp: known
-            .classes
-            .get(&name)
-            .cloned()
-            .unwrap_or_else(|| name.clone()),
-        public: s.visibility.is_public(),
+        cpp: class_cpp,
+        visibility: s.visibility,
         line: s.name.position.line_no,
         at: s.name.position,
         delete_symbol: cpp_shim_symbol(set, &name, "__delete", 0),
@@ -394,6 +508,7 @@ fn member(
     kind: MemberKind,
     cpp: String,
     overload: usize,
+    exceptions_off: bool,
     diagnostics: &mut DiagnosticBag,
 ) -> Option<Member> {
     let file = f.file_path.as_ref();
@@ -494,6 +609,39 @@ fn member(
         name.as_str()
     };
     let symbol = cpp_shim_symbol(set, class, symbol_member, overload);
+    let borrowed_class = !owned_result(&f.attributes).is_owned()
+        && matches!(
+            ret,
+            Ret::Value(super::types::Bridge::Class { .. })
+                | Ret::Result(super::types::Bridge::Class { .. })
+        );
+    let from_param = params
+        .iter()
+        .any(|p| matches!(p.bridge, super::types::Bridge::Class { .. }));
+    if borrowed_class && (kind != MemberKind::Instance || from_param) {
+        report(
+            diagnostics,
+            file,
+            format!(
+                "`@cpp` member '{name}' returns a borrowed C++ object with no owner to keep \
+                 alive; mark it `@owned` or return `CPtr`"
+            ),
+            &f.name,
+        );
+        return None;
+    }
+    if exceptions_off && matches!(ret, Ret::Result(_) | Ret::Fallible) {
+        report(
+            diagnostics,
+            file,
+            format!(
+                "`@cpp` member '{name}' returns `Result`, but the native set is built with \
+                 `-fno-exceptions`, so a C++ exception cannot become that error"
+            ),
+            &f.name,
+        );
+        return None;
+    }
     ok.then(|| Member {
         kind,
         symbol,
@@ -503,12 +651,34 @@ fn member(
             .map(dream_type)
             .unwrap_or_else(|| "void".to_string()),
         owned: owned_result(&f.attributes).is_owned(),
-        internal: f.visibility == Visibility::Internal,
+        visibility: f.visibility,
+        hosts: host_prefix(&f.attributes),
         line: f.name.position.line_no,
         at: f.name.position,
         name,
         cpp,
         params,
         ret,
+    })
+}
+
+fn host_prefix(attributes: &[AttributeNode]) -> String {
+    let mut out = String::new();
+    for name in ["native", "node", "web"] {
+        if has_named_attr(attributes, name) {
+            out.push('@');
+            out.push_str(name);
+            out.push(' ');
+        }
+    }
+    out
+}
+
+fn no_exceptions(graph: &NativeGraph, set: &str) -> bool {
+    graph.sets.get(set).is_some_and(|set| {
+        set.cflags.iter().any(|flag| {
+            flag.split_whitespace()
+                .any(|part| part == "-fno-exceptions" || part.starts_with("-fno-exceptions="))
+        })
     })
 }

@@ -545,7 +545,9 @@ impl Lowerer<'_> {
     fn is_i32_tostring_ty(&self, ty: TypeId) -> bool {
         matches!(
             self.interner.kind(ty),
-            TyKind::Prim(PrimTy::Int | PrimTy::Byte)
+            TyKind::Prim(
+                PrimTy::Int | PrimTy::Byte | PrimTy::SByte | PrimTy::Short | PrimTy::UShort
+            )
         )
     }
 

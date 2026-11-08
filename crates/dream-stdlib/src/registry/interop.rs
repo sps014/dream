@@ -6,24 +6,28 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/interop/c_call_conv.dream",
-            include_str!("../system/interop/c_call_conv.dream"),
+            "<std>/system/interop/string_encoding.dream",
+            include_str!("../system/interop/string_encoding.dream"),
         ),
         (
-            "<std>/system/interop/marshal_kind.dream",
-            include_str!("../system/interop/marshal_kind.dream"),
+            "<std>/system/interop/user_data_position.dream",
+            include_str!("../system/interop/user_data_position.dream"),
         ),
         (
             "<std>/system/interop/c_attribute.dream",
             include_str!("../system/interop/c_attribute.dream"),
         ),
         (
-            "<std>/system/interop/c_call_attribute.dream",
-            include_str!("../system/interop/c_call_attribute.dream"),
-        ),
-        (
             "<std>/system/interop/marshal_attribute.dream",
             include_str!("../system/interop/marshal_attribute.dream"),
+        ),
+        (
+            "<std>/system/interop/user_data_attribute.dream",
+            include_str!("../system/interop/user_data_attribute.dream"),
+        ),
+        (
+            "<std>/system/interop/owned_attribute.dream",
+            include_str!("../system/interop/owned_attribute.dream"),
         ),
         (
             "<std>/system/interop/packed_attribute.dream",

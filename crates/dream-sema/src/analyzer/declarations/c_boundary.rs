@@ -6,7 +6,9 @@
 
 use super::*;
 use dream_abi::attributes::{OwnedResult, c_import_target, owned_result};
-use dream_abi::c_abi::{C_PTR_TYPE, NATIVE_CALLBACK_TYPE, OWNED_C_PTR_TYPE, is_c_identifier};
+use dream_abi::c_abi::{
+    C_PTR_TYPE, NATIVE_CALLBACK_TYPE, OWNED_C_PTR_TYPE, is_c_identifier, is_link_name,
+};
 use dream_hir::CShape;
 use dream_syntax::nodes::{ConstraintKind, ExpressionNode, FunctionNode, ParameterNode, Type};
 use dream_types::CScalar;
@@ -23,8 +25,9 @@ enum Pos {
 const PARAM_TYPES: &str = "numbers, `bool`, `string`, `CPtr`, @unmanaged structs, `fun(...)`, \
      `NativeCallback<fun(...)>`, `Option` of `string`/`CPtr`/`fun`/`NativeCallback`, and arrays of \
      numbers or @unmanaged structs";
-const RETURN_TYPES: &str = "`void`, numbers, `bool`, `string`, `CPtr`, @unmanaged structs, \
-     `OwnedCPtr` (with `@owned(\"free_fn\")`), `Option<string>`, and `Option<CPtr>`";
+const RETURN_TYPES: &str = "`void`, numbers, `bool`, `string`, `byte[]` and arrays of numbers or \
+     @unmanaged structs, `CPtr`, @unmanaged structs, `OwnedCPtr` (with `@owned(\"free_fn\")`), \
+     `@owned` `string`, `Option<string>`, and `Option<CPtr>`";
 const CALLBACK_PARAM_TYPES: &str =
     "numbers, `bool`, `string`, `CPtr`, `Option<string>`, and `Option<CPtr>`";
 const CALLBACK_RETURN_TYPES: &str = "`void`, numbers, `bool`, and `CPtr`";
@@ -37,6 +40,24 @@ impl<'a> Analyzer<'a> {
         def: dream_types::DefId,
         diagnostics: &mut DiagnosticBag,
     ) {
+        if function.generic_parameters.is_some() {
+            diagnostics.report_error(
+                format!(
+                    "'@c' extern '{}' cannot be generic; C has no type parameters",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        if function.parameters.iter().any(|p| p.is_variadic) {
+            diagnostics.report_error(
+                format!(
+                    "'@c' extern '{}' cannot be variadic; declare one overload per arity",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
         let mut wrapped = Vec::new();
         for (i, param) in function.parameters.iter().enumerate() {
             match self.c_param_shape(param) {
@@ -60,10 +81,19 @@ impl<'a> Analyzer<'a> {
                 Some(function.name.position),
             );
         }
-        let symbol = c_import_target(&function.attributes)
-            .map(|(_, symbol)| symbol)
-            .unwrap_or_else(|| function.name.text.clone());
-        if !is_c_identifier(&symbol) {
+        let (lib, symbol) = c_import_target(&function.attributes)
+            .unwrap_or_else(|| (String::new(), function.name.text.clone()));
+        if !lib.is_empty() && !is_link_name(&lib) {
+            diagnostics.report_error(
+                format!(
+                    "'@c' extern '{}' names library '{lib}', which is not a link name",
+                    function.name.text
+                ),
+                Some(function.name.position),
+            );
+        }
+        let generated_shim = symbol.starts_with("dream__") && symbol == function.name.text;
+        if !is_c_identifier(&symbol) || (symbol.starts_with("dream__") && !generated_shim) {
             diagnostics.report_error(
                 format!(
                     "'@c' extern '{}' binds '{symbol}', which is not a C identifier",
@@ -80,6 +110,7 @@ impl<'a> Analyzer<'a> {
         &self,
         callee: dream_types::DefId,
         args: &[ExpressionNode<'a>],
+        arg_offset: usize,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) {
@@ -87,6 +118,9 @@ impl<'a> Analyzer<'a> {
             return;
         };
         for &i in wrapped {
+            let Some(i) = i.checked_sub(arg_offset) else {
+                continue;
+            };
             let Some(arg) = args.get(i) else {
                 continue;
             };
@@ -113,8 +147,9 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// `(parameter shapes, result shape)` of a validated `@c` extern; invalid positions (already
-    /// reported) fall back to an `int` scalar.
+    /// `(parameter shapes, result shape)` of a `@c` extern. Validation already rejected every
+    /// unsupported position, and imports are built only after analysis reported no errors, so a
+    /// failure here is a compiler bug rather than a user program.
     pub(in crate::analyzer) fn c_shapes(
         &self,
         function: &FunctionNode<'a>,
@@ -122,18 +157,43 @@ impl<'a> Analyzer<'a> {
         let params = function
             .parameters
             .iter()
-            .map(|p| self.c_param_shape(p).unwrap_or(POISON))
+            .map(|p| match self.c_param_shape(p) {
+                Ok(shape) => shape,
+                Err(msg) => crate::internal_error!(
+                    "@c extern '{}' parameter was not validated: {msg}",
+                    function.name.text
+                ),
+            })
             .collect();
-        let ret = self.c_ret_shape(function).unwrap_or(POISON);
+        let ret = match self.c_ret_shape(function) {
+            Ok(shape) => shape,
+            Err(msg) => crate::internal_error!(
+                "@c extern '{}' result was not validated: {msg}",
+                function.name.text
+            ),
+        };
         (params, ret)
     }
 
     fn c_param_shape(&self, param: &ParameterNode) -> Result<CShape, String> {
+        if param.is_borrow {
+            if param.type_.is_unknown() {
+                return Ok(POISON);
+            }
+            if matches!(param.type_, Type::String(_)) {
+                return Ok(CShape::StrView);
+            }
+            return Err(
+                "`borrow` at the C boundary applies only to `string`; the view is valid for the call"
+                    .to_string(),
+            );
+        }
         if param.is_ref {
             return self.c_ref_shape(&param.type_);
         }
-        let user_data_last = dream_abi::attributes::marshal_kind(&param.attributes)
-            == Some(dream_abi::attributes::MarshalKind::UserDataLast);
+        let user_data_last = dream_abi::attributes::user_data_position(&param.attributes)
+            == Some(dream_abi::attributes::UserDataPosition::Last);
+        let has_user_data = dream_abi::attributes::user_data_position(&param.attributes).is_some();
         let shape = self.c_shape(&param.type_, Pos::Param)?;
         match shape {
             CShape::Callback {
@@ -147,10 +207,9 @@ impl<'a> Analyzer<'a> {
                 optional,
                 user_data_last,
             }),
-            _ if user_data_last => Err(
-                "`@marshal(MarshalKind.UserDataLast)` applies only to a `NativeCallback` parameter"
-                    .to_string(),
-            ),
+            _ if has_user_data => {
+                Err("`@user_data` applies only to a `NativeCallback` parameter".to_string())
+            }
             other => Ok(other),
         }
     }
@@ -177,6 +236,12 @@ impl<'a> Analyzer<'a> {
             (_, OwnedResult::FreedBy(_)) => Err(format!(
                 "`@owned(\"free_fn\")` applies only to a `@c` extern returning `{OWNED_C_PTR_TYPE}`"
             )),
+            (Some(Type::String(_)), OwnedResult::Owned) => Ok(CShape::OwnedStr),
+            (_, OwnedResult::Owned) => Err(
+                "bare `@owned` on a `@c` extern applies only to a `string` result; return \
+                 `OwnedCPtr` with `@owned(\"free_fn\")` for a raw pointer"
+                    .to_string(),
+            ),
             (None, _) => Ok(CShape::Void),
             (Some(t), _) => self.c_shape(t, Pos::Return),
         }
@@ -206,12 +271,21 @@ impl<'a> Analyzer<'a> {
             (Some(CShape::Ptr { optional: false }), Pos::CallbackReturn) => true,
             (Some(CShape::Str { .. } | CShape::Ptr { .. }), p) => p != Pos::CallbackReturn,
             (Some(CShape::Struct), p) => matches!(p, Pos::Param | Pos::Return),
-            (Some(CShape::Func { .. } | CShape::Callback { .. } | CShape::Array), Pos::Param) => {
-                true
-            }
+            (Some(CShape::Func { .. } | CShape::Callback { .. }), Pos::Param) => true,
+            (Some(CShape::Array), Pos::Param | Pos::Return) => true,
             _ => false,
         };
         match shape {
+            Some(CShape::Struct) if allowed => {
+                if let Some(problem) = self.c_struct_layout_problem(ty) {
+                    Err(format!(
+                        "type '{}' cannot cross the C boundary: it contains {problem}",
+                        ty.display_name()
+                    ))
+                } else {
+                    Ok(CShape::Struct)
+                }
+            }
             Some(s) if allowed => Ok(s),
             _ => Err(format!(
                 "type '{}' has no C representation here; allowed: {}",
@@ -235,7 +309,7 @@ impl<'a> Analyzer<'a> {
         }
         match ty {
             Type::String(_) => Some(CShape::Str { optional: false }),
-            Type::Array(elem) if pos == Pos::Param => {
+            Type::Array(elem) if matches!(pos, Pos::Param | Pos::Return) => {
                 let ok = is_c_array_elem(elem) || self.is_unmanaged_struct(elem);
                 ok.then_some(CShape::Array)
             }
@@ -298,6 +372,44 @@ impl<'a> Analyzer<'a> {
                 .is_some_and(|ty| self.struct_info(ty).is_some())
     }
 
+    /// `float16`, tuples, and enums have no C layout the shim can emit. Walk nested unmanaged
+    /// structs; a cycle is impossible for a well-formed value struct, and a repeated name stops.
+    fn c_struct_layout_problem(&self, ty: &Type) -> Option<String> {
+        fn walk(this: &Analyzer<'_>, ty: &Type, seen: &mut Vec<String>) -> Option<String> {
+            match ty {
+                Type::Float16(_) => Some("`float16`".to_string()),
+                Type::Tuple(_) => Some("a tuple".to_string()),
+                Type::Struct(tok, _) => {
+                    let name = tok.text.clone();
+                    if this
+                        .type_ctx
+                        .resolve(dream_types::DefKind::Enum, &name)
+                        .is_some()
+                    {
+                        return Some(format!("enum '{name}'"));
+                    }
+                    let id = this.type_ctx.resolved_type(&name)?;
+                    if this.union_info(id).is_some() {
+                        return Some(format!("union '{name}'"));
+                    }
+                    if seen.iter().any(|seen| seen == &name) {
+                        return None;
+                    }
+                    let info = this.struct_info(id)?;
+                    seen.push(name);
+                    for (field, field_info) in &info.fields {
+                        if let Some(problem) = walk(this, &field_info.type_, seen) {
+                            return Some(format!("field '{field}' ({problem})"));
+                        }
+                    }
+                    None
+                }
+                _ => None,
+            }
+        }
+        walk(self, ty, &mut Vec::new())
+    }
+
     fn is_unmanaged_struct(&self, ty: &Type) -> bool {
         let Type::Struct(tok, None) = ty else {
             return false;
@@ -338,7 +450,7 @@ fn optional(inner: CShape) -> Option<CShape> {
     }
 }
 
-/// The shape recorded for a position whose error was already reported.
+/// Unknown types (from an earlier error) keep a scalar shape so one mistake does not cascade.
 const POISON: CShape = CShape::Scalar(CScalar::I32);
 
 /// Element types whose Dream array storage is the C array (`bool`/`char` use Dream-specific widths).

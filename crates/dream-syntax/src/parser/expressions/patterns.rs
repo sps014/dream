@@ -182,6 +182,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         token.text = body.to_string();
         match suffix.to_ascii_lowercase().as_str() {
             "b" => Type::Byte(token),
+            "sb" => Type::SByte(token),
+            "s" => Type::Short(token),
+            "us" => Type::UShort(token),
             "ul" | "lu" => Type::ULong(token),
             "l" => Type::Long(token),
             "u" => Type::UInt(token),

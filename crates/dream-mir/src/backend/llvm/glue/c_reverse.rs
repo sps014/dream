@@ -25,9 +25,16 @@ pub(super) enum Reverse {
     Callback {
         fun_ty: TypeId,
         user_data_last: bool,
+        /// String parameters arrive as UTF-16 (`char16_t*`), matching the extern's `@marshal`.
+        wide: bool,
     },
     /// A fixed Dream function (named function or non-capturing lambda) of type `fun_ty`.
-    Direct { symbol: String, fun_ty: TypeId },
+    Direct {
+        symbol: String,
+        fun_ty: TypeId,
+        /// String parameters arrive as UTF-16 (`char16_t*`), matching the extern's `@marshal`.
+        wide: bool,
+    },
 }
 
 impl Reverse {
@@ -37,12 +44,19 @@ impl Reverse {
             crate::internal_error!("C callback signature has no structural symbol")
         });
         match self {
-            Reverse::Callback { user_data_last, .. } => format!(
-                "dream_ctramp_{}{}",
+            Reverse::Callback {
+                user_data_last,
+                wide,
+                ..
+            } => format!(
+                "dream_ctramp_{}{}{}",
                 signature,
-                if *user_data_last { "_udl" } else { "" }
+                if *user_data_last { "_udl" } else { "" },
+                if *wide { "_w" } else { "" }
             ),
-            Reverse::Direct { symbol, .. } => format!("{symbol}__c_{signature}"),
+            Reverse::Direct { symbol, wide, .. } => {
+                format!("{symbol}__c_{signature}{}", if *wide { "_w" } else { "" })
+            }
         }
     }
 
@@ -153,6 +167,7 @@ pub(super) fn reverse_trampolines(l: &Lcx<'_>) -> IndexMap<Reverse, (Vec<CShape>
                     let rev = Reverse::Callback {
                         fun_ty: fun_ty(),
                         user_data_last: *user_data_last,
+                        wide: imp.c_wide_strings,
                     };
                     out.insert(rev, (params.clone(), (**ret).clone()));
                 }
@@ -161,7 +176,11 @@ pub(super) fn reverse_trampolines(l: &Lcx<'_>) -> IndexMap<Reverse, (Vec<CShape>
                     for f in direct_targets(l, fun_ty) {
                         let symbol = l.abi_sym(&l.user_fn(f));
                         out.insert(
-                            Reverse::Direct { symbol, fun_ty },
+                            Reverse::Direct {
+                                symbol,
+                                fun_ty,
+                                wide: imp.c_wide_strings,
+                            },
                             (params.clone(), (**ret).clone()),
                         );
                     }
@@ -209,7 +228,10 @@ fn reverse_trampoline(l: &mut Lcx<'_>, rev: &Reverse, shapes: &[CShape], ret: &C
         let what = panic_msgs::c_callback_arg_what(i);
         let v = match s {
             CShape::Str { optional } => {
-                let v = fx.c_string(&c, *optional, &what);
+                let wide = match rev {
+                    Reverse::Callback { wide, .. } | Reverse::Direct { wide, .. } => *wide,
+                };
+                let v = fx.c_string(&c, *optional, wide, &what);
                 owned.push((v.clone(), *ty));
                 v
             }

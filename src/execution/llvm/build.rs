@@ -333,7 +333,7 @@ pub fn compile_llvm(
     };
     let profile = llvm_pgo(pgo, &bin, || tools.optional_tool("llvm-profdata"))?;
     let icon_png = icon.map(icon::read_png).transpose()?;
-    let c_sources = read_c_sources_from_abi(&abi_path);
+    let c_sources = read_c_sources_from_abi(&abi_path)?;
     let native = if c_sources.is_empty() {
         NativeObjects::default()
     } else {
@@ -341,7 +341,15 @@ pub fn compile_llvm(
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join("native-c");
-        compile_sets(config, &tools.clang()?, &spec, &c_sources, &cache, debug)?
+        compile_sets(
+            config,
+            &tools.clang()?,
+            &spec,
+            &c_sources,
+            &cache,
+            debug,
+            separate_runtime,
+        )?
     };
     let stamp_path = bin.with_extension("flags");
     let linker = match output_kind {
@@ -403,10 +411,13 @@ pub fn compile_llvm(
         .or_else(|| runtime_objects.first().map(PathBuf::as_path))
         .ok_or("runtime has no link inputs")?;
     let runtime_archive = rt.as_ref().and_then(|rt| rt.archive.as_deref());
-    if c_sources.is_empty()
-        && native_bin_fresh(&bin, ll_path, runtime_input, input)
+    if native_bin_fresh(&bin, ll_path, runtime_input, input)
         && runtime_objects.iter().all(|o| !newer_than(o, &bin))
-        && native.objects.iter().all(|o| !newer_than(o, &bin))
+        && native
+            .objects
+            .iter()
+            .chain(&native.lto_bitcode)
+            .all(|o| !newer_than(o, &bin))
         && opt_remarks.is_none()
         && opt_ll.is_none_or(Path::exists)
         && (output_kind != OutputKind::Staticlib || ll_path.with_extension("link.json").is_file())
@@ -429,6 +440,16 @@ pub fn compile_llvm(
     exports.extend(vendor_exports.into_iter().map(str::to_owned));
     exports.extend(library::exports(&abi_path)?);
     let shim = shim_bitcode(&tools, &spec, ll_path)?;
+    if let Some(shim) = &shim
+        && !native.bitcode.is_empty()
+    {
+        super::wasm_sources::validate_signatures(
+            &tools,
+            &native.bitcode,
+            shim,
+            &dream_mir::backend::llvm::RuntimeSigs::default(),
+        )?;
+    }
     let mut debug_objects = runtime_objects;
     let optimized = if separate_runtime {
         for module in shim.iter().chain(&icon_ll) {
@@ -471,18 +492,19 @@ pub fn compile_llvm(
             run_captured(&mut command, "opt (program)").map(|()| out)
         }
     } else {
+        let mut linked = [
+            rt.as_ref().map(|rt| rt.bc.as_path()),
+            shim.as_deref(),
+            icon_ll.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        linked.extend(native.lto_bitcode.iter().map(PathBuf::as_path));
         link_and_optimize(
             &tools,
             ll_path,
-            &[
-                rt.as_ref().map(|rt| rt.bc.as_path()),
-                shim.as_deref(),
-                icon_ll.as_deref(),
-            ]
-            .iter()
-            .flatten()
-            .copied()
-            .collect::<Vec<_>>(),
+            &linked,
             (opt, debug, opt_remarks),
             &profile,
             &exports,
@@ -516,7 +538,7 @@ pub fn compile_llvm(
             );
         }
         flags.extend(system_libs(&spec).iter().map(|l| l.to_string()));
-        let libs = read_c_libs_from_abi(&abi_path);
+        let libs = read_c_libs_from_abi(&abi_path)?;
         flags.extend(cc_link_flags(
             config,
             &libs,
@@ -588,7 +610,7 @@ pub fn compile_llvm(
     if let Some(dir) = &dir {
         lcmd.args(link_runtime(dir, bundled.as_deref(), &capabilities, &spec));
     }
-    let c_libs = read_c_libs_from_abi(&abi_path);
+    let c_libs = read_c_libs_from_abi(&abi_path)?;
     if !c_libs.is_empty() {
         let roots = search_roots_for_artifact(config, ll_path);
         lcmd.args(cc_link_flags(config, &c_libs, &roots, &spec));

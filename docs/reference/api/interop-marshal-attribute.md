@@ -6,16 +6,16 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `MarshalAttribute`
 
-`@c` marshaling: on the extern, string encoding (`@marshal(MarshalKind.LpStr)` / `@marshal(MarshalKind.LpWStr)`); on a `NativeCallback` parameter, `@marshal(MarshalKind.UserDataLast)` passes `user_data` after the callback's own arguments.
+String encoding of a `@c` extern: `@marshal(StringEncoding.Utf8)` or `@marshal(StringEncoding.Utf16)`. It covers string parameters, the string result, and string parameters of callbacks.
 
 ```dream
 public struct MarshalAttribute
 ```
 
-## `kind`
+## `encoding`
 
-Marshaling rule applied to the extern or parameter.
+Encoding used for every `string` that crosses this extern.
 
 ```dream
-public kind: MarshalKind
+public encoding: StringEncoding
 ```

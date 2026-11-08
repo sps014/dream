@@ -263,6 +263,42 @@ internal enum Intrinsic {
     DreamFfiReadI64,
     /// Identifies the ffi read f64 operation for an `@intrinsic` declaration.
     DreamFfiReadF64,
+    /// Identifies the ffi read u8 operation for an `@intrinsic` declaration.
+    DreamFfiReadU8,
+    /// Identifies the ffi read u32 operation for an `@intrinsic` declaration.
+    DreamFfiReadU32,
+    /// Identifies the ffi read u64 operation for an `@intrinsic` declaration.
+    DreamFfiReadU64,
+    /// Identifies the ffi read f32 operation for an `@intrinsic` declaration.
+    DreamFfiReadF32,
+    /// Identifies the ffi read isize operation for an `@intrinsic` declaration.
+    DreamFfiReadIsize,
+    /// Identifies the ffi read usize operation for an `@intrinsic` declaration.
+    DreamFfiReadUsize,
+    /// Identifies the ffi read bytes operation for an `@intrinsic` declaration.
+    DreamFfiReadBytes,
+    /// Identifies the ffi read bounded cstring operation for an `@intrinsic` declaration.
+    DreamFfiReadCstringN,
+    /// Identifies the ffi write pointer operation for an `@intrinsic` declaration.
+    DreamFfiWritePtr,
+    /// Identifies the ffi write u8 operation for an `@intrinsic` declaration.
+    DreamFfiWriteU8,
+    /// Identifies the ffi write i32 operation for an `@intrinsic` declaration.
+    DreamFfiWriteI32,
+    /// Identifies the ffi write u32 operation for an `@intrinsic` declaration.
+    DreamFfiWriteU32,
+    /// Identifies the ffi write i64 operation for an `@intrinsic` declaration.
+    DreamFfiWriteI64,
+    /// Identifies the ffi write u64 operation for an `@intrinsic` declaration.
+    DreamFfiWriteU64,
+    /// Identifies the ffi write f32 operation for an `@intrinsic` declaration.
+    DreamFfiWriteF32,
+    /// Identifies the ffi write f64 operation for an `@intrinsic` declaration.
+    DreamFfiWriteF64,
+    /// Identifies the ffi write isize operation for an `@intrinsic` declaration.
+    DreamFfiWriteIsize,
+    /// Identifies the ffi write usize operation for an `@intrinsic` declaration.
+    DreamFfiWriteUsize,
     /// Identifies the shared lock acquire operation for an `@intrinsic` declaration.
     SharedLockAcquire,
     /// Identifies the shared lock release operation for an `@intrinsic` declaration.

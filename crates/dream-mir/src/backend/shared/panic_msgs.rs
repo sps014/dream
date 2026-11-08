@@ -54,6 +54,11 @@ pub fn c_null_string(what: &str) -> String {
     format!("panic: {what} is NULL where 'string' was declared; declare it 'Option<string>'")
 }
 
+/// `NULL` where a managed `string` or array result was declared.
+pub fn c_null_managed(what: &str) -> String {
+    format!("panic: {what} is NULL; C must return the Dream value it built")
+}
+
 pub fn c_result_what(import: &str) -> String {
     format!("the result of '@c' extern '{import}'")
 }
@@ -74,6 +79,9 @@ pub fn c_boundary(mir: &crate::Mir) -> Vec<String> {
         out.push(c_capturing_closure(&imp.name));
         out.push(c_no_direct_target(&imp.name));
         out.push(c_null_string(&c_result_what(&imp.name)));
+        if matches!(imp.c_ret, CShape::Array | CShape::OwnedStr) {
+            out.push(c_null_managed(&c_result_what(&imp.name)));
+        }
         for s in &imp.c_params {
             if let CShape::Func { params, .. } | CShape::Callback { params, .. } = s {
                 for i in 0..params.len() {

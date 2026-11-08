@@ -34,6 +34,18 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/primitives/byte.dream"),
         ),
         (
+            "<std>/system/primitives/sbyte.dream",
+            include_str!("../system/primitives/sbyte.dream"),
+        ),
+        (
+            "<std>/system/primitives/short.dream",
+            include_str!("../system/primitives/short.dream"),
+        ),
+        (
+            "<std>/system/primitives/ushort.dream",
+            include_str!("../system/primitives/ushort.dream"),
+        ),
+        (
             "<std>/system/primitives/char.dream",
             include_str!("../system/primitives/char.dream"),
         ),

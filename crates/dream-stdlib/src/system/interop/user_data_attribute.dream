@@ -1,0 +1,8 @@
+module system.interop;
+
+/// Where a `NativeCallback` parameter receives `user_data`. The default is `UserDataPosition.First`.
+@attribute(AttributeTarget.Parameter)
+public struct UserDataAttribute {
+    /// Position of `user_data` among the C arguments.
+    public position: UserDataPosition;
+}

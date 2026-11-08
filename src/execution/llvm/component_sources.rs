@@ -12,8 +12,8 @@ pub(super) fn compile(
     opt: OptLevel,
 ) -> Result<(Vec<PathBuf>, Vec<String>), String> {
     let abi = ll.with_extension("abi.json");
-    let sets = crate::execution::native::native_c::read_c_sources_from_abi(&abi);
-    let mut libraries = crate::execution::native::c_link::read_c_libs_from_abi(&abi);
+    let sets = crate::execution::native::native_c::read_c_sources_from_abi(&abi)?;
+    let mut libraries = crate::execution::native::c_link::read_c_libs_from_abi(&abi)?;
     let directory = ll.with_extension("component-c");
     std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
     let mut objects = Vec::new();
@@ -49,7 +49,14 @@ pub(super) fn compile(
                 command.arg(format!("-D{define}"));
             }
             command.args(&set.cflags).arg(source).arg("-o").arg(&object);
-            run_captured(&mut command, &format!("WASI C/C++ set '{}'", set.name))?;
+            crate::execution::native::native_c::compile_if_stale(
+                config,
+                clang,
+                &dream_abi::target::TargetSpec::wasm32(),
+                &mut command,
+                &object,
+                &format!("WASI C/C++ set '{}'", set.name),
+            )?;
             objects.push(object);
         }
         libraries.extend(set.libs.iter().cloned());

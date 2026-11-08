@@ -101,13 +101,13 @@ pub fn named_attr_string_arg<'a>(
 /// Only compiler-owned declarations activate compiler behavior.
 pub fn compiler_attribute_module(name: &str) -> Option<&'static str> {
     Some(match name {
-        "c" | "c_call" | "marshal" | "packed" | "cpp" | "cpp_name" => "system.interop",
+        "c" | "marshal" | "user_data" | "packed" | "cpp" | "cpp_name" | "owned" => "system.interop",
         "test" | "timeout" => "system.testing",
         "generator" | "generator_only" | "incremental" | "on_attribute" | "on_call"
         | "syntax_block" | "uses_tool" => "system.codegen",
         "attribute" | "repeatable" | "export" | "intrinsic" | "llvm" | "inline" | "noinline"
-        | "unsafe" | "borrowed_result" | "slot_walk" | "allow_cycle" | "consuming" | "owned"
-        | "js" | "runtime" | "async_host" | "native" | "node" | "web" => "system.core",
+        | "unsafe" | "borrowed_result" | "slot_walk" | "allow_cycle" | "consuming" | "js"
+        | "runtime" | "async_host" | "native" | "node" | "web" => "system.core",
         _ => return None,
     })
 }

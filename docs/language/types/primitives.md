@@ -34,13 +34,16 @@ Primitive types hold numbers, booleans, and characters, and their methods need n
 | `isize` | Pointer width, signed | Same as `int` on wasm32, same as `long` on 64-bit native | No suffix; `(isize)42` |
 | `usize` | Pointer width, unsigned | Same as `uint` on wasm32, same as `ulong` on 64-bit native | No suffix; `(usize)42` |
 | `byte` | 8-bit unsigned | 0 to 255 | `255b` |
+| `sbyte` | 8-bit signed | −128 to 127 | `-1sb` |
+| `short` | 16-bit signed | −32,768 to 32,767 | `-1s` |
+| `ushort` | 16-bit unsigned | 0 to 65,535 | `65535us` |
 | `float16` | 16-bit IEEE 754 (binary16) | ±65,504, ~3 significant digits | `1.5h` |
 | `float` | 32-bit IEEE 754 | About ±3.4 × 10³⁸, ~7 significant digits | `3.14f`, or bare `3.14` |
 | `double` | 64-bit IEEE 754 | About ±1.8 × 10³⁰⁸, ~15 significant digits | `3.14d` |
 | `bool` | — | `true` or `false` | `true` |
 | `char` | 32 bits | One Unicode scalar value | `'A'`, `'\n'` |
 
-Suffixes are case-insensitive. Integer literals can also be written in hex (`0xFF`), octal (`0o77`), or binary (`0b101`); a hex literal accepts only the `u`, `L`, and `uL` suffixes, because `b`, `d`, and `f` are hex digits.
+Suffixes are case-insensitive. Integer literals can also be written in hex (`0xFF`), octal (`0o77`), or binary (`0b101`). A hex literal accepts `u`, `L`, `uL`, `s`, `sb`, and `us`. `b`, `d`, and `f` are hex digits, so they are not hex suffixes.
 
 ## Methods by type
 

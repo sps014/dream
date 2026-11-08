@@ -123,12 +123,12 @@ fn validate_function_list(
                 user_attrs,
                 diagnostics,
             );
-            validate_marshal_context(&p.attributes, true, diagnostics);
-            if has_named_attr(&p.attributes, "marshal")
+            validate_user_data(&p.attributes, diagnostics);
+            if has_named_attr(&p.attributes, "user_data")
                 && !(f.is_extern && has_c_attr(&f.attributes))
             {
                 diagnostics.report_error(
-                    "'@marshal' requires a parameter of a '@c' extern".to_string(),
+                    "'@user_data' requires a parameter of a '@c' extern".to_string(),
                     Some(p.name.position),
                 );
             }

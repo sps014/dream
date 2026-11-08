@@ -142,7 +142,7 @@ The pieces:
 ## Shader parameters in a render pass
 
 Parameters of render shaders are bound on the pass instead of being passed to a wrapper. Each
-parameter has a slot on the generated class:
+parameter has a binding on the generated class:
 
 ```dream
 import system;

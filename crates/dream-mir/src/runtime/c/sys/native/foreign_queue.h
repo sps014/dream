@@ -124,7 +124,7 @@ int dream_foreign_work_end(dream_ptr f) {
 
 /* A cancelled frame is still handed back so its owner drops the scheduler retain the host was
  * relying on. */
-static void complete_foreign(dream_ptr f, dream_result res, int owned) {
+static void complete_foreign(dream_ptr f, dream_result res, int owned, int32_t status) {
     Node *n;
     Scheduler *s;
     if (!f) {
@@ -146,7 +146,7 @@ static void complete_foreign(dream_ptr f, dream_result res, int owned) {
         *result_at(f) = res;
         dream_publish(f);
         int32_t idle = 0;
-        discarded = !__atomic_compare_exchange_n(i32_at(f, F_STATUS), &idle, 1, 0,
+        discarded = !__atomic_compare_exchange_n(i32_at(f, F_STATUS), &idle, status, 0,
                                                  __ATOMIC_RELEASE, __ATOMIC_ACQUIRE);
         if (discarded) {
             *result_at(f) = 0;
@@ -169,8 +169,11 @@ static void complete_foreign(dream_ptr f, dream_result res, int owned) {
     if (owned && discarded) { dream_release((dream_ptr)res); }
 }
 
-void dream_complete_foreign(dream_ptr f, dream_result res) { complete_foreign(f, res, 0); }
-void dream_complete_foreign_owned(dream_ptr f, dream_ptr res) { complete_foreign(f, (dream_result)res, 1); }
+void dream_complete_foreign(dream_ptr f, dream_result res) { complete_foreign(f, res, 0, 1); }
+void dream_complete_foreign_owned(dream_ptr f, dream_ptr res) { complete_foreign(f, (dream_result)res, 1, 1); }
+void dream_complete_foreign_status(dream_ptr f, dream_result res, int owned, int32_t status) {
+    complete_foreign(f, res, owned, status);
+}
 
 static void foreign_drain(void) {
     for (;;) {

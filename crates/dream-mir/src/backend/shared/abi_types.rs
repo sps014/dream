@@ -51,7 +51,16 @@ pub(crate) fn abi_ty(interner: &TypeInterner, ty: TypeId) -> AbiTy {
         TyKind::Prim(PrimTy::Float16) => AbiTy::F16,
         TyKind::Prim(PrimTy::Long | PrimTy::ULong) => AbiTy::I64,
         TyKind::Prim(PrimTy::ISize | PrimTy::USize) => AbiTy::Word,
-        TyKind::Prim(PrimTy::Int | PrimTy::UInt | PrimTy::Bool | PrimTy::Char | PrimTy::Byte)
+        TyKind::Prim(
+            PrimTy::Int
+            | PrimTy::UInt
+            | PrimTy::Bool
+            | PrimTy::Char
+            | PrimTy::Byte
+            | PrimTy::SByte
+            | PrimTy::Short
+            | PrimTy::UShort,
+        )
         | TyKind::Enum(_)
         | TyKind::Js => AbiTy::I32,
         _ => AbiTy::Ptr,
@@ -63,6 +72,9 @@ pub(crate) fn abi_ty(interner: &TypeInterner, ty: TypeId) -> AbiTy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MemTy {
     U8,
+    I8,
+    I16,
+    U16,
     I32,
     I64,
     Word,
@@ -82,6 +94,9 @@ pub(crate) fn mem_ty(cx: &Cx<'_>, ty: TypeId) -> MemTy {
         TyKind::Prim(PrimTy::ISize) => MemTy::Word,
         TyKind::Prim(PrimTy::USize) => MemTy::UWord,
         TyKind::Prim(PrimTy::Byte | PrimTy::Bool) => MemTy::U8,
+        TyKind::Prim(PrimTy::SByte) => MemTy::I8,
+        TyKind::Prim(PrimTy::Short) => MemTy::I16,
+        TyKind::Prim(PrimTy::UShort) => MemTy::U16,
         TyKind::Prim(PrimTy::Char | PrimTy::Int | PrimTy::UInt) | TyKind::Enum(_) | TyKind::Js => {
             MemTy::I32
         }
@@ -153,24 +168,35 @@ fn parse_native_header_fns() -> HashSet<String> {
 }
 
 pub(crate) fn c_ident(name: &str) -> String {
-    let mut s = String::new();
-    for (i, c) in name.chars().enumerate() {
-        if c.is_ascii_alphanumeric() || c == '_' {
-            s.push(c);
-        } else {
-            s.push('_');
-        }
-        if i == 0 && s.as_bytes()[0].is_ascii_digit() {
-            s.insert(0, '_');
-        }
-    }
-    if s.is_empty() {
-        s.push('_');
-    }
-    if s == "main" {
+    if name == "main" {
         return "main_dream".into();
     }
-    s
+    let plain = !name.is_empty()
+        && name.chars().enumerate().all(|(i, c)| {
+            if i == 0 {
+                c.is_ascii_alphabetic() || c == '_'
+            } else {
+                c.is_ascii_alphanumeric() || c == '_'
+            }
+        });
+    if plain {
+        return name.to_string();
+    }
+    // Length-prefix and escape so `a-b` and `a_b` cannot share a symbol.
+    let mut enc = String::new();
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            enc.push(c);
+        } else {
+            enc.push_str(&format!("U{:02x}", u32::from(c)));
+        }
+    }
+    let spelled = format!("_{}x{enc}", name.chars().count());
+    if spelled.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        format!("_{spelled}")
+    } else {
+        spelled
+    }
 }
 
 /// Synthetic `int` locals carrying addresses rather than language integers.
@@ -388,10 +414,9 @@ pub(crate) fn is_c_import(imp: &dream_hir::HImport) -> bool {
     imp.module.starts_with("c/")
 }
 
-/// A deferred-extern poll symbol for `imp`, or `None` when the import is not an async host bridge
-/// (C FFI imports keep their synchronous wrappers).
+/// A deferred-extern poll symbol for `imp`, or `None` when the import is not async.
 pub(crate) fn lazy_import_poll(imp: &dream_hir::HImport) -> Option<String> {
-    if is_c_import(imp) || !imp.is_async {
+    if !imp.is_async {
         return None;
     }
     Some(format!("{}_poll", import_call_name(imp)))

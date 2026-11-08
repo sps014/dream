@@ -12,14 +12,6 @@ A C pointer returned by an `@owned("free_fn")` `@c` extern: Dream owns it, and t
 public class OwnedCPtr
 ```
 
-## `free_with`
-
-Releases `ptr` by calling the foreign function at address `free`.
-
-```dream
-public static extern fun free_with(free: usize, ptr: usize): void
-```
-
 ## `get`
 
 The pointer, still owned (and later freed) by this object.

@@ -102,7 +102,7 @@ System.println(grid[1][2]); // 6
 
 ## Repeat arrays: `[value; len]`
 
-`[value; len]` allocates a `T[]` of length `len` whose every slot holds `value`. The element type is inferred from the value (or from the surrounding array-typed context), and `len` may be any runtime `int` expression:
+`[value; len]` allocates a `T[]` of length `len` whose every element holds `value`. The element type is inferred from the value (or from the surrounding array-typed context), and `len` may be any runtime `int` expression:
 
 ```dream
 let zeros = [0; 4]; // int[4], all zero
@@ -111,7 +111,7 @@ let n = read_count();
 let buf = [2.0; n * 2]; // length computed at runtime
 ```
 
-The value expression is evaluated **once**, and every slot shares the result — for reference types (`["hi"; 3]`, `[config; 8]`) all slots point at the same object. The one exception is a value that itself constructs an array: then it is re-evaluated per slot so each row is distinct:
+The value expression is evaluated **once**, and every element shares the result — for reference types (`["hi"; 3]`, `[config; 8]`) all elements point at the same object. The one exception is a value that itself constructs an array: then it is re-evaluated for each element so each row is distinct:
 
 ```dream
 let grid = [[0; 3]; 5]; // int[][] — five *distinct* rows of three zeros
@@ -126,7 +126,7 @@ A zero value (`0`, `0.0`, `false`) fills the array with zeros.
 | Form | Result |
 |------|--------|
 | `[a, b, c]` | An array holding the listed values |
-| `[value; len]` | `len` slots, all holding `value` (re-evaluated per slot only when `value` builds an array) |
+| `[value; len]` | `len` elements, all holding `value` (re-evaluated for each element only when `value` builds an array) |
 
 ## Fixed-size buffers
 
@@ -145,9 +145,9 @@ grid[0][0] = 32;
 ```
 
 !!! note "Arrays own their slots"
-    Every slot of a `T[]` is released when the array is dropped, even if your own bookkeeping
+    Every element of a `T[]` is released when the array is dropped, even if your own bookkeeping
     stopped tracking it earlier — see [Raw buffers and custom containers](../memory/buffers.md#raw-buffers-and-custom-containers).
-    Overwriting a slot releases its previous occupant immediately.
+    Overwriting an element releases its previous occupant immediately.
 
 ## `Span<T>`: a bounds-checked view without copying
 

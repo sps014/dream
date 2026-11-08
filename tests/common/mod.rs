@@ -59,8 +59,9 @@ pub fn compile_test_pipeline_for<R>(
     target: Target,
     emit: impl FnOnce(&Hir, &TypeInterner) -> R,
 ) -> R {
+    let code = ensure_js_attribute_import(code);
     let mut diagnostics = DiagnosticBag::new(None);
-    let lexer = Lexer::new(code.to_string());
+    let lexer = Lexer::new(code);
     let parse_arena = bumpalo::Bump::new();
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
     let tree = parser.parse().expect("parse should succeed");
@@ -179,6 +180,27 @@ pub fn emit_hir_to_ir(code: &str) -> (String, usize) {
         }
         (emit_ll(&mir, interner), count)
     })
+}
+
+/// `@js` resolves only after `import system.js`. Stubs paste the attribute below other
+/// declarations, so the import is inserted at the top of the harness source.
+fn ensure_js_attribute_import(code: &str) -> String {
+    if !code.contains("@js(") || code.contains("import system.js") {
+        return code.to_string();
+    }
+    let trimmed = code.trim_start();
+    let offset = code.len() - trimmed.len();
+    if let Some(rest) = trimmed.strip_prefix("module ")
+        && let Some(end) = rest.find(';')
+    {
+        let split = offset + "module ".len() + end + 1;
+        let mut out = String::with_capacity(code.len() + 20);
+        out.push_str(&code[..split]);
+        out.push_str("\nimport system.js;\n");
+        out.push_str(&code[split..]);
+        return out;
+    }
+    format!("import system.js;\n{code}")
 }
 
 /// Compiles `code` natively and returns stdout from `main`.
@@ -342,6 +364,8 @@ pub const JS_STUB: &str = "
         None,
     }
     extend js {
+        @js(\"Dream\", \"jsCallback\")
+        static extern fun callback(index: int, signature: string): js;
         @js(\"Dream\", \"jsGlobal\")
         static extern fun global(name: string): js;
         @js(\"Dream\", \"jsGlobalThis\")
@@ -350,10 +374,6 @@ pub const JS_STUB: &str = "
         static extern fun object(): js;
         @js(\"Dream\", \"jsArray\")
         static extern fun array(): js;
-        @js(\"Dream\", \"jsFunc\")
-        static extern fun func(handler: fun(js): void): js;
-        @js(\"Dream\", \"jsFunc0\")
-        static extern fun func0(handler: fun(): void): js;
         @js(\"Dream\", \"jsInt\")
         static extern fun box_int(value: int): js;
         @js(\"Dream\", \"jsLong\")

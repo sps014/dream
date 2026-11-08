@@ -162,6 +162,7 @@ impl<'a> Analyzer<'a> {
             // Fact-only analysis and poisoned functions intentionally have no HIR locals.
             debug_assert!(
                 !matches!(shape, HirArmShape::Unsupported)
+                    || !self.active()
                     || diagnostics.has_errors()
                     || self.generator_facts.is_some(),
                 "expand_switch_arms_for_fast_path + routing should keep Unsupported off the flat Switch path ({})",

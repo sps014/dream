@@ -324,10 +324,10 @@ impl<'a> Analyzer<'a> {
                     future_expr.position(),
                     diagnostics,
                 );
-                // `<jsExpr>.await;` (discarding the `Option<js>` result): desugar the same way.
+                // `<jsExpr>.await;` (discarding the `Result<js, JsError>` result): desugar the same way.
                 if self.is_js_type(&fut) {
                     let fut_hir = self.desugar_js_await(value);
-                    self.hir_await_stmt(fut_hir, &Self::option_js_type());
+                    self.hir_await_stmt(fut_hir, &Self::result_js_type());
                 } else if Self::future_inner_type(&fut).is_none() {
                     diagnostics.report_error(
                         format!(

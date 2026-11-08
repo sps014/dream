@@ -1,4 +1,4 @@
-import { TAGS, LEN_PREFIX_SIZE, elementSize, stripSuffix, parseFunType, jsToWasm, wasmToJs } from "./core.js";
+import { TAGS, LEN_PREFIX_SIZE, elementSize, stripSuffix, parseFunType, isJsHandleStruct, jsToWasm, wasmToJs } from "./core.js";
 import { HAS_ASYNC_MAIN, HAS_ASYNC_IMPORTS, HAS_JS_HANDLES, HAS_CALLBACKS, HAS_WORKERS } from "./features.js";
 
 const WORKER_STACK_BYTES = 65536;
@@ -181,6 +181,8 @@ export class DreamInstance {
         return this.f64(addr);
       case "string":
         return this.readString(this.i32(addr));
+      case "js":
+        return this.derefHandle(this.i32(addr));
       default:
         if (t.endsWith("[]")) return this.readArray(this.i32(addr), t.slice(0, -2));
         return this.i32(addr); // struct/object/list: opaque pointer
@@ -220,6 +222,9 @@ export class DreamInstance {
         break;
       case "string":
         this.view.setInt32(addr, this.writeString(value == null ? "" : String(value)), true);
+        break;
+      case "js":
+        this.view.setInt32(addr, this.registerHandle(value), true);
         break;
       default:
         this.view.setInt32(addr, value | 0, true); // struct/object pointer
@@ -304,6 +309,26 @@ export class DreamInstance {
   }
 
   /**
+   * Pointer to a reusable 8-byte slot. A callback argument that is a JS object struct is one
+   * handle word; the callee copies those bytes, and the slot is released when the call returns.
+   */
+  callbackStructSlot() {
+    const width = 8;
+    if (!this._callbackStruct) this._callbackStruct = { base: this.guestMalloc(width * 32, 0), depth: 0, width };
+    const slot = this._callbackStruct;
+    if (slot.depth >= 32) throw new Error("JS callback struct arguments are nested too deeply");
+    const ptr = slot.base + slot.depth * slot.width;
+    slot.depth += 1;
+    this.view.setInt32(ptr, 0, true);
+    this.view.setInt32(ptr + 4, 0, true);
+    return ptr;
+  }
+
+  releaseCallbackStructSlots(count) {
+    this._callbackStruct.depth -= count;
+  }
+
+  /**
    * Wraps a Dream function value (an `i32` index into the exported `__indirect_function_table`)
    * as a JS callable, so a Dream function passed to a `fun(...)`-typed extern parameter can be
    * invoked by the host. `typeStr` is the Dream function type (e.g. `fun(int):void`) used to
@@ -328,9 +353,31 @@ export class DreamInstance {
     }
     const { params, result } = parseFunType(typeStr);
     const wrapper = (...jsArgs) => {
-      const raw = params.map((p, i) => jsToWasm(this, p, jsArgs[i]));
-      const out = fn(...raw);
-      return wasmToJs(this, result, out);
+      const raw = [];
+      const borrowed = [];
+      try {
+        for (let i = 0; i < params.length; i++) {
+          const type = params[i];
+          const value = jsArgs[i];
+          if (HAS_JS_HANDLES && isJsHandleStruct(type)) {
+            const ptr = this.callbackStructSlot();
+            this.view.setInt32(ptr, this.registerHandle(value), true);
+            borrowed.push(value);
+            raw.push(ptr);
+          } else raw.push(jsToWasm(this, type, value));
+        }
+        if (HAS_JS_HANDLES && isJsHandleStruct(result)) {
+          const out = fn(...raw);
+          const value = out ? this.derefHandle(this.view.getInt32(out, true)) : null;
+          if (out && typeof this.exports.dream_free === "function") this.exports.dream_free(out);
+          this.releaseValue(value);
+          return value;
+        }
+        return wasmToJs(this, result, fn(...raw));
+      } finally {
+        for (const value of borrowed) this.releaseValue(value);
+        if (borrowed.length) this.releaseCallbackStructSlots(borrowed.length);
+      }
     };
     // Expose the raw table index so callers that need the portable funcref value itself (e.g.
     // a `Task` body on another thread, in another instance of the same module) can recover it.

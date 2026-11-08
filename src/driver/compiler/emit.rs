@@ -261,13 +261,31 @@ impl Compiler {
 
         // Opt-in tree-shaken JS hosts (`--runtime --web` / `--runtime --node`); minified on
         // optimizing builds.
-        if !self.runtimes.is_empty() {
+        if !self.runtimes.is_empty() || !loaded.acc.js_modules.is_empty() {
+            let targets = if self.runtimes.is_empty() {
+                vec![crate::driver::js_runtime::JsRuntimeTarget::Web]
+            } else {
+                self.runtimes.clone()
+            };
+            let imports = loaded
+                .acc
+                .js_project_root
+                .as_deref()
+                .filter(|_| !loaded.acc.js_modules.is_empty())
+                .map(|root| {
+                    (
+                        root,
+                        loaded.acc.js_modules.as_slice(),
+                        &loaded.acc.js_bundles,
+                    )
+                });
             let runtime_paths = crate::driver::js_runtime::emit_selective_runtimes(
                 out_path,
                 &wasm_bytes,
-                &self.runtimes,
+                &targets,
                 self.effective_optimize().is_some(),
                 &loaded.graph.embedded_assets,
+                imports,
             )?;
             for p in runtime_paths {
                 self.reporter.artifact(&p);

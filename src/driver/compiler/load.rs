@@ -56,6 +56,30 @@ impl Compiler {
             None => parse_file_recursive(main_file_path, &mut acc, arena, diagnostics)?,
         }
 
+        if !self.target.spec().capabilities.js_interop {
+            for (file, program) in &acc.parsed_files {
+                for import in program.imports.iter().filter(|import| import.is_js) {
+                    diagnostics.file_path = Some(file.clone());
+                    diagnostics.report_error(
+                        "jsimport requires a JavaScript host target (--web or --node)".into(),
+                        Some(import.module_name.position),
+                    );
+                }
+            }
+        }
+        if !diagnostics.has_errors() {
+            crate::driver::js_imports::prepare(
+                arena,
+                &mut acc,
+                main_file_path,
+                self.runtimes
+                    .first()
+                    .map(|target| target.as_str())
+                    .unwrap_or("web"),
+                true,
+                diagnostics,
+            )?;
+        }
         let native_graph =
             crate::driver::native_sets::NativeGraph::load(main_file_path, &acc, self.target.spec())
                 .map_err(CompileError::Manifest)?;

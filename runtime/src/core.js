@@ -16,6 +16,17 @@ export function stripSuffix(typeName) {
 
 export const isPrimitive = (t) => t === "int" || t === "float" || t === "double" || t === "bool";
 
+const JS_CALLBACK_SCALARS = new Set([
+  "int", "uint", "long", "ulong", "isize", "usize", "byte", "sbyte", "short", "ushort",
+  "float", "float16", "double", "bool", "char", "string", "js", "void",
+]);
+
+/** A generated one-field JS object struct. The callback ABI passes a pointer to its handle word. */
+export function isJsHandleStruct(typeName) {
+  const base = stripSuffix(typeName);
+  return !JS_CALLBACK_SCALARS.has(base) && !base.endsWith("[]") && !base.startsWith("fun(") && !base.startsWith("Option<") && /^[A-Za-z_]/.test(base);
+}
+
 export const isFunType = (t) => typeof t === "string" && t.startsWith("fun(");
 
 export function parseFunType(typeStr) {

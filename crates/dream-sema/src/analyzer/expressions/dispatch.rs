@@ -295,7 +295,7 @@ impl<'a> Analyzer<'a> {
                 // the awaited value as another `js`.
                 if self.is_js_type(&fut) {
                     let fut_hir = self.desugar_js_await(inner_hir);
-                    let opt = Self::option_js_type();
+                    let opt = Self::result_js_type();
                     self.hir_set_await(fut_hir, &opt);
                     return Ok(opt);
                 }

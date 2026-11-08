@@ -1,5 +1,5 @@
 //! Desugaring of native syntax on the dynamic `js` type into calls to the stdlib interop bridges
-//! declared in `stdlib/core/js.dream`.
+//! declared in `stdlib/system/js/js.dream`.
 //!
 //! When a receiver has type `js`, member access, method calls, indexing, property assignment, and
 //! calling the value itself all bind *dynamically*: the compiler performs no member resolution and
@@ -53,7 +53,8 @@ impl<'a> Analyzer<'a> {
     /// Diagnostic when a capturing `fun(...)` value is handed to a JS API. The host bridges
     /// (`func0`/`func`/`funcN`, FUNC slots) only take the funcidx half of a funcbox — the env
     /// word is discarded — so a capturing lambda would lose its environment.
-    const JS_CAPTURING_CALLBACK_MSG: &'static str = "capturing lambdas cannot be passed to JS APIs (the closure environment would be lost); pass a non-capturing top-level function, or wrap only a captureless `fun(...)` via `js.func` / `js.func0`";
+    const JS_CAPTURING_CALLBACK_MSG: &'static str =
+        "capturing lambdas cannot be passed to JS APIs; use a captureless function";
 
     /// True when `e` is a known-capturing `fun(...)` value: a `funcbox_new` with a non-zero env,
     /// a `Binding::Func` whose def is a capturing lambda/method-group, or a fun-typed local marked
@@ -125,6 +126,30 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    pub(in crate::analyzer) fn validate_js_callback_arguments(
+        &self,
+        file: Option<&str>,
+        expected: &[TypeId],
+        args: &[Option<HExpr>],
+        span: TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let foreign = file.is_some_and(|file| {
+            file.starts_with("<js>/") || file.starts_with("<std>/generated/system.js")
+        });
+        for (index, argument) in args.iter().enumerate() {
+            if let Some(argument) = argument
+                && matches!(self.type_ctx.interner.kind(argument.ty), TyKind::Func(..))
+                && (foreign
+                    || expected
+                        .get(index)
+                        .is_some_and(|ty| matches!(self.type_ctx.interner.kind(*ty), TyKind::Js)))
+            {
+                self.ensure_captureless_js_callback(argument, Some(span), diagnostics);
+            }
+        }
+    }
+
     /// Builds a call to a `js` bridge extern (`js.__something`), resolved by its mangled def name.
     /// Returns `None` only if the bridge is somehow unregistered (a stdlib bug).
     fn js_bridge_call(&self, method: &str, args: Vec<HExpr>, ret: TypeId) -> Option<HExpr> {
@@ -173,22 +198,6 @@ impl<'a> Analyzer<'a> {
         }
 
         if let Some(sig) = known_sig {
-            // Explicit `js.func` / `js.func0` / `js.funcN` also strip the env word host-side —
-            // reject capturing handlers here (they skip `box_to_js` / FUNC-slot checks).
-            if matches!(method.text.as_str(), "func" | "func0" | "funcN") {
-                for arg in arg_hirs.iter().flatten() {
-                    if matches!(self.type_ctx.interner.kind(arg.ty), TyKind::Func(..))
-                        && !self.ensure_captureless_js_callback(
-                            arg,
-                            Some(method.position),
-                            diagnostics,
-                        )
-                    {
-                        self.hir_none();
-                        return Ok(Type::Unknown);
-                    }
-                }
-            }
             let ret = sig.return_type.clone().unwrap_or(Type::Void);
             self.hir_set_method_call(recv, &sig.identity, arg_hirs, &ret);
             return Ok(ret);
@@ -272,26 +281,22 @@ impl<'a> Analyzer<'a> {
         self.hir_set_last(call);
     }
 
-    /// The AST type `Option<js>` (the result of awaiting a `js` Promise).
-    pub(super) fn option_js_type() -> Type {
+    /// Await preserves successful nullish values and the original rejection reason.
+    pub(super) fn result_js_type() -> Type {
         Type::Struct(
-            synthetic_token(TokenKind::IdentifierToken, "Option"),
-            Some(vec![Self::js_type()]),
+            synthetic_token(TokenKind::IdentifierToken, "Result"),
+            Some(vec![
+                Self::js_type(),
+                Type::Struct(synthetic_token(TokenKind::IdentifierToken, "JsError"), None),
+            ]),
         )
     }
 
-    /// `<jsExpr>.await` -> `js.await_promise(<jsExpr>).await`. Builds the async wrapper call whose result is
-    /// `Future<Option<js>>` (so the enclosing `.await` unwraps it to `Option<js>` - `Some` on resolve,
-    /// `None` on rejection), letting a JS Promise be awaited natively. Returns the
-    /// `Future<Option<js>>`-typed call HIR (to hand to `hir_set_await`), or `None` if the inner
-    /// expression was not representable.
     pub(super) fn desugar_js_await(&mut self, inner: Option<HExpr>) -> Option<HExpr> {
         let recv = inner?;
         let fut = self
             .type_ctx
-            .lower(&Self::future_type(Self::option_js_type()));
-        // `await_promise`'s `token` parameter defaults to `Option.None`, but default substitution
-        // only runs for calls written in source — a synthetic bridge call has to spell it out.
+            .lower(&Self::future_type(Self::result_js_type()));
         let token = self.option_none(&Self::cancellation_token_type())?;
         self.js_bridge_call("await_promise", vec![recv, token], fut)
     }

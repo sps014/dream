@@ -335,6 +335,11 @@ pub(crate) fn emit_selective_runtimes(
     targets: &[JsRuntimeTarget],
     minify: bool,
     assets: &indexmap::IndexMap<String, Vec<u8>>,
+    imports: Option<(
+        &Path,
+        &[crate::driver::js_imports::JsModule],
+        &indexmap::IndexMap<String, String>,
+    )>,
 ) -> Result<Vec<std::path::PathBuf>, Error> {
     // WASI archives and runtime adapters can add host imports after MIR import pruning.
     let mut live_imports = Vec::new();
@@ -384,6 +389,25 @@ pub(crate) fn emit_selective_runtimes(
     for &target in targets {
         let path = Path::new(wat_path).with_extension(target.runtime_extension());
         let mut text = assemble_for_requirements(&live_imports, target, requirements)?;
+        if let Some((root, modules, bundles)) = imports {
+            let bundle_path =
+                Path::new(wat_path).with_extension(format!("{}.jsimports.mjs", target.as_str()));
+            let bundle = match bundles.get(target.as_str()) {
+                Some(code) => code.clone(),
+                None => crate::driver::js_imports::bundle(root, modules, target.as_str())?,
+            };
+            fs::write(&bundle_path, bundle)?;
+            let name = bundle_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| Error::other("non-UTF-8 JS bundle filename"))?;
+            let specifier = serde_json::to_string(&format!("./{name}")).map_err(Error::other)?;
+            text = text.replace(
+                "const importedJsModules = {};",
+                &format!("import {{ importedJsModules }} from {specifier};"),
+            );
+            written.push(bundle_path);
+        }
         text = text.replace(
             "function bindTypedImport() { return null; }",
             &typed::generate(&abi, &live_imports)?,

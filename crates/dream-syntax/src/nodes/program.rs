@@ -37,6 +37,8 @@ pub struct GlobalVariableNode<'a> {
 pub struct ImportNode {
     pub module_name: SyntaxToken,
     pub alias: Option<SyntaxToken>,
+    /// JavaScript module specifiers are opaque strings, not Dream module paths.
+    pub is_js: bool,
 }
 
 impl ImportNode {
@@ -45,6 +47,7 @@ impl ImportNode {
         ImportNode {
             module_name,
             alias: None,
+            is_js: false,
         }
     }
 
@@ -53,6 +56,7 @@ impl ImportNode {
         ImportNode {
             module_name,
             alias: Some(alias),
+            is_js: false,
         }
     }
 }

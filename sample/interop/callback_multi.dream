@@ -1,3 +1,5 @@
+import system.js;
+
 // Multi-argument callbacks across a dynamic `js` call. A `fun(js, js): void` is auto-wrapped into a
 // JS callable (a FUNC slot carrying arity 2), so a JS iteratee like `Array.forEach((value, index))`
 // can invoke the Dream function with both arguments.

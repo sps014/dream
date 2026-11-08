@@ -188,6 +188,9 @@ pub struct Manifest {
     pub test: Option<TestConfig>,
     #[serde(default)]
     pub dependencies: BTreeMap<String, Dependency>,
+    /// JavaScript dependencies consumed by the compiler's automatic JS binding generator.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub npm: BTreeMap<String, String>,
     #[serde(default, rename = "dev-dependencies")]
     pub dev_dependencies: BTreeMap<String, Dependency>,
     /// Named shell commands a developer can invoke via their own shell (e.g. `sh -c
@@ -431,6 +434,7 @@ impl Manifest {
             workspace: None,
             test: None,
             dependencies: BTreeMap::new(),
+            npm: BTreeMap::new(),
             dev_dependencies: BTreeMap::new(),
             scripts: BTreeMap::new(),
             registries: BTreeMap::new(),

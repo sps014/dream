@@ -15,6 +15,7 @@ mod gpu;
 mod gpu_shaders;
 mod interop;
 mod io;
+mod js;
 mod json;
 mod json_derive;
 mod logging;
@@ -53,6 +54,7 @@ pub const BOOTSTRAP_PACKAGES: &[&str] = &["system.core", "system.primitives"];
 /// All stdlib packages, in global prelude merge order.
 pub const STD_PACKAGES: &[StdPackage] = &[
     core::PACKAGE,
+    js::PACKAGE,
     audio::PACKAGE,
     primitives::PACKAGE,
     collections::PACKAGE,

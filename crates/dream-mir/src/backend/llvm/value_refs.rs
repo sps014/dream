@@ -193,6 +193,12 @@ impl Fx<'_, '_> {
     }
 
     fn ref_action(&mut self, ty: TypeId, value: &V, action: &RefAction) {
+        // Host registry identities are owned references, but never guest heap edges.
+        if matches!(self.interner.kind(ty), dream_types::TyKind::Js)
+            && matches!(action, RefAction::Visit | RefAction::Publish(_))
+        {
+            return;
+        }
         match action {
             RefAction::Visit => {
                 let value = self.as_ref(value);

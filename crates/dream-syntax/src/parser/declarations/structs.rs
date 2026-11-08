@@ -150,7 +150,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 // only binds when the next token is a property name followed by a parameter list.
                 let is_accessor = core.kind == TokenKind::IdentifierToken
                     && crate::nodes::function::AccessorKind::from_keyword(&core.text).is_some()
-                    && self.peek_token(m + 1).kind == TokenKind::IdentifierToken
+                    && matches!(
+                        self.peek_token(m + 1).kind,
+                        TokenKind::IdentifierToken | TokenKind::DefaultToken
+                    )
                     && self.peek_token(m + 2).kind == TokenKind::OpenParenthesisToken;
                 if core.kind == TokenKind::FunToken
                     || core.kind == TokenKind::ExternToken

@@ -1,0 +1,16 @@
+module system.js;
+
+/// A rejected JavaScript promise, retaining the original rejection value.
+public struct JsError {
+    /// The original JavaScript value, which may be an Error, a primitive, null, or undefined.
+    public reason: js;
+
+    internal constructor(reason: js) {
+        this.reason = reason;
+    }
+
+    /// A readable representation of the rejection value.
+    public get message(): string {
+        return this.reason.to_str();
+    }
+}

@@ -246,7 +246,7 @@ getUser: (id) =>
     .catch(() => ""),
 ```
 
-A Promise awaited as a [`js` value](../interop/js-type.md#awaiting-js-promises) reports rejection as `None` instead, and a rejection caused by cancelling the awaiting task is not a failure.
+A Promise awaited as a [`js` value](../interop/js-type.md#awaiting-js-promises) reports rejection as `Err(JsError)` instead, and a rejection caused by cancelling the awaiting task is not a failure.
 
 ## Limitations
 

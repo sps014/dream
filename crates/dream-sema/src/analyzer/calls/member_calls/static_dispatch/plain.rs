@@ -183,17 +183,17 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        // `js.func` / `js.func0` / `js.funcN` strip the closure env host-side — reject capturing
-        // handlers here (static dispatch, not the dynamic `js` member-call path).
-        if type_name == dream_abi::js_abi::JS_TYPE
-            && matches!(method.text.as_str(), "func" | "func0" | "funcN")
+        let expected_params = store_sig.parameters.clone();
+        if self
+            .struct_info(owner)
+            .is_some_and(|info| info.js_namespace.is_some())
         {
-            for arg in arg_hirs.iter().flatten() {
+            for argument in arg_hirs.iter().flatten() {
                 if matches!(
-                    self.type_ctx.interner.kind(arg.ty),
+                    self.type_ctx.interner.kind(argument.ty),
                     dream_types::TyKind::Func(..)
                 ) && !self.ensure_captureless_js_callback(
-                    arg,
+                    argument,
                     Some(method.position),
                     diagnostics,
                 ) {
@@ -202,8 +202,6 @@ impl<'a> Analyzer<'a> {
                 }
             }
         }
-
-        let expected_params = store_sig.parameters.clone();
         let total = expected_params.len();
         let required = Self::required_arg_count(&store_sig.defaults, total);
         let given = arg_types.len();

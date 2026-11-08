@@ -155,6 +155,13 @@ impl<'a> Analyzer<'a> {
         if let ExpressionNode::Identifier(id) = obj {
             let is_local = symbol_table.borrow().get_symbol(id).is_ok();
             if !is_local && id.text == "js" && member.text == "global" {
+                if self.js_bridge_def("global_this").is_none() {
+                    diagnostics.report_error(
+                        "JavaScript interop requires 'import system.js;'".into(),
+                        Some(member.position),
+                    );
+                    return Ok(Type::Unknown);
+                }
                 self.desugar_js_global_this();
                 return Ok(Self::js_type());
             }

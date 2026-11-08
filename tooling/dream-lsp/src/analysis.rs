@@ -95,7 +95,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         );
 
         for import in &program.imports {
-            if import.alias.is_some() {
+            if import.is_js || import.alias.is_some() {
                 continue;
             }
             let module_name = import.module_name.text.as_str();
@@ -112,7 +112,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
             acc.visited.insert(MAIN_FILE.to_string());
 
             for import in &program.imports {
-                if import.alias.is_some() {
+                if import.is_js || import.alias.is_some() {
                     continue;
                 }
                 let module_name = import.module_name.text.as_str();
@@ -152,6 +152,15 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
             }
         }
     }
+
+    let _ = dream::driver::js_imports::prepare(
+        &arena,
+        &mut acc,
+        file_path.unwrap_or(MAIN_FILE),
+        "web",
+        false,
+        &mut diagnostics,
+    );
 
     let _ = dream::driver::prelude::merge_prelude(
         &arena,
@@ -230,6 +239,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
             stacker::maybe_grow(64 * 1024, 16 * 1024 * 1024, || {
                 let target = dream_abi::target::TargetSpec::host();
                 let mut analyzer = Analyzer::new(&graph, &arena)
+                    .with_aliased_imports(acc.aliased_imports.clone())
                     .with_target_layout(dream_hir::TargetLayout {
                         ptr_size: target.ptr_size,
                         ptr_align: target.ptr_align,

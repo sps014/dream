@@ -1,3 +1,5 @@
+import system.js;
+
 // The dynamic `js` type: a live JavaScript value crosses into Dream as an opaque handle and is
 // read, called, and mutated with native syntax. The compiler performs no member resolution on a
 // `js` value - `config.title`, `title.toUpperCase()`, `config.touched = true` bind at runtime in

@@ -413,6 +413,13 @@ impl<'a> Analyzer<'a> {
             method.position,
             diagnostics,
         );
+        self.validate_js_callback_arguments(
+            store_sig.declaring_file.as_deref(),
+            &expected_params,
+            &arg_hirs,
+            method.position,
+            diagnostics,
+        );
 
         // An `async` method yields a `Future<T>` handle (carried by the `MethodCall`); `await`
         // unwraps it.

@@ -61,6 +61,8 @@ impl Index {
             next_scope: 0,
             is_main: true,
             current_file: None,
+            current_namespace: None,
+            file_namespaces: HashMap::new(),
             fn_params: HashMap::new(),
             ctor_params: HashMap::new(),
         };
@@ -91,6 +93,12 @@ impl Index {
                 None,
             ));
 
+            if let Some(module) = &program.module {
+                builder
+                    .file_namespaces
+                    .insert(String::new(), module.path.text.clone());
+            }
+
             // Pass 1: Declare all file-level symbols for the main program
             builder.walk_program_for_imports(program);
 
@@ -98,7 +106,7 @@ impl Index {
 
             // Collect std + file imports before prelude merge so opt-in packages load.
             for import in &program.imports {
-                if import.alias.is_some() {
+                if import.is_js || import.alias.is_some() {
                     continue;
                 }
                 let module_name = import.module_name.text.as_str();
@@ -115,7 +123,7 @@ impl Index {
                 acc.visited.insert(path_str.to_string());
 
                 for import in &program.imports {
-                    if import.alias.is_some() {
+                    if import.is_js || import.alias.is_some() {
                         continue;
                     }
                     let module_name = import.module_name.text.as_str();
@@ -138,6 +146,31 @@ impl Index {
                 }
             }
 
+            acc.parsed_files.insert(
+                file_path.unwrap_or("main.dream").to_string(),
+                program.clone(),
+            );
+            let _ = dream::driver::js_imports::prepare(
+                &arena,
+                &mut acc,
+                file_path.unwrap_or("main.dream"),
+                "web",
+                false,
+                &mut scratch,
+            );
+            let aliases = acc.aliased_imports.clone();
+            for (_, item, alias, _) in aliases {
+                if let Some(mut declaration) = acc
+                    .all_structs
+                    .iter()
+                    .find(|decl| decl.name.text == item)
+                    .cloned()
+                {
+                    declaration.name = alias;
+                    acc.all_structs.push(declaration);
+                }
+            }
+
             let _ = dream::driver::prelude::merge_prelude(
                 &arena,
                 &mut acc.all_functions,
@@ -153,6 +186,11 @@ impl Index {
                 acc.cfg,
             );
 
+            builder.file_namespaces.extend(
+                acc.file_modules
+                    .iter()
+                    .map(|(file, namespace)| (file.clone(), namespace.to_string())),
+            );
             let combined = dream::syntax::nodes::ProgramNode::new(
                 vec![],
                 acc.all_structs,

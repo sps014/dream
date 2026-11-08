@@ -213,7 +213,12 @@ impl<'a> Analyzer<'a> {
         // Dynamic `js`: box a primitive/`string` into a `js` handle, or unbox a `js` value into a
         // primitive/`string`, at this typed binding boundary (so `let x: js = 5` and
         // `let n: int = el.count` work without an explicit conversion).
-        if matches!(target_k, TyKind::Js) && matches!(val_k, TyKind::Prim(_) | TyKind::Struct(..)) {
+        if matches!(target_k, TyKind::Js)
+            && matches!(
+                val_k,
+                TyKind::Prim(_) | TyKind::Struct(..) | TyKind::Func(..)
+            )
+        {
             if let Some(boxed) = self.box_to_js(value.clone(), None, None) {
                 return boxed;
             }

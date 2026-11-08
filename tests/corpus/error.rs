@@ -119,7 +119,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "js_lambda_errors",
-        "capturing lambdas cannot be passed to JS APIs (the closure environment would be lost); pass a non-capturing top-level function, or wrap only a captureless `fun(...)` via `js.func` / `js.func0`",
+        "capturing lambdas cannot be passed to JS APIs; use a captureless function",
         true,
     ),
     Case::error(

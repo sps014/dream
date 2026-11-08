@@ -292,8 +292,8 @@ fn catalog() -> &'static UserAttributes {
                 include_str!("../../../dream-stdlib/src/system/interop/owned_attribute.dream"),
             ),
             (
-                "system.core",
-                include_str!("../../../dream-stdlib/src/system/core/js_attribute.dream"),
+                "system.js",
+                include_str!("../../../dream-stdlib/src/system/js/js_attribute.dream"),
             ),
             (
                 "system.core",

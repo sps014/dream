@@ -20,6 +20,28 @@ impl Index {
             HoverTarget::Attribute(located) => return Some(located),
         };
         let mut contents = format!("```dream\n{}\n```", decl.detail);
+        let namespace = decl
+            .ty
+            .as_deref()
+            .and_then(|ty| {
+                self.decls
+                    .iter()
+                    .find(|candidate| {
+                        candidate.name == type_base(ty)
+                            && matches!(
+                                candidate.kind,
+                                SymKind::Class
+                                    | SymKind::Struct
+                                    | SymKind::Interface
+                                    | SymKind::Enum
+                            )
+                    })
+                    .and_then(|candidate| candidate.namespace.as_ref())
+            })
+            .or(decl.namespace.as_ref());
+        if let Some(namespace) = namespace {
+            contents.push_str(&format!("\n\nNamespace: `{namespace}`"));
+        }
         if let Some(doc) = &decl.doc_comment {
             contents.push_str("\n\n---\n\n");
             contents.push_str(doc);
@@ -169,6 +191,7 @@ impl Index {
             && let Some(spec) = self.declared_attribute(&ctx.name)
         {
             return Some(Decl {
+                namespace: None,
                 name: spec.name.to_string(),
                 kind: SymKind::Decorator,
                 detail: spec.signature.clone(),

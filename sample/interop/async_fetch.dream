@@ -1,3 +1,5 @@
+import system.js;
+
 // Async JS interop demo: `await` a host Promise without any `.then()` in Dream source.
 //
 // Compile with:  cargo run -- sample/interop/async_fetch.dream

@@ -147,7 +147,7 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
             if fx.is_value(elem) {
                 let at = fx.as_ref(&V::s(at));
                 fx.visit_refs(elem, &at);
-            } else if fx.is_rc(elem) {
+            } else if fx.is_rc(elem) && !matches!(fx.interner.kind(elem), dream_types::TyKind::Js) {
                 let child = fx.load_ty(fx.h(), &at, 4, true);
                 let child = fx.as_ref(&child);
                 fx.call("dream_visit_edge", &[child]);

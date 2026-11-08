@@ -1,3 +1,5 @@
+import system.js;
+
 // JS interop demo. The `extern` functions are implemented in JavaScript.
 //
 // Compile with:  cargo run -- sample/interop/interop.dream

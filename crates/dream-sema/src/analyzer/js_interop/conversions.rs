@@ -10,9 +10,9 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Boxes a Dream value into a `js` handle: a `js` value passes through; primitives/`string` route
-    /// through the matching `__box_*` bridge; a `fun(js): void` / `fun(): void` is wrapped as a JS
-    /// callable. Any other type (struct/class/union/array/list) yields `None` (a compile error at the
-    /// call site, pointing at `js.object()` / `js.array()`).
+    /// through the matching `__box_*` bridge; a captureless function is wrapped as a JS callable.
+    /// Callback parameters and results may be primitives, `js`, or a generated JavaScript object
+    /// struct. Any other type yields `None` (a compile error at the call site).
     ///
     /// A capturing `fun(...)` yields `None` after reporting via `diagnostics` when provided — the
     /// host bridges strip the closure env word, so only captureless functions are marshalable.
@@ -37,36 +37,59 @@ impl<'a> Analyzer<'a> {
                 };
                 self.js_bridge_call(class.box_bridge(), vec![carried], js)
             }
-            TyKind::Func(params, _ret) => {
-                // A Dream function handed to a JS API as a persistent handle. `e` is a boxed
-                // `fun(...)` value (see `hir_set_func_value`); the host has no env-restoring
-                // prologue of its own, so only the funcidx half is meaningful — a *capturing*
-                // lambda would lose its environment and is rejected at compile time. Arity 0/1 use
-                // the documented `func0`/`func` convenience bridges; any higher arity routes through
-                // the generalized `funcN` bridge, which receives the raw funcref-table index plus
-                // the parameter count and wraps it host-side as `fun(js, …): void`. Each parameter
-                // is marshaled as a `js` handle and the result is discarded.
+            TyKind::Func(params, ret) => {
                 if self.func_expr_is_capturing(&e) {
                     if let Some(diagnostics) = diagnostics {
                         diagnostics.report_error(Self::JS_CAPTURING_CALLBACK_MSG.to_string(), pos);
                     }
                     return None;
                 }
-                let funcidx = self.hir_funcbox_funcidx(e)?;
-                match params.len() {
-                    0 => self.js_bridge_call("func0", vec![funcidx], js),
-                    1 => self.js_bridge_call("func", vec![funcidx], js),
-                    n => {
-                        let arity =
-                            HExpr::new(self.type_ctx.interner.int(), HExprKind::IntLit(n as i64));
-                        self.js_bridge_call("funcN", vec![funcidx, arity], js)
+                if params.iter().any(|ty| !self.js_callback_type(*ty, false))
+                    || !self.js_callback_type(ret, true)
+                {
+                    if let Some(diagnostics) = diagnostics {
+                        diagnostics.report_error(
+                            "JS callbacks require primitive, js, or imported JavaScript object parameters and results".into(),
+                            pos,
+                        );
                     }
+                    return None;
                 }
+                let signature =
+                    dream_types::display_name(&self.type_ctx.interner, &self.type_ctx.defs, e.ty);
+                let signature = self.js_name_lit(&signature);
+                let funcidx = self.hir_funcbox_funcidx(e)?;
+                self.js_bridge_call("callback", vec![funcidx, signature], js)
             }
-            // A struct/class deep-copies into a plain JS object; the backend generates a
             // `$<Type>_to_js` marshaler that the `Cast` dispatches to (see `mir/emit/js_marshal.rs`).
+            TyKind::Struct(..)
+                if self
+                    .struct_info(e.ty)
+                    .is_some_and(|info| info.is_value && info.js_namespace.is_some()) =>
+            {
+                Some(HExpr::new(
+                    js,
+                    HExprKind::Field {
+                        obj: Box::new(e),
+                        field: 0,
+                    },
+                ))
+            }
             TyKind::Struct(..) => Some(HExpr::new(js, HExprKind::Cast(Box::new(e)))),
             _ => None,
+        }
+    }
+
+    /// A callback parameter or result the host can marshal: a primitive, `js`, `void` (results
+    /// only), or a generated JavaScript object struct.
+    fn js_callback_type(&self, ty: TypeId, result: bool) -> bool {
+        match self.type_ctx.interner.kind(ty) {
+            TyKind::Prim(_) | TyKind::Js => true,
+            TyKind::Void => result,
+            TyKind::Struct(..) => self
+                .struct_info(ty)
+                .is_some_and(|info| info.is_value && info.js_namespace.is_some()),
+            _ => false,
         }
     }
 
@@ -77,6 +100,23 @@ impl<'a> Analyzer<'a> {
     /// registered.
     pub(in crate::analyzer) fn unbox_from_js(&mut self, e: HExpr, target: TypeId) -> HExpr {
         let target_stripped = target;
+        if self
+            .struct_info(target)
+            .is_some_and(|info| info.is_value && info.js_namespace.is_some())
+            && let TyKind::Struct(def, instance) = self.type_ctx.interner.kind(target).clone()
+        {
+            let ctor = self.unique_method_def(target, dream_syntax::nodes::types::CONSTRUCTOR_NAME);
+            return HExpr::new(
+                target,
+                HExprKind::New {
+                    def,
+                    instance,
+                    ctor,
+                    args: vec![e],
+                    take_params: self.ctor_take_params(ctor),
+                },
+            );
+        }
         // A struct/class target reconstructs from the JS object's properties via the generated
         // `$js_to_<Type>` marshaler that the `Cast` dispatches to (heap result for reference
         // classes; in-place `(j, dst)` fill for value structs — see `mir/emit/js_marshal.rs`).

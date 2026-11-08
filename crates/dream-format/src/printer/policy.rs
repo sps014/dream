@@ -160,7 +160,10 @@ impl Printer {
             && is_decl_starter(kind)
             && !matches!(
                 kind,
-                TokenKind::ImportToken | TokenKind::LetToken | TokenKind::ConstToken
+                TokenKind::ImportToken
+                    | TokenKind::JsImportToken
+                    | TokenKind::LetToken
+                    | TokenKind::ConstToken
             )
         {
             self.layout.blank_line();

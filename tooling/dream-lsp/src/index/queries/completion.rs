@@ -260,6 +260,9 @@ impl Index {
             .iter()
             .filter(|d| {
                 matches!(d.kind, SymKind::Field | SymKind::Method)
+                    && !(d.file_path.as_deref().is_some_and(|p| {
+                        p.starts_with("<js>/") || p.starts_with("<std>/generated/")
+                    }) && d.name.starts_with("__"))
                     && d.scope == GLOBAL
                     && detail_belongs_to(&d.detail, base)
                     && d.name != CONSTRUCTOR_NAME
@@ -313,6 +316,9 @@ impl Index {
                 .iter()
                 .filter(|d| {
                     d.kind == SymKind::Method
+                        && !(d.file_path.as_deref().is_some_and(|p| {
+                            p.starts_with("<js>/") || p.starts_with("<std>/generated/")
+                        }) && d.name.starts_with("__"))
                         && d.scope == GLOBAL
                         && detail_belongs_to(&d.detail, name)
                         && detail_is_static_method(&d.detail)

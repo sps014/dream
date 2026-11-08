@@ -670,7 +670,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    fn active(&self) -> bool {
+    pub(in crate::analyzer) fn active(&self) -> bool {
         self.hir.collecting && self.hir.ok
     }
 

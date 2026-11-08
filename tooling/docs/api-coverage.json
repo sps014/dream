@@ -6790,80 +6790,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/core/js.dream",
-    "package": "system.core",
-    "page": "reference/api/core-js.md",
-    "declarations": [
-      {
-        "signature": "public static get null(): js",
-        "description": "The JavaScript `null` value.",
-        "line": 59,
-        "page": "reference/api/core-js.md"
-      },
-      {
-        "signature": "public static get undefined(): js",
-        "description": "The JavaScript `undefined` value.",
-        "line": 66,
-        "page": "reference/api/core-js.md"
-      },
-      {
-        "signature": "public fun to_int(): int",
-        "description": "Explicit conversions back to Dream values.",
-        "line": 407,
-        "page": "reference/api/core-js.md"
-      },
-      {
-        "signature": "public fun to_double(): double",
-        "description": "Converts this JavaScript value to a Dream double.",
-        "line": 414,
-        "page": "reference/api/core-js.md"
-      },
-      {
-        "signature": "public fun to_bool(): bool",
-        "description": "Converts this JavaScript value to a Dream boolean.",
-        "line": 421,
-        "page": "reference/api/core-js.md"
-      },
-      {
-        "signature": "public fun to_str(): string",
-        "description": "Converts this JavaScript value to a Dream string.",
-        "line": 428,
-        "page": "reference/api/core-js.md"
-      },
-      {
-        "signature": "public fun is_null(): bool",
-        "description": "True if the referenced value is `null` or `undefined`.",
-        "line": 435,
-        "page": "reference/api/core-js.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/core/js_attribute.dream",
-    "package": "system.core",
-    "page": "reference/api/core-js-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct JsAttribute",
-        "description": "Binds an external function to a JavaScript export using `@js(\"module\", \"export\")`. Available only on JavaScript platforms.",
-        "line": 6,
-        "page": "reference/api/core-js-attribute.md"
-      },
-      {
-        "signature": "public module_name: string",
-        "description": "Fully qualified module containing the declaration.",
-        "line": 8,
-        "page": "reference/api/core-js-attribute.md"
-      },
-      {
-        "signature": "public export_name: string",
-        "description": "Name exposed to callers of the foreign function.",
-        "line": 11,
-        "page": "reference/api/core-js-attribute.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/core/lock.dream",
     "package": "system.core",
     "page": "reference/api/core-lock.md",
@@ -15451,6 +15377,136 @@
         "description": "Retries partial writes until all bytes are accepted; rejects zero or invalid progress. A failure leaves any completed writes in effect; this does not flush.",
         "line": 15,
         "page": "reference/api/io-writer.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/js/js.dream",
+    "package": "system.js",
+    "page": "reference/api/js-js.md",
+    "declarations": [
+      {
+        "signature": "public static fun object(): js",
+        "description": "Creates an empty JavaScript object whose properties can be assigned dynamically.",
+        "line": 45,
+        "page": "reference/api/js-js.md"
+      },
+      {
+        "signature": "public static fun array(): js",
+        "description": "Creates an empty JavaScript array.",
+        "line": 52,
+        "page": "reference/api/js-js.md"
+      },
+      {
+        "signature": "public static get null(): js",
+        "description": "The JavaScript `null` value.",
+        "line": 71,
+        "page": "reference/api/js-js.md"
+      },
+      {
+        "signature": "public static get undefined(): js",
+        "description": "The JavaScript `undefined` value.",
+        "line": 78,
+        "page": "reference/api/js-js.md"
+      },
+      {
+        "signature": "public fun to_int(): int",
+        "description": "Converts this JavaScript value to a Dream integer.",
+        "line": 413,
+        "page": "reference/api/js-js.md"
+      },
+      {
+        "signature": "public fun to_double(): double",
+        "description": "Converts this JavaScript value to a Dream double.",
+        "line": 420,
+        "page": "reference/api/js-js.md"
+      },
+      {
+        "signature": "public fun to_bool(): bool",
+        "description": "Converts this JavaScript value to a Dream boolean.",
+        "line": 427,
+        "page": "reference/api/js-js.md"
+      },
+      {
+        "signature": "public fun to_str(): string",
+        "description": "Converts this JavaScript value to a Dream string.",
+        "line": 434,
+        "page": "reference/api/js-js.md"
+      },
+      {
+        "signature": "public fun is_null(): bool",
+        "description": "True if the referenced value is `null` or `undefined`.",
+        "line": 441,
+        "page": "reference/api/js-js.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/js/js_attribute.dream",
+    "package": "system.js",
+    "page": "reference/api/js-js-attribute.md",
+    "declarations": [
+      {
+        "signature": "public struct JsAttribute",
+        "description": "Binds an external function to a JavaScript export using `@js(\"module\", \"export\")`. Available only on JavaScript platforms.",
+        "line": 6,
+        "page": "reference/api/js-js-attribute.md"
+      },
+      {
+        "signature": "public module_name: string",
+        "description": "Fully qualified module containing the declaration.",
+        "line": 8,
+        "page": "reference/api/js-js-attribute.md"
+      },
+      {
+        "signature": "public export_name: string",
+        "description": "Name exposed to callers of the foreign function.",
+        "line": 11,
+        "page": "reference/api/js-js-attribute.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/js/js_error.dream",
+    "package": "system.js",
+    "page": "reference/api/js-js-error.md",
+    "declarations": [
+      {
+        "signature": "public struct JsError",
+        "description": "A rejected JavaScript promise, retaining the original rejection value.",
+        "line": 4,
+        "page": "reference/api/js-js-error.md"
+      },
+      {
+        "signature": "public reason: js",
+        "description": "The original JavaScript value, which may be an Error, a primitive, null, or undefined.",
+        "line": 6,
+        "page": "reference/api/js-js-error.md"
+      },
+      {
+        "signature": "public get message(): string",
+        "description": "A readable representation of the rejection value.",
+        "line": 13,
+        "page": "reference/api/js-js-error.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/js/js_type_attribute.dream",
+    "package": "system.js",
+    "page": "reference/api/js-js-type-attribute.md",
+    "declarations": [
+      {
+        "signature": "public struct JsTypeAttribute",
+        "description": "Identifies the originating namespace of a JavaScript binding. The struct must contain one owned `js` field and a constructor accepting that handle. A static class may instead identify a module's exported members.",
+        "line": 7,
+        "page": "reference/api/js-js-type-attribute.md"
+      },
+      {
+        "signature": "public namespace: string",
+        "description": "JavaScript module or standard-library namespace shown in editor type information.",
+        "line": 9,
+        "page": "reference/api/js-js-type-attribute.md"
       }
     ]
   },

@@ -1,3 +1,5 @@
+import system.js;
+
 // Passing Dream classes across the JS boundary: a class deep-copies into a plain JS object (nested
 // classes and array fields included), and a JS object reads back into a Dream class field-by-field.
 //

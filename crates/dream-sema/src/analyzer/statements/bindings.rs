@@ -123,6 +123,17 @@ impl<'a> Analyzer<'a> {
             .unwrap_or(Type::Unknown);
         let mut value = self.hir_take();
         self.current_expected_type = saved_expected;
+        if type_annotation
+            .as_ref()
+            .is_some_and(|ty| self.is_js_type(ty))
+            && let Some(initializer) = &value
+            && matches!(
+                self.type_ctx.interner.kind(initializer.ty),
+                dream_types::TyKind::Func(..)
+            )
+        {
+            self.ensure_captureless_js_callback(initializer, Some(left.position), diagnostics);
+        }
         let void = self.type_ctx.interner.void();
         let right_type = if value.as_ref().is_some_and(|v| v.ty == void)
             && !Self::is_discard_binding(&left.text)

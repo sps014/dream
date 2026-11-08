@@ -163,7 +163,15 @@ pub fn hover(snapshot: Option<&IdeSnapshot>, idx: &Index, offset: usize) -> Opti
 pub fn hover_at(snapshot: &IdeSnapshot, offset: usize) -> Option<(usize, usize, String)> {
     let r = snapshot.ref_covering(offset)?;
     let body = hover_body(snapshot, r);
-    Some((r.start, r.end, format!("```dream\n{body}\n```")))
+    let mut contents = format!("```dream\n{body}\n```");
+    if let Some(namespace) = r
+        .result
+        .ty()
+        .and_then(|ty| snapshot.type_namespaces.get(&ty))
+    {
+        contents.push_str(&format!("\n\nNamespace: `{namespace}`"));
+    }
+    Some((r.start, r.end, contents))
 }
 
 fn fn_signature(

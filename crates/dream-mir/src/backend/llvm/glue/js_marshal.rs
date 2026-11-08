@@ -258,7 +258,7 @@ impl<'l, 'a> Fx<'l, 'a> {
 fn struct_to_js(l: &mut Lcx<'_>, layout: &TypeLayout) {
     let mut fx = glue(l, &struct_syms(&layout.name).0);
     let this = fx.arg(0);
-    let o = fx.bridge("object", &[]);
+    let o = fx.bridge("host_object", &[]);
     for f in &layout.fields {
         let at = fx.addr(&this, f.offset as i64);
         let Some(v) = fx.stored_to_js(&at, f.ty) else {
@@ -348,7 +348,7 @@ fn union_to_js(l: &mut Lcx<'_>, ty: TypeId, layout: &UnionLayout) {
         fx.finish();
         return;
     }
-    let o = fx.bridge("object", &[]);
+    let o = fx.bridge("host_object", &[]);
     let disc = fx.load_disc(&this);
     for v in &layout.variants {
         let hit = fx.w.icmp("eq", &disc, &Value::i32(v.discriminant as i64));
@@ -458,7 +458,7 @@ fn array_to_js(l: &mut Lcx<'_>, elem: TypeId) {
     let esize = elem_size(&l.cx, elem) as i64;
     let mut fx = glue(l, &array_syms(elem).0);
     let arr = fx.arg(0);
-    let o = fx.bridge("array", &[]);
+    let o = fx.bridge("host_array", &[]);
     let nz = fx.truthy(&arr);
     let n = fx.if_else_v(
         &nz,

@@ -1,4 +1,4 @@
-module system.core;
+module system.js;
 
 /// Binds an external function to a JavaScript export using `@js("module", "export")`. Available
 /// only on JavaScript platforms.

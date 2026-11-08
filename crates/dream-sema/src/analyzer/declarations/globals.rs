@@ -18,7 +18,7 @@ impl<'a> Analyzer<'a> {
         // that expression analysis requires; with no `this` parameter it is treated as outside any
         // type, so initializers cannot reach private members.
         let empty_body: &'a [dream_syntax::nodes::StatementNode<'a>] = &[];
-        let init_fn = FunctionNode::new(
+        let mut init_fn = FunctionNode::new(
             Vec::new(),
             synthetic_token(TokenKind::IdentifierToken, "__module_init"),
             None,
@@ -39,6 +39,7 @@ impl<'a> Analyzer<'a> {
 
         for global in node.globals.iter() {
             self.current_file = global.file_path.clone();
+            init_fn.file_path = global.file_path.clone();
             self.type_ctx
                 .set_scope(self.graph.module_for_file(global.file_path.as_deref()));
             diagnostics.file_path = file_path_string(&global.file_path);

@@ -175,15 +175,17 @@ impl<'a, 'b> Parser<'a, 'b> {
         // takes no parameters and declares a return type; a setter takes one parameter. The property
         // name is stored on `name`, and `accessor` records which half this is.
         let accessor_kind = if self.current_token().kind == TokenKind::IdentifierToken
-            && self.peek_token(1).kind == TokenKind::IdentifierToken
-        {
+            && matches!(
+                self.peek_token(1).kind,
+                TokenKind::IdentifierToken | TokenKind::DefaultToken
+            ) {
             crate::nodes::function::AccessorKind::from_keyword(&self.current_token().text)
         } else {
             None
         };
         if let Some(accessor_kind) = accessor_kind {
             self.match_token(TokenKind::IdentifierToken);
-            let mut prop_name = self.match_token(TokenKind::IdentifierToken);
+            let mut prop_name = self.match_member_name();
             Self::splice_leading_trivia(&mut prop_name, first_trivia);
             let params = self.parse_formal_parameters()?;
             let mut return_type: Option<Type> = None;

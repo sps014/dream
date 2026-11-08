@@ -1,8 +1,24 @@
 # Js
 
-No import is needed.
+**Import:** `import system.js;`
 
-Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+Read the [JavaScript interop guide](../../language/interop/index.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
+
+## `object`
+
+Creates an empty JavaScript object whose properties can be assigned dynamically.
+
+```dream
+public static fun object(): js
+```
+
+## `array`
+
+Creates an empty JavaScript array.
+
+```dream
+public static fun array(): js
+```
 
 ## `null`
 
@@ -22,7 +38,7 @@ public static get undefined(): js
 
 ## `to_int`
 
-Explicit conversions back to Dream values.
+Converts this JavaScript value to a Dream integer.
 
 ```dream
 public fun to_int(): int

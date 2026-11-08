@@ -623,10 +623,16 @@ impl<'a, 'b> Parser<'a, 'b> {
             None
         };
 
-        while self.current_token().kind == TokenKind::ImportToken
-            || (self.at_cfg_attribute()
-                && self.core_keyword_after_attrs() == TokenKind::ImportToken)
+        while matches!(
+            self.current_token().kind,
+            TokenKind::ImportToken | TokenKind::JsImportToken
+        ) || (self.at_cfg_attribute()
+            && matches!(
+                self.core_keyword_after_attrs(),
+                TokenKind::ImportToken | TokenKind::JsImportToken
+            ))
         {
+            let loop_start = self.current_token_index;
             let gate = self.parse_cfg_gate();
             let parsed = self.parse_import();
             let keep = self.keep_cfg_item(gate);
@@ -635,6 +641,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Ok(_) => {}
                 Err(_) => self.recover_to_next_declaration(),
             }
+            self.ensure_progress(loop_start);
         }
 
         while self.current_token().kind != TokenKind::EndOfFileToken {
@@ -768,6 +775,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     | TokenKind::LetToken
                     | TokenKind::ConstToken
                     | TokenKind::ImportToken
+                    | TokenKind::JsImportToken
             ) {
                 break;
             }

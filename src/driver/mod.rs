@@ -18,6 +18,7 @@ pub mod error;
 pub mod ffi_shim;
 pub mod generate;
 pub mod interface_defaults;
+pub mod js_imports;
 pub mod js_runtime;
 #[cfg(feature = "native")]
 pub mod metrics;

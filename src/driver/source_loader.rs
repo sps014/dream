@@ -27,6 +27,9 @@ mod graph;
 /// correctly.
 #[derive(Default)]
 pub struct ProgramAccumulator<'a> {
+    pub js_modules: Vec<crate::driver::js_imports::JsModule>,
+    pub js_bundles: indexmap::IndexMap<String, String>,
+    pub js_project_root: Option<std::path::PathBuf>,
     /// Entry directory retained before following dependency cache symlinks.
     pub(crate) package_base: Option<std::path::PathBuf>,
     pub parsed_files: indexmap::IndexMap<String, ProgramNode<'a>>,
@@ -278,6 +281,10 @@ pub fn parse_source_recursive<'a>(
     }
 
     for import in &program.imports {
+        if import.is_js {
+            acc.requested_std_packages.insert("system.js".into());
+            continue;
+        }
         if let Some(alias) = &import.alias {
             // `import a.b.c as x;` names an item `c` inside a *declared* module `a.b`, not a file
             // path — resolved separately (`resolve_aliased_imports`) once every file, and its own

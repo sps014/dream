@@ -2308,3 +2308,40 @@ fn exclusive_range_expressions() {
     assert!(matches!(left, ExpressionNode::Unary(..)));
     assert!(matches!(right, ExpressionNode::Binary(_, op, _) if op.kind == TokenKind::MinusToken));
 }
+
+#[test]
+fn js_imports_keep_specifiers_aliases_and_source_order() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        r#"jsimport "firebase/app" as firebase; jsimport "./setup.mjs"; import system.js; fun main(): void {}"#,
+        &arena,
+    );
+    assert!(!diagnostics.has_errors());
+    assert_eq!(program.imports.len(), 3);
+    assert!(program.imports[0].is_js);
+    assert_eq!(program.imports[0].module_name.text, "\"firebase/app\"");
+    assert_eq!(
+        program.imports[0].alias.as_ref().map(|alias| alias.text.as_str()),
+        Some("firebase")
+    );
+    assert!(program.imports[1].is_js && program.imports[1].alias.is_none());
+    assert!(!program.imports[2].is_js);
+}
+
+#[test]
+fn malformed_js_import_recovers_to_following_function() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code("jsimport broken; fun main(): void {}", &arena);
+    assert!(diagnostics.has_errors());
+    assert!(program.functions.iter().any(|f| f.name.text == "main"));
+}
+
+#[test]
+fn default_export_accessors_are_member_names() {
+    let arena = bumpalo::Bump::new();
+    let (_, diagnostics) = parse_code(
+        "class Module { public get default(): int { return 1; } public set default(value: int) {} }",
+        &arena,
+    );
+    assert!(!diagnostics.has_errors());
+}

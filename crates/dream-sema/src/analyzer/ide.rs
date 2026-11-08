@@ -180,6 +180,8 @@ pub struct IdeSnapshot {
     pub unions: IndexMap<dream_types::TypeId, Vec<VariantOut>>,
     /// Source-level display name of every type keyed in the member tables.
     pub type_names: IndexMap<dream_types::TypeId, String>,
+    /// Declaring namespace, including the original module of a generated JS reference.
+    pub type_namespaces: IndexMap<dream_types::TypeId, String>,
     pub globals: Vec<GlobalOut>,
 }
 
@@ -534,6 +536,26 @@ impl<'a> Analyzer<'a> {
                 .then_some(ty)
             })
             .collect();
+        let type_namespaces = self
+            .type_ctx
+            .interner
+            .iter_kinds()
+            .filter_map(|(ty, kind)| {
+                let namespace = match kind {
+                    dream_types::TyKind::Struct(def, _)
+                    | dream_types::TyKind::Union(def, _)
+                    | dream_types::TyKind::Interface(def, _)
+                    | dream_types::TyKind::Enum(def) => self
+                        .struct_info(ty)
+                        .and_then(|info| info.js_namespace.clone())
+                        .unwrap_or_else(|| self.type_ctx.defs.get(*def).module_path.clone()),
+                    dream_types::TyKind::Js => "system.js".into(),
+                    dream_types::TyKind::Prim(_) => "system.primitives".into(),
+                    _ => return None,
+                };
+                (!namespace.is_empty()).then_some((ty, namespace))
+            })
+            .collect();
         IdeSnapshot {
             primary_file: None,
             refs,
@@ -545,6 +567,7 @@ impl<'a> Analyzer<'a> {
             enums,
             unions,
             type_names,
+            type_namespaces,
             globals,
         }
     }

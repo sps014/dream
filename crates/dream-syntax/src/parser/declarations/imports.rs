@@ -11,6 +11,22 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// - `import a.b.c as x;` — keeps the path dot-joined (`a.b.c`): it names an item inside a
     ///   *declared* `module` namespace, not a file path, resolved separately after all files load.
     pub(crate) fn parse_import(&mut self) -> Result<ImportNode, Error> {
+        if self.current_token().kind == TokenKind::JsImportToken {
+            self.next_token();
+            let module_name = self.match_token(TokenKind::StringToken);
+            let alias = if self.current_token().kind == TokenKind::AsToken {
+                self.next_token();
+                Some(self.match_token(TokenKind::IdentifierToken))
+            } else {
+                None
+            };
+            self.match_token(TokenKind::SemicolonToken);
+            return Ok(ImportNode {
+                module_name,
+                alias,
+                is_js: true,
+            });
+        }
         self.match_token(TokenKind::ImportToken);
 
         let first = self.match_token(TokenKind::IdentifierToken);

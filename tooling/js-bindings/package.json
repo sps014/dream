@@ -1,0 +1,17 @@
+{
+  "name": "dream-js-bindings",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "doctrine": "3.0.0",
+    "esbuild": "0.25.12",
+    "oxc-parser": "0.156.0",
+    "oxc-resolver": "11.24.2"
+  },
+  "devDependencies": {
+    "@types/web": "0.0.361"
+  }
+}

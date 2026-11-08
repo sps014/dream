@@ -1,5 +1,6 @@
 // Attribute validation runs before semantic analysis; every misuse below must be reported.
 import system;
+import system.js;
 import system.json;
 import system.interop;
 import system.gpu;

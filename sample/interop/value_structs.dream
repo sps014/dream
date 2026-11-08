@@ -1,3 +1,5 @@
+import system.js;
+
 // Value-struct <-> JS object marshaling: a `struct` deep-copies into a plain JS object, and a JS
 // object fills a value-struct slot in place via `$js_to_<Name>(j, dst)` (no heap allocation).
 //

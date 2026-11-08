@@ -1,0 +1,10 @@
+module system.js;
+
+/// Identifies the originating namespace of a JavaScript binding.
+/// The struct must contain one owned `js` field and a constructor accepting that handle.
+/// A static class may instead identify a module's exported members.
+@attribute(AttributeTarget.Struct, AttributeTarget.Class)
+public struct JsTypeAttribute {
+    /// JavaScript module or standard-library namespace shown in editor type information.
+    public namespace: string;
+}

@@ -60,6 +60,8 @@ impl NativeSetSpec {
 
 #[derive(Debug, Clone, Default)]
 pub struct ProjectManifest {
+    /// JavaScript runtime and declaration dependencies, resolved together through npm.
+    pub npm: std::collections::BTreeMap<String, String>,
     pub library: Option<dream_abi::library::LibraryConfig>,
     pub package_name: Option<String>,
     /// `[package].type`: `bin`, `lib`, or `test`.
@@ -99,6 +101,19 @@ impl ProjectManifest {
     pub fn parse(text: &str) -> Result<Self, String> {
         let root: toml::Table = text.parse().map_err(|e: toml::de::Error| e.to_string())?;
         let mut m = ProjectManifest::default();
+        if let Some(npm) = root.get("npm") {
+            let npm = npm.as_table().ok_or("[npm] must be a table")?;
+            for (name, version) in npm {
+                let version = version
+                    .as_str()
+                    .filter(|v| !v.trim().is_empty())
+                    .ok_or_else(|| format!("[npm].{name} must be a non-empty version string"))?;
+                if name.is_empty() || name.starts_with('-') || name.contains(char::is_whitespace) {
+                    return Err(format!("[npm]: invalid package name '{name}'"));
+                }
+                m.npm.insert(name.clone(), version.to_string());
+            }
+        }
         if let Some(lib) = root.get("lib") {
             let config: dream_abi::library::LibraryConfig =
                 lib.clone().try_into().map_err(|e| format!("[lib]: {e}"))?;
@@ -511,5 +526,26 @@ sources = ["third_party/x.c"]
         .unwrap();
         assert_eq!(m.package_name.as_deref(), Some("x"));
         assert!(m.native.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod npm_tests {
+    use super::ProjectManifest;
+
+    #[test]
+    fn npm_requires_named_packages_and_nonempty_versions() {
+        let manifest =
+            ProjectManifest::parse("[npm]\nfirebase = \"12.0.0\"\n\"@types/node\" = \"^22\"\n")
+                .unwrap();
+        assert_eq!(manifest.npm["firebase"], "12.0.0");
+        assert_eq!(manifest.npm["@types/node"], "^22");
+        for bad in [
+            "[npm]\nfirebase = 12",
+            "[npm]\nfirebase = \"\"",
+            "[npm]\n\"bad name\" = \"1\"",
+        ] {
+            assert!(ProjectManifest::parse(bad).is_err(), "{bad}");
+        }
     }
 }

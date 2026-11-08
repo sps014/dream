@@ -1,48 +1,83 @@
 ---
 title: Interop
-summary: "Call JavaScript with ordinary Dream syntax."
+summary: "Import JavaScript modules and call them from Dream."
 icon: material/swap-horizontal
 ---
 
 # JavaScript interop
 
-Use `js.global` to read, call, and assign browser or Node APIs with ordinary Dream syntax. No binding declarations or imports are needed.
+`jsimport` reads a module's declarations and bundles its implementation. It works with `--web` and `--node`. A native build rejects it.
 
 ```dream
+import system;
+
+jsimport "./math.mjs" as math;
+
 fun main(): void {
-    let console = js.global.console;
-    console.log("Hello from Dream!");
+    System.println(math.add(2, 3));
 }
 ```
 
-Compile for Node with `dream --node main.dream`, or for the browser with
-`dream --web main.dream`. Load the output using the emitted runtime:
+Place the module and its declarations beside `main.dream`:
 
-```javascript
-import { run } from "./main.node.runtime.js";
-await run("./main.wasm");
-```
-
-For a browser, import `main.web.runtime.js` instead and load it from a page served over HTTP.
-JavaScript APIs require the corresponding host: browser DOM APIs are unavailable in Node.
-
-## Working with values
-
-Dynamic operations return `js`. Assign a result to a typed variable to convert it to a Dream value.
-
-```dream
-fun main(): void {
-    let text: string = js.global.JSON.stringify(js.object());
-    System.println(text);
+```javascript title="math.mjs"
+export function add(left, right) {
+    return left + right;
 }
 ```
 
-Member names are checked when the JavaScript runs, and a missing function, exception, or failed conversion stops that operation. Catch a recoverable error in JavaScript and return a result; promises are covered in [The js type](js-type.md).
+```typescript title="math.d.mts"
+export function add(left: number, right: number): number;
+```
 
-Pass Dream functions directly as callbacks. [Callbacks](callbacks.md) covers identity and signatures, and [The js type](js-type.md) covers arrays, objects, conversion, and promises.
+```sh
+dream --runtime --node main.dream
+```
 
-Application code uses `js` syntax or ordinary Dream functions. Explicit JS `extern` bindings are for the compiler — see [Internal JavaScript bindings](../../internals/21-js-bindings.md).
+Load `main.node.runtime.js` together with `main.node.jsimports.mjs`. A browser build uses `--web` and `main.web.runtime.js`.
 
-Native library integration uses [C interop](c.md) or [C++ interop](cpp.md).
+## Packages
 
-Use [Standalone WASI commands](wasi.md) to run command components in a WASI host.
+List packages in `dream.toml`. The first build installs them into `.dream/npm` and writes `dream.npm.lock`. Commit that lock file. Installation scripts do not run.
+
+```toml
+[npm]
+escape-string-regexp = "5.0.0"
+```
+
+Import it with `jsimport "escape-string-regexp" as pattern;`. A default export is `pattern.default(...)`. Add an `@types` package to `[npm]` when a library ships no declarations.
+
+A URL import uses the same form. Its downloaded graph is recorded in `dream.js.lock`.
+
+```dream
+jsimport "https://example.com/library.mjs" as library;
+```
+
+Omit the alias when the module only needs to run:
+
+```dream
+jsimport "./setup.mjs";
+
+fun main(): void {}
+```
+
+`DREAM_NO_AUTO_INSTALL=1` skips downloads.
+
+## Values
+
+JavaScript numbers are `double`, booleans are `bool`, strings are `string`, and bigints are `long`. Nullable results are `Option`. An awaited promise is `Result<T, JsError>`. A type Dream cannot represent stays `js`.
+
+`import system.js;` provides `console`, `JSON`, `URL`, and timers. Page objects such as `document` are `js`.
+
+```dream
+import system.js;
+
+fun main(): void {
+    let element = js.global.document.getElementById("app");
+    if !element.is_null() {
+        element.textContent = "Hello";
+    }
+}
+```
+
+See [The js type](js-type.md) and [Callbacks](callbacks.md).

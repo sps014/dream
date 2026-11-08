@@ -32,7 +32,8 @@ fn explicit_wasm_output_keeps_binary_and_text_separate() {
     let output = dir.path().join("main.wasm");
     std::fs::write(
         &entry,
-        "import system; fun main(): void { System.println(42); }",
+        "import system;
+import system.js; fun main(): void { System.println(42); }",
     )
     .unwrap();
     compile(&entry, &output, None).unwrap();
@@ -59,6 +60,7 @@ fn typed_js_callbacks_unbox_functions_and_keep_stable_identity() {
         &entry,
         r#"
 import system;
+import system.js;
 @js("host", "inspect")
 extern fun inspect(callback: fun(int): int): int;
 fun twice(value: int): int { return value * 2; }
@@ -145,6 +147,7 @@ fn typed_host_adapters_snapshot_custom_arrays_and_async_inputs() {
         &entry,
         r#"
 import system;
+import system.js;
 @js("host", "bytes")
 extern fun typed_bytes(value: byte[]): byte[];
 @js("host", "text")

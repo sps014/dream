@@ -31,8 +31,6 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [IntrinsicAttribute](core-intrinsic-attribute.md)
 - [Iterable](core-iterable.md)
 - [Iterator](core-iterator.md)
-- [Js](core-js.md)
-- [JsAttribute](core-js-attribute.md)
 - [Lock](core-lock.md)
 - [Math](core-math.md)
 - [NativeAttribute](core-native-attribute.md)

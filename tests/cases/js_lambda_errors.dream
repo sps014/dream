@@ -1,12 +1,13 @@
 // JS bridges forward only a function index, so a capturing lambda would lose its environment.
 import system;
+import system.js;
 
 fun wrapped_func(): void {
     let n: int = 42;
     let handler: fun(js): void = (ev) => {
         System.println(n + ev.to_int());
     };
-    let _wrapped: js = js.func(handler);
+    let _wrapped: js = handler;
 }
 
 fun dynamic_slot(): void {

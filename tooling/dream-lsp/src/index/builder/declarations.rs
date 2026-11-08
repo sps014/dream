@@ -33,6 +33,7 @@ impl Builder {
     }
 
     pub(crate) fn set_current_file(&mut self, path: Option<&str>) {
+        self.current_namespace = self.file_namespaces.get(path.unwrap_or("")).cloned();
         self.current_file = if self.is_main {
             None
         } else {
@@ -84,6 +85,15 @@ impl Builder {
         }
         for st in &program.structs {
             self.set_current_file(st.file_path.as_deref());
+            if let Some(namespace) = st
+                .attributes
+                .iter()
+                .find(|attr| attr.name.text == "js_type")
+                .and_then(|attr| attr.args.first())
+                .and_then(|arg| arg.as_string())
+            {
+                self.current_namespace = Some(namespace.into());
+            }
             let (kind, keyword) = if st.is_value {
                 (
                     SymKind::Struct,
@@ -342,6 +352,7 @@ impl Builder {
         // access on `this` can be resolved to the owner's fields/methods. Static methods do not.
         if !func.is_static {
             self.decls.push(Decl {
+                namespace: self.current_namespace.clone(),
                 name: "this".to_string(),
                 kind: SymKind::Param,
                 detail: format!("(this) {}", owner),

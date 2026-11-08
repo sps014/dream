@@ -1592,14 +1592,14 @@ fn test_js_null_and_undefined_properties() {
 #[test]
 fn test_js_await_promise() {
     // Awaiting a `js` value (a JS Promise handle) is legal inside an async function and yields
-    // `Option<js>` - `Some` on resolve, `None` on rejection.
+    // `Result<js, JsError>` - `Ok` on resolve, `Err` on rejection.
     let code = format!(
         "{JS_STUB}
         async fun main(): void {{
             let user = js.global.fetchUser(42).await;
             let name: string = switch (user) {{
-                Some(u) => u.name.to_str(),
-                None => \"\",
+                Ok(u) => u.name.to_str(),
+                Err(error) => \"\",
             }};
         }}"
     );

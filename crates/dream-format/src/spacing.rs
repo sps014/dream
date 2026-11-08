@@ -40,6 +40,7 @@ pub(super) fn is_decl_starter(kind: TokenKind) -> bool {
             | TokenKind::InterfaceToken
             | TokenKind::ExtendToken
             | TokenKind::ImportToken
+            | TokenKind::JsImportToken
             | TokenKind::ModuleToken
             | TokenKind::LetToken
             | TokenKind::ConstToken
@@ -127,6 +128,7 @@ pub(super) fn is_keyword_needing_space(kind: TokenKind) -> bool {
             | TokenKind::OverrideToken
             | TokenKind::OperatorToken
             | TokenKind::ImportToken
+            | TokenKind::JsImportToken
             | TokenKind::AsToken
             | TokenKind::ModuleToken
             | TokenKind::PublicToken

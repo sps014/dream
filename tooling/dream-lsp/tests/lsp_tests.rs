@@ -173,8 +173,8 @@ fun main(): void {
 
 #[test]
 fn js_type_and_static_member_completions() {
-    // `js` comes from the bootstrap prelude via `extend js { … }` — no import needed.
-    let harness = TestHarness::new("fun main(): void {\n    |\n}\n");
+    // The dynamic API is explicitly imported.
+    let harness = TestHarness::new("import system.js;\nfun main(): void {\n    |\n}\n");
     let comps = harness
         .index()
         .completions(None, &harness.src, harness.offset);
@@ -186,14 +186,13 @@ fn js_type_and_static_member_completions() {
         comps.iter().filter(|(n, ..)| n == "js").collect::<Vec<_>>()
     );
 
-    let harness = TestHarness::new("fun main(): void {\n    js.|\n}\n");
+    let harness = TestHarness::new("import system.js;\nfun main(): void {\n    js.|\n}\n");
     let comps = harness
         .index()
         .completions(None, &harness.src, harness.offset);
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"global")
-            && names.contains(&"global_this")
             && names.contains(&"object")
             && names.contains(&"array")
             && names.contains(&"null")
@@ -202,7 +201,7 @@ fn js_type_and_static_member_completions() {
     );
 
     // `js.global.` is typed as `js` (property form / static return), so instance helpers appear.
-    let harness = TestHarness::new("fun main(): void {\n    js.global.|\n}\n");
+    let harness = TestHarness::new("import system.js;\nfun main(): void {\n    js.global.|\n}\n");
     let comps = harness
         .index()
         .completions(None, &harness.src, harness.offset);
@@ -217,7 +216,9 @@ fn js_type_and_static_member_completions() {
 fn js_global_hover_is_not_regex_global() {
     // `Regex` has a field `global: bool`. Hover on `js.global` must resolve the js static, not
     // that unrelated field (regression: receiver `js` was not recognized as a Type).
-    let harness = TestHarness::new("fun main(): void {\n    let d = js.|global.document;\n}\n");
+    let harness = TestHarness::new(
+        "import system.js;\nfun main(): void {\n    let d = js.|global.document;\n}\n",
+    );
     let hover = harness
         .index()
         .hover(harness.offset)
@@ -2808,4 +2809,71 @@ async fun main(): void {
         "expected read_at return float[], got {}",
         hover.contents
     );
+}
+
+#[test]
+fn hover_identifies_declaring_namespace() {
+    let harness = TestHarness::new(
+        "module application.model; public struct Point { public x:int; } fun main():void { let point=Point(1); let other=|point; }",
+    );
+    let hover = sema_hover(&harness).expect("hover on a typed local");
+    assert!(
+        hover.contents.contains("Namespace: `application.model`"),
+        "{}",
+        hover.contents
+    );
+}
+
+#[test]
+fn javascript_import_completion_and_hover_use_declarations() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("main.dream");
+    std::fs::write(
+        dir.path().join("library.mjs"),
+        "export function read(){return {name:'ok'}}",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("library.d.mts"),
+        "export interface Item { readonly name:string; } export function read():Item;",
+    )
+    .unwrap();
+    let marked = "jsimport \"./library.mjs\" as library; fun main():void { let item=library.read(); let other=|item; }";
+    let harness = TestHarness::new(marked);
+    let file = file.to_str().unwrap();
+    let outcome = dream_lsp::analysis::analyze_document(Some(file), &harness.src);
+    assert!(
+        outcome.diagnostics.iter().all(|d| d.severity != "error"),
+        "{:?}",
+        outcome.diagnostics
+    );
+    let index = dream_lsp::index::Index::build(Some(file), &harness.src);
+    let hover = dream_lsp::sema_ide::hover(outcome.sema.as_ref(), &index, harness.offset).unwrap();
+    assert!(
+        hover.contents.contains("Namespace: `./library.mjs`"),
+        "{}",
+        hover.contents
+    );
+    for (source, member) in [
+        (
+            "jsimport \"./library.mjs\" as library; fun main():void { library.| }",
+            "read",
+        ),
+        (
+            "jsimport \"./library.mjs\" as library; fun main():void { let item=library.read(); item.| }",
+            "name",
+        ),
+    ] {
+        let harness = TestHarness::new(source);
+        let index = dream_lsp::index::Index::build(Some(file), &harness.src);
+        let completions = index.completions(Some(file), &harness.src, harness.offset);
+        assert!(
+            completions.iter().any(|(name, ..)| name == member),
+            "{completions:?}"
+        );
+        assert!(
+            !completions.iter().any(|(name, ..)| name.starts_with("__")),
+            "{completions:?}"
+        );
+    }
 }

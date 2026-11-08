@@ -1,3 +1,5 @@
+import system.js;
+
 // Exercises the shadow-stack argument marshaling for dynamic `js` calls: multiple mixed-type
 // arguments, an array argument, and a Dream callback argument - all crossing in one host call each.
 //

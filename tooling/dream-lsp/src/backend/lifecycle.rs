@@ -65,9 +65,13 @@ impl Backend {
             .register_capability(vec![Registration {
                 id: "dream-watch-dream-files".to_string(),
                 method: "workspace/didChangeWatchedFiles".to_string(),
-                register_options: Some(
-                    serde_json::json!({ "watchers": [{ "globPattern": "**/*.dream" }] }),
-                ),
+                register_options: Some(serde_json::json!({ "watchers": [
+                        { "globPattern": "**/*.{dream,js,mjs,cjs,ts,mts,cts}" },
+                        { "globPattern": "**/dream.toml" },
+                        { "globPattern": "**/package.json" },
+                        { "globPattern": "**/dream.npm.lock" },
+                        { "globPattern": "**/dream.js.lock" }
+                    ] })),
             }])
             .await;
         self.client
@@ -128,16 +132,23 @@ impl Backend {
         &self,
         params: DidChangeWatchedFilesParams,
     ) {
-        use tower_lsp::lsp_types::FileChangeType;
         // A dependency changed on disk. Cached models embed parsed copies of every imported
         // file, so drop them all (they rebuild lazily on the next request) and re-publish
         // diagnostics for every open document.
         let changed: Vec<String> = params
             .changes
             .iter()
-            .filter(|c| c.typ != FileChangeType::DELETED)
             .filter_map(|c| Self::file_path_of(&c.uri))
-            .filter(|p| p.ends_with(".dream"))
+            .filter(|p| {
+                let path = std::path::Path::new(p);
+                matches!(
+                    path.extension().and_then(|extension| extension.to_str()),
+                    Some("dream" | "js" | "mjs" | "cjs" | "ts" | "mts" | "cts")
+                ) || matches!(
+                    path.file_name().and_then(|name| name.to_str()),
+                    Some("dream.toml" | "package.json" | "dream.npm.lock" | "dream.js.lock")
+                )
+            })
             .collect();
         if changed.is_empty() {
             return;

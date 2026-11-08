@@ -33,6 +33,8 @@ pub(crate) struct Builder {
     pub(crate) is_main: bool,
     /// File owning decls currently being recorded (`None` = the open document).
     pub(crate) current_file: Option<String>,
+    pub(crate) current_namespace: Option<String>,
+    pub(crate) file_namespaces: HashMap<String, String>,
     /// Parameter names per free function name, used to render parameter-name inlay hints at calls.
     pub(crate) fn_params: HashMap<String, Vec<String>>,
     /// Constructor parameter names per struct name (only when a custom `constructor` is declared).
@@ -74,6 +76,7 @@ impl Builder {
 
         let doc_comment = Self::doc_comment_from_trivia(token);
         self.decls.push(Decl {
+            namespace: self.current_namespace.clone(),
             name: token.text.clone(),
             kind,
             detail,

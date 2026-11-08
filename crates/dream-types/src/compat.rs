@@ -93,7 +93,7 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
     // generates the `$<Type>_to_js` / `$js_to_<Type>` marshalers — heap result for classes, in-place
     // fill for value structs).
     if matches!(tk, TyKind::Js) {
-        return matches!(vk, TyKind::Prim(_) | TyKind::Struct(..));
+        return matches!(vk, TyKind::Prim(_) | TyKind::Struct(..) | TyKind::Func(..));
     }
     if matches!(vk, TyKind::Js) {
         return matches!(tk, TyKind::Prim(_) | TyKind::Struct(..));

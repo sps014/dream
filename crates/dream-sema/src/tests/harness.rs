@@ -53,7 +53,11 @@ pub(super) const JS_STUB: &str = "
         Some(T),
         None,
     }
+    enum Result<T, E> { Ok(T), Err(E), }
+    struct JsError { public reason: js; }
     extend js {
+        @js(\"Dream\", \"jsCallback\")
+        static extern fun callback(index: int, signature: string): js;
         @js(\"Dream\", \"jsGlobal\")
         static extern fun global(name: string): js;
         @js(\"Dream\", \"jsGlobalThis\")
@@ -68,10 +72,6 @@ pub(super) const JS_STUB: &str = "
         static extern fun host_undefined(): js;
         public static get null(): js { return js.host_null(); }
         public static get undefined(): js { return js.host_undefined(); }
-        @js(\"Dream\", \"jsFunc\")
-        static extern fun func(handler: fun(js): void): js;
-        @js(\"Dream\", \"jsFunc0\")
-        static extern fun func0(handler: fun(): void): js;
         @js(\"Dream\", \"jsInt\")
         static extern fun box_int(value: int): js;
         @js(\"Dream\", \"jsLong\")
@@ -141,7 +141,7 @@ pub(super) const JS_STUB: &str = "
         @js(\"Dream\", \"jsGetCallAsString\")
         static extern fun get_call_as_string(target: js, prop: string, method: string, args_ptr: int, argc: int): string;
         @js(\"Dream\", \"jsAwait\")
-        static extern async fun await_promise(target: js): js;
+        static extern async fun await_promise(target: js): Result<js, JsError>;
         @js(\"Dream\", \"jsAsInt\")
         static extern fun as_int(target: js): int;
         @js(\"Dream\", \"jsAsLong\")

@@ -1,3 +1,5 @@
+import system.js;
+
 // Awaiting a JS Promise through the dynamic `js` type - no `extern async` declaration needed.
 //
 //   cargo run -- sample/interop/async_js.dream
@@ -11,23 +13,23 @@ import system;
 async fun main(): void {
     System.println("fetching...");
 
-    // `await` on a `js` yields `Option<js>`: `Some(value)` on resolve, `None` on rejection - so
+    // `await` on a `js` yields `Result<js, JsError>`: `Ok(value)` on resolve, `Err(error)` on rejection - so
     // failure is impossible to ignore. Awaits may appear in any control-flow position.
     let user = js.global.fetchUser(42).await;
     let res = js.global.fetchUser(7).await;
 
     switch (user) {
-        Some(u) => {
+        Ok(u) => {
             let name: string = u.name; // property read + unbox at the typed binding
             System.println("user = " + name);
         }
-        None => System.println("fetch failed"),
+        Err(error) => System.println(error.message),
     }
     switch (res) {
-        Some(r) => {
+        Ok(r) => {
             let id: int = r.id;
             System.println("id = " + id);
         }
-        None => System.println("fetch failed"),
+        Err(error) => System.println(error.message),
     }
 }

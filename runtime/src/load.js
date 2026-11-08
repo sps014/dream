@@ -1,4 +1,5 @@
 import { bindTypedImport } from "./typed_imports.js";
+import { importedJsModules } from "./imports.js";
 import { HAS_GENERIC_IMPORTS, HAS_ASYNC_IMPORTS } from "./features.js";
 import { wrapAsyncImport } from "./async.js";
 import { TAGS, HEAP_HEADER_SIZE } from "./core.js";
@@ -236,9 +237,9 @@ export async function load(source, options = {}) {
     for (const e of abi.externs) {
       const bucket = (importObject[e.module] ||= {});
       if (bucket[e.field]) continue;
-      const resolved = (e.module === "Dream" && builtinDream[e.field])
+      const resolved = importedJsModules[e.module]?.[e.field] ?? ((e.module === "Dream" && builtinDream[e.field])
         ? builtinDream[e.field]
-        : resolveGlobal(e.module, e.field);
+        : resolveGlobal(e.module, e.field));
       bucket[e.field] = resolved
         ? wrapFor(resolved, e)
         : () => {

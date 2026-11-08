@@ -535,6 +535,7 @@ fn test_hir_emission_extern_import_and_call() {
     // An `extern fun` becomes a declaration of its `@js` host symbol, and a call to it resolves to
     // that symbol so the module links.
     let code = "
+        import system.js;
         @js(\"host\", \"log_it\")
         extern fun log(x: int): void;
         fun run(): void { log(7); }

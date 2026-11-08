@@ -121,15 +121,17 @@ impl<'a, 'b> Parser<'a, 'b> {
         // Property accessor: `get name(): T;` / `set name(v: T) { ... }` — same shape as class
         // accessors, but allowing a trailing `;` for a required (no-default) contract.
         let accessor_kind = if self.current_token().kind == TokenKind::IdentifierToken
-            && self.peek_token(1).kind == TokenKind::IdentifierToken
-        {
+            && matches!(
+                self.peek_token(1).kind,
+                TokenKind::IdentifierToken | TokenKind::DefaultToken
+            ) {
             crate::nodes::function::AccessorKind::from_keyword(&self.current_token().text)
         } else {
             None
         };
         if let Some(accessor_kind) = accessor_kind {
             self.match_token(TokenKind::IdentifierToken);
-            let function_name = self.match_token(TokenKind::IdentifierToken);
+            let function_name = self.match_member_name();
             let params = self.parse_formal_parameters()?;
             let mut return_type: Option<Type> = None;
             if self.current_token().kind == TokenKind::ColonToken {
@@ -309,7 +311,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             let is_accessor = self.current_token().kind == TokenKind::IdentifierToken
                 && crate::nodes::function::AccessorKind::from_keyword(&self.current_token().text)
                     .is_some()
-                && self.peek_token(1).kind == TokenKind::IdentifierToken;
+                && matches!(
+                    self.peek_token(1).kind,
+                    TokenKind::IdentifierToken | TokenKind::DefaultToken
+                );
             if self.current_token().kind == TokenKind::FunToken
                 || self.current_token().kind == TokenKind::PublicToken
                 || self.current_token().kind == TokenKind::InternalToken

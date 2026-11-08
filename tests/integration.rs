@@ -30,6 +30,7 @@ mod host_library_tests;
 mod http_client;
 mod inline_value_types_test;
 mod intrinsic_visibility;
+mod js_imports;
 mod leak_diagnostics;
 mod library_outputs;
 mod llvm_backend_tests;

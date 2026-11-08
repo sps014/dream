@@ -59,7 +59,9 @@ impl<'a> ProgramAccumulator<'a> {
         let prelude_paths: Vec<_> = programs
             .keys()
             .filter(|path| {
-                !self.parsed_files.contains_key(*path) && self.file_contents.contains_key(*path)
+                (!self.parsed_files.contains_key(*path)
+                    || self.std_generator_output_files.contains(*path))
+                    && self.file_contents.contains_key(*path)
             })
             .cloned()
             .collect();

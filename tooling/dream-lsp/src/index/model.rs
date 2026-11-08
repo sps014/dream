@@ -31,6 +31,7 @@ pub enum SymKind {
 
 #[derive(Debug, Clone)]
 pub struct Decl {
+    pub namespace: Option<String>,
     pub name: String,
     pub kind: SymKind,
     /// The signature or type detail (e.g. `fun foo()` or `let x: int`).

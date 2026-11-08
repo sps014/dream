@@ -28,6 +28,7 @@ impl StructFieldInfo {
 
 #[derive(Debug, Clone)]
 pub struct StructInfo {
+    pub js_namespace: Option<String>,
     pub has_destructor: bool,
     pub name: String,
     /// Insertion-ordered declaration order, matching HIR layout field indices.
@@ -69,8 +70,28 @@ impl StructTable {
         ty: TypeId,
         struct_decl: &StructDeclarationNode<'_>,
         field_types: &[TypeId],
+        js_ty: TypeId,
     ) -> Result<(), String> {
         let name = struct_decl.name.text.clone();
+        let js_namespace =
+            dream_abi::attributes::named_attr_string_arg(&struct_decl.attributes, "js_type", 0)
+                .map(str::to_string);
+        if js_namespace.is_some()
+            && !struct_decl.is_static
+            && (!struct_decl.is_value
+                || field_types != [js_ty]
+                || struct_decl
+                    .fields
+                    .iter()
+                    .any(|field| field.is_weak || field.is_unowned)
+                || !struct_decl.methods.iter().any(|method| {
+                    method.name.text == dream_syntax::nodes::types::CONSTRUCTOR_NAME
+                        && method.parameters.len() == 1
+                        && method.parameters[0].type_.get_type() == "js"
+                }))
+        {
+            return Err("@js_type requires a value struct with one owned js field and a one-argument constructor".into());
+        }
         if self.structs.contains_key(&ty) {
             return Err(format!("Struct '{}' is already defined", name));
         }
@@ -108,6 +129,7 @@ impl StructTable {
         self.structs.insert(
             ty,
             StructInfo {
+                js_namespace,
                 has_destructor: struct_decl
                     .methods
                     .iter()
@@ -141,6 +163,7 @@ impl StructTable {
         self.structs.insert(
             ty,
             StructInfo {
+                js_namespace: None,
                 has_destructor: false,
                 name: name.to_string(),
                 fields: IndexMap::new(),

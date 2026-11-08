@@ -73,7 +73,7 @@ pub(crate) fn release_into_sym(cx: &Cx<'_>, ty: TypeId) -> Option<String> {
             c_ident(&format!("release_{}", cx.mir.layouts.unions.get(&ty)?.name)),
             ty,
         ),
-        TyKind::Array(e) if cx.interner.is_reference(*e) || cx.interner.is_value_type(*e) => {
+        TyKind::Array(e) if cx.interner.is_rc_tracked(*e) || cx.interner.is_value_type(*e) => {
             // Array glue is never in `canon_maps` (those keys are struct/union ids). Looking
             // up the element id would steal a redirected *element* `release_Foo` and drop the
             // array header as if it were a `Foo` — SIGSEGV when two classes share a layout
@@ -118,7 +118,7 @@ pub(crate) fn release_sym(cx: &Cx<'_>, ty: TypeId) -> String {
             };
             cx.canon_maps().release.get(&ty).cloned().unwrap_or(raw)
         }
-        TyKind::Array(e) if interner.is_reference(*e) || interner.is_value_type(*e) => {
+        TyKind::Array(e) if interner.is_rc_tracked(*e) || interner.is_value_type(*e) => {
             c_ident(&format!("release_array_t{}", e.0))
         }
         TyKind::Func(..) => "dream_release_funcbox".into(),
@@ -156,7 +156,7 @@ pub(crate) fn destroy_sym(cx: &Cx<'_>, ty: TypeId) -> String {
             };
             cx.canon_maps().destroy.get(&ty).cloned().unwrap_or(raw)
         }
-        TyKind::Array(e) if cx.interner.is_reference(*e) || cx.interner.is_value_type(*e) => {
+        TyKind::Array(e) if cx.interner.is_rc_tracked(*e) || cx.interner.is_value_type(*e) => {
             c_ident(&format!("destroy_array_t{}", e.0))
         }
         TyKind::Object | TyKind::Interface(..) => c_ident("destroy_object"),
@@ -421,7 +421,7 @@ fn collect_array_elems(
 ) {
     for local in &f.locals {
         if let TyKind::Array(e) = interner.kind(local.ty)
-            && (interner.is_reference(*e) || interner.is_value_type(*e))
+            && (interner.is_rc_tracked(*e) || interner.is_value_type(*e))
         {
             array_elems.insert(*e);
         }
@@ -435,7 +435,7 @@ pub(crate) fn glue_array_elems(cx: &Cx<'_>) -> BTreeSet<TypeId> {
     for layout in cx.mir.layouts.structs.values() {
         for f in &layout.fields {
             if let TyKind::Array(e) = interner.kind(f.ty)
-                && (interner.is_reference(*e) || interner.is_value_type(*e))
+                && (interner.is_rc_tracked(*e) || interner.is_value_type(*e))
             {
                 array_elems.insert(*e);
             }

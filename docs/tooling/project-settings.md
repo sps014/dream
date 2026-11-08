@@ -166,3 +166,12 @@ A dependency is a bare version requirement string, or a table with these keys:
 - `[registries]` maps registry aliases to base URLs; a dependency's `registry = "..."` picks one,
   defaulting to the `default` alias.
 - `[scripts]` records how you normally build, run, or test the project. No `dreamer` command runs those scripts.
+
+## JavaScript dependencies
+
+`[npm]` lists packages used by `jsimport`. The first import installs them into `.dream/npm` and writes `dream.npm.lock`. Commit the lock file. Installation scripts do not run. Add an `@types` package when the library ships no declarations. See [JavaScript interop](../language/interop/index.md).
+
+```toml
+[npm]
+escape-string-regexp = "5.0.0"
+```

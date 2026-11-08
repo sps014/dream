@@ -431,7 +431,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 }
                 let m = mem_ty(&self.l.cx, ety);
                 self.publish_store(place, ety, &rhs);
-                if !realloc_self_store(place, rv) && self.interner.is_reference(ety) {
+                if !realloc_self_store(place, rv) && self.interner.is_rc_tracked(ety) {
                     self.rc_store_ty(ety, &addr, &rhs, rv, ELEM_ALIGN);
                     return;
                 }
@@ -514,7 +514,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.weak_option_store(&slot, &fld, rv, &rhs, align, self.is_value(ty));
             return;
         }
-        if self.interner.is_reference(fld.ty) && !self.f.locals[base.0 as usize].borrows_refs {
+        if self.interner.is_rc_tracked(fld.ty) && !self.f.locals[base.0 as usize].borrows_refs {
             self.rc_store_ty(fld.ty, &slot, &rhs, rv, align);
             return;
         }

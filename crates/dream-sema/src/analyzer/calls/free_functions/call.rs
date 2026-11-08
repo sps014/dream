@@ -615,6 +615,13 @@ impl<'a> Analyzer<'a> {
             name.position,
             diagnostics,
         );
+        self.validate_js_callback_arguments(
+            store_sig.declaring_file.as_deref(),
+            &store_sig.parameters,
+            &arg_hirs,
+            name.position,
+            diagnostics,
+        );
 
         let ret_type = Self::async_return_type(
             store_sig.is_async,

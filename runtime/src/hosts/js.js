@@ -7,6 +7,8 @@ export function makeJsHost(getInstance) {
     jsGlobalThis: () => globalThis,
     jsObject: () => ({}),
     jsArray: () => [],
+    jsConstruct: (target, fixed, rest) => Reflect.construct(target, [...fixed, ...rest]),
+    jsApply: (target, receiver, fixed, rest) => Reflect.apply(target, receiver, [...fixed, ...rest]),
     jsNull: () => null,
     jsUndefined: () => undefined,
     jsString: (value) => value,
@@ -111,7 +113,10 @@ export function makeJsHost(getInstance) {
       const v = recv[method](...decodeJsSlots(getInstance(), argsPtr, argc));
       return v == null ? "" : String(v);
     },
-    jsAwait: (target) => target,
+    jsAwait: (target) => Promise.resolve(target).then(
+      value => ({ ok: true, value }),
+      reason => ({ ok: false, reason }),
+    ),
     jsAsInt: (target) => (target == null ? 0 : (Number(target) | 0)),
     jsAsLong: (target) => (target == null ? 0 : Math.trunc(Number(target))),
     jsAsDouble: (target) => (target == null ? 0 : Number(target)),
@@ -120,12 +125,6 @@ export function makeJsHost(getInstance) {
     jsIsNull: (target) => target === null || target === undefined,
     jsRetain: (target) => getInstance().retainValue(target),
     jsRelease: (target) => getInstance().releaseValue(target),
-    jsFunc: (handler) => handler,
-    jsFunc0: (handler) => handler,
-    jsFuncN: (index, arity) => {
-      const n = arity > 0 ? arity : 0;
-      const sig = `fun(${Array(n).fill("js").join(",")}):void`;
-      return getInstance().callback(index, sig);
-    },
+    jsCallback: (index, signature) => getInstance().callback(index, signature),
   };
 }

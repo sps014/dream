@@ -101,7 +101,12 @@ impl<'a> Analyzer<'a> {
                 .iter()
                 .map(|field| self.type_ctx.lower(&field.field_type))
                 .collect();
-            if let Err(e) = self.struct_table.add_struct(ty, struct_decl, &field_types) {
+            if let Err(e) = self.struct_table.add_struct(
+                ty,
+                struct_decl,
+                &field_types,
+                self.type_ctx.interner.js(),
+            ) {
                 diagnostics.report_error(e, Some(struct_decl.name.position));
             }
             self.register_struct_methods(struct_decl, ty, &GenericBindings::new(), diagnostics);
@@ -493,10 +498,12 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|field| self.type_ctx.lower_with(&field.field_type, &type_bindings))
             .collect();
-        if let Err(e) = self
-            .struct_table
-            .add_struct(instance, new_decl_ref, &field_types)
-        {
+        if let Err(e) = self.struct_table.add_struct(
+            instance,
+            new_decl_ref,
+            &field_types,
+            self.type_ctx.interner.js(),
+        ) {
             diagnostics.report_error(e, Some(*position));
         }
 

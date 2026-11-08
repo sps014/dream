@@ -49,7 +49,9 @@ pub fn run_selected_profile(stems: Option<&[&str]>, hosts: &[TestHost], release_
                 .iter()
                 .any(|tag| case.stem.contains(tag)))
                 && stems.is_none_or(|stems| stems.contains(&case.stem))
-                && filter.as_ref().is_none_or(|filter| case_matches(case, filter))
+                && filter
+                    .as_ref()
+                    .is_none_or(|filter| case_matches(case, filter))
         })
         .collect();
     assert!(!selected.is_empty(), "no corpus cases selected");

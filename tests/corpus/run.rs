@@ -17,6 +17,12 @@ fn release() -> bool {
     std::env::var_os("DREAM_CORPUS_RELEASE").is_some()
 }
 
+/// A filter names a case stem or a project suite, so `interop` selects the interop suite.
+fn case_matches(case: &Case, filter: &str) -> bool {
+    case.stem.contains(filter)
+        || matches!(case.expectation, Expectation::Project(suite) if suite.contains(filter))
+}
+
 pub fn run_selected(stems: Option<&[&str]>, hosts: &[TestHost]) {
     run_selected_profile(stems, hosts, release());
 }
@@ -43,9 +49,7 @@ pub fn run_selected_profile(stems: Option<&[&str]>, hosts: &[TestHost], release_
                 .iter()
                 .any(|tag| case.stem.contains(tag)))
                 && stems.is_none_or(|stems| stems.contains(&case.stem))
-                && filter
-                    .as_ref()
-                    .is_none_or(|filter| case.stem.contains(filter))
+                && filter.as_ref().is_none_or(|filter| case_matches(case, filter))
         })
         .collect();
     assert!(!selected.is_empty(), "no corpus cases selected");

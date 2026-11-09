@@ -29,6 +29,10 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 [dev-dependencies]
 proptest = "1"
 dream-host-window = { path = "../dream-host-window" }
+tempfile = "3"
+tiny_http = "0.12"
+toml = "0.8"
+ureq = "2"
 
 [build-dependencies]
 cmake = "0.1"

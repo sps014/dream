@@ -6,10 +6,12 @@ include!("../dream-host-abi/link.rs");
 
 #[path = "build/cmake_config.rs"]
 mod cmake_config;
+#[path = "build/download.rs"]
+mod download;
 #[path = "build/fetch.rs"]
 mod fetch;
 
-use fetch::Pin;
+use download::Pin;
 use std::path::{Path, PathBuf};
 
 fn main() {
@@ -100,7 +102,7 @@ fn main() {
 
     let rhi = table("slang-rhi");
     let rhi_commit = rhi["commit"].as_str().unwrap();
-    let rhi_archive = fetch::download(&cache, &Pin::from_table(rhi, "slang-rhi"), None);
+    let rhi_archive = download::download(&cache, &Pin::from_table(rhi, "slang-rhi"), None);
     let pristine = fetch::extract(
         &rhi_archive,
         &cache.join(format!("slang-rhi-{}-pristine", &rhi_commit[..12])),
@@ -133,11 +135,11 @@ fn main() {
     let dawn_version = table("dawn")["version"].as_str().unwrap();
     let dawn = (!mobile).then(|| {
         let pin = archive_pin("dawn", &platform);
-        let archive = fetch::download(&cache, &pin, None);
+        let archive = download::download(&cache, &pin, None);
         (pin, archive)
     });
     let vulkan_pin = Pin::from_table(table("vulkan-headers"), "vulkan-headers");
-    let vulkan_archive = fetch::download(&cache, &vulkan_pin, None);
+    let vulkan_archive = download::download(&cache, &vulkan_pin, None);
 
     let mut config = cmake::Config::new(manifest.join("native"));
     config
@@ -163,7 +165,7 @@ fn main() {
     }
     if matches!(os.as_str(), "macos" | "ios") {
         let metal_pin = Pin::from_table(table("metal-cpp"), "metal-cpp");
-        let metal_archive = fetch::download(&cache, &metal_pin, None);
+        let metal_archive = download::download(&cache, &metal_pin, None);
         config
             .define("SLANG_RHI_METAL_CPP_URL", file_url(&metal_archive))
             .define(
@@ -173,7 +175,8 @@ fn main() {
     }
     if os == "windows" {
         let winpix_pin = Pin::from_table(table("winpix"), "winpix");
-        let winpix_archive = fetch::download(&cache, &winpix_pin, Some("WinPixEventRuntime.zip"));
+        let winpix_archive =
+            download::download(&cache, &winpix_pin, Some("WinPixEventRuntime.zip"));
         config
             .define("SLANG_RHI_WINPIX_URL", file_url(&winpix_archive))
             .define(
@@ -269,7 +272,7 @@ fn slang_headers(cache: &Path, version: &str, platform: &str, pin: Pin) -> PathB
             }
         }
     }
-    let archive = fetch::download(cache, &pin, None);
+    let archive = download::download(cache, &pin, None);
     let extracted = fetch::extract(
         &archive,
         &cache.join(format!("slang-{version}-{platform}-include")),

@@ -1,91 +1,9 @@
-//! Pinned inputs for the native build: downloaded once into the GPU cache, verified against the
-//! SHA-256 upstream publishes, and extracted next to the archive.
+//! Extraction and patching of verified native GPU build inputs.
 
-use sha2::{Digest, Sha256};
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-pub struct Pin {
-    pub url: String,
-    pub sha256: String,
-}
-
-impl Pin {
-    pub fn from_table(table: &toml::Table, what: &str) -> Pin {
-        let field = |name: &str| {
-            table
-                .get(name)
-                .and_then(|v| v.as_str())
-                .unwrap_or_else(|| panic!("pins.toml: {what} has no `{name}`"))
-                .to_string()
-        };
-        Pin {
-            url: field("url"),
-            sha256: field("sha256"),
-        }
-    }
-
-    fn file_name(&self) -> &str {
-        self.url.rsplit('/').next().unwrap_or(&self.url)
-    }
-}
-
-fn sha256_file(path: &Path) -> io::Result<String> {
-    let mut file = File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0u8; 1 << 16];
-    loop {
-        let n = file.read(&mut buffer)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buffer[..n]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
-}
-
-/// The verified archive for `pin` under `cache/downloads`, downloading it when absent.
-pub fn download(cache: &Path, pin: &Pin, name: Option<&str>) -> PathBuf {
-    let dest = cache
-        .join("downloads")
-        .join(name.unwrap_or_else(|| pin.file_name()));
-    if dest.is_file() && sha256_file(&dest).ok().as_deref() == Some(pin.sha256.as_str()) {
-        return dest;
-    }
-    fs::create_dir_all(dest.parent().unwrap()).expect("creating the GPU download cache");
-    let partial = dest.with_extension("part");
-    let fetched = (|| -> Result<(), String> {
-        let response = ureq::get(&pin.url)
-            .timeout(std::time::Duration::from_secs(900))
-            .call()
-            .map_err(|e| e.to_string())?;
-        let mut reader = response.into_reader();
-        let mut out = File::create(&partial).map_err(|e| e.to_string())?;
-        io::copy(&mut reader, &mut out).map_err(|e| e.to_string())?;
-        out.flush().map_err(|e| e.to_string())
-    })();
-    if let Err(error) = fetched {
-        let _ = fs::remove_file(&partial);
-        panic!(
-            "downloading {} failed: {error}\nplace the file (SHA-256 {}) at {} to build offline",
-            pin.url,
-            pin.sha256,
-            dest.display()
-        );
-    }
-    let actual = sha256_file(&partial).expect("hashing a download");
-    if actual != pin.sha256 {
-        let _ = fs::remove_file(&partial);
-        panic!(
-            "{}: SHA-256 mismatch (expected {}, got {actual})",
-            pin.url, pin.sha256
-        );
-    }
-    fs::rename(&partial, &dest).expect("finishing a download");
-    dest
-}
 
 /// Written last into a finished cache directory. CI caches that prune `target/` can leave a
 /// directory behind without its files; one without the marker is rebuilt.

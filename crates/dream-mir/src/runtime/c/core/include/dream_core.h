@@ -775,8 +775,16 @@ DREAM_ALWAYS_INLINE int dream_str_can_hold(dream_ptr p, int32_t units) {
         return 1;
     }
     char *block = (char *)dream_p(p) - HEAP_HEADER_SIZE;
-    size_t need = HEAP_HEADER_SIZE + (size_t)dream_string_bytes(units);
-    return dream_block_fits(block, need);
+    size_t need = HEAP_HEADER_SIZE + (size_t)dream_string_bytes(units) + DREAM_REDZONE_BYTES;
+    if (!dream_block_fits(block, need)) {
+        return 0;
+    }
+#ifdef DREAM_ASAN
+    /* Reuse can grow into size-class slack that the previous allocation left poisoned. */
+    dream_allocation_bounds(dream_p(p), dream_block_total(block) - HEAP_HEADER_SIZE,
+                            (size_t)dream_string_bytes(units));
+#endif
+    return 1;
 }
 
 DREAM_ALWAYS_INLINE void dream_concat_fill(dream_ptr p, dream_ptr a, dream_ptr b, int32_t sc1,

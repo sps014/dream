@@ -27,9 +27,14 @@ export async function dependencies(root, npm) {
     locked = JSON.stringify(parsed.packages?.[""]?.dependencies ?? {}) === JSON.stringify(manifest.dependencies);
     if (locked) await fs.writeFile(path.join(directory, "package-lock.json"), lock);
   }
-  const result = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", [
+  const args = [
     locked ? "ci" : "install", "--ignore-scripts", "--no-audit", "--no-fund",
-  ], { cwd: directory, encoding: "utf8", timeout: 180_000, windowsHide: true });
+  ];
+  // Batch files require cmd.exe; only fixed npm arguments enter its command line.
+  const windows = process.platform === "win32";
+  const result = spawnSync(windows ? (process.env.ComSpec || "cmd.exe") : "npm",
+    windows ? ["/d", "/s", "/c", "npm.cmd", ...args] : args,
+    { cwd: directory, encoding: "utf8", timeout: 180_000, windowsHide: true });
   if (result.error || result.status !== 0) {
     throw new Error(`installing [npm] dependencies: ${result.error?.message ?? result.stderr}`);
   }

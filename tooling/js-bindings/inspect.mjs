@@ -14,7 +14,12 @@ export class DeclarationGraph {
     this.types = new BindingTypes(this);
   }
   resolve(file, specifier) {
-    const result = this.resolver.resolveDtsSync(file, specifier);
+    // The declaration resolver treats a drive letter as a URL scheme. Resolve absolute
+    // files from their own directory so drive letters and UNC roots stay in the file path.
+    const absolute = path.isAbsolute(specifier);
+    const containing = absolute ? path.join(path.dirname(specifier), "__dream_import__.mjs") : file;
+    const request = absolute ? `./${path.basename(specifier)}` : specifier;
+    const result = this.resolver.resolveDtsSync(containing, request);
     if (result.path) {
       if (result.packageJsonPath) this.inputs.add(result.packageJsonPath);
       return result.path;

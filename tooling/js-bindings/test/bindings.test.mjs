@@ -4,6 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { processImports } from "../main.mjs";
+import { dependencies } from "../dependencies.mjs";
+import { DeclarationGraph } from "../inspect.mjs";
 
 async function fixture(t, declarations, implementation = "export const version = 'test';") {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "dream-js-test-"));
@@ -75,4 +77,29 @@ test("unsupported type operators are reported rather than guessed", async t => {
   const {result} = await fixture(t, `export function read<T>(value:T):T extends string ? number : boolean;`);
   assert.match(result.modules[0].files[0].source,/fun read\(value: js\): js/);
   assert.ok(result.modules[0].warnings.some(warning=>warning.includes("extends")));
+});
+
+test("absolute module paths resolve companion declarations", async t => {
+  const {root} = await fixture(t, "export function read():string;");
+  const graph = new DeclarationGraph(root, "node");
+  const resolved = graph.resolve(path.join(root, "main.mjs"), path.join(root, "library.mjs"));
+  assert.equal(await fs.realpath(resolved), await fs.realpath(path.join(root, "library.d.mts")));
+});
+
+test("local npm dependencies install and restore from the project lock in paths with spaces", async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "dream npm test "));
+  t.after(() => fs.rm(root, {recursive:true,force:true}));
+  const library = path.join(root, "local library");
+  await fs.mkdir(library);
+  await fs.writeFile(path.join(library, "package.json"), JSON.stringify({name:"demo",version:"1.0.0",main:"index.js"}));
+  await fs.writeFile(path.join(library, "index.js"), "module.exports = 42;");
+  const npm = {demo:"file:./local library"};
+  const directory = await dependencies(root, npm);
+  const installed = path.join(directory, "node_modules/demo/package.json");
+  assert.equal(JSON.parse(await fs.readFile(installed, "utf8")).name, "demo");
+  const lock = await fs.readFile(path.join(root, "dream.npm.lock"), "utf8");
+  await fs.rm(path.join(directory, "node_modules"), {recursive:true});
+  await dependencies(root, npm);
+  assert.equal(JSON.parse(await fs.readFile(installed, "utf8")).name, "demo");
+  assert.equal(await fs.readFile(path.join(root, "dream.npm.lock"), "utf8"), lock);
 });

@@ -94,6 +94,34 @@ static void slab_layouts(void) {
     assert(!dream_heap_is_live(p));
 }
 
+static void string_reuse_bounds(void) {
+    dream_ptr prefix = dream_string_alloc(8);
+    memcpy((char *)dream_p(prefix) + STRING_UNITS_OFFSET, u"scratch:", 16);
+    dream_ptr value = dream_concat_str_int_str(prefix, 9, 0);
+    dream_ptr grown = dream_concat_str_int_str_into(value, prefix, 10, 0);
+    assert(grown == value);
+    assert(dream_str_len(grown) == 10);
+    assert(!memcmp(dream_str_units(grown), u"scratch:10", 20));
+#ifdef DREAM_ASAN
+    assert(__asan_address_is_poisoned((char *)dream_p(grown) + dream_string_bytes(10)));
+#endif
+    dream_release(grown);
+
+    dream_ptr suffix = dream_string_alloc(2);
+    memcpy((char *)dream_p(suffix) + STRING_UNITS_OFFSET, u"10", 4);
+    value = dream_concat_str_int_str(prefix, 9, 0);
+    grown = dream_concat_strings_into(value, prefix, suffix);
+    assert(grown == value);
+    assert(dream_str_len(grown) == 10);
+    assert(!memcmp(dream_str_units(grown), u"scratch:10", 20));
+#ifdef DREAM_ASAN
+    assert(__asan_address_is_poisoned((char *)dream_p(grown) + dream_string_bytes(10)));
+#endif
+    dream_release(grown);
+    dream_release(suffix);
+    dream_release(prefix);
+}
+
 static void allocation_bounds(void) {
     for (size_t size = 1; size <= 1024; ++size) {
         dream_ptr p = dream_malloc(size, TAG_ARRAY);
@@ -139,6 +167,7 @@ int main(void) {
     int64_t before = debug_get_live_objects();
     slab_layouts();
     allocation_bounds();
+    string_reuse_bounds();
     dream_ptr text = dream_array_to_string(0);
     assert(dream_str_len(text) == 2);
     assert(dream_char_at_u(text, 0) == '[' && dream_char_at_u(text, 1) == ']');

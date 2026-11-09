@@ -46,7 +46,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: tooling/gpu-browser
       - run: |
-          export VK_ICD_FILENAMES="$(printf '%s\n' /usr/share/vulkan/icd.d/*lvp*.json | head -1)"
+          VK_ICD_FILENAMES="$(printf '%s\n' /usr/share/vulkan/icd.d/*lvp*.json | head -1)"
+          export VK_ICD_FILENAMES
           xvfb-run -a vulkaninfo --summary
           xvfb-run -a npm test
         working-directory: tooling/gpu-browser
@@ -175,6 +176,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+      - name: JavaScript binding generator regressions
+        run: |
+          npm ci --prefix tooling/js-bindings
+          npm test --prefix tooling/js-bindings
       - run: cargo test --workspace --no-fail-fast --timings
       # Dependencies are already built. This lints workspace crates only.
       - run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
@@ -324,8 +329,13 @@ jobs:
           "$stress_dir/worker"
 
   golden-corpus:
-    name: Full native corpus and WASM parity
+    name: Full native corpus and WASM parity (${{ matrix.profile }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [debug, release]
     steps:
       - name: Install native dependencies
         run: |
@@ -395,6 +405,7 @@ jobs:
           cargo install wasm-bindgen-cli --version 0.2.129 --locked
           python3 scripts/build-drawing-web.py
       - name: Drawing canvas CPU and WebGPU browser presentation
+        if: matrix.profile == 'debug'
         shell: bash
         env:
           GPU_BROWSER_SOFTWARE: "1"
@@ -403,10 +414,11 @@ jobs:
           cargo build --locked -p dream --bin dream
           npm ci --prefix tooling/gpu-browser
           (cd tooling/gpu-browser && npx playwright install --with-deps chromium)
-          export VK_ICD_FILENAMES="$(printf '%s\n' /usr/share/vulkan/icd.d/*lvp*.json | head -1)"
+          VK_ICD_FILENAMES="$(printf '%s\n' /usr/share/vulkan/icd.d/*lvp*.json | head -1)"
+          export VK_ICD_FILENAMES
           xvfb-run -a npm run test:drawing --prefix tooling/gpu-browser 2>&1 | tee target/drawing-browser.log
       - name: Preserve drawing browser diagnostics
-        if: always()
+        if: always() && matrix.profile == 'debug'
         uses: actions/upload-artifact@v7
         with:
           name: drawing-browser-Linux
@@ -416,28 +428,20 @@ jobs:
             target/drawing-browser/presentation.json
           if-no-files-found: ignore
           retention-days: 7
-      - name: Full native and Node assertion corpus
-        id: corpus-debug
+      # Release compilation is substantially slower; separate runners give each profile
+      # its own budget and preserve one result if the other runner stops.
+      - name: Full native and Node assertion corpus (${{ matrix.profile }} guest builds)
         shell: bash
         run: |
           mkdir -p target
-          python3 scripts/test_corpus.py --both 2>&1 | tee target/corpus.log
-      # Debug guest builds skip inlining, the release function pipeline and every late module
-      # pass; only release builds exercise the ARC elision that ships.
-      - name: Full native and Node assertion corpus (release guest builds)
-        if: ${{ !cancelled() && (steps.corpus-debug.outcome == 'success' || steps.corpus-debug.outcome == 'failure') }}
-        shell: bash
-        run: |
-          mkdir -p target
-          python3 scripts/test_corpus.py --both --release 2>&1 | tee target/corpus-release.log
+          python3 scripts/test_corpus.py --both ${{ matrix.profile == 'release' && '--release' || '' }} 2>&1 | tee target/corpus-${{ matrix.profile }}.log
       - name: Preserve corpus results and compilation timings
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: corpus-Linux
+          name: corpus-Linux-${{ matrix.profile }}
           path: |
-            target/corpus.log
-            target/corpus-release.log
+            target/corpus-${{ matrix.profile }}.log
             target/cargo-timings/*.html
           retention-days: 7
           if-no-files-found: ignore

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -108,7 +109,7 @@ func benchJSON(iters int) {
 		}
 		total := 0.0
 		units := int32(0)
-		var skus []string
+		skus := make([]string, 0)
 		for _, it := range ord.Items {
 			total += it.Price * float64(it.Qty)
 			units += it.Qty
@@ -463,7 +464,7 @@ func benchFanout(iters int) {
 					go func() {
 						v := base + int32(p)
 						if v&7 == 0 {
-							time.Sleep(0)
+							runtime.Gosched()
 						}
 						parts[p] = leaf(v)
 						inner.Done()
@@ -482,6 +483,7 @@ func benchFanout(iters int) {
 		go func() { race <- leaf(int32(i)) }()
 		go func() { race <- leaf(int32(i + 1024)) }()
 		acc += <-race
+		<-race
 	}
 	sinkInt(acc)
 	report("async_fanout", start, iters, acc)
@@ -499,10 +501,10 @@ func chunkWork(seed int32) int32 {
 
 func benchTasks(iters int) {
 	bit := seedBit()
+	seeds := make([]int32, 16)
 	start := time.Now()
 	acc := int32(0)
 	for i := 0; i < iters; i++ {
-		seeds := make([]int32, 16)
 		for k := 0; k < 16; k++ {
 			seeds[k] = int32(i*16+k) + bit
 		}

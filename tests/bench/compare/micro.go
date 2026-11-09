@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -334,6 +335,9 @@ func benchTrees(iters int, reclaim bool) {
 		} else {
 			acc--
 		}
+		if reclaim {
+			runtime.GC()
+		}
 	}
 	label := "binary_trees"
 	if reclaim {
@@ -444,7 +448,7 @@ func benchOptions(iters int) {
 		v    int32
 	}, 8)
 	for k := 0; k < 8; k++ {
-		if ((int32(k)+seed)&1) == 0 {
+		if ((int32(k) + seed) & 1) == 0 {
 			opts[k].some = true
 			opts[k].v = int32(k + 7)
 		}
@@ -546,12 +550,13 @@ func benchByteScan(iters int) {
 }
 
 func benchSubstring(iters int) {
-	s := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	s := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + strconv.Itoa(int(envBit()))
 	start := time.Now()
 	acc := int32(0)
 	for i := 0; i < iters; i++ {
-		sub := string([]byte(s[5:40]))
-		acc += int32(len(sub))
+		st := i & 7
+		sub := s[st : st+25+(i&3)]
+		acc += int32(len(sub)) + int32(sub[0])
 	}
 	report("substring", start, iters, acc)
 	sinkInt(acc)
@@ -808,10 +813,8 @@ func benchArr(iters int) {
 	const n = 256
 	a := make([]float32, n)
 	b := make([]float32, n)
-	c := make([]float32, n)
 	ai := make([]int32, n)
 	bi := make([]int32, n)
-	ci := make([]int32, n)
 	for k := 0; k < n; k++ {
 		a[k] = float32(k)
 		b[k] = float32(k + 1)
@@ -821,15 +824,15 @@ func benchArr(iters int) {
 	start := time.Now()
 	for r := 0; r < iters; r++ {
 		for i := 0; i < n; i++ {
-			c[i] = a[i] + b[i]
+			a[i] = a[i] + b[i]
 		}
 		for j := 0; j < n; j++ {
-			ci[j] = ai[j] + bi[j]
+			ai[j] = ai[j] + bi[j]
 		}
 	}
 	acc := int32(0)
 	for i := 0; i < n; i++ {
-		acc += int32(c[i]) + ci[i]
+		acc += int32(a[i]) + ai[i]
 	}
 	report("arr_add", start, iters, acc)
 	sinkInt(acc)
@@ -839,7 +842,6 @@ func benchVec(iters int) {
 	const n = 256
 	a := make([]float32, n)
 	b := make([]float32, n)
-	c := make([]float32, n)
 	for k := 0; k < n; k++ {
 		a[k] = float32(k)
 		b[k] = float32(k + 1)
@@ -847,12 +849,12 @@ func benchVec(iters int) {
 	start := time.Now()
 	for r := 0; r < iters; r++ {
 		for i := 0; i < n; i++ {
-			c[i] = a[i] + b[i]
+			a[i] = a[i] + b[i]
 		}
 	}
 	acc := int32(0)
 	for i := 0; i < n; i++ {
-		acc += int32(c[i])
+		acc += int32(a[i])
 	}
 	report("vec_add", start, iters, acc)
 	sinkInt(acc)

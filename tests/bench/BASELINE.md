@@ -102,8 +102,8 @@ With Rust and Go available on `PATH`, first build the compiler with
 
 `scripts/bench.py compare --suite micro --rounds 3` builds the same micro workloads in
 Dream, Rust, and Go. Use `--against rust` or `--against go` for a two-language comparison.
-`scripts/bench.py compare --suite macro --against go` retains the Go application workloads;
-there is no Rust macro port. The manual **Language benchmark report** workflow runs both suites.
+`scripts/bench.py compare --suite macro --rounds 3` runs all seven application workloads
+against both Rust and Go. The manual **Language benchmark report** workflow runs both suites.
 
 Dream uses `--release`, Rust uses Cargo's release profile at optimization level 3, and Go
 uses its default optimized build. Each process warms up once. Process order rotates between
@@ -113,10 +113,21 @@ JSON preserves each sample, build command, source hashes, and tool versions; raw
 output is saved beside it. Reports default to ignored `target/language-report/` storage.
 
 These are native library comparisons: Rust uses `Rc`/`Weak`, standard collections,
-`serde_json`, `regex`, and Tokio local tasks. Dream uses ARC, UTF-16 strings, PCRE2, and its
+`serde_json`, `regex`, directly awaited futures, `join_all`, and Rayon parallel jobs. Tokio
+drives cooperative yields without adding spawned tasks to direct-await rows. Dream uses ARC, UTF-16 strings, PCRE2, and its
 cooperative scheduler; Go uses GC, UTF-8 strings, and goroutines. Inputs are ASCII, but string
-encoding, substring storage, ownership, and scheduling costs differ. In particular, the Go
-tree rows do not force completed reclamation, while Dream and Rust drop trees eagerly.
+encoding, ownership, and scheduling costs differ. Owned substring rows retain the source
+buffer in all three ports, with varying bounds and observed contents. The explicit
+`binary_trees_reclaim` row completes reclamation in all ports, using `runtime.GC` in Go.
+Fanout races wait for remaining work before stopping the timer. Array-add rows feed each
+result into the next iteration so dead stores cannot remove repeated additions.
+There are no per-operation optimization barriers. All ports expose results through their sinks.
+Rust's byte scan hides the buffer once per iteration; otherwise the constant reduction
+folds into `iters * sum` and the row measures nothing. Rust's direct-await helpers stay
+out of line, matching Dream's separate async functions.
+Rows below 10 microseconds receive no winner verdict. Go's goroutine-based `async_poll`
+and `scheduler_queue` are marked not equivalent to a direct future await. Reports distinguish workload, runtime,
+library, and representation comparisons; they must not be combined into a language speed score.
 Ratios are descriptive measurements on one machine, not regression acceptance or universal
 language rankings. Keep machine-specific reports out of commits.
 

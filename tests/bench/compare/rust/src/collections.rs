@@ -1,7 +1,6 @@
 use crate::Harness;
 use std::{
     collections::{HashMap, HashSet},
-    hint::black_box,
     time::Instant,
 };
 
@@ -11,7 +10,7 @@ pub(super) fn list_push(h: &mut Harness, iters: usize) {
     for i in 0..iters {
         list.push(i as i32);
     }
-    h.report("list_push", start, iters, black_box(list).len() as i32);
+    h.report("list_push", start.elapsed(), iters, list.len() as i32);
 }
 
 pub(super) fn insert_mid(h: &mut Harness, iters: usize) {
@@ -25,7 +24,7 @@ pub(super) fn insert_mid(h: &mut Harness, iters: usize) {
         }
         acc = acc.wrapping_add(list[list.len() / 2]);
     }
-    h.report("list_insert_mid", start, rounds * 256, acc);
+    h.report("list_insert_mid", start.elapsed(), rounds * 256, acc);
 }
 
 pub(super) fn map(h: &mut Harness, iters: usize) {
@@ -38,7 +37,7 @@ pub(super) fn map(h: &mut Harness, iters: usize) {
     for i in 0..iters {
         acc = acc.wrapping_add(map[&(i as i32)]);
     }
-    h.report("map_get_set", start, iters, acc);
+    h.report("map_get_set", start.elapsed(), iters, acc);
 }
 
 pub(super) fn map_clear(h: &mut Harness, iters: usize) {
@@ -53,9 +52,9 @@ pub(super) fn map_clear(h: &mut Harness, iters: usize) {
     }
     h.report(
         "map_clear_reuse",
-        start,
+        start.elapsed(),
         64 * per,
-        black_box(map).len() as i32,
+        map.len() as i32,
     );
 }
 
@@ -74,7 +73,7 @@ pub(super) fn set(h: &mut Harness, iters: usize) {
             acc += 1;
         }
     }
-    h.report("set_probe", start, iters, acc + set.len() as i32);
+    h.report("set_probe", start.elapsed(), iters, acc + set.len() as i32);
 }
 
 pub(super) fn set_clear(h: &mut Harness, iters: usize) {
@@ -89,9 +88,9 @@ pub(super) fn set_clear(h: &mut Harness, iters: usize) {
     }
     h.report(
         "set_clear_reuse",
-        start,
+        start.elapsed(),
         64 * per,
-        black_box(set).len() as i32,
+        set.len() as i32,
     );
 }
 
@@ -103,8 +102,13 @@ pub(super) fn list_clear(h: &mut Harness, iters: usize) {
         for i in 0..per {
             list.push(i as i32);
         }
-        black_box(&list);
+
         list.clear();
     }
-    h.report("list_clear_reuse", start, 64 * per, list.len() as i32);
+    h.report(
+        "list_clear_reuse",
+        start.elapsed(),
+        64 * per,
+        list.len() as i32,
+    );
 }

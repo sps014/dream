@@ -563,7 +563,9 @@ async fun bench_async_fanout(iters: int): void {
             k = k + 1;
         }
         // Both racers carry the same value, so the winner never changes the checksum.
-        acc = acc + Promise.race([leaf_job(i), leaf_job(i + 1024)]).await;
+        let racers = [leaf_job(i), leaf_job(i + 1024)];
+        acc = acc + Promise.race(racers).await;
+        Promise.all(racers).await;
         i = i + 1;
     }
     sw.stop();
@@ -586,6 +588,7 @@ fun chunk_work(seed: int): int {
 }
 
 async fun bench_task_parallel(iters: int): void {
+    let bit = seed_bit();
     let seeds = Array.alloc<int>(16);
     let sw = Stopwatch();
     let acc = 0;
@@ -593,7 +596,7 @@ async fun bench_task_parallel(iters: int): void {
     while i < iters {
         let k = 0;
         while k < 16 {
-            seeds[k] = i * 16 + k + seed_bit();
+            seeds[k] = i * 16 + k + bit;
             k = k + 1;
         }
         let batch = Task.scope<int, string>(

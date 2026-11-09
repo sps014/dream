@@ -300,7 +300,7 @@ rows need interleaved rounds rather than a single median.
 ### Go comparison round
 
 `scripts/bench.py compare` compares micro workloads against optimized Rust and Go builds;
-`--suite macro --against go` compares the macro suite against Go. The Go measurements in this
+`--suite macro` compares the macro suite against both as well. The Go measurements in this
 round used the same optimized Go port. At the start of this round Go was faster on `arr_add` (1.69x), `string_builder` (1.98x),
 `split_span` (1.28x), `alloc_churn` (1.24x) and `matmul_64` (1.23x). Disassembly of the release
 binary traced each row to one cause.

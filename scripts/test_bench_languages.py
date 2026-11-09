@@ -18,11 +18,11 @@ class LanguageReportTests(unittest.TestCase):
     def samples(self):
         return {arm: [report.parse_rows(f"bench work ns_total={ns} iters=10 checksum=-42\nsink 1\n")
                       for ns in totals]
-                for arm, totals in {"dream": [100, 200, 300], "rust": [200, 400, 600], "go": [50, 100, 150]}.items()}
+                for arm, totals in {"dream": [100000, 200000, 300000], "rust": [200000, 400000, 600000], "go": [50000, 100000, 150000]}.items()}
 
     def test_fractional_ns_per_op_and_each_comparator_use_process_medians(self):
         row = report.summarize(self.samples())[0]
-        self.assertEqual(row["measurements"]["dream"]["ns_per_op"], [10, 20, 30])
+        self.assertEqual(row["measurements"]["dream"]["ns_per_op"], [10000, 20000, 30000])
         self.assertEqual(row["comparisons"]["rust"], {"ratio": .5, "verdict": "Dream"})
         self.assertEqual(row["comparisons"]["go"], {"ratio": 2, "verdict": "Go"})
         self.assertEqual(report.parse_rows("bench fractional ns_total=3 iters=10 checksum=1")["fractional"]["ns_total"] / 10, .3)
@@ -61,11 +61,36 @@ class LanguageReportTests(unittest.TestCase):
                          [["dream", "rust", "go"], ["rust", "go", "dream"], ["go", "dream", "rust"]])
         self.assertEqual(arms, ["dream", "rust", "go"])
 
-    def test_render_includes_both_ratios_and_semantic_qualifications(self):
+    def test_short_samples_and_extra_spawning_do_not_get_winner_verdicts(self):
+        samples = self.samples()
+        samples["rust"][0]["work"]["ns_total"] = 1
+        self.assertEqual(report.summarize(samples)[0]["comparisons"]["rust"]["verdict"], "too short")
+        samples = {arm: [{"async_poll": process["work"]} for process in processes]
+                   for arm, processes in self.samples().items()}
+        self.assertEqual(report.summarize(samples)[0]["comparisons"]["go"]["verdict"], "not equivalent")
+        queued = {arm: [{"scheduler_queue": process["async_poll"]} for process in processes]
+                  for arm, processes in samples.items()}
+        self.assertEqual(report.summarize(queued)[0]["comparisons"]["go"]["verdict"], "not equivalent")
+        self.assertEqual(report.summarize(queued)[0]["comparisons"]["rust"]["verdict"], "Dream")
+
+    def test_both_suites_have_both_comparators_and_runtime_rows_are_identified(self):
+        for _, arms in report.SUITES.values():
+            self.assertEqual(set(arms), {"rust", "go"})
+        self.assertEqual(report.workload_contract("async_fanout")[0], "runtime")
+        self.assertEqual(report.workload_contract("byte_scan")[0], "representation")
+
+    def test_summary_groups_timings_then_ratios_and_skips_methodology(self):
         text = report.markdown({"suite": "micro", "against": ["rust", "go"], "rounds": 3,
                                 "seed": "1", "platform": "test host", "rows": report.summarize(self.samples())})
-        for phrase in ("Dream/Rust", "Dream/Go", "Tokio", "UTF-16", "GC", "not a statistical regression gate"):
-            self.assertIn(phrase, text)
+        self.assertIn("| Bench | Iterations | Dream ns/op | Rust ns/op | Go ns/op | Dream/Rust | Dream/Go | vs Rust | vs Go |", text)
+        self.assertIn("0.90–1.10 is a tie", text)
+        self.assertLess(text.count("\n"), 12)
+        for phrase in ("Tokio", "UTF-16", "report.json", "statistical regression gate"):
+            self.assertNotIn(phrase, text)
+        queued = report.summarize({arm: [{"async_poll": process["work"]} for process in processes]
+                                   for arm, processes in self.samples().items()})
+        self.assertIn("not scored", report.markdown({"suite": "micro", "against": ["rust", "go"], "rounds": 3,
+                                                     "seed": "1", "rows": queued}))
 
 
 if __name__ == "__main__":

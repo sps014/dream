@@ -1,6 +1,6 @@
 name: Language benchmark report
 
-# Manual only. Compares micro against Rust and Go, and macro against Go, in
+# Manual only. Compares micro and macro against Rust and Go in
 # tests/bench/compare and publishes the table. It does not run on pull requests
 # and a timing result does not fail the job. A checksum mismatch does.
 on:
@@ -21,7 +21,7 @@ env:
 
 jobs:
   report:
-    name: Micro vs Rust and Go, macro vs Go
+    name: Micro and macro vs Rust and Go
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:

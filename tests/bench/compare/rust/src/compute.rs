@@ -1,5 +1,5 @@
 use crate::{Harness, env_bit};
-use std::{hint::black_box, time::Instant};
+use std::time::Instant;
 
 pub(super) fn nbody(h: &mut Harness, iters: usize) {
     struct Body {
@@ -11,7 +11,7 @@ pub(super) fn nbody(h: &mut Harness, iters: usize) {
         vz: f64,
         mass: f64,
     }
-    let mut bodies = black_box(vec![
+    let mut bodies = vec![
         Body {
             x: 0.,
             y: 0.,
@@ -57,7 +57,7 @@ pub(super) fn nbody(h: &mut Harness, iters: usize) {
             vz: 0.02,
             mass: 0.0625,
         },
-    ]);
+    ];
     let start = Instant::now();
     for _ in 0..iters {
         for a in 0..bodies.len() {
@@ -81,7 +81,12 @@ pub(super) fn nbody(h: &mut Harness, iters: usize) {
             b.z += b.vz * 0.01;
         }
     }
-    h.report("nbody", start, iters, (bodies[0].x * 1000.) as i32);
+    h.report(
+        "nbody",
+        start.elapsed(),
+        iters,
+        (bodies[0].x * 1000.) as i32,
+    );
 }
 
 pub(super) fn mandelbrot(h: &mut Harness, iters: usize) {
@@ -107,12 +112,12 @@ pub(super) fn mandelbrot(h: &mut Harness, iters: usize) {
             }
         }
     }
-    h.report("mandelbrot", start, iters, acc);
+    h.report("mandelbrot", start.elapsed(), iters, acc);
 }
 
 pub(super) fn matmul(h: &mut Harness, iters: usize) {
-    let a = black_box((0..4096).map(|i| (i % 13) as f64).collect::<Vec<_>>());
-    let b = black_box((0..4096).map(|i| ((i * 7) % 11) as f64).collect::<Vec<_>>());
+    let a = (0..4096).map(|i| (i % 13) as f64).collect::<Vec<_>>();
+    let b = (0..4096).map(|i| ((i * 7) % 11) as f64).collect::<Vec<_>>();
     let mut c = vec![0.; 4096];
     let start = Instant::now();
     for _ in 0..iters {
@@ -125,8 +130,8 @@ pub(super) fn matmul(h: &mut Harness, iters: usize) {
             }
         }
     }
-    black_box(&c);
-    h.report("matmul_64", start, iters, c[0] as i32);
+
+    h.report("matmul_64", start.elapsed(), iters, c[0] as i32);
 }
 
 fn qsort(a: &mut [i32], lo: isize, hi: isize) {
@@ -154,7 +159,7 @@ fn qsort(a: &mut [i32], lo: isize, hi: isize) {
 
 pub(super) fn quicksort(h: &mut Harness, iters: usize) {
     let mut a = vec![0i32; 512];
-    let mut seed = black_box(123456789i32);
+    let mut seed = 123456789i32;
     let start = Instant::now();
     for _ in 0..iters {
         for v in &mut a {
@@ -163,7 +168,7 @@ pub(super) fn quicksort(h: &mut Harness, iters: usize) {
         }
         qsort(&mut a, 0, 511);
     }
-    h.report("quicksort", start, iters, a[0]);
+    h.report("quicksort", start.elapsed(), iters, a[0]);
 }
 
 pub(super) fn sieve(h: &mut Harness, iters: usize) {
@@ -183,7 +188,7 @@ pub(super) fn sieve(h: &mut Harness, iters: usize) {
             acc = acc.wrapping_add(v);
         }
     }
-    h.report("sieve", start, iters, acc);
+    h.report("sieve", start.elapsed(), iters, acc);
 }
 
 fn fib_value(n: i32) -> i32 {
@@ -198,9 +203,9 @@ pub(super) fn fib(h: &mut Harness, iters: usize) {
     let start = Instant::now();
     let mut acc = 0i32;
     for i in 0..iters {
-        acc = acc.wrapping_add(fib_value(black_box(20 + (i & 1) as i32)));
+        acc = acc.wrapping_add(fib_value(20 + (i & 1) as i32));
     }
-    h.report("fib_rec", start, iters, acc);
+    h.report("fib_rec", start.elapsed(), iters, acc);
 }
 
 trait Op {
@@ -253,8 +258,8 @@ pub(super) fn interface(h: &mut Harness, iters: usize) {
         .collect();
     let rounds = (iters * 3 / 1024).max(1);
     let start = Instant::now();
-    let acc = iface_rounds(black_box(&ops), rounds);
-    h.report("iface_dispatch", start, rounds * 1024, acc);
+    let acc = iface_rounds(&ops, rounds);
+    h.report("iface_dispatch", start.elapsed(), rounds * 1024, acc);
 }
 
 #[inline(never)]
@@ -271,54 +276,47 @@ pub(super) fn closure(h: &mut Harness, iters: usize) {
     let callback = closure_offset(env_bit());
     let start = Instant::now();
     let acc = closure_calls(callback.as_ref(), iters);
-    h.report("closure_dispatch", start, iters, acc);
+    h.report("closure_dispatch", start.elapsed(), iters, acc);
 }
 
 pub(super) fn options(h: &mut Harness, iters: usize) {
     let seed = env_bit();
-    let opts: Vec<_> = black_box(
-        (0..8)
-            .map(|k| (((k + seed) & 1) == 0).then_some(k + 7))
-            .collect(),
-    );
+    let opts: Vec<_> = (0..8)
+        .map(|k| (((k + seed) & 1) == 0).then_some(k + 7))
+        .collect();
     let start = Instant::now();
     let mut acc = 0i32;
     for i in 0..iters {
         acc = acc.wrapping_add(opts[i & 7].unwrap_or(-1));
         acc = acc.wrapping_add(opts[(i + 3) & 7].unwrap_or(1));
     }
-    h.report("sum_options", start, iters, acc);
+    h.report("sum_options", start.elapsed(), iters, acc);
 }
 
 pub(super) fn arrays(h: &mut Harness, iters: usize, integers: bool) {
-    let a = black_box((0..256).map(|k| k as f32).collect::<Vec<_>>());
-    let b = black_box((0..256).map(|k| (k + 1) as f32).collect::<Vec<_>>());
-    let (ai, bi) = black_box((
-        (0..256).collect::<Vec<i32>>(),
-        (1..257).collect::<Vec<i32>>(),
-    ));
-    let (mut c, mut ci) = (vec![0f32; 256], vec![0i32; 256]);
+    let mut a = (0..256).map(|k| k as f32).collect::<Vec<_>>();
+    let b = (0..256).map(|k| (k + 1) as f32).collect::<Vec<_>>();
+    let mut ai = (0..256).collect::<Vec<i32>>();
+    let bi = (1..257).collect::<Vec<i32>>();
     let start = Instant::now();
     for _ in 0..iters {
-        for (out, (a, b)) in c.iter_mut().zip(a.iter().zip(&b)) {
-            *out = a + b;
+        for (a, b) in a.iter_mut().zip(&b) {
+            *a += b;
         }
         if integers {
-            for (out, (a, b)) in ci.iter_mut().zip(ai.iter().zip(&bi)) {
-                *out = a + b;
+            for (a, b) in ai.iter_mut().zip(&bi) {
+                *a += b;
             }
         }
-        black_box(c.as_slice());
-        if integers {
-            black_box(ci.as_slice());
-        }
     }
+    let elapsed = start.elapsed();
     let acc = (0..256).fold(0i32, |sum, i| {
-        sum.wrapping_add(c[i] as i32).wrapping_add(ci[i])
+        sum.wrapping_add(a[i] as i32)
+            .wrapping_add(if integers { ai[i] } else { 0 })
     });
     h.report(
         if integers { "arr_add" } else { "vec_add" },
-        start,
+        elapsed,
         iters,
         acc,
     );

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare optimized Dream with Rust and Go on matched benchmark workloads.
 
-Micro supports Rust and Go; macro supports Go. Each process discards one internal
+Micro and macro support Rust and Go. Each process discards one internal
 warmup before one measured pass. Process order rotates between rounds. Reports
 retain raw samples and build identities. Checksums, row sets and iteration counts
 must agree; timing is descriptive and never a merge gate.
@@ -29,8 +29,19 @@ ROOT = Path(__file__).resolve().parents[2]
 RUST_MANIFEST = ROOT / "tests/bench/compare/rust/Cargo.toml"
 SUITES = {
     "micro": (ROOT / "tests/bench/microbenches.dream", ("rust", "go")),
-    "macro": (ROOT / "tests/bench/macro/macrobenches.dream", ("go",)),
+    "macro": (ROOT / "tests/bench/macro/macrobenches.dream", ("rust", "go")),
 }
+MIN_SAMPLE_NS = 10_000
+
+
+def workload_contract(name):
+    if name in ("async_poll", "scheduler_queue", "async_fanout", "task_parallel"):
+        return "runtime", "Native async/parallel runtimes; direct await, joining, yielding and spawning have distinct contracts."
+    if name in ("json_serialize", "json_deserialize", "json_service", "regex_find", "log_processor"):
+        return "library", "Native JSON/regex libraries implement the same workload, with different engines and representations."
+    if name in ("char_scan", "byte_scan"):
+        return "representation", "ASCII text in native encodings: UTF-16 for Dream, UTF-8 for Rust/Go; byte counts differ."
+    return "workload", "Matched algorithms and logical inputs; native ownership, containers and compiler optimizations apply."
 
 
 def run(command, env=None, timeout=1800):
@@ -103,8 +114,15 @@ def summarize(samples):
             if arm == "dream":
                 continue
             ratio = measurements["dream"]["median_ns_per_op"] / measurements[arm]["median_ns_per_op"]
-            comparisons[arm] = {"ratio": ratio, "verdict": "Dream" if ratio < .9 else arm.title() if ratio > 1.1 else "tie"}
+            verdict = "Dream" if ratio < .9 else arm.title() if ratio > 1.1 else "tie"
+            if min(*measurements["dream"]["ns_total"], *measurements[arm]["ns_total"]) < MIN_SAMPLE_NS:
+                verdict = "too short"
+            if arm == "go" and name in ("async_poll", "scheduler_queue"):
+                verdict = "not equivalent"
+            comparisons[arm] = {"ratio": ratio, "verdict": verdict}
+        kind, contract = workload_contract(name)
         rows.append({"name": name, "iters": reference["iters"], "checksum": reference["checksum"],
+                     "kind": kind, "contract": contract,
                      "measurements": measurements, "comparisons": comparisons})
     return rows
 
@@ -139,12 +157,12 @@ def compile_arm(arm, args, out):
     if arm == "dream":
         binary = binary.with_suffix(".bin")
     elif arm == "rust":
-        shutil.copy2(target / f"release/dream-micro-rust{suffix}", binary)
+        shutil.copy2(target / f"release/dream-{args.suite}-rust{suffix}", binary)
     if not binary.is_file():
         raise ValueError(f"{arm} did not write {binary}")
     compiler = Path(shutil.which(args.rustc if arm == "rust" else command[0]) or command[0]).resolve()
     settings = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_PROFILE_RELEASE_OPT_LEVEL", "CARGO_PROFILE_RELEASE_LTO",
-                "GOFLAGS", "GOGC", "GOMEMLIMIT", "GOMAXPROCS")
+                "GOFLAGS", "GOGC", "GOMEMLIMIT", "GOMAXPROCS", "RAYON_NUM_THREADS")
     return binary, {"command": command, "version": version, "sources": fingerprint(sources),
                     "compiler": str(compiler), "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
                     "environment": {key: build_env[key] for key in settings if key in build_env},
@@ -153,29 +171,24 @@ def compile_arm(arm, args, out):
 
 def markdown(report):
     arms = report["against"]
-    build_notes = ["Dream uses `--release`"]
-    if "rust" in arms:
-        build_notes.append("Rust uses `cargo build --release` (default opt-level 3)")
-    if "go" in arms:
-        build_notes.append("Go uses optimized `go build`")
-    lines = [f"# Dream {report['suite']} vs {' and '.join(a.title() for a in arms)}", "",
-             f"Median of {report['rounds']} process samples, each after one internal warmup. Seed: `{report['seed']}`.",
-             f"Host: {report['platform']}. Process order rotates between rounds. Raw samples and compiler identities are in report.json.",
-             "; ".join(build_notes) + ". Extra build/runtime settings are recorded in report.json.",
-             "Dream/comparator below 1 means Dream used less time per operation. Ratios from 0.90 to 1.10 are labeled ties; this is a descriptive report, not a statistical regression gate.",
-             "Strings use native encodings (Dream UTF-16, Rust/Go UTF-8); these inputs are ASCII. Rust uses Rc/Weak, serde_json and regex. Async rows compare Dream's scheduler, Tokio local tasks and Go goroutines; they are not identical scheduler implementations.",
-             "Owned substring operations use each language's representation. Tree reclamation is eager in Dream and Rust; Go uses GC. Compiler elimination and timer resolution can dominate very short rows.", ""]
+    note = (f"Median of {report['rounds']} rounds after one warmup. Seed `{report['seed']}`. "
+            "A ratio below 1 means Dream was faster; 0.90–1.10 is a tie.")
+    if any(row["comparisons"].get(arm, {}).get("verdict") == "not equivalent" for row in report["rows"] for arm in arms):
+        note += " Go async rows that spawn goroutines are not scored."
     header = ["Bench", "Iterations", "Dream ns/op"]
-    for arm in arms:
-        header += [f"{arm.title()} ns/op", f"Dream/{arm.title()}", "Result"]
-    lines += ["| " + " | ".join(header) + " |", "|" + "|".join(["---"] + ["---:"] * (len(header) - 1)) + "|"]
+    header += [f"{arm.title()} ns/op" for arm in arms]
+    header += [f"Dream/{arm.title()}" for arm in arms]
+    header += [f"vs {arm.title()}" for arm in arms]
+    rows = []
     for row in report["rows"]:
         cells = [row["name"], str(row["iters"]), f"{row['measurements']['dream']['median_ns_per_op']:,.2f}"]
-        for arm in arms:
-            comparison = row["comparisons"][arm]
-            cells += [f"{row['measurements'][arm]['median_ns_per_op']:,.2f}", f"{comparison['ratio']:.3f}", comparison["verdict"]]
-        lines.append("| " + " | ".join(cells) + " |")
-    lines += ["", "All reported checksums and iteration counts match across languages and process samples.", ""]
+        cells += [f"{row['measurements'][arm]['median_ns_per_op']:,.2f}" for arm in arms]
+        cells += [f"{row['comparisons'][arm]['ratio']:.3f}" for arm in arms]
+        cells += [row["comparisons"][arm]["verdict"] for arm in arms]
+        rows.append("| " + " | ".join(cells) + " |")
+    align = "|" + "|".join(["---"] + ["---:"] * (len(header) - 1)) + "|"
+    lines = [f"# Dream {report['suite']} vs {' and '.join(arm.title() for arm in arms)}", "", note, "",
+             "| " + " | ".join(header) + " |", align, *rows, "", "Checksums and iteration counts match.", ""]
     return "\n".join(lines)
 
 

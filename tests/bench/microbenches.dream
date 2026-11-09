@@ -193,17 +193,19 @@ fun bench_byte_scan(iters: int): void {
 }
 
 fun bench_substring(iters: int): void {
-    let s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let seed = int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1;
+    let s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" + seed.to_string();
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
     while i < iters {
-        let sub = s.substring(5, 40);
-        acc = acc + sub.byte_size();
+        let start = i & 7;
+        let sub = s.substring(start, start + 25 + (i & 3));
+        acc = acc + sub.length + (int)sub[0];
         i = i + 1;
     }
     sw.stop();
-    report("substring", sw.elapsed_nanos, iters, acc / 2);
+    report("substring", sw.elapsed_nanos, iters, acc);
     sink_int(acc);
 }
 
@@ -554,10 +556,8 @@ fun bench_arr_add(iters: int): void {
     let n = 256;
     let a = Array.alloc<float>(n);
     let b = Array.alloc<float>(n);
-    let c = Array.alloc<float>(n);
     let ai = Array.alloc<int>(n);
     let bi = Array.alloc<int>(n);
-    let ci = Array.alloc<int>(n);
     let k = 0;
     while k < n {
         a[k] = (float)k;
@@ -571,26 +571,25 @@ fun bench_arr_add(iters: int): void {
     while r < iters {
         let i = 0;
         while i < n {
-            c[i] = a[i] + b[i];
+            a[i] = a[i] + b[i];
             i = i + 1;
         }
         let j = 0;
         while j < n {
-            ci[j] = ai[j] + bi[j];
+            ai[j] = ai[j] + bi[j];
             j = j + 1;
         }
         r = r + 1;
     }
     sw.stop();
-    report("arr_add", sw.elapsed_nanos, iters, checksum_floats(c) + checksum_ints(ci));
-    sink_int(checksum_floats(c) + checksum_ints(ci));
+    report("arr_add", sw.elapsed_nanos, iters, checksum_floats(a) + checksum_ints(ai));
+    sink_int(checksum_floats(a) + checksum_ints(ai));
 }
 
 fun bench_vec_add(iters: int): void {
     let n = 256;
     let a = Array.alloc<float>(n);
     let b = Array.alloc<float>(n);
-    let c = Array.alloc<float>(n);
     let k = 0;
     while k < n {
         a[k] = (float)k;
@@ -605,18 +604,18 @@ fun bench_vec_add(iters: int): void {
         while i + lanes <= n {
             let va = Vector<float>.load(a, i);
             let vb = Vector<float>.load(b, i);
-            (va + vb).store(c, i);
+            (va + vb).store(a, i);
             i = i + lanes;
         }
         while i < n {
-            c[i] = a[i] + b[i];
+            a[i] = a[i] + b[i];
             i = i + 1;
         }
         r = r + 1;
     }
     sw.stop();
-    report("vec_add", sw.elapsed_nanos, iters, checksum_floats(c));
-    sink_int(checksum_floats(c));
+    report("vec_add", sw.elapsed_nanos, iters, checksum_floats(a));
+    sink_int(checksum_floats(a));
 }
 
 fun bench_string_builder(iters: int): void {
@@ -720,7 +719,9 @@ fun bench_nbody(iters: int): void {
 // One op = one full 48x64 frame, up to 30 iterations per pixel.
 fun bench_mandelbrot(iters: int): void {
     // A shared runtime seed makes the historical and current workloads identical.
-    let jitter = (double)(int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1);
+    let jitter = (double)(
+        int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1
+    );
     let sw = Stopwatch();
     let acc = 0;
     let i = 0;
@@ -1253,7 +1254,9 @@ fun closure_offset(offset: int): fun(int): int {
 }
 
 fun bench_closure_dispatch(iters: int): void {
-    let callback = closure_offset(int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1));
+    let callback = closure_offset(
+        int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1)
+    );
     let sw = Stopwatch();
     sw.start();
     let total = closure_dispatch_calls(callback, iters);

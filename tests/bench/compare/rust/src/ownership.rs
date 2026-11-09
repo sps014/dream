@@ -1,6 +1,5 @@
 use crate::Harness;
 use std::{
-    hint::black_box,
     rc::{Rc, Weak},
     time::Instant,
 };
@@ -23,17 +22,21 @@ pub(super) fn trees_alloc(h: &mut Harness, iters: usize) {
     let mut keep = Vec::with_capacity(iters);
     let start = Instant::now();
     for _ in 0..iters {
-        keep.push(black_box(tree(12)));
+        keep.push(tree(12));
     }
-    h.report("binary_trees_alloc", start, iters, keep.len() as i32);
-    black_box(&keep);
+    h.report(
+        "binary_trees_alloc",
+        start.elapsed(),
+        iters,
+        keep.len() as i32,
+    );
 }
 
 pub(super) fn trees(h: &mut Harness, iters: usize, reclaim: bool) {
     let start = Instant::now();
     let mut acc = 0i32;
     for _ in 0..iters {
-        let root = black_box(tree(12));
+        let root = tree(12);
         acc += if root.is_some() { 1 } else { -1 };
         drop(root);
     }
@@ -43,7 +46,7 @@ pub(super) fn trees(h: &mut Harness, iters: usize, reclaim: bool) {
         } else {
             "binary_trees"
         },
-        start,
+        start.elapsed(),
         iters,
         acc,
     );
@@ -62,7 +65,7 @@ pub(super) fn linked(h: &mut Harness, iters: usize) {
             next: head,
         }));
     }
-    let head = black_box(head);
+    let head = head;
     let start = Instant::now();
     let mut acc = 0i32;
     for _ in 0..iters {
@@ -72,7 +75,7 @@ pub(super) fn linked(h: &mut Harness, iters: usize) {
             current = node.next.clone();
         }
     }
-    h.report("linked_walk", start, iters, acc);
+    h.report("linked_walk", start.elapsed(), iters, acc);
 }
 
 struct WeakTree {
@@ -93,10 +96,10 @@ pub(super) fn weak(h: &mut Harness, iters: usize) {
     let start = Instant::now();
     let mut acc = 0i32;
     for _ in 0..iters {
-        let root = black_box(weak_tree(10, Weak::new()));
+        let root = weak_tree(10, Weak::new());
         acc += if root.left.is_some() { 1 } else { -1 };
     }
-    h.report("weak_tree", start, iters, acc);
+    h.report("weak_tree", start.elapsed(), iters, acc);
 }
 
 pub(super) fn arc(h: &mut Harness, iters: usize) {
@@ -106,9 +109,9 @@ pub(super) fn arc(h: &mut Harness, iters: usize) {
         let a: Rc<str> = Rc::from(format!("n{i}"));
         let b = a.clone();
         let c = b.clone();
-        acc = acc.wrapping_add(black_box(&c).len() as i32);
+        acc = acc.wrapping_add(c.len() as i32);
     }
-    h.report("arc_locals", start, iters, acc);
+    h.report("arc_locals", start.elapsed(), iters, acc);
 }
 
 #[inline(never)]
@@ -122,7 +125,7 @@ pub(super) fn alloc(h: &mut Harness, iters: usize) {
     for i in 0..iters {
         let mut buf = vec![0i32; 64];
         buf[0] = i as i32;
-        acc = acc.wrapping_add(touch(black_box(&buf)));
+        acc = acc.wrapping_add(touch(&buf));
     }
-    h.report("alloc_churn", start, iters, acc);
+    h.report("alloc_churn", start.elapsed(), iters, acc);
 }

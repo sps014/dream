@@ -7,39 +7,8 @@ mod ownership;
 mod scheduler;
 mod strings;
 
-use std::hint::black_box;
-use std::time::Instant;
-
-struct Harness {
-    measuring: bool,
-    sink: i32,
-}
-
-impl Harness {
-    #[inline(never)]
-    fn sink(&mut self, value: i32) {
-        self.sink = self.sink.wrapping_add(black_box(value));
-    }
-
-    fn report(&mut self, name: &str, start: Instant, iters: usize, checksum: i32) {
-        let nanos = start.elapsed().as_nanos();
-        self.sink(checksum);
-        if self.measuring {
-            println!(
-                "bench {name} ns_total={nanos} iters={iters} ns_per_op={} checksum={checksum}",
-                nanos / iters as u128
-            );
-        }
-    }
-}
-
-fn env_bit() -> i32 {
-    std::env::var("DREAM_BENCH_SEED")
-        .ok()
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(1)
-        & 1
-}
+mod harness;
+use harness::{Harness, env_bit};
 
 fn run_suite(h: &mut Harness, s: usize) {
     compute::nbody(h, s * 4);
@@ -97,16 +66,11 @@ fn main() {
         scheduler::poll(&mut h, 20_000).await;
         scheduler::queue(&mut h, 5_000).await;
         h.measuring = true;
-        let passes = std::env::var("DREAM_BENCH_PASSES")
-            .ok()
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(1)
-            .clamp(1, 30);
-        for _ in 0..passes {
+        for _ in 0..harness::passes() {
             run_suite(&mut h, 20_000);
             scheduler::poll(&mut h, 20_000).await;
             scheduler::queue(&mut h, 5_000).await;
         }
     });
-    println!("sink {}", black_box(h.sink));
+    println!("sink {}", h.sink);
 }

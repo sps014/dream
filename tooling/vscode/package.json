@@ -10,7 +10,7 @@
     "directory": "tooling/vscode"
   },
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.125.0"
   },
   "icon": "./icons/dream.png",
   "main": "./out/extension.js",
@@ -446,7 +446,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
-    "@types/vscode": "^1.144.0",
+    "@types/vscode": "1.125.0",
     "typescript": "^7.0.2"
   }
 }

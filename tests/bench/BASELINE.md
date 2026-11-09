@@ -33,7 +33,7 @@ emission when requested and must be compared with matching flags.
 10% regression gate alone does not establish a win.
 
 The fixture includes `closure_dispatch`, `async_poll`, `scheduler_queue`, `set_probe` and
-`set_clear_reuse` (42 workloads in total). Runtime attribution
+`set_clear_reuse` (41 workloads in total). Runtime attribution
 adds non-null retain/release helper events, accepted ready-queue enqueues and queue-node heap
 allocations to the existing
 weak/region counters. Immortal no-op retain/releases are included; these are helper events,
@@ -94,6 +94,31 @@ scripts/bench.py generators --help     # isolated source-generator cache measure
 The old minimum-based C hotpath harness is retired as a measurement entry point. Language
 workloads exercise the allocator, weak references, strings and queues with matched inputs.
 Counter runs attribute mechanisms but cannot establish latency wins.
+
+## Rust and Go comparisons
+
+With Rust and Go available on `PATH`, first build the compiler with
+`cargo build --release -p dream`.
+
+`scripts/bench.py compare --suite micro --rounds 3` builds the same micro workloads in
+Dream, Rust, and Go. Use `--against rust` or `--against go` for a two-language comparison.
+`scripts/bench.py compare --suite macro --against go` retains the Go application workloads;
+there is no Rust macro port. The manual **Language benchmark report** workflow runs both suites.
+
+Dream uses `--release`, Rust uses Cargo's release profile at optimization level 3, and Go
+uses its default optimized build. Each process warms up once. Process order rotates between
+rounds, and the report compares median nanoseconds per operation. Missing workloads, changed
+checksums, mismatched iteration counts, and nonpositive times invalidate the comparison.
+JSON preserves each sample, build command, source hashes, and tool versions; raw process
+output is saved beside it. Reports default to ignored `target/language-report/` storage.
+
+These are native library comparisons: Rust uses `Rc`/`Weak`, standard collections,
+`serde_json`, `regex`, and Tokio local tasks. Dream uses ARC, UTF-16 strings, PCRE2, and its
+cooperative scheduler; Go uses GC, UTF-8 strings, and goroutines. Inputs are ASCII, but string
+encoding, substring storage, ownership, and scheduling costs differ. In particular, the Go
+tree rows do not force completed reclamation, while Dream and Rust drop trees eagerly.
+Ratios are descriptive measurements on one machine, not regression acceptance or universal
+language rankings. Keep machine-specific reports out of commits.
 
 
 Preserve machine-specific results as immutable JSON with raw samples and runner identities

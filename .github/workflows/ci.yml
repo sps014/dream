@@ -63,6 +63,7 @@ jobs:
       - run: python3 scripts/check_hygiene.py
       - run: python3 scripts/test_compile_budget.py
       - run: python3 scripts/test_bench_gate.py
+      - run: python3 scripts/test_bench_languages.py
 
   build-clippy-test:
     name: Build, clippy, test (${{ matrix.os }})

@@ -299,8 +299,9 @@ rows need interleaved rounds rather than a single median.
 
 ### Go comparison round
 
-`scripts/benchmarks/go_report.py` compares the micro and macro suites against an optimized Go
-build. At the start of this round Go was faster on `arr_add` (1.69x), `string_builder` (1.98x),
+`scripts/bench.py compare` compares micro workloads against optimized Rust and Go builds;
+`--suite macro --against go` compares the macro suite against Go. The Go measurements in this
+round used the same optimized Go port. At the start of this round Go was faster on `arr_add` (1.69x), `string_builder` (1.98x),
 `split_span` (1.28x), `alloc_churn` (1.24x) and `matmul_64` (1.23x). Disassembly of the release
 binary traced each row to one cause.
 
@@ -344,7 +345,7 @@ Measured and rejected:
   constant addresses. It removed 4 of 81 dead loads; the rest sit inside inlined runtime code. It
   was neutral to slightly slower.
 
-After the round, `go_report.py --rounds 3` reports Go faster on 2 micro rows: `split_span`
+After the round, the Go comparison (`scripts/bench.py compare --against go --rounds 3`) reported Go faster on 2 micro rows: `split_span`
 (1.18–1.24x across runs) and `nbody` (a tie to 1.24x across runs). Go fuses `x*y+z` into one
 instruction, which Dream's strict IEEE semantics do not allow. Paired against the pre-round
 compiler, `split_span` is 0.97x and no row regresses. Each `split_span` piece runs an

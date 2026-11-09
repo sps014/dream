@@ -14,6 +14,7 @@ Examples:
   scripts/bench.py                        # current Dream, 20 rounds, 10 passes
   scripts/bench.py build --help           # compiler cold/warm/edited builds
   scripts/bench.py go --help              # `go build` on the same workload shapes
+  scripts/bench.py compare --suite micro  # optimized Dream vs Rust and Go
   scripts/bench.py generators --help      # isolated source-generator caches
   scripts/bench.py profile --suite macro  # CPU profile (samply, perf or xctrace)
   scripts/bench.py --suite macro          # Dream application workloads
@@ -434,8 +435,11 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators", "go", "profile", "startup"):
+        if len(sys.argv) > 1 and sys.argv[1] in ("build", "generators", "go", "profile", "startup", "compare"):
             command = sys.argv.pop(1)
+            if command == "compare":
+                from benchmarks import language_report
+                sys.exit(language_report.main())
             if command == "go":
                 from benchmarks import go_baseline
                 sys.exit(go_baseline.main())

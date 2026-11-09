@@ -1,6 +1,6 @@
-name: Go bench report
+name: Language benchmark report
 
-# Manual only. Compares tests/bench micro and macro against the Go ports in
+# Manual only. Compares micro against Rust and Go, and macro against Go, in
 # tests/bench/compare and publishes the table. It does not run on pull requests
 # and a timing result does not fail the job. A checksum mismatch does.
 on:
@@ -21,7 +21,7 @@ env:
 
 jobs:
   report:
-    name: Micro and macro vs Go
+    name: Micro vs Rust and Go, macro vs Go
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -52,15 +52,22 @@ jobs:
         run: scripts/fetch-dev-llvm.sh
       - name: Build the release compiler
         run: cargo build --locked --release -p dream
-      - name: Run the Go comparison and publish the report
-        run: python3 scripts/benchmarks/go_report.py --rounds "${{ inputs.rounds }}" --out target/go-report
+      - name: Validate the report harness and Rust port
+        run: |
+          python3 scripts/test_bench_languages.py
+          cargo clippy --locked --manifest-path tests/bench/compare/rust/Cargo.toml --target-dir target/bench-rust --all-targets -- -D warnings
+      - name: Run the micro comparisons and publish the report
+        run: python3 scripts/bench.py compare --suite micro --rounds "${{ inputs.rounds }}" --out target/language-report/micro
+      - name: Run the macro comparison and publish the report
+        run: python3 scripts/bench.py compare --suite macro --rounds "${{ inputs.rounds }}" --out target/language-report/macro
       - name: Upload the report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: go-bench-report-${{ github.sha }}
+          name: language-bench-report-${{ github.sha }}
           path: |
-            target/go-report/report.md
-            target/go-report/report.json
+            target/language-report/*/report.md
+            target/language-report/*/report.json
+            target/language-report/*/samples/*.txt
           retention-days: 30
           if-no-files-found: warn

@@ -160,6 +160,7 @@ members = [
     "tooling/dream-lsp",
     "tooling/dreamer",
     "tooling/dream-runner",
+    "tests/bench/compare/rust",
 ]
 # Resolver 2+ feature unification, so the wasm32 analyzer build does not inherit the root
 # crate's default `native` feature.

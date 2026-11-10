@@ -289,6 +289,11 @@ func closureOffset(offset int32) func(int32) int32 {
 }
 
 //go:noinline
+func closureScale(factor int32) func(int32) int32 {
+	return func(value int32) int32 { return value * factor }
+}
+
+//go:noinline
 func closureCalls(callback func(int32) int32, iters int) int32 {
 	total := int32(0)
 	for i := 0; i < iters; i++ {
@@ -298,7 +303,13 @@ func closureCalls(callback func(int32) int32, iters int) int32 {
 }
 
 func benchClosure(iters int) {
-	callback := closureOffset(envBit())
+	seed := envBit()
+	var callback func(int32) int32
+	if seed == 1 {
+		callback = closureOffset(seed)
+	} else {
+		callback = closureScale(seed + 2)
+	}
 	start := time.Now()
 	total := closureCalls(callback, iters)
 	sinkInt(total)

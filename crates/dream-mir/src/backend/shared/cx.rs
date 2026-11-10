@@ -117,7 +117,14 @@ impl<'a> Cx<'a> {
         self.iface_guards
             .get_or_init(|| super::iface_guard::build_guards(self))
             .get(&(iface_id, slot))
-            .map(Vec::as_slice)
+            .map(|guard| guard.arms.as_slice())
+    }
+
+    pub(crate) fn iface_eager(&self, iface_id: usize, slot: usize) -> bool {
+        self.iface_guards
+            .get_or_init(|| super::iface_guard::build_guards(self))
+            .get(&(iface_id, slot))
+            .is_some_and(|guard| guard.eager)
     }
 
     pub(crate) fn nstruct(&self, ty: TypeId) -> Option<&TypeLayout> {

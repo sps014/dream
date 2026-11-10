@@ -581,38 +581,42 @@ internal class JsonParser {
     // `options.ignore_case`. Consumes the key and the following colon.
     public fun match_key(borrow key: string): bool {
         this.skip_ws();
-        let saved = this.pos;
-        if (this.pos >= this.len()) || (this.b() != 34) {
+        let start = this.pos;
+        let n = this.len();
+        if (start >= n) || (this.b_at(start) != 34) {
             return false;
         }
-        this.pos = this.pos + 1;
+        let first = start + 1;
         let kn = key.length;
-        if (this.pos + kn > this.len()) || key.span().contains('\\') || !this.key_equals(key) {
-            this.pos = saved;
+        if (kn >= n - first) || (this.b_at(first + kn) != 34) {
             return false;
         }
-        this.pos = this.pos + kn;
-        if (this.pos >= this.len()) || (this.b() != 34) {
-            this.pos = saved;
+        if key.span().contains('\\') || !this.key_equals(key, first) {
             return false;
         }
-        this.pos = this.pos + 1;
-        this.skip_ws();
-        if (this.pos < this.len()) && (this.b() == 58) {
-            this.pos = this.pos + 1;
-            return true;
+        let end = first + kn + 1;
+        while end < n {
+            let c = this.b_at(end);
+            if (c == 32) || (c == 10) || (c == 9) || (c == 13) {
+                end = end + 1;
+            } else {
+                break;
+            }
         }
-        this.pos = saved;
-        return false;
+        if (end >= n) || (this.b_at(end) != 58) {
+            return false;
+        }
+        this.pos = end + 1;
+        return true;
     }
 
-    fun key_equals(borrow key: string): bool {
+    fun key_equals(borrow key: string, start: int): bool {
         if this.options.ignore_case == false {
-            return this.text.span(this.pos, this.pos + key.length).equals(key);
+            return this.text.span(start, start + key.length).equals(key);
         }
         let i = 0;
         while i < key.length {
-            let x = this.b_at(this.pos + i);
+            let x = this.b_at(start + i);
             let y = ((int)key.char_at(i));
             if (x >= 65) && (x <= 90) {
                 x = x + 32;

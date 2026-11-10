@@ -268,12 +268,22 @@ fn closure_offset(offset: i32) -> Box<dyn Fn(i32) -> i32> {
 }
 
 #[inline(never)]
+fn closure_scale(factor: i32) -> Box<dyn Fn(i32) -> i32> {
+    Box::new(move |v| v.wrapping_mul(factor))
+}
+
+#[inline(never)]
 fn closure_calls(callback: &dyn Fn(i32) -> i32, iters: usize) -> i32 {
     (0..iters).fold(0i32, |sum, i| sum.wrapping_add(callback(i as i32)))
 }
 
 pub(super) fn closure(h: &mut Harness, iters: usize) {
-    let callback = closure_offset(env_bit());
+    let seed = env_bit();
+    let callback = if seed == 1 {
+        closure_offset(seed)
+    } else {
+        closure_scale(seed + 2)
+    };
     let start = Instant::now();
     let acc = closure_calls(callback.as_ref(), iters);
     h.report("closure_dispatch", start.elapsed(), iters, acc);

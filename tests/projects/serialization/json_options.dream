@@ -100,6 +100,25 @@ fun json_options_naming_renames_declared_fields(): void {
 }
 
 @test
+fun json_key_matching_preserves_cursor_when_fields_do_not_match(): void {
+    let fallback = jo_Address("fallback", "fallback");
+    let text = "{ \"zip_codes\": [1, {\"nested\": true}], \"zip_code\" \t : \"N1\", \"street_name\"\n: \"Main\" }";
+    let back = Json.deserialize<jo_Address>(text).unwrap_or(fallback);
+    Assert.eq(back.street_name, "Main");
+    Assert.eq(back.zip_code, "N1");
+
+    let folded = Json.deserialize<jo_Address>(
+        "{\"ZIP_CODE\":\"N2\",\"STREET_NAME\":\"Side\"}",
+        JsonOptions(ignore_case: true)
+    ).unwrap_or(fallback);
+    Assert.eq(folded.street_name, "Side");
+    Assert.eq(folded.zip_code, "N2");
+
+    Assert.is_true(Json.deserialize<jo_Address>("{\"zip_code\"").is_err());
+    Assert.is_true(Json.deserialize<jo_Address>("{\"zip_code\":").is_err());
+}
+
+@test
 fun json_options_omit_skips_none_fields(): void {
     let omit = JsonOptions(nulls: JsonNull.Omit);
     let none: Option<string> = Option.None;

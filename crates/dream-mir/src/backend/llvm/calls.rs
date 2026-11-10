@@ -202,6 +202,33 @@ impl<'l, 'a> Fx<'l, 'a> {
         let result = (!ret_ty.is_void()).then(|| self.w.alloca(ret_ty.clone(), 8));
         let tag = self.call_v("dream_object_kind", &[recv]);
         let tag = self.conv(&tag, &Ty::I32);
+        if self.l.cx.iface_eager(iface_id, method_slot) {
+            let mut selected = None;
+            let mut valid = Value::i1(false);
+            for (expected, cname) in &arms {
+                let hit = self.w.icmp("eq", &tag, &Value::i32(i64::from(*expected)));
+                valid = self.w.bin("or", &valid, &hit);
+                let callee = self.l.fn_ref(&self.l.abi_sym(cname));
+                let vals = self.coerce_args(&s, &call_args);
+                let result = self
+                    .call_ptr(&callee, &s, vals)
+                    .expect("integer interface result");
+                selected = Some(match selected {
+                    Some(previous) => self.w.select(&hit, &result, &previous),
+                    None => result,
+                });
+            }
+            let ready = self.w.new_block("iface.selected");
+            let missing = self.w.new_block("iface.missing");
+            self.w.cond_br(&valid, ready, missing);
+            self.w.switch_to(missing);
+            self.call("dream_platform_abort", &[]);
+            if !self.w.is_terminated() {
+                self.w.unreachable();
+            }
+            self.w.switch_to(ready);
+            return selected.map(V::s);
+        }
         let join = self.w.new_block("iface.join");
         let fallback = self.w.new_block("iface.itable");
         let blocks: Vec<_> = arms

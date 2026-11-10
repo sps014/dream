@@ -32,6 +32,7 @@ pub(super) fn infer(
     intrinsics: &BTreeMap<DefId, IntrinsicOp>,
     escaped: &BTreeSet<TypeId>,
     constructors: &BTreeSet<DefId>,
+    returns: &BTreeMap<Key, Target>,
 ) -> BTreeMap<Key, BTreeMap<Local, Target>> {
     let taken = crate::passes::funcbox_abi::address_taken(mir);
     let bodies: Vec<_> = mir.functions.iter().chain(&mir.polls).collect();
@@ -108,7 +109,7 @@ pub(super) fn infer(
                     (!mir.profile.is_debug() && matches!(fact, Fact::Pending)).then_some(p)
                 })
                 .collect();
-            let facts = local_targets(f, fields, intrinsics, escaped, &known);
+            let facts = local_targets(f, fields, intrinsics, escaped, returns, &known);
             let pending = pending_locals(f, pending, intrinsics, escaped);
             let mut visit = |callee: &Callee, args: &[Operand]| {
                 let key = (callee.def, callee.args.clone());

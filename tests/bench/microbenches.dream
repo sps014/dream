@@ -1253,10 +1253,15 @@ fun closure_offset(offset: int): fun(int): int {
     return (value) => value + offset;
 }
 
+@noinline
+fun closure_scale(factor: int): fun(int): int {
+    return (value) => value * factor;
+}
+
 fun bench_closure_dispatch(iters: int): void {
-    let callback = closure_offset(
-        int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1)
-    );
+    let seed = int.parse(System.env("DREAM_BENCH_SEED").unwrap_or("1")).unwrap_or(1) & 1;
+    // Distinct code targets keep this a dynamic call even when factory returns are resolved.
+    let callback = seed == 1 ? closure_offset(seed) : closure_scale(seed + 2);
     let sw = Stopwatch();
     sw.start();
     let total = closure_dispatch_calls(callback, iters);

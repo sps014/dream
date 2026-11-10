@@ -276,10 +276,24 @@ internal static class JsonGenerator {
         cb.line("if __first == false { sb.append_char(','); }");
         cb.line("__first = false;");
         if field.property_name.length > 0 {
-            cb.line("sb.append(\"\\\"" + field.property_name + "\\\":\");");
+            let literal = Json.serialize(Json.serialize(field.property_name) + ":");
+            cb.line("sb.append(" + literal + ");");
         } else {
-            cb.line("Json.write_key(sb, \"" + field.name + "\", __options);");
+            JsonGenerator.write_declared_key(cb, field.name);
         }
+    }
+
+    static fun write_declared_key(borrow cb: CodeBuilder, borrow name: string): void {
+        let literal = Json.serialize(Json.serialize(name) + ":");
+        cb.line("if __options.naming == JsonNaming.Identity {");
+        cb.indent();
+        cb.line("sb.append(" + literal + ");");
+        cb.dedent();
+        cb.line("} else {");
+        cb.indent();
+        cb.line("Json.write_key(sb, \"" + name + "\", __options);");
+        cb.dedent();
+        cb.line("}");
     }
 
     // Expression reading the property for `field` from the object `v` as `Option<JsonValue>`.
@@ -1915,7 +1929,7 @@ internal static class JsonGenerator {
                             + fname + ")).unwrap_or(JsonValue.null());"
                     );
                     write_cb.line("sb.append_char(',');");
-                    write_cb.line("Json.write_key(sb, \"" + fname + "\", __options);");
+                    JsonGenerator.write_declared_key(write_cb, fname);
                     write_cb.line("sb.append(Json.serialize(" + fname + ", __options));");
                 } else if (ftype.ends_with("[]")) {
                     let elem = ftype.substring(0, ftype.length - 2);
@@ -1942,7 +1956,7 @@ internal static class JsonGenerator {
                     }
                     to_cb.line("__o[\"" + fname + "\"] = __arr_" + vname + "_" + fname + ";");
                     write_cb.line("sb.append_char(',');");
-                    write_cb.line("Json.write_key(sb, \"" + fname + "\", __options);");
+                    JsonGenerator.write_declared_key(write_cb, fname);
                     if JsonGenerator.array_write_stmts(
                         write_cb,
                         elem,
@@ -1986,7 +2000,7 @@ internal static class JsonGenerator {
                     }
                     to_cb.line("__o[\"" + fname + "\"] = __arr_" + vname + "_" + fname + ";");
                     write_cb.line("sb.append_char(',');");
-                    write_cb.line("Json.write_key(sb, \"" + fname + "\", __options);");
+                    JsonGenerator.write_declared_key(write_cb, fname);
                     if JsonGenerator.tuple_write_stmts(write_cb, ftype, fname, json_names) == false {
                         return JsonGenOutput.failure_at(
                             "@json union '"
@@ -2019,7 +2033,7 @@ internal static class JsonGenerator {
                     }
                     to_cb.line("__o[\"" + fname + "\"] = " + expr + ";");
                     write_cb.line("sb.append_char(',');");
-                    write_cb.line("Json.write_key(sb, \"" + fname + "\", __options);");
+                    JsonGenerator.write_declared_key(write_cb, fname);
                     if JsonGenerator.json_write_stmts(write_cb, ftype, fname, "sb", json_names)
                         == false {
                         return JsonGenOutput.failure_at(

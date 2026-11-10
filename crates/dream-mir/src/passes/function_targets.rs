@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::analysis::function_boxes::{self as escape, operand_type};
 mod params;
+mod returns;
 
 type Field = (TypeId, usize);
 type Key = (DefId, Vec<TypeId>);
@@ -54,7 +55,16 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
         .collect();
     let empty = BTreeMap::new();
     let empty_parameters = BTreeMap::new();
-    let parameters = params::infer(mir, interner, &fields, &intrinsics, &escaped, &ctors);
+    let returns = returns::infer(mir, interner, &fields, &intrinsics, &escaped);
+    let parameters = params::infer(
+        mir,
+        interner,
+        &fields,
+        &intrinsics,
+        &escaped,
+        &ctors,
+        &returns,
+    );
     let mut changed = false;
     for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
         if !f.blocks.iter().flat_map(|b| &b.stmts).any(|s| {
@@ -74,6 +84,7 @@ pub(super) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             },
             &intrinsics,
             &escaped,
+            &returns,
             parameters
                 .get(&(f.def, f.instance.clone()))
                 .unwrap_or(&empty_parameters),
@@ -145,6 +156,7 @@ fn rv_target(
     locals: &BTreeMap<Local, Target>,
     fields: &BTreeMap<Field, Target>,
     intrinsics: &BTreeMap<DefId, IntrinsicOp>,
+    returns: &BTreeMap<Key, Target>,
 ) -> Option<Target> {
     match rv {
         Rvalue::FuncRef(callee) => Some(Target {
@@ -169,7 +181,7 @@ fn rv_target(
                 target.boxed = false;
                 Some(target)
             }
-            _ => None,
+            _ => returns.get(&(callee.def, callee.args.clone())).cloned(),
         },
         _ => None,
     }
@@ -180,6 +192,7 @@ fn local_targets(
     fields: &BTreeMap<Field, Target>,
     intrinsics: &BTreeMap<DefId, IntrinsicOp>,
     escaped: &BTreeSet<TypeId>,
+    returns: &BTreeMap<Key, Target>,
     parameters: &BTreeMap<Local, Target>,
 ) -> BTreeMap<Local, Target> {
     let mut defs: BTreeMap<Local, Vec<&Rvalue>> = BTreeMap::new();
@@ -195,7 +208,7 @@ fn local_targets(
             if !escaped.contains(&f.local_ty(local))
                 && defs.len() == 1
                 && !facts.contains_key(&local)
-                && let Some(target) = rv_target(defs[0], f, &facts, fields, intrinsics)
+                && let Some(target) = rv_target(defs[0], f, &facts, fields, intrinsics, returns)
             {
                 facts.insert(local, target);
                 changed = true;
@@ -331,7 +344,14 @@ fn field_targets(
                 common = None;
                 break;
             }
-            let locals = local_targets(f, &BTreeMap::new(), intrinsics, escaped, &BTreeMap::new());
+            let locals = local_targets(
+                f,
+                &BTreeMap::new(),
+                intrinsics,
+                escaped,
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+            );
             let mut initialized = BTreeMap::new();
             for stmt in &f.blocks[0].stmts {
                 match stmt {
@@ -339,8 +359,15 @@ fn field_targets(
                         if escape::result_type(rv, f).is_some_and(|ty| escaped.contains(&ty)) {
                             continue;
                         }
-                        if let Some(t) = rv_target(rv, f, &locals, &BTreeMap::new(), intrinsics)
-                            .filter(|t| t.boxed)
+                        if let Some(t) = rv_target(
+                            rv,
+                            f,
+                            &locals,
+                            &BTreeMap::new(),
+                            intrinsics,
+                            &BTreeMap::new(),
+                        )
+                        .filter(|t| t.boxed)
                         {
                             initialized.insert((ty, *field), t);
                         }
@@ -369,12 +396,27 @@ fn field_targets(
     }
     // Every live typed write must agree; setters and borrowed constructor arguments stay dynamic.
     for f in mir.functions.iter().chain(&mir.polls) {
-        let locals = local_targets(f, &BTreeMap::new(), intrinsics, escaped, &BTreeMap::new());
+        let locals = local_targets(
+            f,
+            &BTreeMap::new(),
+            intrinsics,
+            escaped,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
         for stmt in f.blocks.iter().flat_map(|b| &b.stmts) {
             if let Statement::Assign(Place::Field { base, field }, rv) = stmt {
                 let key = (f.local_ty(*base), *field);
                 if fields.contains_key(&key)
-                    && rv_target(rv, f, &locals, &BTreeMap::new(), intrinsics).as_ref()
+                    && rv_target(
+                        rv,
+                        f,
+                        &locals,
+                        &BTreeMap::new(),
+                        intrinsics,
+                        &BTreeMap::new(),
+                    )
+                    .as_ref()
                         != fields.get(&key)
                 {
                     fields.remove(&key);

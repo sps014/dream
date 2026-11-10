@@ -235,3 +235,36 @@ fun closure_capture_rebinding(): void {
     fixed.value = 4;
     Assert.eq(bound(), "4");
 }
+
+@noinline
+fun returned_offset(offset: int): fun(int): int {
+    return (value) => value + offset;
+}
+
+@noinline
+fun returned_choice(offset: int, subtract: bool): fun(int): int {
+    if subtract {
+        return (value) => value - offset;
+    }
+    return (value) => value + offset;
+}
+
+@noinline
+fun apply_returned(callback: fun(int): int, value: int): int {
+    return callback(value);
+}
+
+@test
+fun returned_closures_preserve_each_capture_and_dynamic_choice(): void {
+    let first = returned_offset(3);
+    let second = returned_offset(9);
+    Assert.eq(apply_returned(first, 10), 13);
+    Assert.eq(apply_returned(second, 10), 19);
+    Assert.eq(apply_returned(first, 20), 23);
+
+    let add = returned_choice(7, false);
+    let sub = returned_choice(7, true);
+    Assert.eq(add(30), 37);
+    Assert.eq(sub(30), 23);
+    Assert.eq(add(40), 47);
+}

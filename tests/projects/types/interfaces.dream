@@ -2,6 +2,33 @@ import system.testing;
 import system;
 import system.collections;
 
+interface GuardedCalculation {
+    fun apply(value: int): int;
+}
+
+class GuardedAdd: GuardedCalculation {
+    public fun apply(value: int): int {
+        return value + 3;
+    }
+}
+
+class GuardedDivide: GuardedCalculation {
+    public fun apply(value: int): int {
+        return 100 / value;
+    }
+}
+
+@noinline
+fun guarded_calculation(op: GuardedCalculation, value: int): int {
+    return op.apply(value);
+}
+
+@test
+fun interface_dispatch_does_not_evaluate_a_trapping_alternative(): void {
+    Assert.eq(guarded_calculation(GuardedAdd(), 0), 3);
+    Assert.eq(guarded_calculation(GuardedDivide(), 2), 50);
+}
+
 interface c106_Animal {
     fun speak(): string;
     fun legs(): int;

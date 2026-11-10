@@ -6,6 +6,13 @@ Ownership is decided by MIR, and LLVM never decides it. Every `Retain`  /
 `Release` / `ValueDrop` that MIR emits becomes exactly one runtime call or one inlined
 glue sequence. LLVM may only optimize what those calls leave behind.
 
+Closed interface slots with at most four implementations normally use a tag switch into direct
+calls. The guard planner permits eager evaluation only when every implementation is a single
+short block of receiver-independent integer calculations. Memory access, calls, ownership,
+division/remainder, checked arithmetic, debug hooks, and explicit `@noinline` reject that proof.
+Eligible results use LLVM `select`; an invalid receiver tag still aborts. The planner records
+this decision alongside the guard arms so the emitter does not guess whether speculation is safe.
+
 ```mermaid
 flowchart TD
     mir[Optimized MIR] --> ll["backend/llvm writers → module .ll"]

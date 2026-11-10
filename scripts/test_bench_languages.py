@@ -28,7 +28,7 @@ class LanguageReportTests(unittest.TestCase):
         self.assertEqual(report.parse_rows("bench fractional ns_total=3 iters=10 checksum=1")["fractional"]["ns_total"] / 10, .3)
 
     def test_duplicate_missing_malformed_and_nonpositive_rows_are_rejected(self):
-        for text in ("sink 1", "bench broken", "bench bad ns_total=0 iters=1 checksum=1",
+        for text in ("sink 1", "bench broken",
                      "bench bad ns_total=1 iters=0 checksum=1",
                      "bench bad ns_total=-1 iters=1 checksum=1",
                      "bench a ns_total=1 iters=1 checksum=1\nbench a ns_total=2 iters=1 checksum=1"):
@@ -72,6 +72,29 @@ class LanguageReportTests(unittest.TestCase):
                   for arm, processes in samples.items()}
         self.assertEqual(report.summarize(queued)[0]["comparisons"]["go"]["verdict"], "not equivalent")
         self.assertEqual(report.summarize(queued)[0]["comparisons"]["rust"]["verdict"], "Dream")
+
+    def test_zero_duration_samples_are_unscored_and_never_divide_by_zero(self):
+        for arm in ("dream", "rust"):
+            samples = self.samples()
+            samples[arm] = [report.parse_rows("bench work ns_total=0 iters=10 checksum=-42") for _ in range(3)]
+            row = report.summarize(samples)[0]
+            self.assertEqual(row["comparisons"]["rust"]["verdict"], "too short")
+            text = report.markdown({"suite": "micro", "against": ["rust"], "rounds": 3,
+                                    "seed": "1", "rows": [row]})
+            self.assertIn("too short", text)
+            if arm == "rust":
+                self.assertIsNone(row["comparisons"]["rust"]["ratio"])
+                self.assertIn("—", text)
+
+    def test_byte_scan_reports_the_encoding_adjustment_separately(self):
+        samples = {arm: [{"byte_scan": process["work"]} for process in processes]
+                   for arm, processes in self.samples().items()}
+        rows = report.summarize(samples)
+        text = report.markdown({"suite": "micro", "against": ["rust", "go"], "rounds": 3,
+                                "seed": "1", "rows": rows})
+        self.assertIn("Dream/Rust 0.250", text)
+        self.assertIn("Dream/Go 1.000", text)
+        self.assertEqual(rows[0]["comparisons"]["rust"]["ratio"], .5)
 
     def test_both_suites_have_both_comparators_and_runtime_rows_are_identified(self):
         for _, arms in report.SUITES.values():

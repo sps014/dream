@@ -66,8 +66,8 @@ def parse_rows(text):
             raise ValueError(f"malformed benchmark row: {line}") from error
         if name in rows:
             raise ValueError(f"duplicate benchmark row: {name}")
-        if row["ns_total"] <= 0 or row["iters"] <= 0:
-            raise ValueError(f"{name}: timings and iteration counts must be positive")
+        if row["ns_total"] < 0 or row["iters"] <= 0:
+            raise ValueError(f"{name}: timings must be nonnegative and iteration counts must be positive")
         rows[name] = row
     if not rows:
         raise ValueError("benchmark produced no bench rows")
@@ -113,10 +113,12 @@ def summarize(samples):
         for arm in samples:
             if arm == "dream":
                 continue
-            ratio = measurements["dream"]["median_ns_per_op"] / measurements[arm]["median_ns_per_op"]
-            verdict = "Dream" if ratio < .9 else arm.title() if ratio > 1.1 else "tie"
+            comparator = measurements[arm]["median_ns_per_op"]
+            ratio = measurements["dream"]["median_ns_per_op"] / comparator if comparator else None
             if min(*measurements["dream"]["ns_total"], *measurements[arm]["ns_total"]) < MIN_SAMPLE_NS:
                 verdict = "too short"
+            else:
+                verdict = "Dream" if ratio < .9 else arm.title() if ratio > 1.1 else "tie"
             if arm == "go" and name in ("async_poll", "scheduler_queue"):
                 verdict = "not equivalent"
             comparisons[arm] = {"ratio": ratio, "verdict": verdict}
@@ -183,12 +185,18 @@ def markdown(report):
     for row in report["rows"]:
         cells = [row["name"], str(row["iters"]), f"{row['measurements']['dream']['median_ns_per_op']:,.2f}"]
         cells += [f"{row['measurements'][arm]['median_ns_per_op']:,.2f}" for arm in arms]
-        cells += [f"{row['comparisons'][arm]['ratio']:.3f}" for arm in arms]
+        cells += [f"{row['comparisons'][arm]['ratio']:.3f}" if row['comparisons'][arm]['ratio'] is not None else "—" for arm in arms]
         cells += [row["comparisons"][arm]["verdict"] for arm in arms]
         rows.append("| " + " | ".join(cells) + " |")
     align = "|" + "|".join(["---"] + ["---:"] * (len(header) - 1)) + "|"
     lines = [f"# Dream {report['suite']} vs {' and '.join(arm.title() for arm in arms)}", "", note, "",
              "| " + " | ".join(header) + " |", align, *rows, "", "Checksums and iteration counts match.", ""]
+    for row in report["rows"]:
+        if row["name"] == "byte_scan":
+            ratios = [f"Dream/{arm.title()} {row['comparisons'][arm]['ratio'] / 2:.3f}"
+                      for arm in arms if row['comparisons'][arm]['ratio'] is not None]
+            lines += ["ASCII byte scan reads two UTF-16 bytes per character in Dream and one UTF-8 byte in Rust/Go. "
+                      + "Time ratios per byte: " + ", ".join(ratios) + ".", ""]
     return "\n".join(lines)
 
 

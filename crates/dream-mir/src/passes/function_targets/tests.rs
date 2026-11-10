@@ -112,6 +112,107 @@ fn captured_box_keeps_its_environment_and_resolves_the_code() {
     ));
 }
 
+fn returned_box(conflicting: bool, unknown: bool) -> (Mir, TypeInterner) {
+    let (mut mir, i) = module(true, false);
+    mir.profile = dream_abi::profile::CompileProfile::Release;
+    let caller = &mut mir.functions[0];
+    let sig = caller.local_ty(Local(1));
+    let mut factory = module(true, false).0.functions.remove(0);
+    factory.def = DefId::root(40);
+    factory.ret = sig;
+    factory.blocks[0].stmts.truncate(2);
+    factory.blocks[0].terminator = Terminator::Return(Some(local(Local(1))));
+    if conflicting || unknown {
+        let mut other = factory.blocks[0].clone();
+        if unknown {
+            other.stmts[1] = Statement::Assign(
+                Place::Local(Local(1)),
+                Rvalue::Use(Operand::Const(Const::Null)),
+            );
+        } else {
+            other.stmts[0] =
+                Statement::Assign(Place::Local(Local(0)), Rvalue::FuncRef(callee(9, i.int())));
+        }
+        factory.blocks.push(other);
+        let entry = crate::BasicBlock {
+            terminator: Terminator::If {
+                cond: Operand::Const(Const::Bool(true)),
+                then_blk: BlockId(0),
+                else_blk: BlockId(1),
+            },
+            ..Default::default()
+        };
+        factory.entry = BlockId(2);
+        factory.blocks.push(entry);
+    }
+    caller.blocks[0].stmts.splice(
+        0..2,
+        [Statement::Assign(
+            Place::Local(Local(1)),
+            Rvalue::Call {
+                callee: callee(40, sig),
+                args: vec![],
+            },
+        )],
+    );
+    mir.functions.push(factory);
+    (mir, i)
+}
+
+#[test]
+fn returned_capturing_box_resolves_across_factory_calls() {
+    let (mut mir, i) = returned_box(false, false);
+    assert!(run(&mut mir, &i));
+    assert!(matches!(
+        &mir.functions[0].blocks[0].stmts[2],
+        Statement::Assign(_, Rvalue::Call { callee, .. }) if callee.def == DefId::root(1)
+    ));
+    assert!(!run(&mut mir, &i));
+}
+
+#[test]
+fn factory_returns_must_all_have_one_known_target() {
+    for (conflicting, unknown) in [(true, false), (false, true)] {
+        let (mut mir, i) = returned_box(conflicting, unknown);
+        assert!(!run(&mut mir, &i));
+    }
+}
+
+#[test]
+fn debug_keeps_factory_returns_dynamic() {
+    let (mut mir, i) = returned_box(false, false);
+    mir.profile = dream_abi::profile::CompileProfile::Debug;
+    assert!(!run(&mut mir, &i));
+}
+
+#[test]
+fn factory_target_definitions_must_dominate_their_reads() {
+    for conditional in [false, true] {
+        let (mut mir, i) = returned_box(false, false);
+        let factory = &mut mir.functions[1];
+        factory.params.push(Local(0));
+        if conditional {
+            let definition = factory.blocks[0].stmts.remove(0);
+            factory.blocks.push(crate::BasicBlock {
+                stmts: vec![definition],
+                terminator: Terminator::Goto(BlockId(0)),
+            });
+            factory.entry = BlockId(2);
+            factory.blocks.push(crate::BasicBlock {
+                stmts: vec![],
+                terminator: Terminator::If {
+                    cond: Operand::Const(Const::Bool(true)),
+                    then_blk: BlockId(1),
+                    else_blk: BlockId(0),
+                },
+            });
+        } else {
+            factory.blocks[0].stmts.swap(0, 1);
+        }
+        assert!(!run(&mut mir, &i));
+    }
+}
+
 #[test]
 fn callback_parameter_requires_every_direct_caller_to_agree() {
     for unknown_caller in [false, true] {

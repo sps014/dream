@@ -1609,6 +1609,32 @@ fn test_interface_call_emits_dynamic_dispatch() {
 }
 
 #[test]
+fn integer_interface_selection_requires_every_arm_to_be_safe_to_evaluate() {
+    for (method, eager) in [("return x * 3;", true), ("return 100 / x;", false)] {
+        let code = format!(
+            "interface Calc {{ fun apply(x: int): int; }}
+             class Add: Calc {{ public fun apply(x: int): int {{ return x + 3; }} }}
+             class Other: Calc {{ public fun apply(x: int): int {{ {method} }} }}
+             @noinline fun evaluate(op: Calc, x: int): int {{ return op.apply(x); }}
+             fun main(): void {{ evaluate(Add(), 0); evaluate(Other(), 2); }}"
+        );
+        let ir = compile_test_pipeline(&code, |hir, interner| {
+            let mut mir = dream_mir::lower::lower_program(hir, interner);
+            mir.profile = dream_abi::profile::CompileProfile::Release;
+            dream_mir::passes::optimize_module(&mut mir, interner);
+            emit_ll(&mir, interner)
+        });
+        let body = ir_func_body(&ir, "evaluate");
+        assert_eq!(body.contains("iface.selected"), eager, "{body}");
+        if eager {
+            assert!(body.contains("select i1"), "{body}");
+        } else {
+            assert!(body.contains("iface.direct"), "{body}");
+        }
+    }
+}
+
+#[test]
 fn test_js_desugars_to_host_bridges() {
     // Dynamic js operations desugar to the declared host bridge symbols (`jsGlobal`, ...) and fused
     // slot/method marshalling goes through `dream_js_call`. (The WAT backend's `$js_set_slot` /

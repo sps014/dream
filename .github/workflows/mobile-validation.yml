@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
@@ -62,7 +62,7 @@ jobs:
           target: default
           disable-animations: true
           script: python3 scripts/mobile/android.py --ndk "$ANDROID_HOME/ndk/28.2.13676358"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mobile-android
@@ -92,7 +92,7 @@ jobs:
       - run: cargo build --locked -p dream --no-default-features --features native -p dreamer
       - name: Link staticlibs, package XCFramework and run the sample app
         run: python3 scripts/mobile/ios.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mobile-ios

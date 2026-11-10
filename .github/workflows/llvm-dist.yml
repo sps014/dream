@@ -109,7 +109,7 @@ jobs:
           echo "archive: $((BYTES / 1024 / 1024)) MB (budget ${{ matrix.max_mb }} MB)"
           test "$BYTES" -le $(( ${{ matrix.max_mb }} * 1024 * 1024 ))
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: llvm-dist-${{ matrix.target }}
           path: dist/*.tar.xz
@@ -118,7 +118,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -128,7 +128,7 @@ jobs:
           find artifacts -name '*.tar.xz' -exec cp {} release/ \;
           cd release && sha256sum * > SHA256SUMS && cat SHA256SUMS
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: llvm-dist-${{ env.LLVM_VERSION }}
           name: Dream LLVM ${{ env.LLVM_VERSION }} (bundled toolchain)

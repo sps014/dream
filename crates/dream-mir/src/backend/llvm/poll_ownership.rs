@@ -4,20 +4,6 @@ use super::fx::{Fx, V};
 use super::ir::Value;
 use crate::{Const, Local, Operand, Place, Rvalue, Statement};
 
-pub(super) fn captures_environment(body: &crate::MirFunction) -> bool {
-    // Global zero is the reserved closure environment, never an application global.
-    body.blocks
-        .iter()
-        .flat_map(|block| &block.stmts)
-        .any(|statement| {
-            let mut found = false;
-            crate::visit::stmt_operands_mut(&mut statement.clone(), &mut |operand| {
-                found |= matches!(operand, Operand::Copy(Place::Global(crate::Global(0))));
-            });
-            found
-        })
-}
-
 fn ownership_step(statement: &Statement) -> bool {
     matches!(
         statement,

@@ -47,12 +47,15 @@ enum Rc {
 
 /// `free_deaths`: the object's death releases nothing, so a `Release` may be its death on one
 /// path and an ordinary count change on another (reported in `rc_ops`).
+/// `fresh_call`: the allocation is a call returning a fresh `+1` object rather than a `New`.
 pub(crate) fn lifetime(
     f: &MirFunction,
     members: &[Local],
     new_local: Local,
     free_deaths: bool,
+    fresh_call: bool,
 ) -> Option<Lifetime> {
+    let is_alloc = |rv: &Rvalue| is_new(rv) || (fresh_call && matches!(rv, Rvalue::Call { .. }));
     let pos: HashMap<Local, usize> = members.iter().enumerate().map(|(i, &m)| (m, i)).collect();
     if members
         .iter()
@@ -97,7 +100,7 @@ pub(crate) fn lifetime(
     while let Some(bi) = work.pop() {
         let mut states = entry_state[bi].clone();
         for s in &f.blocks[bi].stmts {
-            states = advance(s, &pos, &states, free_deaths)?.0;
+            states = advance(s, &pos, &states, free_deaths, &is_alloc)?.0;
         }
         let term = &f.blocks[bi].terminator;
         if matches!(term, Terminator::Return(_) | Terminator::AsyncComplete(_))
@@ -130,7 +133,7 @@ pub(crate) fn lifetime(
             continue;
         }
         for (si, s) in b.stmts.iter().enumerate() {
-            let (next, role) = advance(s, &pos, &states, free_deaths)?;
+            let (next, role) = advance(s, &pos, &states, free_deaths, &is_alloc)?;
             states = next;
             match role {
                 Rc::Other => {}
@@ -147,6 +150,7 @@ fn advance(
     pos: &HashMap<Local, usize>,
     states: &BTreeSet<State>,
     free_deaths: bool,
+    is_alloc: &dyn Fn(&Rvalue) -> bool,
 ) -> Option<(BTreeSet<State>, Rc)> {
     let mut next = BTreeSet::new();
     let mut role = None;
@@ -165,7 +169,7 @@ fn advance(
         };
         for alternative in alternatives {
             let mut state = state.clone();
-            let current = step(&alternative, pos, &mut state)?;
+            let current = step(&alternative, pos, &mut state, is_alloc)?;
             // Cleanup is unconditional at this MIR site; choosing a runtime branch here
             // would replace the ownership proof with a new runtime ownership test. A death
             // that releases nothing is indistinguishable from any other count change.
@@ -184,7 +188,7 @@ fn advance(
     Some((next, role.unwrap_or(Rc::Other)))
 }
 
-fn is_alloc(rv: &Rvalue) -> bool {
+fn is_new(rv: &Rvalue) -> bool {
     matches!(
         rv,
         Rvalue::New { .. }
@@ -209,7 +213,12 @@ fn rc_member(s: &Statement, pos: &HashMap<Local, usize>) -> Option<Local> {
     }
 }
 
-fn step(s: &Statement, pos: &HashMap<Local, usize>, st: &mut State) -> Option<Rc> {
+fn step(
+    s: &Statement,
+    pos: &HashMap<Local, usize>,
+    st: &mut State,
+    is_alloc: &dyn Fn(&Rvalue) -> bool,
+) -> Option<Rc> {
     let kill = |st: &mut State| {
         for h in &mut st.hold {
             if *h == Hold::Obj {

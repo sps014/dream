@@ -2321,7 +2321,10 @@ fn js_imports_keep_specifiers_aliases_and_source_order() {
     assert!(program.imports[0].is_js);
     assert_eq!(program.imports[0].module_name.text, "\"firebase/app\"");
     assert_eq!(
-        program.imports[0].alias.as_ref().map(|alias| alias.text.as_str()),
+        program.imports[0]
+            .alias
+            .as_ref()
+            .map(|alias| alias.text.as_str()),
         Some("firebase")
     );
     assert!(program.imports[1].is_js && program.imports[1].alias.is_none());

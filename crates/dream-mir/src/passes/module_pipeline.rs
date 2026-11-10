@@ -41,6 +41,10 @@ pub(super) fn optimize_module_rounds(
     dump: &mut MirDump,
     max_rounds: usize,
 ) {
+    // Debug-info builds keep each async body in its own poll frame for the debugger.
+    if inline && module_stage(ready_await::STAGE, || ready_await::run(mir, interner)) {
+        dump.module(ready_await::STAGE, mir, interner);
+    }
     prepare_ownership(mir, interner, dump);
     // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
     // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag

@@ -637,7 +637,7 @@ fun bench_string_builder(iters: int): void {
 // Compute kernels — pure FP/int work, no ARC in the inner loops. These
 // measure the optimizer + codegen (autovec, ABC, LICM), not stdlib.
 // =====================================================================
-class Body {
+struct Body {
     public x: double;
     public y: double;
     public z: double;
@@ -681,32 +681,29 @@ fun bench_nbody(iters: int): void {
     while i < iters {
         let a = 0;
         while a < n {
-            let bi = bodies[a];
             let b = a + 1;
             while b < n {
-                let bj = bodies[b];
-                let dx = bj.x - bi.x;
-                let dy = bj.y - bi.y;
-                let dz = bj.z - bi.z;
+                let dx = bodies[b].x - bodies[a].x;
+                let dy = bodies[b].y - bodies[a].y;
+                let dz = bodies[b].z - bodies[a].z;
                 let d2 = dx * dx + dy * dy + dz * dz + 1e-9d;
                 let inv = 1.0d / Math.sqrt(d2);
-                let f = bj.mass * bi.mass * inv * inv * inv * dt;
-                bi.vx = bi.vx + dx * f;
-                bi.vy = bi.vy + dy * f;
-                bi.vz = bi.vz + dz * f;
-                bj.vx = bj.vx - dx * f;
-                bj.vy = bj.vy - dy * f;
-                bj.vz = bj.vz - dz * f;
+                let f = bodies[b].mass * bodies[a].mass * inv * inv * inv * dt;
+                bodies[a].vx = bodies[a].vx + dx * f;
+                bodies[a].vy = bodies[a].vy + dy * f;
+                bodies[a].vz = bodies[a].vz + dz * f;
+                bodies[b].vx = bodies[b].vx - dx * f;
+                bodies[b].vy = bodies[b].vy - dy * f;
+                bodies[b].vz = bodies[b].vz - dz * f;
                 b = b + 1;
             }
             a = a + 1;
         }
         let k = 0;
         while k < n {
-            let bk = bodies[k];
-            bk.x = bk.x + bk.vx * dt;
-            bk.y = bk.y + bk.vy * dt;
-            bk.z = bk.z + bk.vz * dt;
+            bodies[k].x = bodies[k].x + bodies[k].vx * dt;
+            bodies[k].y = bodies[k].y + bodies[k].vy * dt;
+            bodies[k].z = bodies[k].z + bodies[k].vz * dt;
             k = k + 1;
         }
         i = i + 1;

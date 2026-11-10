@@ -213,7 +213,7 @@ fn emit_llvm_module_unchecked(
         }
         let (offs, frame_size) = body::async_offsets(&l, pre_lowered);
         let environment =
-            poll_ownership::captures_environment(pre_lowered).then_some((frame_size + 7) & !7);
+            crate::async_emit::captures_environment(pre_lowered).then_some((frame_size + 7) & !7);
         let frame_size = environment.map_or(frame_size, |offset| offset + 8);
         body::build_async_stub(
             &mut l,

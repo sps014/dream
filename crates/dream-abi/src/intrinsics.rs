@@ -535,6 +535,15 @@ impl IntrinsicOp {
             .and_then(IntrinsicOp::from_key)
     }
 
+    /// True for task-runtime helpers that act on the future whose poll is running, rather than
+    /// on an argument. Running such code from another poll would act on the wrong task.
+    pub fn reads_running_task(key: &str) -> bool {
+        matches!(
+            key,
+            "dream_task_has_context" | "dream_task_context" | "dream_task_protect"
+        )
+    }
+
     /// True for the async combinators that take a `Future<T>[]`.
     pub fn is_promise_combinator(self) -> bool {
         matches!(self, IntrinsicOp::PromiseAll | IntrinsicOp::PromiseRace)

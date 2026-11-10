@@ -1172,6 +1172,24 @@ DREAM_ALWAYS_INLINE dream_ptr dream_substring_into(dream_ptr dest, dream_ptr s, 
     return p;
 }
 
+/* A substring the compiler proved never outlives its function, built as an immortal slice in a
+ * frame buffer of `HEAP_HEADER_SIZE + DREAM_SLICE_BYTES` bytes. It does not retain `s`: the
+ * compiler holds its own count on `s` until the slice's last use. */
+DREAM_ALWAYS_INLINE dream_ptr dream_frame_substring(void *block, dream_ptr s, int32_t start,
+                                                    int32_t end) {
+    dream_ptr p;
+    if (s == 0) {
+        return 0;
+    }
+    dream_substring_clamp(s, &start, &end);
+    if (end - start <= 0) {
+        return dream_string_alloc(0); /* immortal shared empty */
+    }
+    p = dream_frame_object(block, DREAM_SLICE_BYTES, TAG_STRING);
+    dream_slice_fill(p, s, end - start, dream_str_units(s) + start);
+    return p;
+}
+
 #if defined(__AVX2__)
 #define DREAM_F32_LANES 8
 #define DREAM_I32_LANES 8

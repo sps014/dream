@@ -1,9 +1,10 @@
 use super::frame_alloc;
 use crate::{
-    Const, Mir, NewCtor, Operand, Place, Rvalue, Statement, Terminator, build::FunctionBuilder,
+    Callee, Const, Mir, NewCtor, Operand, Place, Rvalue, Statement, Terminator,
+    build::FunctionBuilder,
 };
 use dream_hir::TypeLayout;
-use dream_types::{DefKind, TypeCtx, TypeId};
+use dream_types::{DefId, DefKind, TypeCtx, TypeId};
 
 #[test]
 fn frame_budget_includes_headers_and_alignment() {
@@ -193,6 +194,75 @@ fn arrays_that_escape_hold_references_or_are_large_stay_on_the_heap() {
         let mut mir = array_function(&mut ctx, elem, len, escapes);
         assert!(!frame_alloc::run(&mut mir, &ctx.interner));
         assert!(mir.frame_objects.is_empty());
+    }
+}
+
+/// `t = s.substring(0, 4); n = t.length; [call g()]; release t`.
+fn substring_function(ctx: &TypeCtx, call_between: bool) -> Mir {
+    let (int, string) = (ctx.interner.int(), ctx.interner.string());
+    let mut mir = Mir {
+        intrinsics: vec![(
+            DefId::root(3),
+            dream_abi::intrinsics::ATTR_STRING_SUBSTRING.into(),
+        )],
+        ..Mir::default()
+    };
+    let callee = |def: u32, ret| Callee {
+        borrowed_result: false,
+        def: DefId::root(def),
+        args: vec![],
+        ret,
+        take_params: vec![],
+    };
+    let mut b = FunctionBuilder::new("slices", int);
+    let s = b.new_param(string, None);
+    let t = b.new_local(string, None);
+    let n = b.new_local(int, None);
+    b.assign(
+        Place::Local(t),
+        Rvalue::Call {
+            callee: callee(3, string),
+            args: vec![
+                Operand::Copy(Place::Local(s)),
+                Operand::Const(Const::Int(0)),
+                Operand::Const(Const::Int(4)),
+            ],
+        },
+    );
+    b.assign(
+        Place::Local(n),
+        Rvalue::StrLen(Operand::Copy(Place::Local(t))),
+    );
+    if call_between {
+        b.push(Statement::Call {
+            callee: callee(4, ctx.interner.void()),
+            args: vec![],
+        });
+    }
+    b.push(Statement::Release(Operand::Copy(Place::Local(t))));
+    b.terminate(Terminator::Return(Some(Operand::Copy(Place::Local(n)))));
+    mir.functions.push(b.finish());
+    mir
+}
+
+#[test]
+fn substring_slice_holds_its_parent_only_when_code_between_could_drop_it() {
+    for call_between in [false, true] {
+        let ctx = TypeCtx::new();
+        let mut mir = substring_function(&ctx, call_between);
+        assert!(frame_alloc::run(&mut mir, &ctx.interner));
+        assert_eq!(mir.frame_objects.len(), 1);
+        let stmts = &mir.functions[0].blocks[0].stmts;
+        let retains = stmts
+            .iter()
+            .filter(|s| matches!(s, Statement::Retain(_)))
+            .count();
+        let releases = stmts
+            .iter()
+            .filter(|s| matches!(s, Statement::Release(_)))
+            .count();
+        let held = usize::from(call_between);
+        assert_eq!((retains, releases), (held, held), "call between: {call_between}");
     }
 }
 

@@ -374,6 +374,18 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
         .filter_map(|imp| Some((imp.def, imp.ret?)))
         .collect();
 
+    let mut async_ordinal = 0usize;
+    let poll_of: Vec<Option<usize>> = mir
+        .functions
+        .iter()
+        .map(|f| {
+            f.is_async.then(|| {
+                async_ordinal += 1;
+                async_ordinal - 1
+            })
+        })
+        .collect();
+
     let mut reachable: HashSet<usize> = HashSet::new();
     let mut live_types: HashSet<TypeId> = HashSet::new();
     let mut type_worklist: Vec<TypeId> = mir.globals.iter().map(|g| g.ty).collect();
@@ -455,6 +467,18 @@ fn prune_functions(mir: &mut Mir, interner: &TypeInterner) {
                 callees.extend(edges.callees);
                 type_worklist.extend(edges.types);
                 iface_uses.extend(edges.iface_calls);
+            }
+            // Poll rewrites (ready awaits) may call functions the HIR snapshot never names.
+            if let Some(poll) = poll_of[idx].and_then(|p| mir.polls.get(p)) {
+                for stmt in poll.blocks.iter().flat_map(|b| &b.stmts) {
+                    match stmt {
+                        Statement::Call { callee, .. } => {
+                            callees.push((callee.def, callee.args.clone()))
+                        }
+                        Statement::Assign(_, rv) => rvalue_callees(rv, &mut callees),
+                        _ => {}
+                    }
+                }
             }
             for key in callees {
                 if let Some(&ty) = constructing_imports.get(&key.0) {

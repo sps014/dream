@@ -9,6 +9,12 @@
 //! An `a = ArrayNew` with a constant length and elements that hold no references gets the same
 //! treatment; its deaths release nothing.
 //!
+//! A `t = s.substring(a, b)` slice is built the same way. Instead of the slice retaining `s`, a
+//! copy of `s` is retained where the slice is built and released at each of its deaths, which is
+//! what the heap slice's own destroy would have done. When the slice dies in the block that builds
+//! it and nothing in between can drop a count, the parent's existing holder suffices and the copy
+//! is skipped.
+//!
 //! Refused: `del` (it would have to run at the death), weak / unowned fields (registry entries
 //! point into the block), `@shared`, value fields with managed contents, instances over
 //! [`MAX_OBJECT_BYTES`] (arrays over [`MAX_ARRAY_BYTES`]), functions on a call cycle (frame growth under recursion) or opening a
@@ -18,6 +24,7 @@ use crate::analysis::effects::strong_children;
 use crate::analysis::escape::{Escape, LocalEscape, ParamSummaries};
 use crate::analysis::object_life::{Lifetime, lifetime};
 use crate::{Const, Local, LocalDecl, Mir, MirFunction, Operand, Place, Rvalue, Statement};
+use dream_abi::intrinsics::IntrinsicOp;
 use dream_hir::LayoutTable;
 use dream_types::{TyKind, TypeId, TypeInterner};
 use std::collections::{BTreeMap, BTreeSet};
@@ -28,9 +35,18 @@ pub(crate) const STAGE: &str = "frame-alloc";
 const MAX_OBJECT_BYTES: u32 = 256;
 const MAX_ARRAY_BYTES: u32 = 512;
 const MAX_FRAME_BYTES: u32 = 1024;
+/// A string slice after its header: length and kind words, parent and units pointers, and the
+/// native cached hash. Sized for 64-bit pointers on every target.
+const SLICE_PAYLOAD: u32 = 8 + 2 * 8 + 4;
 
 pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
     let sums = ParamSummaries::compute(mir, interner);
+    let substrings: BTreeSet<_> = mir
+        .intrinsics
+        .iter()
+        .filter(|(_, key)| IntrinsicOp::from_key(key) == Some(IntrinsicOp::StringSubstring))
+        .map(|(def, _)| *def)
+        .collect();
     let layouts = &mir.layouts;
     let mut marked = Vec::new();
     let mut hoisted = false;
@@ -52,7 +68,16 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
             let Statement::Assign(Place::Local(o), rv) = s else {
                 continue;
             };
+            let mut parent = None;
             let (fields, payload, limit) = match rv {
+                Rvalue::Call { callee, args }
+                    if substrings.contains(&callee.def)
+                        && args.len() == 3
+                        && !callee.take_params.iter().any(|t| *t) =>
+                {
+                    parent = Some(args[0].clone());
+                    (Vec::new(), SLICE_PAYLOAD, MAX_OBJECT_BYTES)
+                }
                 Rvalue::New { ty, .. } => {
                     let Some(fields) = releasable_fields(*ty, interner, layouts) else {
                         continue;
@@ -91,15 +116,18 @@ pub(crate) fn run(mir: &mut Mir, interner: &TypeInterner) -> bool {
                     decision = "rejected", reason = "frame-budget-limit", size, budget);
                 continue;
             }
-            let Some(life) = lifetime(f, &esc.class(*o), *o, fields.is_empty()) else {
+            let free_deaths = fields.is_empty() && parent.is_none();
+            let Some(life) = lifetime(f, &esc.class(*o), *o, free_deaths, parent.is_some()) else {
                 continue;
             };
+            let parent = parent.filter(|p| !parent_outlives(f, *o, p, &life));
             budget -= size;
             tracing::debug!(pass = STAGE, function = %f.name, local = o.0,
                 decision = "eliminated", cost = "heap-allocation", frame_bytes = size);
             plans.push(Plan {
                 object: *o,
                 fields,
+                parent,
                 life,
                 payload,
             });
@@ -199,9 +227,79 @@ type RefFields = [(usize, TypeId)];
 struct Plan {
     object: Local,
     fields: Vec<(usize, TypeId)>,
+    /// The string a frame slice views, held by the function instead of by the slice.
+    parent: Option<Operand>,
     life: Lifetime,
     /// Field bytes of the constructed class, after the heap header.
     payload: u32,
+}
+
+/// True when nothing can drop the slice's parent while the slice lives: the slice is built once,
+/// dies in the same block, and the statements in between neither release (except the slice's own
+/// RC ops), call, store, nor rebind the parent. The parent's existing holder then keeps it alive.
+fn parent_outlives(f: &MirFunction, o: Local, parent: &Operand, life: &Lifetime) -> bool {
+    let s = match parent {
+        Operand::Const(_) => None,
+        Operand::Copy(Place::Local(s)) => Some(*s),
+        _ => return false,
+    };
+    let mut sites = f.blocks.iter().enumerate().flat_map(|(bi, b)| {
+        b.stmts.iter().enumerate().filter_map(move |(si, st)| {
+            matches!(st, Statement::Assign(Place::Local(d), Rvalue::Call { .. }) if *d == o)
+                .then_some((bi, si))
+        })
+    });
+    let (Some((bi, start)), None) = (sites.next(), sites.next()) else {
+        return false;
+    };
+    let Some(end) = life
+        .deaths
+        .iter()
+        .map(|&(db, ds, _)| (db == bi && ds > start).then_some(ds))
+        .try_fold(start, |end, d| d.map(|d| end.max(d)))
+    else {
+        return false;
+    };
+    let own = |si: usize| {
+        life.rc_ops.contains(&(bi, si)) || life.deaths.iter().any(|d| (d.0, d.1) == (bi, si))
+    };
+    f.blocks[bi].stmts[start + 1..end]
+        .iter()
+        .enumerate()
+        .all(|(k, st)| match st {
+            Statement::Retain(_)
+            | Statement::Panic(_)
+            | Statement::Nop
+            | Statement::DebugLine(_)
+            | Statement::SourceLine(_) => true,
+            Statement::Release(_) => own(start + 1 + k),
+            Statement::Assign(Place::Local(d), rv) => Some(*d) != s && count_neutral(rv),
+            _ => false,
+        })
+}
+
+/// Rvalues that run no user code and change no reference count.
+fn count_neutral(rv: &Rvalue) -> bool {
+    matches!(
+        rv,
+        Rvalue::Zero(_)
+            | Rvalue::Use(_)
+            | Rvalue::Move { .. }
+            | Rvalue::Select { .. }
+            | Rvalue::Binary(..)
+            | Rvalue::Unary(..)
+            | Rvalue::CheckedBinary(..)
+            | Rvalue::CheckedNeg(_)
+            | Rvalue::StrLen(_)
+            | Rvalue::StrByteSize(_)
+            | Rvalue::CharAt(..)
+            | Rvalue::ByteAt(..)
+            | Rvalue::LoadU8(..)
+            | Rvalue::LoadU16(..)
+            | Rvalue::ArrayLen(_)
+            | Rvalue::Cast(..)
+            | Rvalue::IsType(..)
+    )
 }
 
 /// The strong reference fields a death must release, or `None` if the type is not frameable.
@@ -293,14 +391,22 @@ fn unmanaged(ty: TypeId, interner: &TypeInterner, layouts: &LayoutTable, depth: 
     }
 }
 
+type Death<'p> = (Local, TypeId, &'p RefFields, Option<Local>);
+
 fn apply(f: &mut MirFunction, plans: &[Plan]) {
     let mut drop: BTreeSet<(usize, usize)> = BTreeSet::new();
-    let mut deaths: BTreeMap<(usize, usize), (Local, TypeId, &RefFields)> = BTreeMap::new();
+    let mut deaths: BTreeMap<(usize, usize), Death> = BTreeMap::new();
+    let mut holds: BTreeMap<Local, (Local, Operand)> = BTreeMap::new();
     for p in plans {
         drop.extend(p.life.rc_ops.iter().copied());
         let class = f.locals[p.object.0 as usize].ty;
+        let held = p.parent.as_ref().map(|parent| {
+            let t = push_temp(f, class);
+            holds.insert(p.object, (t, parent.clone()));
+            t
+        });
         for &(bi, si, m) in &p.life.deaths {
-            deaths.insert((bi, si), (m, class, &p.fields));
+            deaths.insert((bi, si), (m, class, &p.fields, held));
         }
     }
     let mut temps: BTreeMap<TypeId, Local> = BTreeMap::new();
@@ -312,8 +418,8 @@ fn apply(f: &mut MirFunction, plans: &[Plan]) {
     let mut views: BTreeMap<TypeId, Local> = BTreeMap::new();
     let aliased: Vec<TypeId> = deaths
         .values()
-        .filter(|&&(m, class, _)| f.locals[m.0 as usize].ty != class)
-        .map(|&(_, class, _)| class)
+        .filter(|&&(m, class, _, held)| held.is_none() && f.locals[m.0 as usize].ty != class)
+        .map(|&(_, class, _, _)| class)
         .collect();
     for class in aliased {
         views.entry(class).or_insert_with(|| push_temp(f, class));
@@ -325,10 +431,27 @@ fn apply(f: &mut MirFunction, plans: &[Plan]) {
             if drop.contains(&(bi, si)) {
                 continue;
             }
-            let Some(&(m, class, fields)) = deaths.get(&(bi, si)) else {
+            if let Statement::Assign(Place::Local(o), Rvalue::Call { .. }) = &s
+                && let Some((held, parent)) = holds.get(o)
+            {
+                block.stmts.push(Statement::Assign(
+                    Place::Local(*held),
+                    Rvalue::Use(parent.clone()),
+                ));
+                block
+                    .stmts
+                    .push(Statement::Retain(Operand::Copy(Place::Local(*held))));
+            }
+            let Some(&(m, class, fields, held)) = deaths.get(&(bi, si)) else {
                 block.stmts.push(s);
                 continue;
             };
+            if let Some(held) = held {
+                block
+                    .stmts
+                    .push(Statement::Release(Operand::Copy(Place::Local(held))));
+                continue;
+            }
             let base = if local_tys[m.0 as usize] == class {
                 m
             } else {

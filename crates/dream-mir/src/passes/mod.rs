@@ -41,6 +41,9 @@ mod param_modes_tests;
 mod prop;
 pub(crate) mod rc;
 mod read_loans;
+mod ready_await;
+#[cfg(test)]
+mod ready_await_tests;
 mod scalar_operands;
 mod sccp;
 mod simplify_cfg;

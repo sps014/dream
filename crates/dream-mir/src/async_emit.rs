@@ -16,6 +16,24 @@ use super::MirFunction;
 use dream_types::{TyKind, TypeId, TypeInterner};
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 
+/// Whether a poll body reads the closure environment its stub saves into the frame.
+pub fn captures_environment(body: &MirFunction) -> bool {
+    // Global zero is the reserved closure environment, never an application global.
+    body.blocks
+        .iter()
+        .flat_map(|block| &block.stmts)
+        .any(|statement| {
+            let mut found = false;
+            crate::visit::stmt_operands_mut(&mut statement.clone(), &mut |operand| {
+                found |= matches!(
+                    operand,
+                    crate::Operand::Copy(crate::Place::Global(crate::Global(0)))
+                );
+            });
+            found
+        })
+}
+
 /// Slot offsets for one async function's `Future` frame.
 pub struct AsyncSlots {
     /// Local index → byte offset of its slot within the `Future` frame.

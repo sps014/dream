@@ -280,6 +280,16 @@ impl<'l, 'a> Fx<'l, 'a> {
             self.store(place, rv, r);
             return;
         }
+        if let (Place::Local(l), Rvalue::Call { args, .. }) = (place, rv)
+            && frame_buffer_payload(self.mir, self.f, *l).is_some()
+        {
+            let buf = self.frame_buf(*l);
+            let mut all = vec![V::s(buf)];
+            all.extend(args.iter().map(|a| self.operand(a)));
+            let r = self.call_v("dream_frame_substring", &all);
+            self.write_local(*l, &r);
+            return;
+        }
         if let (Place::Local(l), Rvalue::ArrayNew { len, .. }) = (place, rv)
             && let Some(payload) = frame_buffer_payload(self.mir, self.f, *l)
         {

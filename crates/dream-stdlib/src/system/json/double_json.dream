@@ -1,0 +1,23 @@
+module system.json;
+
+// JSON encoding of `double` for `Json.serialize`, `Json.deserialize`, `Json.from_value` and the
+// collection encoders.
+extend double {
+    /// Appends this value as JSON as a JSON number.
+    internal fun write_json(borrow sb: StringBuilder, borrow options: JsonOptions): void {
+        Json.write_number(sb, this);
+    }
+
+    /// Reads a `double` from a parsed JSON value; a value of another kind reads as zero.
+    internal static fun from_json(borrow v: JsonValue, borrow options: JsonOptions): double {
+        return v.as_double().unwrap_or(0.0d);
+    }
+
+    /// Parses JSON text holding a single `double`.
+    internal static fun read_json(
+        borrow text: string,
+        borrow options: JsonOptions
+    ): Result<double, ParseError> {
+        return Json.read_parsed<double>(text, options);
+    }
+}

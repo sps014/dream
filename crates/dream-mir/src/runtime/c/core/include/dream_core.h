@@ -1342,8 +1342,9 @@ DREAM_ALWAYS_INLINE int32_t dream_string_eq(dream_ptr a, dream_ptr b) {
     if (a == b) {
         return 1;
     }
+    /* A zeroed string field is null and reads as the empty string. */
     if (a == 0 || b == 0) {
-        return 0;
+        return dream_str_len(a == 0 ? b : a) == 0;
     }
     n = dream_str_len(a);
     if (n != dream_str_len(b)) {

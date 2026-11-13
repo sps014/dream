@@ -2,13 +2,13 @@ module system.drawing;
 
 internal static class DrawingHost {
     @async_host
-    @runtime("drawingCreate")
+    @runtime("drawingCreate", "drawing")
     internal static extern async fun create(width: int, height: int, backend: int): int;
 
-    @runtime("drawingLastError")
+    @runtime("drawingLastError", "drawing")
     internal static extern fun error(): string;
 
-    @runtime("drawingRender")
+    @runtime("drawingRender", "drawing")
     internal static extern fun render(
         handle: int,
         borrow commands: float[],
@@ -17,28 +17,28 @@ internal static class DrawingHost {
     ): int;
 
     @async_host
-    @runtime("drawingPixels")
+    @runtime("drawingPixels", "drawing")
     internal static extern async fun pixels(handle: int): byte[];
 
-    @runtime("drawingCopyGpu")
+    @runtime("drawingCopyGpu", "drawing")
     internal static extern fun copy_gpu(handle: int, texture: int, width: int, height: int): int;
 
-    @runtime("drawingBackend")
+    @runtime("drawingBackend", "drawing")
     internal static extern fun backend(handle: int): int;
 
-    @runtime("drawingRelease")
+    @runtime("drawingRelease", "drawing")
     internal static extern fun release(handle: int): void;
 
     @async_host
-    @runtime("drawingImageDecode")
+    @runtime("drawingImageDecode", "drawing")
     internal static extern async fun image_decode(borrow bytes: byte[]): int;
 
     @async_host
-    @runtime("drawingImageRgba")
+    @runtime("drawingImageRgba", "drawing")
     internal static extern async fun image_rgba(width: int, height: int, borrow bytes: byte[]): int;
 
     @async_host
-    @runtime("drawingTextCreate")
+    @runtime("drawingTextCreate", "drawing")
     internal static extern async fun text_create(
         borrow text: string,
         borrow family: string,
@@ -49,13 +49,13 @@ internal static class DrawingHost {
     ): int;
 
     @async_host
-    @runtime("drawingFontRegister")
+    @runtime("drawingFontRegister", "drawing")
     internal static extern async fun font_register(borrow bytes: byte[]): string;
 
-    @runtime("drawingAssetMetrics")
+    @runtime("drawingAssetMetrics", "drawing")
     internal static extern fun asset_metrics(handle: int): float[];
 
-    @runtime("drawingTextMeasure")
+    @runtime("drawingTextMeasure", "drawing")
     internal static extern fun text_measure(
         borrow text: string,
         borrow family: string,
@@ -65,15 +65,15 @@ internal static class DrawingHost {
         alignment: int
     ): float[];
 
-    @runtime("drawingTextIndexAt")
+    @runtime("drawingTextIndexAt", "drawing")
     internal static extern fun text_index_at(handle: int, x: float, y: float): int;
 
-    @runtime("drawingTextCaret")
+    @runtime("drawingTextCaret", "drawing")
     internal static extern fun text_caret(handle: int, index: int): float[];
 
-    @runtime("drawingTextSelection")
+    @runtime("drawingTextSelection", "drawing")
     internal static extern fun text_selection(handle: int, start: int, end: int): float[];
 
-    @runtime("drawingAssetRelease")
+    @runtime("drawingAssetRelease", "drawing")
     internal static extern fun asset_release(handle: int): void;
 }

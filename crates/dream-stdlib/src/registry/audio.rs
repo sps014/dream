@@ -11,6 +11,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.io",
         "system.net",
     ],
+    core_language: false,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &[],
     files: &[
         (

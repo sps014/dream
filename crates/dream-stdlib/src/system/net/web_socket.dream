@@ -8,10 +8,10 @@ public class WebSocket {
         this.id = id;
     }
 
-    @runtime("netWsStart")
+    @runtime("netWsStart", "net")
     static extern fun start_host(request: byte[], bytes: byte[]): int;
 
-    @runtime("netWsClose")
+    @runtime("netWsClose", "net")
     static extern fun close_host(id: int): void;
 
     del() {

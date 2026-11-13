@@ -129,6 +129,54 @@ pub fn runtime_import_field(attributes: &[AttributeNode]) -> Option<String> {
     attr.args.first()?.as_string().map(|s| s.to_string())
 }
 
+/// Native capability named by `@runtime("field", "net")`, or `None` for core host services.
+pub fn runtime_host_capability(
+    attributes: &[AttributeNode],
+) -> Option<crate::host_capability::HostCapability> {
+    let attr = attributes
+        .iter()
+        .find(|a| is_compiler_attribute(a, "runtime"))?;
+    crate::host_capability::HostCapability::from_name(attr.args.get(1)?.as_string()?)
+}
+
+/// True when `@runtime(name, host, traits...)` lists `RuntimeTrait.<member>`.
+fn runtime_has_trait(attributes: &[AttributeNode], member: &str) -> bool {
+    attributes
+        .iter()
+        .filter(|a| is_compiler_attribute(a, "runtime"))
+        .flat_map(|a| a.args.iter().skip(2))
+        .any(|arg| matches!(arg, AttributeArg::Enum(path) if path.last().is_some_and(|p| p.text == member)))
+}
+
+/// True for a host service the WASI component adapter implements (`RuntimeTrait.Component`).
+pub fn runtime_is_component(attributes: &[AttributeNode]) -> bool {
+    runtime_has_trait(attributes, "Component")
+}
+
+/// True for a host service that reads host state only and never touches Dream storage or calls
+/// back (`RuntimeTrait.Quiet`).
+pub fn runtime_is_quiet(attributes: &[AttributeNode]) -> bool {
+    runtime_has_trait(attributes, "Quiet")
+}
+
+/// `@requires_member(parameter, member, message?)` uses, in declaration order.
+pub fn member_requirements(attributes: &[AttributeNode]) -> Vec<(String, String, Option<String>)> {
+    attributes
+        .iter()
+        .filter(|a| is_compiler_attribute(a, "requires_member"))
+        .filter_map(|a| {
+            Some((
+                a.args.first()?.as_string()?.to_string(),
+                a.args.get(1)?.as_string()?.to_string(),
+                a.args
+                    .get(2)
+                    .and_then(|arg| arg.as_string())
+                    .map(str::to_string),
+            ))
+        })
+        .collect()
+}
+
 /// True when the declaration carries `@runtime`.
 pub fn has_runtime_attr(attributes: &[AttributeNode]) -> bool {
     attributes

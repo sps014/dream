@@ -46,6 +46,7 @@ impl<'a> Analyzer<'a> {
         name: &str,
         ctor: Option<DefId>,
         args: Vec<Option<HExpr>>,
+        field_inits: Vec<(usize, HExpr)>,
         result_ty: &Type,
     ) {
         if !self.active() {
@@ -70,6 +71,7 @@ impl<'a> Analyzer<'a> {
                 ctor,
                 args: collected,
                 take_params,
+                field_inits,
             },
         ));
     }

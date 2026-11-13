@@ -403,22 +403,23 @@ impl Compiler {
         }
 
         let mut inputs = loaded.acc.resolution_inputs.clone();
-        if !self.runtimes.is_empty()
-            && loaded
-                .graph
-                .files
-                .iter()
-                .any(|file| file.path.starts_with("<std>/system/drawing/"))
-        {
-            let host = crate::driver::js_runtime::drawing_host_dir();
-            for name in [
-                "dream_drawing.js",
-                "dream_drawing_bg.wasm",
-                "NotoSans-OFL.txt",
-            ] {
-                let path = host.join(name);
-                field("drawing-host", input_hash(&path)?.as_bytes());
-                inputs.insert(path);
+        if !self.runtimes.is_empty() {
+            let mut packages: Vec<&dream_stdlib::StdPackage> = Vec::new();
+            for file in &loaded.graph.files {
+                if let Some(package) = dream_stdlib::package_for_source(&file.path)
+                    && package.web_assets.is_some()
+                    && !packages.iter().any(|p| p.name == package.name)
+                {
+                    packages.push(package);
+                }
+            }
+            for assets in packages.iter().filter_map(|p| p.web_assets) {
+                let host = crate::driver::js_runtime::web_assets_dir(assets);
+                for name in assets.files {
+                    let path = host.join(name);
+                    field("web-assets", input_hash(&path)?.as_bytes());
+                    inputs.insert(path);
+                }
             }
         }
         for file in &loaded.graph.files {

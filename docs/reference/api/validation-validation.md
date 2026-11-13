@@ -17,7 +17,7 @@ public static class Validation
 Decodes and validates JSON as `T`, returning the collected validation issues on failure.
 
 ```dream
-public static extern fun decode<T>(text: string): Result<T, ValidationErrors>
+public static fun decode<T>(text: string): Result<T, ValidationErrors>
 ```
 
 ## `validate`
@@ -25,7 +25,7 @@ public static extern fun decode<T>(text: string): Result<T, ValidationErrors>
 Checks `value` against its validation attributes; returns the value or collected issues.
 
 ```dream
-public static extern fun validate<T>(value: T): Result<T, ValidationErrors>
+public static fun validate<T>(value: T): Result<T, ValidationErrors>
 ```
 
 ## `schema`
@@ -33,5 +33,5 @@ public static extern fun validate<T>(value: T): Result<T, ValidationErrors>
 Returns the JSON Schema describing `T` and its validation constraints.
 
 ```dream
-public static extern fun schema<T>(): JsonValue
+public static fun schema<T>(): JsonValue
 ```

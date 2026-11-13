@@ -7,5 +7,6 @@ pub mod index;
 pub mod position;
 pub mod sema_ide;
 pub mod semantic_tokens;
+pub mod symbols;
 pub mod tokens;
 pub mod workspace;

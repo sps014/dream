@@ -12,10 +12,10 @@ public class HttpBody: AsyncReader {
         HttpBody.close_host(this.id);
     }
 
-    @runtime("netBodyRead")
+    @runtime("netBodyRead", "net", RuntimeTrait.Component)
     static extern fun read_host(id: int, count: int): int;
 
-    @runtime("netBodyClose")
+    @runtime("netBodyClose", "net", RuntimeTrait.Component)
     static extern fun close_host(id: int): void;
 
     /// Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing.

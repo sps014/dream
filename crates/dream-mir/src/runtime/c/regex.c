@@ -21,6 +21,12 @@ typedef struct {
  * instead of failing the whole match, and the JIT skips validating the subject on every call. */
 static uint32_t compile_opts(int32_t flags) {
     uint32_t opt = PCRE2_UTF | PCRE2_MATCH_INVALID_UTF;
+    /* RegexFlags.IgnoreCase / Multiline / DotAll in system.text. */
+#ifndef DREAM_REGEX_IGNORE_CASE
+#define DREAM_REGEX_IGNORE_CASE 2
+#define DREAM_REGEX_MULTILINE 4
+#define DREAM_REGEX_DOTALL 8
+#endif
     if (flags & DREAM_REGEX_IGNORE_CASE) {
         opt |= PCRE2_CASELESS;
     }

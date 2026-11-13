@@ -11,7 +11,7 @@ public class AudioAnalyzer {
         this.window = AudioWindow.Hann;
     }
 
-    @intrinsic(Intrinsic.DreamAudioFft)
+    @runtime("dream_audio_fft")
     static extern fun fft_host(borrow samples: float[], size: int): float[];
 
     /// Selects a power-of-two FFT size from 32 through 32768; failure preserves the size.

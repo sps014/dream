@@ -2,7 +2,7 @@ module system.webapi.auth;
 
 internal static class AuthCrypto {
     @native
-    @runtime("cryptoAuth")
+    @runtime("cryptoAuth", "crypto")
     static extern fun host(request: string): string;
 
     @native

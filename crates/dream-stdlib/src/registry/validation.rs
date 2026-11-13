@@ -3,6 +3,10 @@ use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.validation",
     deps: &["system", "system.json", "system.text", "system.collections"],
+    core_language: false,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &["system.validation.derive"],
     files: &[
         (

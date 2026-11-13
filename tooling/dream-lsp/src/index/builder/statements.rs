@@ -16,7 +16,8 @@ impl Builder {
                         {
                             return Some(candidate);
                         }
-                        let option = ctx.resolve(DefKind::Union, "Option")?;
+                        let option =
+                            ctx.resolve(DefKind::Union, dream_abi::core_items::OPTION_NAME)?;
                         Some(ctx.instantiate(option, vec![candidate]))
                     })
                 } else {

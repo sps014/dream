@@ -42,8 +42,7 @@ impl ToolchainConfig {
             runtime_c,
             home,
             bin: value("DREAM_BIN").map(PathBuf::from),
-            tool_overrides: dream_abi::toolchain::PINNED_TOOLS
-                .iter()
+            tool_overrides: dream_stdlib::toolchain::pinned_tools()
                 .filter_map(|tool| Some((tool.name.to_string(), PathBuf::from(value(tool.env)?))))
                 .collect(),
             toolchains,

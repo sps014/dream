@@ -47,7 +47,7 @@ fn compiler_without_any_host_libraries_compiles_and_runs() {
     let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
     let tools = dream::execution::llvm::resolve_llvm(&config).unwrap();
     let mold = config
-        .locate_tool(dream_abi::toolchain::pinned_tool("mold").unwrap())
+        .locate_tool(dream_abi::toolchain::compiler_tool("mold").unwrap())
         .unwrap();
     let directory = tempfile::tempdir().unwrap();
     let compiler = std::path::Path::new(env!("CARGO_BIN_EXE_dream"));

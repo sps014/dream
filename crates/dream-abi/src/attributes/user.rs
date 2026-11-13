@@ -4,7 +4,6 @@ use super::*;
 use dream_syntax::nodes::Visibility;
 use std::collections::BTreeMap;
 
-pub const JSON_ATTRIBUTE_ID: &str = "system.json::JsonAttribute";
 pub const ATTRIBUTE_TARGET_ENUM: &str = "AttributeTarget";
 
 pub fn decl_identity(module: &str, name: &str) -> String {

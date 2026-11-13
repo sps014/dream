@@ -42,7 +42,7 @@ impl Linker {
         } else if spec.is_windows() {
             tools.optional_tool("ld.lld")?
         } else {
-            let mold = dream_abi::toolchain::pinned_tool("mold").expect("mold is a pinned tool");
+            let mold = dream_abi::toolchain::compiler_tool("mold").expect("mold is a pinned tool");
             let path = tools
                 .config
                 .locate_tool(mold)?

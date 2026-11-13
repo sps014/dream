@@ -1,8 +1,13 @@
 module system.json;
 
+// Index just past the JSON value that starts at `start` in `text`.
+@runtime("string_json_boundary", "core", RuntimeTrait.Quiet)
+static extern fun string_json_boundary(borrow text: string, start: int): int;
+
 internal static class JsonStorage {
-    @intrinsic(Intrinsic.StringJsonBoundary)
-    internal static extern fun boundary(borrow text: string, start: int): int;
+    internal static fun boundary(borrow text: string, start: int): int {
+        return string_json_boundary(text, start);
+    }
 
     @intrinsic(Intrinsic.StringCloneRange)
     internal static extern fun clone_range(borrow text: string, start: int, end: int): string;

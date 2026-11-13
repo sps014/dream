@@ -15,13 +15,7 @@ impl<'a> Analyzer<'a> {
         let dream_types::TyKind::Struct(def, args) = self.type_ctx.interner.kind(ty) else {
             return false;
         };
-        self.type_ctx.defs.name(*def) == "Range"
-            && args.is_empty()
-            && self.struct_info(ty).is_some_and(|info| {
-                info.file_path
-                    .as_deref()
-                    .is_some_and(dream_stdlib::is_std_source)
-            })
+        args.is_empty() && self.is_core_def(*def, dream_abi::core_items::RANGE)
     }
 
     pub(super) fn analyze_foreach_range(

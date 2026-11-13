@@ -97,6 +97,7 @@ pub(super) const CASES: &[Case] = &[
     Case::project("cli_commands", "serialization", true),
     Case::project("weak_field_runtime", "ownership", true),
     Case::project("class_basics", "types", true),
+    Case::project("field_defaults", "types", true),
     Case::project("class_protocols", "types", true),
     Case::project("generics", "types", true),
     Case::project("symbol_collisions", "types", true),

@@ -43,6 +43,56 @@ pub fn resolve_packages_to_load(requested: &IndexSet<String>) -> Vec<&'static St
         .collect()
 }
 
+/// `(field, capability)` for every `@runtime("field", "capability", …)` in the embedded sources
+/// whose host is a capability library rather than core, sorted by field. Host contract tests compare it with each capability library's exports.
+pub fn runtime_host_fields() -> Vec<(&'static str, &'static str)> {
+    let marker = "@runtime(\"";
+    let mut out = Vec::new();
+    for package in STD_PACKAGES {
+        for &(_, source) in package.files {
+            let mut rest = source;
+            while let Some(at) = rest.find(marker) {
+                rest = &rest[at + marker.len()..];
+                let Some(close) = rest.find(')') else {
+                    break;
+                };
+                let args: Vec<&str> = rest[..close]
+                    .split(',')
+                    .map(|a| a.trim().trim_matches('"'))
+                    .collect();
+                if let [field, capability, ..] = args[..]
+                    && capability != "core"
+                {
+                    out.push((field, capability));
+                }
+                rest = &rest[close..];
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// `(export_name, runtime symbol)` pairs the package owning `source` exports when its host import
+/// `field` is used.
+pub fn guest_exports_for(source: &str, field: &str) -> Vec<(String, String)> {
+    package_for_source(source)
+        .into_iter()
+        .flat_map(|package| package.guest_exports)
+        .filter(|export| export.import == field)
+        .map(|export| (export.export_name.to_string(), export.symbol.to_string()))
+        .collect()
+}
+
+pub fn package_declares_runtime_field(package: &StdPackage, field: &str) -> bool {
+    let marker = format!("@runtime(\"{field}\"");
+    package
+        .files
+        .iter()
+        .any(|(_, source)| source.contains(&marker))
+}
+
 fn collect_deps(name: &str, needed: &mut IndexSet<&'static str>) {
     let Some(pkg) = find_package(name) else {
         return;

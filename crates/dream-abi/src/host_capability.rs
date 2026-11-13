@@ -1,7 +1,5 @@
-//! Native host link artifacts, shared by the compiler and package manager.
-
-#[path = "host_capability_fields.rs"]
-mod fields;
+//! Native host link artifacts, shared by the compiler and package manager. Which fields belong
+//! to a capability is declared by the stdlib: `@runtime("field", "net")`.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -71,28 +69,16 @@ impl HostCapability {
         format!("dream_host_{}_abi_v{version}", self.name())
     }
 
-    pub fn fields(self) -> &'static [&'static str] {
-        fields::fields(self)
-    }
-
-    pub fn for_import(module: &str, field: &str) -> Option<Self> {
-        (module == crate::js_abi::HOST_MODULE)
-            .then(|| {
-                Self::ALL
-                    .iter()
-                    .copied()
-                    .find(|c| c.fields().contains(&field))
-            })
-            .flatten()
-    }
-
-    pub fn required_for_imports<'a>(
-        imports: impl IntoIterator<Item = (&'a str, &'a str)>,
-    ) -> Vec<Self> {
-        let selected: Vec<_> = imports
+    /// Capability named by `@runtime(field, host)`. `core` is implied, never declared.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
             .into_iter()
-            .filter_map(|(module, field)| Self::for_import(module, field))
-            .collect();
+            .find(|c| *c != Self::Core && c.name() == name)
+    }
+
+    /// Libraries to link for the capabilities live imports declare, plus core when any is used.
+    pub fn required(declared: impl IntoIterator<Item = Self>) -> Vec<Self> {
+        let selected: Vec<_> = declared.into_iter().collect();
         Self::canonicalize(&selected)
     }
 

@@ -1,8 +1,25 @@
-use super::StdPackage;
+use super::{StdPackage, WebAssets};
+
+const WEB_ASSETS: WebAssets = WebAssets {
+    name: "drawing browser host",
+    env: "DREAM_DRAWING_WEB",
+    installed_dir: "drawing",
+    development_dir: "drawing-web",
+    files: &[
+        "dream_drawing.js",
+        "dream_drawing_bg.wasm",
+        "NotoSans-OFL.txt",
+    ],
+    build_hint: "run python scripts/build-drawing-web.py, or set DREAM_DRAWING_WEB to the built host directory",
+};
 
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.drawing",
     deps: &["system", "system.collections"],
+    core_language: false,
+    web_assets: Some(&WEB_ASSETS),
+    tools: &[],
+    guest_exports: &[],
     generators: &[],
     files: &[
         (

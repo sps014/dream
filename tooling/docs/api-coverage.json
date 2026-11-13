@@ -7787,6 +7787,43 @@
         "description": "Name exposed to callers of the foreign function.",
         "line": 7,
         "page": "reference/api/core-runtime-attribute.md"
+      },
+      {
+        "signature": "public host: Option<string>",
+        "description": "Native capability library that implements the service (`\"net\"`, `\"gpu\"`, …), or `\"core\"` for services the core host or the runtime itself provides. Omitting it means `\"core\"`.",
+        "line": 10,
+        "page": "reference/api/core-runtime-attribute.md"
+      },
+      {
+        "signature": "public traits: List<RuntimeTrait>",
+        "description": "How the service behaves; see `RuntimeTrait`. Listing traits requires naming the host.",
+        "line": 12,
+        "page": "reference/api/core-runtime-attribute.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/core/runtime_trait.dream",
+    "package": "system.core",
+    "page": "reference/api/core-runtime-trait.md",
+    "declarations": [
+      {
+        "signature": "public enum RuntimeTrait",
+        "description": "Behavior of a host service bound with `@runtime`.",
+        "line": 4,
+        "page": "reference/api/core-runtime-trait.md"
+      },
+      {
+        "signature": "Component",
+        "description": "The standalone WASI component adapter implements the service. A component build rejects every other host import while it can still report a diagnostic.",
+        "line": 7,
+        "page": "reference/api/core-runtime-trait.md"
+      },
+      {
+        "signature": "Quiet",
+        "description": "The service reads only host state: it never touches Dream storage, retains or releases Dream values, or calls back into the program, so the optimizer may move ownership operations across the call. It does not make the call pure or let the optimizer hoist it.",
+        "line": 11,
+        "page": "reference/api/core-runtime-trait.md"
       }
     ]
   },
@@ -15522,39 +15559,39 @@
         "page": "reference/api/json-json.md"
       },
       {
-        "signature": "public static extern fun serialize<T>(borrow value: T): string",
+        "signature": "public static fun serialize<T>(borrow value: T): string",
         "description": "Encodes `value` as compact JSON text, with field names as declared. User-defined types need `@json`.",
         "line": 8,
         "page": "reference/api/json-json.md"
       },
       {
-        "signature": "public static extern fun serialize<T>(borrow value: T, borrow options: JsonOptions): string",
+        "signature": "public static fun serialize<T>(borrow value: T, borrow options: JsonOptions): string",
         "description": "Encodes `value` as JSON text using `options` for property naming, whether `None` fields are written, and indentation. User-defined types need `@json`.",
-        "line": 13,
+        "line": 15,
         "page": "reference/api/json-json.md"
       },
       {
-        "signature": "public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>",
+        "signature": "public static fun deserialize<T>(borrow text: string): Result<T, ParseError>",
         "description": "Decodes JSON text as `T`, returning `ParseError` if it cannot be decoded. Property names must match field names exactly. User-defined types need `@json`.",
-        "line": 18,
+        "line": 24,
         "page": "reference/api/json-json.md"
       },
       {
-        "signature": "public static extern fun deserialize<T>( borrow text: string, borrow options: JsonOptions ): Result<T, ParseError>",
+        "signature": "public static fun deserialize<T>( borrow text: string, borrow options: JsonOptions ): Result<T, ParseError>",
         "description": "Decodes JSON text as `T`, matching property names to fields as `options` describes. Returns `ParseError` if the text cannot be decoded. User-defined types need `@json`.",
-        "line": 23,
-        "page": "reference/api/json-json.md"
-      },
-      {
-        "signature": "public static extern fun from_value<T>(borrow value: JsonValue): T",
-        "description": "Builds a `@json` value from an already-parsed `JsonValue`. Missing or mismatched properties take the field defaults.",
         "line": 31,
         "page": "reference/api/json-json.md"
       },
       {
-        "signature": "public static extern fun from_value<T>(borrow value: JsonValue, borrow options: JsonOptions): T",
+        "signature": "public static fun from_value<T>(borrow value: JsonValue): T",
+        "description": "Builds a `@json` value from an already-parsed `JsonValue`. Missing or mismatched properties take the field defaults.",
+        "line": 41,
+        "page": "reference/api/json-json.md"
+      },
+      {
+        "signature": "public static fun from_value<T>(borrow value: JsonValue, borrow options: JsonOptions): T",
         "description": "Builds a `@json` value from an already-parsed `JsonValue`, matching property names to fields as `options` describes. Missing or mismatched properties take the field defaults.",
-        "line": 36,
+        "line": 48,
         "page": "reference/api/json-json.md"
       }
     ]
@@ -15903,25 +15940,25 @@
       {
         "signature": "public fun keys(): List<string>",
         "description": "The keys of the object (empty list when not an object).",
-        "line": 315,
+        "line": 333,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun at(index: int): Option<JsonValue>",
         "description": "The array element at `index`, or `None`.",
-        "line": 320,
+        "line": 338,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public fun push(value: JsonValue): void",
         "description": "Appends a value to the array.",
-        "line": 335,
+        "line": 353,
         "page": "reference/api/json-json-value-2.md"
       },
       {
         "signature": "public get length(): int",
         "description": "Element count for arrays/objects (0 for scalars).",
-        "line": 345,
+        "line": 363,
         "page": "reference/api/json-json-value-2.md"
       }
     ]
@@ -19889,21 +19926,21 @@
         "page": "reference/api/validation-validation.md"
       },
       {
-        "signature": "public static extern fun decode<T>(text: string): Result<T, ValidationErrors>",
+        "signature": "public static fun decode<T>(text: string): Result<T, ValidationErrors>",
         "description": "Decodes and validates JSON as `T`, returning the collected validation issues on failure.",
         "line": 7,
         "page": "reference/api/validation-validation.md"
       },
       {
-        "signature": "public static extern fun validate<T>(value: T): Result<T, ValidationErrors>",
+        "signature": "public static fun validate<T>(value: T): Result<T, ValidationErrors>",
         "description": "Checks `value` against its validation attributes; returns the value or collected issues.",
-        "line": 11,
+        "line": 13,
         "page": "reference/api/validation-validation.md"
       },
       {
-        "signature": "public static extern fun schema<T>(): JsonValue",
+        "signature": "public static fun schema<T>(): JsonValue",
         "description": "Returns the JSON Schema describing `T` and its validation constraints.",
-        "line": 15,
+        "line": 19,
         "page": "reference/api/validation-validation.md"
       }
     ]

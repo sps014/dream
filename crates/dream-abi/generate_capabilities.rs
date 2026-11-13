@@ -1,4 +1,4 @@
-#[path = "src/gpu_bindings.rs"]
+#[path = "../dream-host-abi/src/gpu_bindings.rs"]
 pub mod gpu_bindings;
 #[path = "src/guest_contract.rs"]
 pub mod guest_contract;

@@ -4,36 +4,65 @@ module system.json;
 public static class Json {
     /// Encodes `value` as compact JSON text, with field names as declared. User-defined types
     /// need `@json`.
-    @intrinsic(Intrinsic.JsonSerialize)
-    public static extern fun serialize<T>(borrow value: T): string;
+    @requires_member("T", "write_json", "'{type}' cannot be serialized to JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'")
+    public static fun serialize<T>(borrow value: T): string {
+        return Json.serialize<T>(value, Json.default_options());
+    }
 
     /// Encodes `value` as JSON text using `options` for property naming, whether `None` fields
     /// are written, and indentation. User-defined types need `@json`.
-    @intrinsic(Intrinsic.JsonSerialize)
-    public static extern fun serialize<T>(borrow value: T, borrow options: JsonOptions): string;
+    @requires_member("T", "write_json", "'{type}' cannot be serialized to JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'")
+    public static fun serialize<T>(borrow value: T, borrow options: JsonOptions): string {
+        let sb = StringBuilder(256);
+        value.write_json(sb, options);
+        return Json.finish(sb, options);
+    }
 
     /// Decodes JSON text as `T`, returning `ParseError` if it cannot be decoded. Property names
     /// must match field names exactly. User-defined types need `@json`.
-    @intrinsic(Intrinsic.JsonDeserialize)
-    public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>;
+    @requires_member("T", "read_json", "'{type}' cannot be deserialized from JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'")
+    public static fun deserialize<T>(borrow text: string): Result<T, ParseError> {
+        return T.read_json(text, Json.default_options());
+    }
 
     /// Decodes JSON text as `T`, matching property names to fields as `options` describes.
     /// Returns `ParseError` if the text cannot be decoded. User-defined types need `@json`.
-    @intrinsic(Intrinsic.JsonDeserialize)
-    public static extern fun deserialize<T>(
+    @requires_member("T", "read_json", "'{type}' cannot be deserialized from JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'")
+    public static fun deserialize<T>(
         borrow text: string,
         borrow options: JsonOptions
-    ): Result<T, ParseError>;
+    ): Result<T, ParseError> {
+        return T.read_json(text, options);
+    }
 
     /// Builds a `@json` value from an already-parsed `JsonValue`. Missing or mismatched properties
     /// take the field defaults.
-    @intrinsic(Intrinsic.JsonFromValue)
-    public static extern fun from_value<T>(borrow value: JsonValue): T;
+    @requires_member("T", "from_json", "'{type}' cannot be converted from JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'")
+    public static fun from_value<T>(borrow value: JsonValue): T {
+        return T.from_json(value, Json.default_options());
+    }
 
     /// Builds a `@json` value from an already-parsed `JsonValue`, matching property names to
     /// fields as `options` describes. Missing or mismatched properties take the field defaults.
-    @intrinsic(Intrinsic.JsonFromValue)
-    public static extern fun from_value<T>(borrow value: JsonValue, borrow options: JsonOptions): T;
+    @requires_member("T", "from_json", "'{type}' cannot be converted from JSON: it has no compile-time JSON encoding. Use 'JsonValue' for mixed or unknown data, or mark a named type '@json'")
+    public static fun from_value<T>(borrow value: JsonValue, borrow options: JsonOptions): T {
+        return T.from_json(value, options);
+    }
+
+    // Parses `text`, then builds `T` from the tree: the `read_json` of types without a typed parser.
+    internal static fun read_parsed<T>(
+        borrow text: string,
+        borrow options: JsonOptions
+    ): Result<T, ParseError> {
+        switch (Json.parse(text)) {
+            Ok(value) => {
+                return Result.Ok(T.from_json(value, options));
+            }
+            Err(error) => {
+                return Result.Err(error);
+            }
+        }
+    }
 
     // Options used when a `serialize`/`deserialize`/`from_value` call omits them.
     internal static fun default_options(): JsonOptions {

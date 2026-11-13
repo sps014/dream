@@ -114,6 +114,7 @@ impl<'a> Analyzer<'a> {
                     ctor,
                     args: vec![e],
                     take_params: self.ctor_take_params(ctor),
+                    field_inits: vec![],
                 },
             );
         }

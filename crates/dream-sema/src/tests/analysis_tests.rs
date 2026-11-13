@@ -959,6 +959,7 @@ fn test_class_foreach_with_option_enumerator_ok() {
     // The full enumerator protocol: `@iterator` returns an object whose `@next(): Option<T>`
     // yields elements. `break`/`continue` are valid in the body.
     let code = "
+        module system.core;
         enum Option<T> { Some(T), None }
         class RangeIter {
             cur: int;

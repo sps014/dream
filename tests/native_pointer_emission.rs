@@ -99,7 +99,8 @@ fn inline_reference_fields_and_nullable_references_keep_pointer_storage() {
 #[test]
 fn closure_environment_is_pointer_but_function_selector_is_integer() {
     let source = format!(
-        r#"{CLOSURE_STUB}
+        r#"module system.core;
+        {CLOSURE_STUB}
         fun make_adder(n: int): fun(int): int {{ return (x) => x + n; }}
         fun invoke(n: int): int {{ let f = make_adder(n); return f(2); }}
         "#,

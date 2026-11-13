@@ -2,8 +2,6 @@ module system.core;
 
 /// Built-in operations available to declarations annotated with `@intrinsic`.
 internal enum Intrinsic {
-    /// Computes the portable audio FFT.
-    DreamAudioFft,
     /// Reads standard input bytes.
     ConsoleRead,
     /// Writes standard output or error bytes.
@@ -52,18 +50,6 @@ internal enum Intrinsic {
     PromiseAll,
     /// Identifies the promise race operation for an `@intrinsic` declaration.
     PromiseRace,
-    /// Identifies the json serialize operation for an `@intrinsic` declaration.
-    JsonSerialize,
-    /// Identifies the json deserialize operation for an `@intrinsic` declaration.
-    JsonDeserialize,
-    /// Identifies the json from value operation for an `@intrinsic` declaration.
-    JsonFromValue,
-    /// Identifies the validation decode operation for an `@intrinsic` declaration.
-    ValidationDecode,
-    /// Identifies the validation validate operation for an `@intrinsic` declaration.
-    ValidationValidate,
-    /// Identifies the validation schema operation for an `@intrinsic` declaration.
-    ValidationSchema,
 
     /// Identifies the gen attribute id operation for an `@intrinsic` declaration.
     GenAttributeId,
@@ -85,8 +71,6 @@ internal enum Intrinsic {
     StringBuilderBuffer,
     /// Identifies the string clone range operation for an `@intrinsic` declaration.
     StringCloneRange,
-    /// Identifies the string json boundary operation for an `@intrinsic` declaration.
-    StringJsonBoundary,
     /// Identifies the string set operation for an `@intrinsic` declaration.
     StringSet,
     /// Identifies the string from utf8 operation for an `@intrinsic` declaration.
@@ -153,22 +137,6 @@ internal enum Intrinsic {
     WireDecode,
     /// Identifies the panic operation for an `@intrinsic` declaration.
     DreamPanic,
-    /// Identifies the regex compile operation for an `@intrinsic` declaration.
-    RegexCompile,
-    /// Identifies the regex free operation for an `@intrinsic` declaration.
-    RegexFree,
-    /// Identifies the regex find operation for an `@intrinsic` declaration.
-    RegexFind,
-    /// Identifies the regex find all operation for an `@intrinsic` declaration.
-    RegexFindAll,
-    /// Identifies the regex group count operation for an `@intrinsic` declaration.
-    RegexGroupCount,
-    /// Identifies the regex name count operation for an `@intrinsic` declaration.
-    RegexNameCount,
-    /// Identifies the regex name at operation for an `@intrinsic` declaration.
-    RegexNameAt,
-    /// Identifies the regex name number operation for an `@intrinsic` declaration.
-    RegexNameNumber,
     /// Identifies the simd lane count operation for an `@intrinsic` declaration.
     SimdLaneCount,
     /// Identifies the simd v128 splat operation for an `@intrinsic` declaration.
@@ -205,8 +173,6 @@ internal enum Intrinsic {
     BufferIsString,
     /// Identifies the array slot take operation for an `@intrinsic` declaration.
     ArraySlotTake,
-    /// Identifies the regex test operation for an `@intrinsic` declaration.
-    RegexTest,
     /// Identifies the channel new operation for an `@intrinsic` declaration.
     DreamChannelNew,
     /// Identifies the channel free operation for an `@intrinsic` declaration.

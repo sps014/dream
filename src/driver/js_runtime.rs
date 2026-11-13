@@ -108,23 +108,45 @@ pub(crate) fn runtime_src_dir() -> PathBuf {
     )
 }
 
-pub(crate) fn drawing_host_dir() -> PathBuf {
-    if let Some(path) = std::env::var_os("DREAM_DRAWING_WEB") {
+/// Directory holding a package's prebuilt web host files.
+pub(crate) fn web_assets_dir(assets: &dream_stdlib::WebAssets) -> PathBuf {
+    if let Some(path) = std::env::var_os(assets.env) {
         return PathBuf::from(path);
     }
     let source = runtime_src_dir();
     let installed = source
         .parent()
         .unwrap_or_else(|| Path::new("."))
-        .join("drawing");
-    if installed.join("dream_drawing.js").is_file() {
+        .join(assets.installed_dir);
+    if assets
+        .files
+        .first()
+        .is_some_and(|file| installed.join(file).is_file())
+    {
         installed
     } else {
         std::env::var_os("CARGO_TARGET_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target"))
-            .join("drawing-web")
+            .join(assets.development_dir)
     }
+}
+
+/// Web assets of every package that declares one of the live host imports.
+fn live_web_assets(live_imports: &[LiveImport]) -> Vec<&'static dream_stdlib::WebAssets> {
+    dream_stdlib::STD_PACKAGES
+        .iter()
+        .filter_map(|package| {
+            let assets = package.web_assets?;
+            live_imports
+                .iter()
+                .any(|(module, field)| {
+                    module == dream_abi::js_abi::HOST_MODULE
+                        && dream_stdlib::package_declares_runtime_field(package, field)
+                })
+                .then_some(assets)
+        })
+        .collect()
 }
 
 fn runtime_sources_at(exe: Option<&Path>, development: &Path) -> PathBuf {
@@ -358,25 +380,24 @@ pub(crate) fn emit_selective_runtimes(
     let abi: serde_json::Value =
         serde_json::from_slice(&fs::read(&abi_path)?).map_err(Error::other)?;
     let requirements = Requirements::from_abi(&abi, &live_imports)?;
-    if !targets.is_empty()
-        && live_imports
-            .iter()
-            .any(|(module, field)| module == "Dream" && field.starts_with("drawing"))
-    {
-        let source = drawing_host_dir();
+    let web_assets = if targets.is_empty() {
+        Vec::new()
+    } else {
+        live_web_assets(&live_imports)
+    };
+    for assets in web_assets {
+        let source = web_assets_dir(assets);
         let directory = Path::new(wat_path)
             .parent()
             .unwrap_or_else(|| Path::new("."));
-        for name in [
-            "dream_drawing.js",
-            "dream_drawing_bg.wasm",
-            "NotoSans-OFL.txt",
-        ] {
+        for name in assets.files {
             let input = source.join(name);
             if !input.is_file() {
                 return Err(Error::other(format!(
-                    "drawing browser host is missing {}: run python scripts/build-drawing-web.py, or set DREAM_DRAWING_WEB to the built host directory",
-                    input.display()
+                    "{} is missing {}: {}",
+                    assets.name,
+                    input.display(),
+                    assets.build_hint
                 )));
             }
             let output = directory.join(name);

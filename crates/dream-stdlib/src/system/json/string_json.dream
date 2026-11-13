@@ -1,0 +1,28 @@
+module system.json;
+
+// JSON encoding of `string` for `Json.serialize`, `Json.deserialize`, `Json.from_value` and the
+// collection encoders.
+extend string {
+    /// Appends this value as JSON as a quoted, escaped JSON string.
+    internal fun write_json(borrow sb: StringBuilder, borrow options: JsonOptions): void {
+        Json.write_string(sb, this);
+    }
+
+    /// Reads a `string` from a parsed JSON value; a value of another kind reads as the empty string.
+    internal static fun from_json(borrow v: JsonValue, borrow options: JsonOptions): string {
+        return v.as_string().unwrap_or("");
+    }
+
+    /// Appends this map key as a quoted JSON object key. Only `string` keys encode as JSON.
+    internal fun write_json_key(borrow sb: StringBuilder): void {
+        Json.write_string(sb, this);
+    }
+
+    /// Parses JSON text holding a single `string`.
+    internal static fun read_json(
+        borrow text: string,
+        borrow options: JsonOptions
+    ): Result<string, ParseError> {
+        return Json.read_parsed<string>(text, options);
+    }
+}

@@ -20,7 +20,7 @@ pub(super) fn link(
         .component()
         .ok_or("expected a component target")?;
     let sdk = config.locate_tool(
-        dream_abi::toolchain::pinned_tool("wasi-sdk").ok_or("missing WASI SDK registry")?,
+        dream_abi::toolchain::compiler_tool("wasi-sdk").ok_or("missing WASI SDK registry")?,
     )?;
     let clang = sdk.executable(&format!("bin/wasm32-{environment}-clang"));
     let mut paths = dream_mir::runtime::component_runtime_c_files(&config.runtime_c);

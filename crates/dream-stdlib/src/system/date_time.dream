@@ -2,7 +2,7 @@ module system;
 
 /// A calendar date and time of day.
 public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
-    @runtime("dateNowMillis")
+    @runtime("dateNowMillis", "core", RuntimeTrait.Component, RuntimeTrait.Quiet)
     static extern fun now_millis(): long;
 
     @runtime("dateLocalOffsetMinutes")

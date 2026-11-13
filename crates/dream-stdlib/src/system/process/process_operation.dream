@@ -22,23 +22,23 @@ internal class ProcessOperation {
         ProcessOperation.claim_host(this.id);
     }
 
-    @runtime("processStart")
+    @runtime("processStart", "process")
     static extern fun start_host(request: string, bytes: byte[]): int;
 
     @async_host
-    @runtime("processOperationWait")
+    @runtime("processOperationWait", "process")
     static extern async fun wait_host(id: int): int;
 
-    @runtime("processOperationResult")
+    @runtime("processOperationResult", "process")
     static extern fun result_host(id: int): byte[];
 
-    @runtime("processOperationCancel")
+    @runtime("processOperationCancel", "process")
     static extern fun cancel_host(id: int): void;
 
-    @runtime("processOperationRelease")
+    @runtime("processOperationRelease", "process")
     static extern fun release_host(id: int): void;
 
-    @runtime("processOperationClaim")
+    @runtime("processOperationClaim", "process")
     static extern fun claim_host(id: int): void;
 
     internal static fun request(action: string, handle: int): JsonValue {

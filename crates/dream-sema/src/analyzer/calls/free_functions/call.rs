@@ -446,7 +446,18 @@ impl<'a> Analyzer<'a> {
                     },
                     ctor_summary,
                 );
-                self.hir_set_new(&name.text, ctor, arg_hirs, &t);
+                let field_inits = if ctor.is_none() {
+                    self.implicit_constructor_field_inits(
+                        concrete_type,
+                        name.position,
+                        parent_function,
+                        symbol_table,
+                        diagnostics,
+                    )
+                } else {
+                    Vec::new()
+                };
+                self.hir_set_new(&name.text, ctor, arg_hirs, field_inits, &t);
                 if let Some(info) = resolved_ctor_name
                     .as_ref()
                     .and_then(|key| self.function_table.functions.get(key))
@@ -489,6 +500,10 @@ impl<'a> Analyzer<'a> {
                 &name.position,
                 diagnostics,
             );
+            if !self.member_requirements_met(template, &bindings, name.position, diagnostics) {
+                self.hir_none();
+                return Ok(Type::Unknown);
+            }
             // A constrained type parameter (`fun sort<T : Comparable<T>>(...)`) must be satisfied by
             // the concrete argument; report a clear error at the call site otherwise.
             self.verify_generic_constraints(

@@ -51,28 +51,28 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
         return this._path;
     }
 
-    @runtime("fileOpen")
+    @runtime("fileOpen", "core", RuntimeTrait.Component)
     static extern fun file_open(borrow path: string, borrow mode: string): int;
 
-    @runtime("fileHandleRead")
+    @runtime("fileHandleRead", "core", RuntimeTrait.Component)
     static extern fun file_handle_read(id: int, n: int): byte[];
 
-    @runtime("fileHandleWrite")
+    @runtime("fileHandleWrite", "core", RuntimeTrait.Component)
     static extern fun file_handle_write(id: int, borrow data: byte[]): long;
 
-    @runtime("fileHandleSeek")
+    @runtime("fileHandleSeek", "core", RuntimeTrait.Component)
     static extern fun file_handle_seek(id: int, pos: long): int;
 
-    @runtime("fileHandleTell")
+    @runtime("fileHandleTell", "core", RuntimeTrait.Component)
     static extern fun file_handle_tell(id: int): long;
 
-    @runtime("fileHandleSeekEnd")
+    @runtime("fileHandleSeekEnd", "core", RuntimeTrait.Component)
     static extern fun file_handle_seek_end(id: int, offset: long): int;
 
-    @runtime("fileHandleClose")
+    @runtime("fileHandleClose", "core", RuntimeTrait.Component)
     static extern fun file_handle_close(id: int): int;
 
-    @runtime("fileHandleLength")
+    @runtime("fileHandleLength", "core", RuntimeTrait.Component)
     static extern fun file_handle_length(id: int): long;
 
     static fun open_result(path: string, mode: string): Result<FileHandle, IoError> {

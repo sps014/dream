@@ -166,7 +166,7 @@ fn from_pin(project: &Path, name: &str, value: toml::Value) -> Result<ResolvedTo
 
 /// The shared pinned-tool table first, then the project's `dream.toml` `[tools]` pins.
 fn resolve(config: &ToolchainConfig, project: &Path, name: &str) -> Result<ResolvedTool, String> {
-    if let Some((tool, relative)) = dream_abi::toolchain::tool_providing(name) {
+    if let Some((tool, relative)) = dream_stdlib::toolchain::tool_providing(name) {
         return from_registry(config, name, tool, relative);
     }
     let manifest = project.join("dream.toml");

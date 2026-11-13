@@ -54,11 +54,11 @@ public class WebApp {
     }
 
     @native
-    @runtime("httpServerClose")
+    @runtime("httpServerClose", "net")
     static extern fun close_host(id: int): void;
 
     @native
-    @runtime("httpServerShutdown")
+    @runtime("httpServerShutdown", "net")
     static extern fun shutdown_host(id: int): void;
 
     /// Appends an outer-to-inner middleware layer before startup.

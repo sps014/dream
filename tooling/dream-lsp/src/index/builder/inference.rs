@@ -161,7 +161,10 @@ impl Builder {
             ExpressionNode::Binary(left, op, right) => match op.kind {
                 TokenKind::DotDotToken => {
                     let mut ctx = self.type_ctx.borrow_mut();
-                    let def = ctx.resolve(dream_types::DefKind::Struct, "Range")?;
+                    let def = ctx.resolve(
+                        dream_types::DefKind::Struct,
+                        dream_abi::core_items::RANGE_NAME,
+                    )?;
                     Some(ctx.instantiate(def, vec![]))
                 }
                 TokenKind::EqualEqualToken

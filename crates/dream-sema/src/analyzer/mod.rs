@@ -28,6 +28,7 @@ mod declarations;
 mod expressions;
 mod generics;
 mod hir_emit;
+mod member_requirements;
 pub mod ide;
 mod iterators;
 mod js_interop;
@@ -222,6 +223,10 @@ pub struct Analyzer<'a> {
     pending_lambdas: IndexMap<dream_types::DefId, (&'a FunctionNode<'a>, GenericBindings)>,
     /// Counter used to name synthesized lambda functions uniquely (`__lambda_<n>`).
     lambda_counter: usize,
+    /// Qualified core-type identity for a compiler-synthesized constructor (`system.collections::List`).
+    /// Set only while lowering a collection literal so a user type of the same short name cannot
+    /// shadow the core one. `None` for ordinary source calls.
+    core_ctor: Option<&'static str>,
     /// Names, local to the function currently being analyzed, that a nested lambda captures — and
     /// so must be boxed into a `CaptureCell<T>` rather than stored as a plain local (see
     /// `expressions::capture_scan::scan_function_captures`, run once as a pre-pass before the
@@ -467,6 +472,7 @@ impl<'a> Analyzer<'a> {
             instantiated_generics: IndexMap::new(),
             pending_lambdas: IndexMap::new(),
             lambda_counter: 0,
+            core_ctor: None,
             boxed_locals: HashSet::new(),
             ref_boxed_locals: HashSet::new(),
             unboxed_captures: HashSet::new(),

@@ -7,7 +7,7 @@ public static class Time {
     internal static extern async fun sleep_host(ms: int): void;
 
     @async_host
-    @runtime("delayMs")
+    @runtime("delayMs", "core", RuntimeTrait.Component)
     static extern async fun delay_host(ms: int): void;
 
     /// Suspends the calling task for at least `ms` milliseconds on Dream's scheduler timer.
@@ -58,6 +58,6 @@ public static class Time {
     /// Returns a monotonically increasing timestamp in nanoseconds from an unspecified
     /// origin. Subtract two readings to measure elapsed time; it is unrelated to wall-clock
     /// dates.
-    @runtime("timeNowNanos")
+    @runtime("timeNowNanos", "core", RuntimeTrait.Component, RuntimeTrait.Quiet)
     static extern fun nano_time(): long;
 }

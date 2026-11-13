@@ -4,13 +4,9 @@
 use dream_syntax::nodes::FunctionNode;
 use dream_types::{DefKind, TyKind, TypeCtx, TypeId};
 
-pub const ITERABLE: &str = "system.core::Iterable";
-pub const ASYNC_ITERABLE: &str = "system.core::AsyncIterable";
-pub const CHANNEL: &str = "system.core::YieldChannel";
-pub const SEQUENCE: &str = "system.core::YieldIterable";
-pub const ASYNC_SEQUENCE: &str = "system.core::YieldAsyncIterable";
-pub const LEASE: &str = "system.core::IteratorLease";
-pub const ASYNC_LEASE: &str = "system.core::AsyncIteratorLease";
+pub use crate::core_items::{
+    ASYNC_ITERABLE, ASYNC_LEASE, ASYNC_SEQUENCE, CHANNEL, ITERABLE, LEASE, SEQUENCE,
+};
 
 pub fn element(ctx: &TypeCtx, ty: TypeId, asynchronous: bool) -> Option<TypeId> {
     let TyKind::Interface(def, args) = ctx.interner.kind(ty) else {

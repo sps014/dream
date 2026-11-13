@@ -70,6 +70,9 @@ impl<'a> Analyzer<'a> {
             {
                 continue;
             }
+            if !self.member_requirements_hold(method, bindings) {
+                continue;
+            }
             let previous_file = std::mem::replace(
                 &mut diagnostics.file_path,
                 file_path_string(&method.file_path),
@@ -168,9 +171,19 @@ impl<'a> Analyzer<'a> {
                     .set_generic_params(def, generic_param_names(&method.generic_parameters));
                 self.generic_functions.insert(def, renamed_template);
                 self.generic_method_bindings.insert(def, bindings.clone());
+                let key = (target_type, member_name);
                 self.function_table
                     .generic_methods
-                    .insert((target_type, member_name), def);
+                    .entry(key.clone())
+                    .or_insert(def);
+                let overloads = self
+                    .function_table
+                    .generic_method_overloads
+                    .entry(key)
+                    .or_default();
+                if !overloads.contains(&def) {
+                    overloads.push(def);
+                }
                 self.function_table
                     .record_declaration(renamed_template, (def, Vec::new()));
                 self.record_ide_definition(def, &method.name, method.file_path.as_deref());

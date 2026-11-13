@@ -2,7 +2,7 @@ module system.net;
 
 /// Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send time.
 public static class HttpCapabilities {
-    @runtime("netCapabilities")
+    @runtime("netCapabilities", "net", RuntimeTrait.Component)
     static extern fun flags_host(): int;
 
     /// Whether clients can automatically store and send cookies using a managed CookieJar (native hosts).

@@ -95,11 +95,6 @@ INITIAL_HEAP_PAGES: u32 = 1 => "INITIAL_HEAP_PAGES";
 MAX_MEMORY_PAGES: u32 = 65536 => "MAX_MEMORY_PAGES";
 /// Base address (block start) of the interned string data segment; the heap begins above it.
 STRING_BASE: u32 = 1024 => "STRING_BASE";
-/// `RegexFlags.IgnoreCase` / `Multiline` / `DotAll` — lockstep with `dream_abi.h` and
-/// `regex_flags.dream`.
-DREAM_REGEX_IGNORE_CASE: i32 = 2 => "DREAM_REGEX_IGNORE_CASE";
-DREAM_REGEX_MULTILINE: i32 = 4 => "DREAM_REGEX_MULTILINE";
-DREAM_REGEX_DOTALL: i32 = 8 => "DREAM_REGEX_DOTALL";
 ALLOC_LOCK_ADDR: u32 = 44 => "ALLOC_LOCK_ADDR";
 HEAP_PTR_ADDR: u32 = 48 => "HEAP_PTR_ADDR";
 /// A monotonically increasing counter (`i32.atomic.rmw.add`) handing out a small, dense, unique id

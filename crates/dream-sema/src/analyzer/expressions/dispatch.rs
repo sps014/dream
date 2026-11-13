@@ -508,7 +508,21 @@ impl<'a> Analyzer<'a> {
             Some(type_args),
             args,
         );
-        self.analyze_expression(&call, ctx.parent_function, ctx.symbol_table, diagnostics)
+        let identity = match base {
+            dream_abi::core_items::LIST_NAME => Some(dream_abi::core_items::LIST),
+            dream_abi::core_items::SET_NAME => Some(dream_abi::core_items::SET),
+            dream_abi::core_items::MAP_NAME => Some(dream_abi::core_items::MAP),
+            dream_abi::core_items::ARRAY_NAME => Some(dream_abi::core_items::ARRAY),
+            _ => None,
+        };
+        let saved = self.core_ctor;
+        if identity.is_some() {
+            self.core_ctor = identity;
+        }
+        let result =
+            self.analyze_expression(&call, ctx.parent_function, ctx.symbol_table, diagnostics);
+        self.core_ctor = saved;
+        result
     }
 
     /// When the surrounding context expects `double`, retarget unsuffixed float/int literals so

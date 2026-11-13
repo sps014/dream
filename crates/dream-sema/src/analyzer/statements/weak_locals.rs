@@ -3,7 +3,7 @@ use dream_hir::HExpr;
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_types::{DefKind, TyKind};
 
-const WEAK_STORAGE: &str = "system.core::Weak";
+const WEAK_STORAGE: &str = dream_abi::core_items::WEAK;
 
 impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn weak_storage_type(target: &Type) -> Type {

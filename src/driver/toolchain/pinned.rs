@@ -126,7 +126,7 @@ impl ToolchainConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dream_abi::toolchain::pinned_tool;
+    use dream_stdlib::toolchain::pinned_tool;
 
     fn executable(path: &Path) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();

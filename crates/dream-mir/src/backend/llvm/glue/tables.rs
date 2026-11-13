@@ -464,14 +464,7 @@ fn emit_runtime_init(l: &mut Lcx<'_>) {
         {
             fx.call("dream_worker_isolate_threads", &[]);
         }
-        if !dream_abi::host_capability::HostCapability::required_for_imports(
-            fx.l.mir
-                .imports
-                .iter()
-                .map(|i| (i.module.as_str(), i.field.as_str())),
-        )
-        .is_empty()
-        {
+        if fx.l.mir.imports.iter().any(|i| i.host_capability.is_some()) {
             let bind = V::s(fx.l.fn_ref("dream_host_bind_v3"));
             fx.call("dream_capability_bind", &[bind]);
         }

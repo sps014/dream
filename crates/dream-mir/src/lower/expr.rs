@@ -170,10 +170,11 @@ impl Lowerer<'_> {
                 ctor,
                 args,
                 take_params,
+                field_inits,
                 ..
             } => {
                 let lowered = args.iter().map(|a| self.lower_operand(a)).collect();
-                Rvalue::New {
+                let new = Rvalue::New {
                     def: *def,
                     ty: e.ty,
                     ctor: ctor.map(|def| crate::NewCtor {
@@ -182,6 +183,23 @@ impl Lowerer<'_> {
                         take_params: take_params.clone(),
                     }),
                     args: lowered,
+                };
+                if field_inits.is_empty() {
+                    new
+                } else {
+                    let object = self.b.new_temp(e.ty);
+                    self.b.assign(Place::Local(object), new);
+                    for (field, value) in field_inits {
+                        let value = self.lower_rvalue(value);
+                        self.b.assign(
+                            Place::Field {
+                                base: object,
+                                field: *field,
+                            },
+                            value,
+                        );
+                    }
+                    Rvalue::Use(Operand::Copy(Place::Local(object)))
                 }
             }
             HExprKind::UnionNew { def, variant, args } => {

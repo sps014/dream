@@ -119,6 +119,7 @@ fn test_hir_emission_coalesce() {
     // runs outside the stdlib prelude, so it declares a minimal stand-in `Option<T>` with the
     // `unwrap_or` method the desugar dispatches to.
     let code = "
+        module system.core;
         enum Option<T> { Some(T), None }
         extend Option<T> {
             fun unwrap_or(fallback: T): T {
@@ -351,7 +352,7 @@ fn test_release_runtime_deep_release_del_and_dispatch() {
         "{SYSTEM_STUB}
                 @allow_cycle class Node {{ public next: Node; public v: int;
             del() {{ System.print(0); }}
-            public constructor(v: int) {{ this.v = v; }}
+            public constructor(v: int) {{ this.v = v; this.next = this; }}
         }}
         fun main(): void {{ let n: Node = Node(1); let o: object = n; }}"
     );
@@ -724,7 +725,7 @@ fn exec_probes_print_expected_output() {
 
         @allow_cycle
         class Node {
-            public next: Node;
+            public next: Option<Node>;
             del() {
                 System.print(1);
             }
@@ -798,7 +799,7 @@ fn exec_probes_print_expected_output() {
         fun container_store(): void {
             let a: Node = Node();
             let b: Node = Node();
-            a.next = b;
+            a.next = Some(b);
             System.print(0);
             let keep = a;
         }
@@ -950,7 +951,8 @@ fn test_hir_emission_first_class_function() {
     // `IndirectCall` — both are now HIR-representable, so `main` stays in coverage. The value is
     // boxed as a funcbox and invoked through the function table.
     let code = format!(
-        "{SYSTEM_STUB}
+        "module system.core;
+        {SYSTEM_STUB}
         {CLOSURE_STUB}
         fun add(a: int, b: int): int {{ return a + b; }}
         fun main(): void {{ let f = add; System.print(f(2, 3)); }}"
@@ -975,7 +977,8 @@ fn func_value_argument_is_reference_counted() {
     // and releases it like any other managed ref. A `string` bound alongside it is also counted —
     // both should see Retain/Release traffic after RC insertion.
     let code = format!(
-        "{SYSTEM_STUB}
+        "module system.core;
+        {SYSTEM_STUB}
         {CLOSURE_STUB}
         fun twice(x: int): int {{ return x * 2; }}
         fun apply(f: fun(int): int, s: string): int {{ return f(3); }}
@@ -1569,7 +1572,10 @@ fn test_async_emits_scheduler_runtime_and_poll() {
 #[test]
 fn mobile_async_entry_returns_to_the_platform_loop() {
     let code = format!(
-        "{ASYNC_STUB}
+        "module system.core;
+        {ASYNC_STUB}
+        @runtime(\"dream_window_app_main\", \"window\")
+        extern fun platform_main(argc: int, argv: isize, entry: isize, pump: isize): int;
         async fun delay(): void {{ Time.sleep(0).await; }}
         async fun main(): void {{ delay().await; }}"
     );

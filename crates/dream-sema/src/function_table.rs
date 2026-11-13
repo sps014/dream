@@ -13,7 +13,10 @@ pub struct FunctionTable {
     // Names only index lexical source scopes; selected functions retain their typed identity.
     scopes: IndexMap<(ModuleId, String), Vec<FunctionIdentity>>,
     pub methods: IndexMap<(TypeId, String), Vec<FunctionIdentity>>,
+    /// The first generic method declared under each name.
     pub generic_methods: IndexMap<(TypeId, String), DefId>,
+    /// Every generic method declared under each name, in declaration order; calls pick by arity.
+    pub generic_method_overloads: IndexMap<(TypeId, String), Vec<DefId>>,
     declarations: IndexMap<usize, FunctionIdentity>,
 }
 

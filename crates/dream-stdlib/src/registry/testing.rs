@@ -3,6 +3,10 @@ use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.testing",
     deps: &["system.core", "system.primitives", "system", "system.io"],
+    core_language: true,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &[],
     files: &[
         (

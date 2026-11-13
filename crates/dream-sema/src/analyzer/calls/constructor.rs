@@ -28,8 +28,12 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(Type, Option<crate::function_table::FunctionIdentity>), SemanticError> {
+        let pinned = self.core_ctor.filter(|identity| {
+            dream_abi::core_items::short_name(identity) == name.text
+        });
+        let lookup: &str = pinned.unwrap_or(name.text.as_str());
         let inferred_args = generic_args.clone().or_else(|| {
-            let def = self.type_ctx.resolve(DefKind::Struct, &name.text)?;
+            let def = self.type_ctx.resolve(DefKind::Struct, lookup)?;
             let template = *self.generic_struct(def)?;
             let parameters = template.generic_parameters.as_ref()?;
             let scope = self.type_ctx.scope();
@@ -60,16 +64,34 @@ impl<'a> Analyzer<'a> {
         });
         let generic_args = &inferred_args;
         if let Some(args) = generic_args {
-            self.ensure_struct_instantiated(&name.text, args, &name.position, diagnostics);
+            if lookup.contains("::")
+                && let Some(def) = self.type_ctx.resolve(DefKind::Struct, lookup)
+            {
+                let ids: Vec<_> = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+                self.ensure_struct_instance(
+                    def,
+                    dream_abi::core_items::short_name(lookup),
+                    ids,
+                    &name.position,
+                    diagnostics,
+                );
+            } else {
+                self.ensure_struct_instantiated(&name.text, args, &name.position, diagnostics);
+            }
         }
         let result = Type::Struct(name.clone(), generic_args.clone());
-        let owner = self.type_ctx.lower(&result);
+        let owner = if lookup.contains("::") {
+            self.core_struct_type(lookup, generic_args.as_ref())
+                .unwrap_or_else(|| self.type_ctx.lower(&result))
+        } else {
+            self.type_ctx.lower(&result)
+        };
         let struct_name = self.type_id_display(owner);
         let ctor_member = dream_syntax::nodes::types::CONSTRUCTOR_NAME;
         if generic_args.is_none()
             && self
                 .type_ctx
-                .resolve(DefKind::Struct, &name.text)
+                .resolve(DefKind::Struct, lookup)
                 .is_some_and(|def| self.generic_struct(def).is_some())
         {
             diagnostics.report_error(
@@ -196,5 +218,25 @@ impl<'a> Analyzer<'a> {
         }
 
         Ok((result, resolved_ctor.map(|sig| sig.identity)))
+    }
+
+    fn core_struct_type(
+        &mut self,
+        identity: &str,
+        generic_args: Option<&Vec<Type>>,
+    ) -> Option<dream_types::TypeId> {
+        let def = self.type_ctx.resolve(DefKind::Struct, identity)?;
+        let args: Vec<_> = generic_args
+            .into_iter()
+            .flatten()
+            .map(|arg| self.type_ctx.lower(arg))
+            .collect();
+        Some(if args.is_empty() {
+            self.type_ctx
+                .resolved_type(identity)
+                .unwrap_or_else(|| self.type_ctx.instantiate(def, Vec::new()))
+        } else {
+            self.type_ctx.instantiate(def, args)
+        })
     }
 }

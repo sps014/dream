@@ -2,7 +2,7 @@ module system.crypto;
 
 /// Cryptographically secure bytes with explicit entropy-source failures.
 public static class SecureRandom {
-    @runtime("cryptoSecureRandomBytes")
+    @runtime("cryptoSecureRandomBytes", "crypto", RuntimeTrait.Component)
     static extern fun bytes_host(n: int): byte[];
 
     /// Returns exactly n secure bytes, or EINVAL/EENTROPY without exposing partial output.

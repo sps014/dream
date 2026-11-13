@@ -26,6 +26,7 @@ impl<'a> Analyzer<'a> {
         let errors_before = diagnostics.errors().count();
         let outer_context = self.enter_generator_context(function);
         self.hir_begin_function(function);
+        self.hir_constructor_field_defaults(function, &param_table, diagnostics);
         let is_unsafe = dream_abi::attributes::has_unsafe_attr(&function.attributes);
         let runtime_support =
             dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);

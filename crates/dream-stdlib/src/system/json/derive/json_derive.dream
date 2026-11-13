@@ -5,14 +5,11 @@ import system.collections;
 import system.codegen;
 import system.json;
 
-// The `@json` derive: `to_json` / `write_json` / `from_json` for every `@json` type, plus the
-// `Json` collection adapters that `Json.serialize/deserialize/from_value` calls on collection
-// types need. One generated file, `json.dream`.
+// The `@json` derive: `to_json` / `write_json` / `from_json` / `read_json` for every `@json` type.
 /// Adds JSON serialization and deserialization methods for types annotated with `@json`.
 @generator
 @incremental
 @on_attribute(JsonAttribute)
-@on_call(Json.serialize, Json.deserialize, Json.from_value)
 internal fun json_derive(ctx: GenContext): void {
     let jsonable = List<string>();
     for (let e in ctx.type_index()) {
@@ -55,18 +52,6 @@ internal fun json_derive(ctx: GenContext): void {
             types.push(spec);
         }
     }
-    let collections = List<JsonCollectionSpec>();
-    let serialize = declof(Json.serialize);
-    for (let call in ctx.call_sites()) {
-        if !call.type_args.is_empty() {
-            for (let t in call.type_args) {
-                collect_collections(t, jsonable, collections);
-            }
-        } else if call.callee == serialize && !call.arg_types.is_empty() {
-            collect_collections(call.arg_types[0], jsonable, collections);
-        }
-    }
-
     let i = 0;
     while i < types.length {
         let result = JsonGenerator.members(types[i], json_names, jsonable);
@@ -76,14 +61,6 @@ internal fun json_derive(ctx: GenContext): void {
         }
         ctx.emit_extend(declarations[i], result.source);
         i++;
-    }
-    let collections_result = JsonGenerator.expand_collections(collections, json_names, jsonable);
-    if !collections_result.ok {
-        ctx.error(first_line(collections_result.error));
-        return;
-    }
-    if !collections_result.source.is_empty() {
-        ctx.emit_file("json.dream", collections_result.source);
     }
 }
 
@@ -209,127 +186,4 @@ fun error_target(ctx: GenContext, borrow failure: JsonGenOutput): string {
         return d.id;
     }
     return "";
-}
-
-fun json_elem_supported(borrow name: string, borrow jsonable: List<string>): bool {
-    let p = primitive_named(name);
-    if p
-        == Primitive.Int
-        || p
-        == Primitive.Long
-        || p
-        == Primitive.String
-        || p
-        == Primitive.Bool || p == Primitive.Double || p == Primitive.Float || p == Primitive.Float16 {
-        return true;
-    }
-    if name == nameof(JsonValue) {
-        return true;
-    }
-    for (let j in jsonable) {
-        if j == name {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Adapter order: array, list, map, set, sorted map.
-fun kind_rank(kind: CollectionKind): int {
-    if kind == CollectionKind.Array {
-        return 0;
-    }
-    if kind == CollectionKind.List {
-        return 1;
-    }
-    if kind == CollectionKind.Map {
-        return 2;
-    }
-    if kind == CollectionKind.Set {
-        return 3;
-    }
-    return 4;
-}
-
-// Orders specs by (kind, elem, value, self, suffix) so the generated adapters are stable.
-fun spec_compare(borrow a: JsonCollectionSpec, borrow b: JsonCollectionSpec): int {
-    let c = kind_rank(a.kind) - kind_rank(b.kind);
-    if c != 0 {
-        return c;
-    }
-    c = a.elem_type.compare(b.elem_type);
-    if c != 0 {
-        return c;
-    }
-    c = a.value_type.compare(b.value_type);
-    if c != 0 {
-        return c;
-    }
-    c = a.self_ty.compare(b.self_ty);
-    if c != 0 {
-        return c;
-    }
-    return a.fn_suffix.compare(b.fn_suffix);
-}
-
-fun insert_spec(
-    kind: CollectionKind,
-    elem_type: string,
-    value_type: string,
-    borrow ty: GenTypeRef,
-    borrow jsonable: List<string>,
-    out: List<JsonCollectionSpec>
-): void {
-    let checked = elem_type;
-    if kind == CollectionKind.Map || kind == CollectionKind.SortedMap {
-        checked = value_type;
-    }
-    if !json_elem_supported(checked, jsonable) {
-        return;
-    }
-    let spec = JsonCollectionSpec(
-        kind,
-        elem_type,
-        value_type,
-        ty.display,
-        ty.mangled.replace("[]", "__arr")
-    );
-    let i = 0;
-    while i < out.length {
-        let c = spec_compare(spec, out[i]);
-        if c == 0 {
-            return;
-        }
-        if c < 0 {
-            out.insert(i, spec);
-            return;
-        }
-        i = i + 1;
-    }
-    out.push(spec);
-}
-
-fun collect_collections(
-    borrow ty: GenTypeRef,
-    borrow jsonable: List<string>,
-    out: List<JsonCollectionSpec>
-): void {
-    let kind = ty.collection();
-    if kind == CollectionKind.Array || kind == CollectionKind.List || kind == CollectionKind.Set {
-        insert_spec(kind, ty.arg(0).mangled, "", ty, jsonable, out);
-        collect_collections(ty.arg(0), jsonable, out);
-        return;
-    }
-    if (kind == CollectionKind.Map || kind == CollectionKind.SortedMap)
-        && ty.arg(0)
-        .is_primitive(Primitive.String) {
-        insert_spec(kind, "", ty.arg(1).mangled, ty, jsonable, out);
-        collect_collections(ty.arg(1), jsonable, out);
-        return;
-    }
-    if ty.kind == TypeRefKind.Named || ty.kind == TypeRefKind.Tuple {
-        for (let a in ty.args) {
-            collect_collections(a, jsonable, out);
-        }
-    }
 }

@@ -34,6 +34,9 @@ pub struct Hir {
     /// Host/extern functions the module imports. The backend emits one `(import ...)` per entry;
     /// call sites resolve to `$name` (which the import declares).
     pub imports: Vec<HImport>,
+    /// Host symbol of the `@platform_main` extern, which the generated `main` calls on targets
+    /// whose operating system owns the main thread.
+    pub platform_main: Option<String>,
     /// `@intrinsic("key")` externs: each maps a callee `DefId` to its intrinsic key. These have no
     /// emitted body — call sites resolve directly to the runtime helper `$<key>` (e.g. `string_alloc`)
     /// or, for async intrinsics like `sleep`, are recognized by the backend and lowered to the
@@ -121,6 +124,15 @@ pub struct HImport {
     /// `@async_host` extern: on native the host takes the future as its leading argument and
     /// completes it from a foreign thread, so its poll delegates instead of blocking inline.
     pub async_host: bool,
+    /// Native capability library from `@runtime(field, host)`; `None` for core host services.
+    pub host_capability: Option<&'static str>,
+    /// `@component`: the standalone WASI component adapter implements this host service.
+    pub component: bool,
+    /// `@quiet`: the host reads only its own state, so ownership operations may move across it.
+    pub quiet: bool,
+    /// `@guest_export(name, symbol)`: runtime functions the guest exports while this import is
+    /// live, for a JavaScript host to call back into.
+    pub guest_exports: Vec<(String, String)>,
     /// `@marshal(StringEncoding.Utf16)` on a `@c` extern: strings cross as UTF-16.
     pub c_wide_strings: bool,
     /// `@c` only: how each parameter crosses the C boundary, parallel to `params`.

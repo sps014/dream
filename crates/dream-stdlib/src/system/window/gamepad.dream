@@ -69,6 +69,6 @@ public class Gamepad {
         return Gamepad.rumble_host(this.pad_slot, low, high, ms);
     }
 
-    @runtime("windowGamepadRumble")
+    @runtime("windowGamepadRumble", "window")
     static extern fun rumble_host(slot: int, low: float, high: float, ms: int): bool;
 }

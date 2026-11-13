@@ -43,38 +43,38 @@ public class Window {
         this.safe_insets = WindowInsets();
     }
 
-    @runtime("windowOpen")
+    @runtime("windowOpen", "window")
     static extern fun open_host(borrow title: string, width: int, height: int, flags: int): int;
 
     @web
     @runtime("windowCanvas")
     static extern fun canvas_host(borrow id: string, flags: int): int;
 
-    @runtime("windowError")
+    @runtime("windowError", "window")
     static extern fun error_host(): string;
 
-    @runtime("windowClose")
+    @runtime("windowClose", "window")
     static extern fun close_host(handle: int): void;
 
-    @runtime("windowPoll")
+    @runtime("windowPoll", "window")
     static extern fun poll_host(handle: int): float[];
 
-    @runtime("windowQuery")
+    @runtime("windowQuery", "window")
     static extern fun query_host(handle: int): float[];
 
-    @runtime("windowSetTitle")
+    @runtime("windowSetTitle", "window")
     static extern fun set_title_host(handle: int, borrow title: string): void;
 
-    @runtime("windowSetSize")
+    @runtime("windowSetSize", "window")
     static extern fun set_size_host(handle: int, width: int, height: int): void;
 
-    @runtime("windowSetFullscreen")
+    @runtime("windowSetFullscreen", "window")
     static extern fun set_fullscreen_host(handle: int, enabled: bool): void;
 
-    @runtime("windowSetCursorMode")
+    @runtime("windowSetCursorMode", "window")
     static extern fun set_cursor_mode_host(handle: int, mode: int): void;
 
-    @runtime("windowSetCursorIcon")
+    @runtime("windowSetCursorIcon", "window")
     static extern fun set_cursor_icon_host(handle: int, icon: int): void;
 
     /// Opens a native window configured by `options` and shows it.

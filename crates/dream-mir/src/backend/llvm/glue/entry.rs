@@ -64,8 +64,9 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
     } else {
         register(l, "main", Ty::I32, vec![Ty::I32, Ty::Ptr]);
         if l.cx.target.spec().hosts_event_loop() {
+            let host = platform_main_symbol(l);
             l.host(
-                dream_abi::c_abi::PLATFORM_APP_MAIN,
+                &host,
                 FnSig::plain(FnTy::new(Ty::I32, vec![Ty::I32, Ty::Ptr, Ty::Ptr, Ty::Ptr])),
             );
         }
@@ -296,12 +297,17 @@ fn platform_main(l: &mut Lcx<'_>) {
     }
     let entry = V::s(fx.l.fn_ref(crate::abi::GUEST_ENTRY_FN));
     let pump = V::s(fx.l.fn_ref("dream_scheduler_pump"));
-    let rc = fx.call_v(
-        dream_abi::c_abi::PLATFORM_APP_MAIN,
-        &[argc, argv, entry, pump],
-    );
+    let host = platform_main_symbol(fx.l);
+    let rc = fx.call_v(&host, &[argc, argv, entry, pump]);
     fx.w.ret(Some(&rc.v));
     fx.finish();
+}
+
+fn platform_main_symbol(l: &Lcx<'_>) -> String {
+    l.mir
+        .platform_main
+        .clone()
+        .expect("system.core declares the platform_main host loop")
 }
 
 fn native_main(l: &mut Lcx<'_>) {

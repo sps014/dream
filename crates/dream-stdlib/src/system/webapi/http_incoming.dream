@@ -81,7 +81,7 @@ public class HttpIncoming {
     }
 
     @native
-    @runtime("httpServerReleaseRequest")
+    @runtime("httpServerReleaseRequest", "net")
     static extern fun release_host(id: int): void;
 
     del() {

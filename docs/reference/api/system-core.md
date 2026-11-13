@@ -46,6 +46,7 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [RepeatableAttribute](core-repeatable-attribute.md)
 - [Result](core-result.md)
 - [RuntimeAttribute](core-runtime-attribute.md)
+- [RuntimeTrait](core-runtime-trait.md)
 - [Semaphore](core-semaphore.md)
 - [Span](core-span.md)
 - [String](core-string.md)

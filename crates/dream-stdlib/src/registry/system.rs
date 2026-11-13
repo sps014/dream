@@ -8,6 +8,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.text",
         "system.io",
     ],
+    core_language: true,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &[],
     files: &[
         (

@@ -14,7 +14,7 @@ internal class AudioEvents {
         this.lost_timestamp = 0L;
     }
 
-    @runtime("timeNowNanos")
+    @runtime("timeNowNanos", "core", RuntimeTrait.Component, RuntimeTrait.Quiet)
     internal static extern fun now(): long;
 
     internal fun push(event: AudioEvent): void {

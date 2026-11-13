@@ -365,7 +365,7 @@ impl<'a> Analyzer<'a> {
         matches!(ty, Type::Struct(tok, None) if tok.text == C_PTR_TYPE)
             && self
                 .type_ctx
-                .resolved_type(C_PTR_TYPE)
+                .resolved_type(dream_abi::core_items::C_PTR)
                 .is_some_and(|ty| self.struct_info(ty).is_some())
     }
 
@@ -373,7 +373,7 @@ impl<'a> Analyzer<'a> {
         matches!(ty, Type::Struct(tok, None) if tok.text == OWNED_C_PTR_TYPE)
             && self
                 .type_ctx
-                .resolved_type(OWNED_C_PTR_TYPE)
+                .resolved_type(dream_abi::core_items::OWNED_C_PTR)
                 .is_some_and(|ty| self.struct_info(ty).is_some())
     }
 

@@ -1,0 +1,12 @@
+module system.core;
+
+/// Behavior of a host service bound with `@runtime`.
+public enum RuntimeTrait {
+    /// The standalone WASI component adapter implements the service. A component build rejects
+    /// every other host import while it can still report a diagnostic.
+    Component,
+    /// The service reads only host state: it never touches Dream storage, retains or releases
+    /// Dream values, or calls back into the program, so the optimizer may move ownership
+    /// operations across the call. It does not make the call pure or let the optimizer hoist it.
+    Quiet,
+}

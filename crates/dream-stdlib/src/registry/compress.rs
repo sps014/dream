@@ -2,6 +2,10 @@ use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.compress",
     deps: &["system.io"],
+    core_language: false,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &[],
     files: &[
         (

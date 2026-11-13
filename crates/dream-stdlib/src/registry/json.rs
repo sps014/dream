@@ -8,6 +8,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.collections",
         "system.text",
     ],
+    core_language: false,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &["system.json.derive"],
     files: &[
         (
@@ -17,6 +21,78 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/json/json_value.dream",
             include_str!("../system/json/json_value.dream"),
+        ),
+        (
+            "<std>/system/json/int_json.dream",
+            include_str!("../system/json/int_json.dream"),
+        ),
+        (
+            "<std>/system/json/uint_json.dream",
+            include_str!("../system/json/uint_json.dream"),
+        ),
+        (
+            "<std>/system/json/long_json.dream",
+            include_str!("../system/json/long_json.dream"),
+        ),
+        (
+            "<std>/system/json/ulong_json.dream",
+            include_str!("../system/json/ulong_json.dream"),
+        ),
+        (
+            "<std>/system/json/byte_json.dream",
+            include_str!("../system/json/byte_json.dream"),
+        ),
+        (
+            "<std>/system/json/sbyte_json.dream",
+            include_str!("../system/json/sbyte_json.dream"),
+        ),
+        (
+            "<std>/system/json/short_json.dream",
+            include_str!("../system/json/short_json.dream"),
+        ),
+        (
+            "<std>/system/json/ushort_json.dream",
+            include_str!("../system/json/ushort_json.dream"),
+        ),
+        (
+            "<std>/system/json/float16_json.dream",
+            include_str!("../system/json/float16_json.dream"),
+        ),
+        (
+            "<std>/system/json/float_json.dream",
+            include_str!("../system/json/float_json.dream"),
+        ),
+        (
+            "<std>/system/json/double_json.dream",
+            include_str!("../system/json/double_json.dream"),
+        ),
+        (
+            "<std>/system/json/bool_json.dream",
+            include_str!("../system/json/bool_json.dream"),
+        ),
+        (
+            "<std>/system/json/string_json.dream",
+            include_str!("../system/json/string_json.dream"),
+        ),
+        (
+            "<std>/system/json/array_json.dream",
+            include_str!("../system/json/array_json.dream"),
+        ),
+        (
+            "<std>/system/json/list_json.dream",
+            include_str!("../system/json/list_json.dream"),
+        ),
+        (
+            "<std>/system/json/set_json.dream",
+            include_str!("../system/json/set_json.dream"),
+        ),
+        (
+            "<std>/system/json/map_json.dream",
+            include_str!("../system/json/map_json.dream"),
+        ),
+        (
+            "<std>/system/json/sorted_map_json.dream",
+            include_str!("../system/json/sorted_map_json.dream"),
         ),
         (
             "<std>/system/json/json_storage.dream",

@@ -84,9 +84,6 @@ fn every_native_dream_host_fn_is_declared_in_the_prelude() {
     for src in HOST_SOURCES {
         registered.extend(c_abi_fn_names(src));
     }
-    // The compiler links this entry directly. It is not a guest `@runtime` function.
-    registered.retain(|name| name != dream_abi::c_abi::PLATFORM_APP_MAIN);
-
     assert!(
         !registered.is_empty(),
         "scanner found no native Dream host functions; the pattern likely drifted"
@@ -116,19 +113,17 @@ fn capability_inventory_matches_each_library_exports() {
         (HostCapability::App, vec![HOST_SOURCES[9]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
-        let registered: HashSet<_> = capability.fields().iter().map(|s| s.to_string()).collect();
+        let declared: HashSet<_> = dream_stdlib::runtime_host_fields()
+            .into_iter()
+            .filter(|(_, host)| *host == capability.name())
+            .map(|(field, _)| field.to_string())
+            .collect();
         assert_eq!(
             exported,
-            registered,
+            declared,
             "{} export inventory",
             capability.name()
         );
-        for field in capability.fields() {
-            assert_eq!(
-                HostCapability::for_import(HOST_MODULE, field),
-                Some(capability)
-            );
-        }
     }
 }
 
@@ -158,6 +153,12 @@ const JS_HOST_SOURCES: &[&str] = &[
 // Satisfied by the runtime C archive (runtime/c/core/weak.c), not by any
 // JS host or capability ABI table — so they are exempt from the prelude/host parity check.
 const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "weakReleaseRaw"];
+// `@runtime` services compiled into the guest from runtime C on every target, so no JS host.
+const RUNTIME_C_SERVICES: &[&str] = &[
+    include_str!("../../dream-mir/src/runtime/c/regex.c"),
+    include_str!("../../dream-mir/src/runtime/c/core/audio_fft.c"),
+    include_str!("../../dream-mir/src/runtime/c/core/string_view.c"),
+];
 // Shared scheduling imports these bridges directly rather than through a stdlib extern.
 const RUNTIME_C_JS_IMPORTS: &[&str] = &[
     "cancellationSubscribe",
@@ -245,6 +246,11 @@ fn js_dream_host_keys_match_prelude_js_declarations() {
     let mut prelude_only: Vec<&String> = declared.difference(&js_keys).collect();
     prelude_only.retain(|n| !COMPILER_EMITTED_JS_RC.contains(&n.as_str()));
     prelude_only.retain(|n| !RUNTIME_ARCHIVE_KEYS.contains(&n.as_str()));
+    prelude_only.retain(|n| {
+        !RUNTIME_C_SERVICES
+            .iter()
+            .any(|src| src.contains(&format!(" {n}(")))
+    });
     assert!(
         js_only.is_empty() && prelude_only.is_empty(),
         "JS Dream host keys and prelude `@runtime` / `@js(\"Dream\", …)` declarations have drifted.\n\

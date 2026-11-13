@@ -20,6 +20,8 @@ pub(crate) struct ModuleAbi<'a> {
     pub execution_environment: dream_abi::target::ExecutionEnvironment,
     pub exports: &'a [String],
     pub export_functions: &'a [dream_abi::exports::ExportFunction],
+    /// Host field of the platform main loop, which the generated `main` calls itself.
+    pub platform_main: Option<&'a str>,
 }
 
 /// WASM custom-section name the JS loader reads with `WebAssembly.Module.customSections`.
@@ -156,6 +158,7 @@ pub(crate) fn build_abi_json(
     module: &ModuleAbi<'_>,
 ) -> String {
     let layouts = module.layouts;
+    let platform_main = module.platform_main;
     let live: BTreeSet<(&str, &str)> = live_imports
         .iter()
         .map(|(m, f)| (m.as_str(), f.as_str()))
@@ -252,11 +255,7 @@ pub(crate) fn build_abi_json(
     }
 
     let mut externs = Vec::new();
-    let host_capabilities = dream_abi::host_capability::HostCapability::required_for_imports(
-        live_imports
-            .iter()
-            .map(|(module, field)| (module.as_str(), field.as_str())),
-    );
+    let mut declared_capabilities = Vec::new();
     let mut c_lib_set: BTreeSet<String> = BTreeSet::new();
     let mut seen_fields: BTreeSet<(String, String)> = BTreeSet::new();
     let class_methods = program.structs.iter().flat_map(|s| s.methods.iter());
@@ -270,6 +269,11 @@ pub(crate) fn build_abi_json(
     {
         if let Some((module, field, entry, c_lib)) = extern_entry(func, layouts.target.ptr_size) {
             if !live.contains(&(module.as_str(), field.as_str())) {
+                continue;
+            }
+            declared_capabilities
+                .extend(dream_abi::attributes::runtime_host_capability(&func.attributes));
+            if platform_main.is_some_and(|host| host == field) {
                 continue;
             }
             if let Some(lib) = c_lib {
@@ -308,10 +312,10 @@ pub(crate) fn build_abi_json(
     // Struct map for `@c`-referenced unmanaged value types (native host consults it to marshal
     // struct-pointer params and to size out-struct writebacks).
     let structs_section = build_c_structs_section(program, &externs, layouts);
-    let host_capabilities = dream_abi::host_capability::HostCapability::ALL
-        .iter()
-        .filter(|capability| host_capabilities.contains(capability))
-        .map(|capability| format!("\"{}\"", capability.name()))
+    let host_capabilities =
+        dream_abi::host_capability::HostCapability::required(declared_capabilities)
+            .into_iter()
+            .map(|capability| format!("\"{}\"", capability.name()))
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -610,6 +614,7 @@ mod tests {
                 export_functions: &[],
                 target_triple: "",
                 execution_environment: dream_abi::target::ExecutionEnvironment::Native,
+                platform_main: None,
             },
         )
     }
@@ -685,6 +690,7 @@ mod tests {
                 export_functions: &[],
                 target_triple: "",
                 execution_environment: dream_abi::target::ExecutionEnvironment::Native,
+                platform_main: None,
             },
         );
         assert!(json.contains("\"c_libs\": [\"z\"]"), "{}", json);
@@ -851,6 +857,7 @@ mod tests {
                     export_functions: &[],
                     target_triple: "",
                     execution_environment: dream_abi::target::ExecutionEnvironment::Native,
+                    platform_main: None,
                 },
             );
             assert!(

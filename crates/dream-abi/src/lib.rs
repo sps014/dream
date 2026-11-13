@@ -5,8 +5,8 @@
 
 pub mod attributes;
 pub mod c_abi;
+pub mod core_items;
 pub mod exports;
-pub mod gpu_bindings;
 pub mod guest_contract;
 pub mod host_capability;
 pub mod intrinsics;

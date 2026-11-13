@@ -17,7 +17,7 @@ public static class Json
 Encodes `value` as compact JSON text, with field names as declared. User-defined types need `@json`.
 
 ```dream
-public static extern fun serialize<T>(borrow value: T): string
+public static fun serialize<T>(borrow value: T): string
 ```
 
 ## `serialize`
@@ -25,7 +25,7 @@ public static extern fun serialize<T>(borrow value: T): string
 Encodes `value` as JSON text using `options` for property naming, whether `None` fields are written, and indentation. User-defined types need `@json`.
 
 ```dream
-public static extern fun serialize<T>(borrow value: T, borrow options: JsonOptions): string
+public static fun serialize<T>(borrow value: T, borrow options: JsonOptions): string
 ```
 
 ## `deserialize`
@@ -33,7 +33,7 @@ public static extern fun serialize<T>(borrow value: T, borrow options: JsonOptio
 Decodes JSON text as `T`, returning `ParseError` if it cannot be decoded. Property names must match field names exactly. User-defined types need `@json`.
 
 ```dream
-public static extern fun deserialize<T>(borrow text: string): Result<T, ParseError>
+public static fun deserialize<T>(borrow text: string): Result<T, ParseError>
 ```
 
 ## `deserialize`
@@ -41,7 +41,7 @@ public static extern fun deserialize<T>(borrow text: string): Result<T, ParseErr
 Decodes JSON text as `T`, matching property names to fields as `options` describes. Returns `ParseError` if the text cannot be decoded. User-defined types need `@json`.
 
 ```dream
-public static extern fun deserialize<T>(
+public static fun deserialize<T>(
     borrow text: string,
     borrow options: JsonOptions
 ): Result<T, ParseError>
@@ -52,7 +52,7 @@ public static extern fun deserialize<T>(
 Builds a `@json` value from an already-parsed `JsonValue`. Missing or mismatched properties take the field defaults.
 
 ```dream
-public static extern fun from_value<T>(borrow value: JsonValue): T
+public static fun from_value<T>(borrow value: JsonValue): T
 ```
 
 ## `from_value`
@@ -60,5 +60,5 @@ public static extern fun from_value<T>(borrow value: JsonValue): T
 Builds a `@json` value from an already-parsed `JsonValue`, matching property names to fields as `options` describes. Missing or mismatched properties take the field defaults.
 
 ```dream
-public static extern fun from_value<T>(borrow value: JsonValue, borrow options: JsonOptions): T
+public static fun from_value<T>(borrow value: JsonValue, borrow options: JsonOptions): T
 ```

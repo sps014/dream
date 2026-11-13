@@ -123,7 +123,7 @@ fn registry_and_pinned_tools_run_in_parallel_with_opaque_outputs() {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     };
     let toolchains = root.path().join("toolchains");
-    let slang = toolchains.join(format!("slang-{}", dream_abi::toolchain::SLANG_VERSION));
+    let slang = toolchains.join(dream_stdlib::toolchain::pinned_tool("slang").unwrap().install_dir());
     executable(
         &slang.join("bin/slangc"),
         include_bytes!("cases/support/generator_framework/tools/slangc.sh"),

@@ -2,19 +2,17 @@
 
 use std::path::{Path, PathBuf};
 
-use dream_abi::intrinsics::{
-    ATTR_REGEX_COMPILE, ATTR_REGEX_FIND, ATTR_REGEX_FIND_ALL, ATTR_REGEX_FREE,
-    ATTR_REGEX_GROUP_COUNT, ATTR_REGEX_NAME_AT, ATTR_REGEX_NAME_COUNT, ATTR_REGEX_NAME_NUMBER,
-};
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RuntimeNeed(u32);
 
 impl RuntimeNeed {
     pub const CORE: Self = Self(1 << 0);
-    pub const REGEX: Self = Self(1 << 1);
-    pub const AUDIO_FFT: Self = Self(1 << 2);
-    pub const AUDIO_DECODE: Self = Self(1 << 3);
+
+    /// An optional module's bit. Prebuilt runtime directories are keyed by these values, so a
+    /// module keeps its bit for as long as it exists.
+    const fn module(bit: u32) -> Self {
+        Self(1 << bit)
+    }
 
     pub fn bits(self) -> u32 {
         self.0
@@ -41,16 +39,6 @@ impl RuntimeNeed {
         }
         sets
     }
-
-    pub fn name(self) -> &'static str {
-        if self == Self::CORE {
-            "core"
-        } else if self == Self::REGEX {
-            "regex"
-        } else {
-            "mixed"
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -75,8 +63,15 @@ pub struct RuntimeModule {
     pub intrinsic_keys: &'static [&'static str],
     /// `@runtime` host fields whose native and component implementations live in this module.
     pub host_fields: &'static [&'static str],
+    /// The module only reads or writes its own buffers. Callers may treat it as ownership-quiet.
+    pub quiet: bool,
+    /// wasm32 links standard C routines from the WASI libc archive (codec parsers use more of
+    /// libc than Dream's freestanding subset).
+    pub wasi_libc: bool,
     /// Guest functions a JS host calls on a private instance of a browser/Node module.
     pub worker_exports: &'static [&'static str],
+    /// Declarations of `exports` that LLVM glue may call, parsed for runtime signatures.
+    pub header: &'static str,
 }
 
 const AUDIO_DECODE_HOSTS: &[&str] = &[
@@ -100,7 +95,7 @@ const AUDIO_DECODE_HOSTS: &[&str] = &[
 pub const RUNTIME_MODULES: &[RuntimeModule] = &[
     RuntimeModule {
         id: "audio_fft",
-        need: RuntimeNeed::AUDIO_FFT,
+        need: RuntimeNeed::module(2),
         shared_c: &["core/audio_fft.c"],
         native_runtime_c: &[],
         native_extra_c: &[],
@@ -111,13 +106,16 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
         native_defines: &["DREAM_NATIVE"],
         include_dirs: &["core/include"],
         exports: &["dream_audio_fft"],
-        intrinsic_keys: &["dream_audio_fft"],
-        host_fields: &[],
+        intrinsic_keys: &[],
+        host_fields: &["dream_audio_fft"],
+        quiet: true,
+        wasi_libc: true,
         worker_exports: &[],
+        header: "",
     },
     RuntimeModule {
         id: "audio_decode",
-        need: RuntimeNeed::AUDIO_DECODE,
+        need: RuntimeNeed::module(3),
         shared_c: &[
             "core/audio_decode.c",
             "core/audio_webm.c",
@@ -142,6 +140,8 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
         exports: AUDIO_DECODE_HOSTS,
         intrinsic_keys: &[],
         host_fields: AUDIO_DECODE_HOSTS,
+        quiet: false,
+        wasi_libc: true,
         worker_exports: &[
             "dream_audio_worker_alloc",
             "dream_audio_worker_free",
@@ -151,10 +151,11 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
             "dream_audio_worker_stream_reposition",
             "dream_audio_worker_stream_close",
         ],
+        header: "",
     },
     RuntimeModule {
         id: "regex",
-        need: RuntimeNeed::REGEX,
+        need: RuntimeNeed::module(1),
         shared_c: &["regex.c"],
         native_runtime_c: &[],
         native_extra_c: &["pcre2/pcre2_jit_compile.c"],
@@ -185,18 +186,46 @@ pub const RUNTIME_MODULES: &[RuntimeModule] = &[
             "regex_find_all",
             "regex_test",
         ],
-        intrinsic_keys: &[
-            ATTR_REGEX_COMPILE,
-            ATTR_REGEX_FREE,
-            ATTR_REGEX_FIND,
-            ATTR_REGEX_FIND_ALL,
-            ATTR_REGEX_GROUP_COUNT,
-            ATTR_REGEX_NAME_COUNT,
-            ATTR_REGEX_NAME_AT,
-            ATTR_REGEX_NAME_NUMBER,
+        intrinsic_keys: &[],
+        host_fields: &[
+            "regex_compile",
+            "regex_free",
+            "regex_find",
+            "regex_find_all",
+            "regex_group_count",
+            "regex_name_count",
+            "regex_name_at",
+            "regex_name_number",
+            "regex_test",
         ],
-        host_fields: &[],
+        quiet: true,
+        wasi_libc: false,
         worker_exports: &[],
+        header: "",
+    },
+    RuntimeModule {
+        id: "gpu_bundle",
+        need: RuntimeNeed::module(4),
+        shared_c: &["core/gpu_bundle.c"],
+        native_runtime_c: &[],
+        native_extra_c: &[],
+        wasm_extra_c: &[],
+        vendor_sources: None,
+        vendor_runtime_exports: &[],
+        wasm_defines: &["DREAM_WASM32"],
+        native_defines: &["DREAM_NATIVE"],
+        include_dirs: &["include"],
+        exports: &[
+            "dream_gpu_bundle_abi_version",
+            "dream_gpu_bundle_index",
+            "dream_gpu_bundle_error",
+        ],
+        intrinsic_keys: &[],
+        host_fields: &[],
+        quiet: false,
+        wasi_libc: false,
+        worker_exports: &[],
+        header: include_str!("c/include/dream_gpu_bundle.h"),
     },
 ];
 
@@ -221,7 +250,6 @@ pub const CORE_C: &[&str] = &[
     "inlines.c",
     "memory.c",
     "utf8.c",
-    "gpu_bundle.c",
     "capability.c",
 ];
 const NATIVE_HEAP_C: &[&str] = &["heap.c", "heap_maps.c", "heap_slabs.c", "heap_large.c"];
@@ -421,6 +449,28 @@ pub fn worker_exports(need: RuntimeNeed) -> impl Iterator<Item = &'static str> {
 }
 
 /// Matches intrinsic keys and `@runtime` host fields alike.
+/// True when `field` is an `@runtime` import whose runtime module only touches its own buffers.
+/// A `@runtime` field implemented by a runtime C module, so every target that links the module
+/// provides it, including standalone WASI components.
+pub fn runtime_module_host_field(field: &str) -> bool {
+    RUNTIME_MODULES
+        .iter()
+        .any(|module| module.host_fields.contains(&field))
+}
+
+/// True when a selected module needs the WASI libc archive on wasm32.
+pub fn needs_wasi_libc(need: RuntimeNeed) -> bool {
+    RUNTIME_MODULES
+        .iter()
+        .any(|m| m.wasi_libc && need.contains(m.need))
+}
+
+pub fn ownership_quiet_host(field: &str) -> bool {
+    RUNTIME_MODULES.iter().any(|module| {
+        module.quiet && (module.host_fields.contains(&field) || module.exports.contains(&field))
+    })
+}
+
 pub fn runtime_need_from_keys<'a, I>(keys: I) -> RuntimeNeed
 where
     I: IntoIterator<Item = &'a str>,
@@ -428,7 +478,10 @@ where
     let mut need = RuntimeNeed::CORE;
     for key in keys {
         for m in RUNTIME_MODULES {
-            if m.intrinsic_keys.contains(&key) || m.host_fields.contains(&key) {
+            if m.intrinsic_keys.contains(&key)
+                || m.host_fields.contains(&key)
+                || m.exports.contains(&key)
+            {
                 need.insert(m.need);
             }
         }
@@ -441,7 +494,12 @@ pub fn runtime_need_from_mir(mir: &crate::Mir) -> RuntimeNeed {
         mir.intrinsics
             .iter()
             .map(|(_, k)| k.as_str())
-            .chain(mir.imports.iter().map(|import| import.field.as_str())),
+            .chain(mir.imports.iter().map(|import| import.field.as_str()))
+            .chain(
+                mir.imports
+                    .iter()
+                    .flat_map(|import| import.guest_exports.iter().map(|(_, s)| s.as_str())),
+            ),
     )
 }
 
@@ -532,6 +590,10 @@ pub fn native_runtime_units(root: &Path, need: RuntimeNeed) -> Vec<NativeCompile
 mod tests {
     use super::*;
 
+    fn need_of(id: &str) -> RuntimeNeed {
+        RUNTIME_MODULES.iter().find(|m| m.id == id).unwrap().need
+    }
+
     #[test]
     fn catalog_sources_exist_on_disk() {
         let c = PathBuf::from(SOURCE_RUNTIME_C_DIR);
@@ -573,17 +635,17 @@ mod tests {
     fn regex_need_from_intrinsic_keys() {
         let n = runtime_need_from_keys(["regex_compile", "print"]);
         assert!(n.contains(RuntimeNeed::CORE));
-        assert!(n.contains(RuntimeNeed::REGEX));
+        assert!(n.contains(need_of("regex")));
         let core = runtime_need_from_keys(["print"]);
         assert!(core.contains(RuntimeNeed::CORE));
-        assert!(!core.contains(RuntimeNeed::REGEX));
+        assert!(!core.contains(need_of("regex")));
     }
 
     #[test]
     fn audio_decode_need_from_host_fields() {
         let need = runtime_need_from_keys(["audioDecodeStart"]);
-        assert!(need.contains(RuntimeNeed::AUDIO_DECODE));
-        assert!(!runtime_need_from_keys(["audioOutputStart"]).contains(RuntimeNeed::AUDIO_DECODE));
+        assert!(need.contains(need_of("audio_decode")));
+        assert!(!runtime_need_from_keys(["audioOutputStart"]).contains(need_of("audio_decode")));
         assert!(worker_exports(need).any(|name| name == "dream_audio_worker_decode"));
         assert_eq!(worker_exports(RuntimeNeed::CORE).count(), 0);
     }
@@ -630,7 +692,7 @@ mod tests {
             core.iter()
                 .all(|p| p.file_name().and_then(|n| n.to_str()) != Some("regex.c"))
         );
-        let with = native_runtime_c_files(RuntimeNeed::CORE.union(RuntimeNeed::REGEX));
+        let with = native_runtime_c_files(RuntimeNeed::CORE.union(need_of("regex")));
         assert!(
             with.iter()
                 .any(|p| p.file_name().and_then(|n| n.to_str()) == Some("regex.c"))

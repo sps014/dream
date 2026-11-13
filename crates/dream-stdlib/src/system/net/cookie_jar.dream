@@ -14,13 +14,13 @@ public class CookieJar {
         CookieJar.close_host(this.id);
     }
 
-    @runtime("netCookieJarCreate")
+    @runtime("netCookieJarCreate", "net", RuntimeTrait.Component)
     static extern fun create_host(): int;
 
-    @runtime("netCookieJarClose")
+    @runtime("netCookieJarClose", "net", RuntimeTrait.Component)
     static extern fun close_host(id: int): void;
 
-    @runtime("netCookieJarControl")
+    @runtime("netCookieJarControl", "net", RuntimeTrait.Component)
     static extern fun control_host(id: int, borrow request: string): string;
 
     /// Processes one Set-Cookie value as received from `url`, including replacement and expiry.

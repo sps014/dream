@@ -104,6 +104,51 @@ let b = Point(3, 4); // (3, 4)
 let c = Point(5); // (5, 5)
 ```
 
+### Field defaults
+
+A field the constructor does not set starts with a default value, so every field is safe to read. Numbers are `0`, `bool` is `false`, `string` is `""`, and `Option<T>` is `None`. An array field starts empty. A field whose type is a class or struct starts as that type's zero-argument constructor, so a `List<int>` field starts as an empty list. A union field starts as its first choice that carries no fields.
+
+```dream
+import system.collections;
+
+class Inventory {
+    public owner: string;
+    public items: List<string>;
+    public counts: int[];
+}
+
+let inv = Inventory();
+inv.items.push("lamp");
+System.println(inv.items.length); // 1
+System.println(inv.counts.length); // 0
+```
+
+A constructor can still assign any field itself, and a default is skipped for a field the constructor assigns on every path. Some fields have no default. Every constructor must assign them on every path, and the compiler reports an error when one does not. A class without a constructor of its own reports it where `T()` is called. These fields are:
+
+- fields of an interface or function type
+- fields of a union type in which every choice carries fields
+- fields of a class or struct type that has no zero-argument constructor
+- fields whose default would build another object of the enclosing type, such as `next: Node` inside `Node` (use `Option<Node>` for links like that)
+
+```dream
+class Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+class Marker {
+    public at: Point;
+}
+
+let m = Marker();
+// error: 'Marker' needs a constructor that assigns field 'at': 'Point' has no default value
+```
+
 ## Structs are value types
 
 A `struct` is stored inline (on the stack, inside an array, or inside another object), and every assignment or argument pass makes an independent **copy** (not a last-use [move](../memory/ownership.md)):

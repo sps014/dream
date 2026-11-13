@@ -2,7 +2,7 @@ module system.io;
 
 /// Availability of secure OS temporary resources on this target.
 public static class TempCapabilities {
-    @runtime("tempSupported")
+    @runtime("tempSupported", "io")
     static extern fun supported_host(): bool;
 
     /// True on native and Node; browser virtual filesystems do not provide OS-private resources.

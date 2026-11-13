@@ -125,90 +125,6 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// True when `@json` derive (or a built-in JSON leaf / collection of those) can encode `ty`.
-    /// Used by `Json.serialize` so analysis without the generator (LSP) still accepts
-    /// `Map<string, string>` and still rejects `object`.
-    pub(in crate::analyzer) fn json_type_encodable(&self, ty: dream_types::TypeId) -> bool {
-        use dream_types::{PrimTy, TyKind};
-        match self.type_ctx.interner.kind(ty) {
-            TyKind::Error => true,
-            TyKind::Prim(p) => matches!(
-                p,
-                PrimTy::Int
-                    | PrimTy::UInt
-                    | PrimTy::Long
-                    | PrimTy::ULong
-                    | PrimTy::Byte
-                    | PrimTy::SByte
-                    | PrimTy::Short
-                    | PrimTy::UShort
-                    | PrimTy::Float16
-                    | PrimTy::Float
-                    | PrimTy::Double
-                    | PrimTy::Bool
-                    | PrimTy::String
-            ),
-            TyKind::Array(elem) => self.json_type_encodable(*elem),
-            TyKind::Tuple(elems) => elems.iter().all(|e| self.json_type_encodable(*e)),
-            TyKind::Struct(def, args) | TyKind::Union(def, args) => {
-                let name = self.type_ctx.defs.name(*def);
-                let builtin = self.program.structs.iter().any(|declaration| {
-                    declaration.name.text == name
-                        && self.graph.module_for_file(declaration.file_path.as_deref())
-                            == def.module
-                        && declaration
-                            .file_path
-                            .as_deref()
-                            .is_some_and(dream_stdlib::is_std_source)
-                }) || self.program.enums.iter().any(|declaration| {
-                    declaration.name.text == name
-                        && self.graph.module_for_file(declaration.file_path.as_deref())
-                            == def.module
-                        && declaration
-                            .file_path
-                            .as_deref()
-                            .is_some_and(dream_stdlib::is_std_source)
-                });
-                if builtin && name == "JsonValue" {
-                    return true;
-                }
-                if builtin && matches!(name, "List" | "Set" | "Option") {
-                    return args.len() == 1 && self.json_type_encodable(args[0]);
-                }
-                if builtin && matches!(name, "Map" | "SortedMap") {
-                    return args.len() == 2
-                        && matches!(
-                            self.type_ctx.interner.kind(args[0]),
-                            TyKind::Prim(PrimTy::String)
-                        )
-                        && self.json_type_encodable(args[1]);
-                }
-                self.json_decl_has_attr(*def)
-            }
-            TyKind::Enum(def) => self.json_decl_has_attr(*def),
-            _ => false,
-        }
-    }
-
-    pub(in crate::analyzer) fn json_decl_has_attr(&self, def: dream_types::DefId) -> bool {
-        let is_json = |attrs: &[dream_syntax::nodes::AttributeNode]| {
-            attrs.iter().any(|attribute| {
-                attribute.resolved_id.get().map(String::as_str)
-                    == Some(dream_abi::attributes::JSON_ATTRIBUTE_ID)
-            })
-        };
-        let info = self.type_ctx.defs.get(def);
-        self.program.structs.iter().any(|declaration| {
-            declaration.name.text == info.name
-                && self.graph.module_for_file(declaration.file_path.as_deref()) == def.module
-                && is_json(&declaration.attributes)
-        }) || self.program.enums.iter().any(|declaration| {
-            declaration.name.text == info.name
-                && self.graph.module_for_file(declaration.file_path.as_deref()) == def.module
-                && is_json(&declaration.attributes)
-        })
-    }
-
     /// Pretty-prints an AST type for diagnostics via the interned type graph.
     /// Use this (or [`Self::ty_str_display`]) in every user-facing message; [`Type::get_type`]
     /// is the mangled identity spelling (`List_List_Point`) and must not appear in diagnostics.
@@ -313,5 +229,12 @@ impl<'a> Analyzer<'a> {
                 .type_ctx
                 .resolve(DefKind::Enum, &base)
                 .is_some_and(|def| self.enum_members(def).is_some())
+    }
+
+    /// True when `def` is the core-language declaration named by a qualified identity
+    /// (`system.core::Option`). A same-named user declaration does not match.
+    pub(in crate::analyzer) fn is_core_def(&self, def: dream_types::DefId, identity: &str) -> bool {
+        let kind = self.type_ctx.defs.get(def).kind;
+        self.type_ctx.resolve(kind, identity) == Some(def)
     }
 }

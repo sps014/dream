@@ -3,14 +3,11 @@
 use super::{Known, ModRef};
 use dream_abi::intrinsics::IntrinsicOp;
 
-pub(super) fn host_summary(module: &str, field: &str) -> Option<ModRef> {
-    // Clock hosts read system state without accessing Dream storage or invoking callbacks.
-    // This ownership fact does not imply purity or permit hoisting the clock reading.
-    (module == crate::abi::HOST_MODULE
-        && matches!(
-            field,
-            crate::abi::TIME_NOW_NANOS | crate::abi::DATE_NOW_MILLIS
-        ))
+pub(super) fn host_summary(import: &dream_hir::HImport) -> Option<ModRef> {
+    // A quiet host reads system state without accessing Dream storage or invoking callbacks.
+    // This ownership fact does not imply purity or permit hoisting the call.
+    (import.module == crate::abi::HOST_MODULE
+        && (import.quiet || crate::runtime::modules::ownership_quiet_host(&import.field)))
     .then(ModRef::default)
 }
 /// Summary of a bodiless intrinsic's runtime helper, or `None` (opaque) if it may run user code
@@ -44,7 +41,6 @@ pub(super) fn intrinsic_summary(op: IntrinsicOp) -> Option<ModRef> {
             | I::ToBytes
             | I::FromBytes
             | I::ArrayGetUnchecked
-            | I::Regex
             | I::Float(_)
     ) || op.is_simd();
     // A panic aborts the process and never unwinds, so no later read can observe what its hook
@@ -77,12 +73,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn clock_hosts_are_ownership_quiet_and_other_imports_remain_unknown() {
-        for field in [crate::abi::TIME_NOW_NANOS, crate::abi::DATE_NOW_MILLIS] {
-            assert!(host_summary(crate::abi::HOST_MODULE, field).is_some_and(|s| s.is_quiet()));
-            assert!(host_summary("foreign", field).is_none());
-        }
-        assert!(host_summary(crate::abi::HOST_MODULE, "unknown").is_none());
+    fn quiet_host_imports_are_ownership_quiet_and_other_imports_remain_unknown() {
+        let import = |module: &str, field: &str, quiet: bool| dream_hir::HImport {
+            def: dream_types::DefId::root(0),
+            name: field.to_string(),
+            module: module.to_string(),
+            field: field.to_string(),
+            params: vec![],
+            param_by_ref: vec![],
+            ret: None,
+            is_async: false,
+            async_host: false,
+            host_capability: None,
+            component: false,
+            quiet,
+            guest_exports: vec![],
+            c_wide_strings: false,
+            c_params: vec![],
+            c_ret: dream_hir::CShape::Void,
+        };
+        let host = crate::abi::HOST_MODULE;
+        assert!(host_summary(&import(host, "timeNowNanos", true)).is_some_and(|s| s.is_quiet()));
+        assert!(host_summary(&import("foreign", "timeNowNanos", true)).is_none());
+        assert!(host_summary(&import(host, "unknown", false)).is_none());
+        assert!(host_summary(&import(host, "regex_test", false)).is_some_and(|s| s.is_quiet()));
     }
 
     #[test]

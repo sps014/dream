@@ -150,6 +150,9 @@ internal static class JsonGenerator {
         if JsonGenerator.name_in(json_names, elem_type) {
             return access + ".to_json()";
         }
+        if JsonGenerator.encodable(elem_type, json_names) {
+            return "Json.parse(Json.serialize(" + access + ")).unwrap_or(JsonValue.null())";
+        }
         return "";
     }
 
@@ -186,6 +189,9 @@ internal static class JsonGenerator {
         if JsonGenerator.name_in(json_names, elem_type) {
             return elem_type + ".from_json(" + jexpr + ", __options)";
         }
+        if JsonGenerator.encodable(elem_type, json_names) {
+            return "Json.from_value<" + elem_type + ">(" + jexpr + ", __options)";
+        }
         return "";
     }
 
@@ -211,10 +217,82 @@ internal static class JsonGenerator {
             == Primitive.Bool || primitive_named(elem_type) == Primitive.String {
             return true;
         }
-        if elem_type == nameof(JsonValue) {
+        return JsonGenerator.encodable(elem_type, json_names);
+    }
+
+    // True when `ty` provides `write_json` and `from_json`: a JSON scalar, `JsonValue`, a `@json`
+    // type, or a list, set, array or string-keyed map of such types, nested to any depth.
+    static fun encodable(ty: string, borrow json_names: List<string>): bool {
+        let t = JsonGenerator.trim_type(ty);
+        if JsonGenerator.is_json_scalar(t) || t == nameof(JsonValue) {
             return true;
         }
-        return JsonGenerator.name_in(json_names, elem_type);
+        if JsonGenerator.name_in(json_names, t) {
+            return true;
+        }
+        if t.ends_with("[]") {
+            return JsonGenerator.encodable(t.substring(0, t.length - 2), json_names);
+        }
+        let open = t.index_of('<');
+        let open_at = 0;
+        switch (open) {
+            Some(i) => {
+                open_at = i;
+            },
+            None => {
+                return false;
+            },
+        }
+        if t.ends_with(">") == false {
+            return false;
+        }
+        let base = t.substring(0, open_at);
+        let args = JsonGenerator.type_args(t.substring(open_at + 1, t.length - 1));
+        if (base == "List" || base == "Set") && args.length == 1 {
+            return JsonGenerator.encodable(args[0], json_names);
+        }
+        if (base == "Map" || base == "SortedMap") && args.length == 2 {
+            return args[0] == "string" && JsonGenerator.encodable(args[1], json_names);
+        }
+        return false;
+    }
+
+    static fun is_json_scalar(t: string): bool {
+        return t == "int"
+            || t == "uint"
+            || t == "long"
+            || t == "ulong"
+            || t == "short"
+            || t == "ushort"
+            || t == "byte"
+            || t == "sbyte"
+            || t == "float16"
+            || t == "float"
+            || t == "double"
+            || t == "bool"
+            || t == "string";
+    }
+
+    // Splits `A, B<C, D>` at its top-level commas.
+    static fun type_args(inner: string): List<string> {
+        let out = List<string>();
+        let depth = 0;
+        let start = 0;
+        let i = 0;
+        while i < inner.length {
+            let c = inner.substring(i, i + 1);
+            if c == "<" || c == "(" {
+                depth = depth + 1;
+            } else if c == ">" || c == ")" {
+                depth = depth - 1;
+            } else if c == "," && depth == 0 {
+                out.push(JsonGenerator.trim_type(inner.substring(start, i)));
+                start = i + 1;
+            }
+            i = i + 1;
+        }
+        out.push(JsonGenerator.trim_type(inner.substring(start, inner.length)));
+        return out;
     }
 
     // Emits statements that append JSON for a scalar / nested `@json` value into `sb`.
@@ -263,7 +341,7 @@ internal static class JsonGenerator {
             cb.line("Json.write_value(" + sb + ", " + access + ");");
             return true;
         }
-        if JsonGenerator.name_in(json_names, elem_type) {
+        if JsonGenerator.encodable(elem_type, json_names) {
             cb.line(access + ".write_json(" + sb + ", __options);");
             return true;
         }
@@ -860,14 +938,10 @@ internal static class JsonGenerator {
     }
 
     static fun parser_scalar(elem_type: string, borrow json_names: List<string>): string {
-        if primitive_named(elem_type)
-            == Primitive.Int
-            || primitive_named(elem_type)
-            == Primitive.UInt || primitive_named(elem_type) == Primitive.Byte {
+        if primitive_named(elem_type) == Primitive.Int {
             return "p.parse_int()";
         }
-        if primitive_named(elem_type)
-            == Primitive.Long || primitive_named(elem_type) == Primitive.ULong {
+        if primitive_named(elem_type) == Primitive.Long {
             return "(long)p.parse_double()";
         }
         if primitive_named(elem_type) == Primitive.Double {
@@ -892,7 +966,7 @@ internal static class JsonGenerator {
         if JsonGenerator.name_in(json_names, elem_type) {
             return elem_type + ".from_json_parser(p)";
         }
-        return elem_type + ".from_json(p.parse_value(), __options)";
+        return "Json.from_value<" + elem_type + ">(p.parse_value(), __options)";
     }
 
     static fun emit_parser_array(
@@ -966,7 +1040,7 @@ internal static class JsonGenerator {
                     } else if (field.seq_kind == CollectionKind.Set) {
                         def = "Set<" + field.seq_elem_inner + ">()";
                     } else {
-                        def = ftype + ".from_json(JsonValue.null(), __options)";
+                        def = "Json.from_value<" + ftype + ">(JsonValue.null(), __options)";
                     }
                 }
                 body.line("let __p_" + fname + ": " + ftype + " = " + def + ";");
@@ -1827,6 +1901,14 @@ internal static class JsonGenerator {
         cb.dedent();
         cb.line("}");
         JsonGenerator.append_block(cb, JsonGenerator.emit_class_parser(t, json_names, self_ty));
+        cb.line(
+            "public static fun read_json(borrow text: string, borrow __options: JsonOptions): Result<"
+                + self_ty + ", ParseError> {"
+        );
+        cb.indent();
+        cb.line("return " + self_ty + ".from_json_parser_text(text, __options);");
+        cb.dedent();
+        cb.line("}");
         if t.assign_fields {
             JsonGenerator.emit_field_constructor(cb, t);
         }
@@ -2281,8 +2363,7 @@ internal static class JsonGenerator {
         JsonGenerator.append_block(cb, from_cb.to_string());
         cb.dedent();
         cb.line("}");
-        // Strict variant check used by `Json.deserialize<T>` (see the `JsonDeserialize` intrinsic
-        // expansion): unlike `from_json` above (kept lenient — falls back to the first variant — so
+        // Strict variant check used by `read_json`: unlike `from_json` above (kept lenient — falls back to the first variant — so
         // nested/array/tuple/type-param composition never has to thread a `Result` through a
         // constructor-argument expression), this reports an unknown discriminant as a real error
         // instead of silently defaulting.
@@ -2306,234 +2387,45 @@ internal static class JsonGenerator {
         );
         cb.dedent();
         cb.line("}");
+        // An unknown discriminant is an error at the top level, unlike nested `from_json`.
+        cb.line(
+            "public static fun read_json(borrow text: string, borrow __options: JsonOptions): Result<"
+                + self_ty + ", ParseError> {"
+        );
+        cb.indent();
+        cb.line("switch (Json.parse(text)) {");
+        cb.indent();
+        cb.line("Ok(parsed) => {");
+        cb.indent();
+        cb.line("switch (" + self_ty + ".__json_check_variant(parsed)) {");
+        cb.indent();
+        cb.line("Ok(checked) => {");
+        cb.indent();
+        cb.line("return Result.Ok(" + self_ty + ".from_json(checked, __options));");
+        cb.dedent();
+        cb.line("}");
+        cb.line("Err(error) => {");
+        cb.indent();
+        cb.line("return Result.Err(error);");
+        cb.dedent();
+        cb.line("}");
+        cb.dedent();
+        cb.line("}");
+        cb.dedent();
+        cb.line("}");
+        cb.line("Err(error) => {");
+        cb.indent();
+        cb.line("return Result.Err(error);");
+        cb.dedent();
+        cb.line("}");
+        cb.dedent();
+        cb.line("}");
+        cb.dedent();
+        cb.line("}");
         if wrap {
             cb.dedent();
             cb.line("}");
         }
-        return JsonGenOutput.success(cb.to_string());
-    }
-
-    // Emits free `__col_ser_*` / `__col_write_*` / `__col_de_*` helpers for top-level
-    // collection `Json.serialize` / `deserialize` / `from_value` (see `intrinsics.rs`).
-    /// Generates JSON serialization and deserialization support for the supplied collection
-    /// descriptions.
-    public static fun expand_collections(
-        borrow specs: List<JsonCollectionSpec>,
-        borrow json_names: List<string>,
-        borrow jsonable: List<string>
-    ): JsonGenOutput {
-        if specs.is_empty() {
-            return JsonGenOutput.success("");
-        }
-        let cb = CodeBuilder();
-        cb.line("extend Json {");
-        cb.indent();
-        let i = 0;
-        while i < specs.length {
-            let spec = specs[i];
-            let one = JsonGenerator.expand_collection_methods(spec, json_names, jsonable);
-            if one.ok == false {
-                return one;
-            }
-            JsonGenerator.append_block(cb, one.source);
-            i = i + 1;
-        }
-        cb.dedent();
-        cb.line("}");
-        return JsonGenOutput.success(cb.to_string());
-    }
-
-    static fun expand_collection_methods(
-        borrow spec: JsonCollectionSpec,
-        borrow json_names: List<string>,
-        borrow jsonable: List<string>
-    ): JsonGenOutput {
-        let ser_name = "__col_ser_" + spec.fn_suffix;
-        let write_name = "__col_write_" + spec.fn_suffix;
-        let de_name = "__col_de_" + spec.fn_suffix;
-        let to_cb = CodeBuilder();
-        let write_cb = CodeBuilder();
-        let from_cb = CodeBuilder();
-        let ok = false;
-        if spec.kind == CollectionKind.List {
-            ok = JsonGenerator.list_to_stmts(
-                to_cb,
-                spec.elem_type,
-                "xs",
-                "__arr",
-                "__i",
-                "__e",
-                json_names
-            );
-            if ok {
-                to_cb.line("return __arr;");
-                ok = JsonGenerator.list_write_stmts(
-                    write_cb,
-                    spec.elem_type,
-                    "xs",
-                    "__i",
-                    "__e",
-                    json_names
-                );
-            }
-            if ok {
-                ok = JsonGenerator.list_from_stmts(
-                    from_cb,
-                    spec.elem_type,
-                    "v",
-                    "__out",
-                    "__i",
-                    "__src",
-                    json_names
-                );
-                if ok {
-                    from_cb.line("return __out;");
-                }
-            }
-        } else if (spec.kind == CollectionKind.Set) {
-            ok = JsonGenerator.set_to_stmts(
-                to_cb,
-                spec.elem_type,
-                "xs",
-                "__arr",
-                "__e",
-                json_names
-            );
-            if ok {
-                to_cb.line("return __arr;");
-                ok = JsonGenerator.set_write_stmts(
-                    write_cb,
-                    spec.elem_type,
-                    "xs",
-                    "__e",
-                    json_names
-                );
-            }
-            if ok {
-                ok = JsonGenerator.set_from_stmts(
-                    from_cb,
-                    spec.elem_type,
-                    "v",
-                    "__out",
-                    "__i",
-                    "__src",
-                    json_names
-                );
-                if ok {
-                    from_cb.line("return __out;");
-                }
-            }
-        } else if (spec.kind == CollectionKind.Array) {
-            ok = JsonGenerator.array_to_stmts(
-                to_cb,
-                spec.elem_type,
-                "xs",
-                "__arr",
-                "__i",
-                json_names
-            );
-            if ok {
-                to_cb.line("return __arr;");
-                ok = JsonGenerator.array_write_stmts(
-                    write_cb,
-                    spec.elem_type,
-                    "xs",
-                    "__i",
-                    json_names
-                );
-            }
-            if ok {
-                ok = JsonGenerator.array_from_stmts(
-                    from_cb,
-                    spec.elem_type,
-                    "v",
-                    "__out",
-                    "__i",
-                    "__src",
-                    json_names
-                );
-                if ok {
-                    from_cb.line("return __out;");
-                }
-            }
-        } else if (spec.kind == CollectionKind.Map || spec.kind == CollectionKind.SortedMap) {
-            let map_ctor = "Map";
-            if spec.kind == CollectionKind.SortedMap {
-                map_ctor = "SortedMap";
-            }
-            ok = JsonGenerator.map_to_stmts(
-                to_cb,
-                spec.value_type,
-                "xs",
-                "__map",
-                "__pair",
-                json_names
-            );
-            if ok {
-                to_cb.line("return __map;");
-                ok = JsonGenerator.map_write_stmts(
-                    write_cb,
-                    spec.value_type,
-                    "xs",
-                    "__pair",
-                    json_names
-                );
-            }
-            if ok {
-                ok = JsonGenerator.map_from_stmts(
-                    from_cb,
-                    spec.value_type,
-                    map_ctor,
-                    "v",
-                    "__out",
-                    "__msrc",
-                    "__mkeys",
-                    "__mi",
-                    "__mk",
-                    json_names
-                );
-                if ok {
-                    from_cb.line("return __out;");
-                }
-            }
-        }
-        if ok == false {
-            let hint = "";
-            if spec.kind
-                == CollectionKind.List
-                || spec.kind == CollectionKind.Set || spec.kind == CollectionKind.Array {
-                hint = JsonGenerator.missing_hint(spec.elem_type, jsonable);
-            } else {
-                hint = JsonGenerator.missing_hint(spec.value_type, jsonable);
-            }
-            return JsonGenOutput.failure(
-                "unsupported collection type '" + spec.self_ty + "' for JSON serialization" + hint
-            );
-        }
-        let cb = CodeBuilder();
-        cb.line("public static fun " + ser_name + "(xs: " + spec.self_ty + "): JsonValue {");
-        cb.indent();
-        JsonGenerator.append_block(cb, to_cb.to_string());
-        cb.dedent();
-        cb.line("}");
-        cb.line(
-            "public static fun "
-                + write_name
-                + "(xs: "
-                + spec.self_ty + ", sb: StringBuilder, borrow __options: JsonOptions): void {"
-        );
-        cb.indent();
-        JsonGenerator.append_block(cb, write_cb.to_string());
-        cb.dedent();
-        cb.line("}");
-        cb.line(
-            "public static fun "
-                + de_name + "(v: JsonValue, borrow __options: JsonOptions): " + spec.self_ty + " {"
-        );
-        cb.indent();
-        JsonGenerator.append_block(cb, from_cb.to_string());
-        cb.dedent();
-        cb.line("}");
         return JsonGenOutput.success(cb.to_string());
     }
 }

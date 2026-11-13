@@ -92,7 +92,7 @@ impl<'a> Analyzer<'a> {
             }
             let Some(range) = self
                 .type_ctx
-                .resolved_type("Range")
+                .resolved_type(dream_abi::core_items::RANGE)
                 .filter(|&id| self.is_stdlib_range(id))
             else {
                 diagnostics.report_error(
@@ -103,7 +103,13 @@ impl<'a> Analyzer<'a> {
             };
             let ty = self.type_ctx.syntax_type(range);
             let ctor = self.unique_method_def(range, dream_syntax::nodes::types::CONSTRUCTOR_NAME);
-            self.hir_set_new("Range", ctor, vec![left_hir, right_hir], &ty);
+            self.hir_set_new(
+                dream_abi::core_items::RANGE,
+                ctor,
+                vec![left_hir, right_hir],
+                Vec::new(),
+                &ty,
+            );
             return Ok(ty);
         }
 
@@ -122,7 +128,7 @@ impl<'a> Analyzer<'a> {
                 return Ok(Type::Unknown);
             };
             let option_def = self.type_ctx.resolve(DefKind::Union, &base);
-            if option_def.is_none_or(|def| self.type_ctx.defs.name(def) != "Option")
+            if option_def.is_none_or(|def| !self.is_core_def(def, dream_abi::core_items::OPTION))
                 || args.len() != 1
             {
                 diagnostics.report_error(

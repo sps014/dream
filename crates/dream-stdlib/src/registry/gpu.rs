@@ -1,4 +1,4 @@
-use super::StdPackage;
+use super::{GuestExport, StdPackage};
 
 /// `system.gpu`: devices, buffers, textures, pipelines, window surfaces and the shader-side
 /// declarations that `@compute`/`@vertex`/`@fragment` and ray tracing shaders use. Its
@@ -11,6 +11,21 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.collections",
         "system.codegen",
         "system.window",
+    ],
+    core_language: false,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[
+        GuestExport {
+            import: "gpuLibraryLoad",
+            export_name: "__dream_gpu_version",
+            symbol: "dream_gpu_bundle_abi_version",
+        },
+        GuestExport {
+            import: "gpuLibraryLoad",
+            export_name: "__dream_gpu_index",
+            symbol: "dream_gpu_bundle_index",
+        },
     ],
     generators: &["system.gpu.shaders"],
     files: &[

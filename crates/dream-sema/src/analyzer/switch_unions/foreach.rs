@@ -19,15 +19,14 @@ impl<'a> Analyzer<'a> {
         let dream_types::TyKind::Interface(def, _) = self.type_ctx.interner.kind(ty) else {
             return false;
         };
-        let info = self.type_ctx.defs.get(*def);
-        matches!(
-            info.name.as_str(),
-            "Iterator" | "Iterable" | "Collection" | "IndexedCollection"
-        ) && self.interface_decl(*def).is_some_and(|decl| {
-            decl.file_path
-                .as_deref()
-                .is_some_and(dream_stdlib::is_std_source)
-        })
+        [
+            dream_abi::core_items::ITERATOR,
+            dream_abi::core_items::ITERABLE,
+            dream_abi::core_items::COLLECTION,
+            dream_abi::core_items::INDEXED_COLLECTION,
+        ]
+        .into_iter()
+        .any(|identity| self.is_core_def(*def, identity))
     }
 
     /// Looks up a 0-arg instance method on a concrete interface instance by name.
@@ -159,8 +158,10 @@ impl<'a> Analyzer<'a> {
         let next_ret = next_method.return_type.clone().unwrap_or(Type::Void);
         let opt_args = match Self::resolve_struct_parts(&next_ret) {
             Some((b, args))
-                if self.type_ctx.resolve(DefKind::Union, &b)
-                    == self.type_ctx.resolve(DefKind::Union, "Option")
+                if self
+                    .type_ctx
+                    .resolve(DefKind::Union, &b)
+                    .is_some_and(|def| self.is_core_def(def, dream_abi::core_items::OPTION))
                     && args.len() == 1 =>
             {
                 args
@@ -414,8 +415,10 @@ impl<'a> Analyzer<'a> {
         let next_ret = next_info.return_type.clone().unwrap_or(Type::Void);
         let opt_args = match Self::resolve_struct_parts(&next_ret) {
             Some((base, args))
-                if self.type_ctx.resolve(DefKind::Union, &base)
-                    == self.type_ctx.resolve(DefKind::Union, "Option")
+                if self
+                    .type_ctx
+                    .resolve(DefKind::Union, &base)
+                    .is_some_and(|def| self.is_core_def(def, dream_abi::core_items::OPTION))
                     && args.len() == 1 =>
             {
                 args

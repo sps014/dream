@@ -1,0 +1,49 @@
+module system.json;
+
+import system.collections;
+
+// JSON objects for `SortedMap<K, V>` with `string` keys and values that encode as JSON.
+extend SortedMap<K, V> {
+    /// Appends the entries as a JSON object keyed by the map's keys.
+    @requires_member("K", "write_json_key")
+    @requires_member("V", "write_json")
+    internal fun write_json(borrow sb: StringBuilder, borrow options: JsonOptions): void {
+        sb.append_char('{');
+        let first = true;
+        for (let pair in this) {
+            if first == false {
+                sb.append_char(',');
+            }
+            first = false;
+            pair.key.write_json_key(sb);
+            sb.append_char(':');
+            pair.value.write_json(sb, options);
+        }
+        sb.append_char('}');
+    }
+
+    /// Reads the members of a JSON object; a value that is not an object reads as empty.
+    @requires_member("K", "write_json_key")
+    @requires_member("V", "from_json")
+    internal static fun from_json(borrow v: JsonValue, borrow options: JsonOptions): SortedMap<K, V> {
+        let out = SortedMap<K, V>();
+        let keys = v.keys();
+        let i = 0;
+        while i < keys.length {
+            let key = keys[i];
+            out[key] = V.from_json(v[key], options);
+            i = i + 1;
+        }
+        return out;
+    }
+
+    /// Parses JSON text holding an object.
+    @requires_member("K", "write_json_key")
+    @requires_member("V", "from_json")
+    internal static fun read_json(
+        borrow text: string,
+        borrow options: JsonOptions
+    ): Result<SortedMap<K, V>, ParseError> {
+        return Json.read_parsed<SortedMap<K, V>>(text, options);
+    }
+}

@@ -37,6 +37,11 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error(
+        "field_default_errors",
+        "constructor of 'Partial' must assign field 'who' on every path: 'Speaker' has no default value\n'NoCtor' needs a constructor that assigns field 'at': 'Point' has no default value",
+        true,
+    ),
+    Case::error(
         "raw_string_errors",
         "a multi-line raw string must start on the line after its opening quotes\nthe closing quotes of a multi-line raw string must be on their own line\na raw string line must start with the same whitespace as its closing quotes\nraw string literal closes with more quotes than it opens with; open it with \"\"\"\"",
         true,

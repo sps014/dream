@@ -1,0 +1,23 @@
+module system.json;
+
+// JSON encoding of `bool` for `Json.serialize`, `Json.deserialize`, `Json.from_value` and the
+// collection encoders.
+extend bool {
+    /// Appends this value as JSON as `true` or `false`.
+    internal fun write_json(borrow sb: StringBuilder, borrow options: JsonOptions): void {
+        Json.write_bool(sb, this);
+    }
+
+    /// Reads a `bool` from a parsed JSON value; a value of another kind reads as `false`.
+    internal static fun from_json(borrow v: JsonValue, borrow options: JsonOptions): bool {
+        return v.as_bool().unwrap_or(false);
+    }
+
+    /// Parses JSON text holding a single `bool`.
+    internal static fun read_json(
+        borrow text: string,
+        borrow options: JsonOptions
+    ): Result<bool, ParseError> {
+        return Json.read_parsed<bool>(text, options);
+    }
+}

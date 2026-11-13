@@ -205,14 +205,7 @@ public fun fill(
         .iter()
         .enumerate()
     {
-        let layout: serde_json::Value = serde_json::from_str(
-            dream_abi::gpu_bindings::binding_layout(
-                entry["params"][i]["webgpu_layout"].as_u64().unwrap() as u32,
-            )
-            .unwrap()
-            .descriptor,
-        )
-        .unwrap();
+        let layout = binding_layout(&entry["params"][i]["webgpu_layout"]);
         assert_eq!(
             layout,
             serde_json::json!({"storageTexture": {
@@ -224,14 +217,7 @@ public fun fill(
             "{code}"
         );
     }
-    let buffer: serde_json::Value = serde_json::from_str(
-        dream_abi::gpu_bindings::binding_layout(
-            entry["params"][4]["webgpu_layout"].as_u64().unwrap() as u32,
-        )
-        .unwrap()
-        .descriptor,
-    )
-    .unwrap();
+    let buffer = binding_layout(&entry["params"][4]["webgpu_layout"]);
     assert_eq!(buffer, serde_json::json!({"buffer": {"type": "storage"}}));
     assert!(code.contains("var<storage, read_write>"));
 }
@@ -722,4 +708,17 @@ fn inferred_helpers_reject_cpu_calls() {
         text.contains("consumed") && text.contains("helper"),
         "{text}"
     );
+}
+
+/// The descriptor for a bundle's binding-layout ID, from the generated host contract.
+fn binding_layout(id: &serde_json::Value) -> serde_json::Value {
+    let layouts: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+        "../crates/dream-host-abi/gpu_binding_layouts.json"
+    ))
+    .unwrap();
+    layouts
+        .into_iter()
+        .find(|layout| layout["id"] == *id)
+        .unwrap()["descriptor"]
+        .clone()
 }

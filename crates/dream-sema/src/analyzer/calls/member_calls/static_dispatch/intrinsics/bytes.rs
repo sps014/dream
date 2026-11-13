@@ -188,7 +188,7 @@ impl<'a> Analyzer<'a> {
 
     fn bytes_type(&self) -> dream_types::TypeId {
         self.type_ctx
-            .resolved_type("Bytes")
+            .resolved_type(dream_abi::core_items::BYTES)
             .unwrap_or_else(|| self.type_ctx.interner.error())
     }
 }

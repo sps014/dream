@@ -20,7 +20,7 @@ public static class AesGcm {
 
     @native
     @node
-    @runtime("cryptoAesGcmEncrypt")
+    @runtime("cryptoAesGcmEncrypt", "crypto")
     static extern fun encrypt_host(
         borrow key: byte[],
         borrow nonce: byte[],
@@ -33,7 +33,7 @@ public static class AesGcm {
     // host boundary.
     @native
     @node
-    @runtime("cryptoAesGcmDecrypt")
+    @runtime("cryptoAesGcmDecrypt", "crypto")
     static extern fun decrypt_host(
         borrow key: byte[],
         borrow nonce: byte[],

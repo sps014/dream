@@ -82,3 +82,168 @@ fn type_file_names_preserve_acronym_boundaries() {
     assert_eq!("HTTPServer".to_snake_case(), "http_server");
     assert_eq!("Utf8Decoder".to_snake_case(), "utf8_decoder");
 }
+
+#[test]
+fn runtime_host_fields_name_one_known_capability() {
+    use dream_abi::host_capability::HostCapability;
+    let fields = crate::runtime_host_fields();
+    assert!(!fields.is_empty());
+    for pair in fields.windows(2) {
+        assert_ne!(pair[0].0, pair[1].0, "{} declares two hosts", pair[0].0);
+    }
+    for (field, capability) in &fields {
+        assert!(
+            HostCapability::from_name(capability).is_some(),
+            "{field}: unknown host '{capability}'"
+        );
+    }
+}
+
+#[test]
+fn compiler_does_not_name_library_packages() {
+    let library: Vec<&str> = crate::STD_PACKAGES
+        .iter()
+        .filter(|p| !p.core_language)
+        .map(|p| p.name)
+        .collect();
+    let library_paths: std::collections::BTreeSet<&str> = crate::STD_PACKAGES
+        .iter()
+        .filter(|p| !p.core_language)
+        .flat_map(|p| p.files.iter().map(|(path, _)| *path))
+        .collect();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let roots = [
+        "crates/dream-syntax/src",
+        "crates/dream-types/src",
+        "crates/dream-hir/src",
+        "crates/dream-abi/src",
+        "crates/dream-sema/src",
+        "crates/dream-mir/src",
+        "src/driver",
+        "src/execution",
+        "tooling/dream-lsp/src",
+    ];
+    let mut violations = Vec::new();
+    for rel in roots {
+        let dir = root.join(rel);
+        walk_rust(&dir, &mut |path| {
+            if path.ends_with("core_items.rs") {
+                return;
+            }
+            let text = std::fs::read_to_string(path).unwrap_or_default();
+            let text = strip_cfg_test(&text);
+            for literal in rust_string_literals(&text) {
+                if library.contains(&literal.as_str())
+                    || library_paths.contains(literal.as_str())
+                    || library
+                        .iter()
+                        .any(|pkg| literal.starts_with(&format!("{pkg}::")))
+                {
+                    violations.push(format!(
+                        "{}: `{literal}`",
+                        path.strip_prefix(&root).unwrap_or(path).display()
+                    ));
+                }
+            }
+        });
+    }
+    violations.sort();
+    assert!(
+        violations.is_empty(),
+        "compiler names a library package:\n{}",
+        violations.join("\n")
+    );
+}
+
+fn walk_rust(dir: &std::path::Path, visit: &mut dyn FnMut(&std::path::Path)) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if path.file_name().is_some_and(|n| n == "tests") {
+                continue;
+            }
+            walk_rust(&path, visit);
+            continue;
+        }
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if name.ends_with(".rs") && name != "tests.rs" && !name.ends_with("_tests.rs") {
+            visit(&path);
+        }
+    }
+}
+
+fn strip_cfg_test(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("#[cfg(test)]") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + "#[cfg(test)]".len()..];
+        let trimmed = after.trim_start();
+        let skipped = after.len() - trimmed.len();
+        if (trimmed.starts_with("mod ")
+            || trimmed.starts_with("fn ")
+            || trimmed.starts_with("impl "))
+            && let Some(rel) = matching_brace_end(trimmed)
+        {
+            rest = &trimmed[rel..];
+            continue;
+        }
+        rest = &after[skipped..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn matching_brace_end(text: &str) -> Option<usize> {
+    let start = text.find('{')?;
+    let bytes = text.as_bytes();
+    let mut depth = 0;
+    let mut i = start;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i + 1);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn rust_string_literals(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            let mut j = i + 1;
+            let mut lit = String::new();
+            while j < bytes.len() {
+                if bytes[j] == b'\\' {
+                    j += 2;
+                    continue;
+                }
+                if bytes[j] == b'"' {
+                    break;
+                }
+                lit.push(bytes[j] as char);
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == b'"' && !lit.is_empty() {
+                out.push(lit);
+            }
+            i = j + 1;
+            continue;
+        }
+        i += 1;
+    }
+    out
+}

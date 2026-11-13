@@ -38,7 +38,7 @@ public class TempFile {
         return Result.Ok(TempFile(opened.unwrap(), temporary));
     }
 
-    @runtime("tempReplace")
+    @runtime("tempReplace", "io")
     static extern fun replace_host(source: string, destination: string): bool;
 
     /// Flushes and closes the file, then atomically replaces a destination on the same filesystem.

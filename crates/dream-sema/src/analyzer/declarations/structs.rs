@@ -438,7 +438,7 @@ impl<'a> Analyzer<'a> {
             .map(|(parameter, &ty)| (parameter.text.clone(), ty))
             .collect();
 
-        if base_name == "Vector"
+        if self.is_core_def(def, dream_abi::core_items::VECTOR)
             && let Some(elem) = args.first()
             && !matches!(
                 elem,

@@ -1,31 +1,9 @@
 //! On-the-fly monomorphization of a generic static method, dispatching the `System.print`,
-//! `Buffer.alloc`, `Bytes.of`/`to`, `Promise.*`, and `Json.serialize`/`deserialize` intrinsics
+//! `Buffer.alloc`, `Bytes.of`/`to`, and `Promise.*` intrinsics
 //! before falling back to registering a plain generic-static instance.
 
 use super::*;
 use dream_abi::intrinsics;
-
-fn json_collection_write_fn(mangled: &str) -> Option<String> {
-    json_collection_adapter(mangled, "write")
-}
-
-fn json_collection_de_fn(mangled: &str) -> Option<String> {
-    json_collection_adapter(mangled, "de")
-}
-
-fn json_collection_adapter(mangled: &str, kind: &str) -> Option<String> {
-    let base = mangled.trim_end_matches('?');
-    let is_collection = base.ends_with("[]")
-        || base.starts_with("List_")
-        || base.starts_with("Set_")
-        || base.starts_with("Map_string_")
-        || base.starts_with("SortedMap_string_");
-    if !is_collection {
-        return None;
-    }
-    let suffix = base.replace("[]", "__arr");
-    Some(format!("__col_{}_{}", kind, suffix))
-}
 
 /// Call-site bundle for [`Analyzer::analyze_generic_static_method`]: the parsed pieces of a
 /// `Type.method(args)` call already resolved to a generic static method template, kept together
@@ -42,9 +20,7 @@ pub(super) struct GenericStaticMethodCall<'a, 'b> {
 mod buffer;
 mod bytes;
 mod gen_attribute;
-mod json;
 mod raw;
-mod validation;
 
 impl<'a> Analyzer<'a> {
     /// Resolves a `Type.method(args)` call whose `{Type}_{method}` names a generic static method
@@ -263,22 +239,6 @@ impl<'a> Analyzer<'a> {
         // Generic static calls / intrinsics need an `InstanceId` (a later slice); stay out of
         // HIR coverage regardless of which sub-branch handles the call.
         self.hir_none();
-        if let Some(
-            op @ (intrinsics::IntrinsicOp::ValidationDecode
-            | intrinsics::IntrinsicOp::ValidationValidate
-            | intrinsics::IntrinsicOp::ValidationSchema),
-        ) = intrinsics::IntrinsicOp::from_attributes(&template.attributes)
-        {
-            return self.analyze_validation_intrinsic(
-                op,
-                method,
-                generic_args,
-                params_types,
-                arg_hirs,
-                diagnostics,
-            );
-        }
-
         if matches!(
             intrinsics::IntrinsicOp::from_attributes(&template.attributes),
             Some(intrinsics::IntrinsicOp::RawLoad | intrinsics::IntrinsicOp::RawStore)
@@ -396,29 +356,6 @@ impl<'a> Analyzer<'a> {
             return Ok(ret);
         }
 
-        if matches!(
-            intrinsics::IntrinsicOp::from_attributes(&template.attributes),
-            Some(
-                intrinsics::IntrinsicOp::JsonSerialize
-                    | intrinsics::IntrinsicOp::JsonDeserialize
-                    | intrinsics::IntrinsicOp::JsonFromValue
-            )
-        ) {
-            return self.analyze_json_intrinsic(
-                &GenericStaticMethodCall {
-                    template,
-                    base,
-                    type_name,
-                    method,
-                    generic_args,
-                    params,
-                },
-                params_types,
-                arg_hirs,
-                diagnostics,
-            );
-        }
-
         if let Some(
             op @ (intrinsics::IntrinsicOp::GenAttributeId
             | intrinsics::IntrinsicOp::GenAttributeDecode
@@ -440,6 +377,9 @@ impl<'a> Analyzer<'a> {
             );
         }
 
+        if !self.member_requirements_met(template, &bindings, method.position, diagnostics) {
+            return Ok(Type::Unknown);
+        }
         self.verify_generic_constraints(
             &template.generic_constraints,
             &bindings,

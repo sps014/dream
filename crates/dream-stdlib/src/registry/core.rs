@@ -3,6 +3,10 @@ use super::StdPackage;
 pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.core",
     deps: &[],
+    core_language: true,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &[],
     files: &[
         (
@@ -86,8 +90,20 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/consuming_attribute.dream"),
         ),
         (
+            "<std>/system/core/runtime_trait.dream",
+            include_str!("../system/core/runtime_trait.dream"),
+        ),
+        (
             "<std>/system/core/runtime_attribute.dream",
             include_str!("../system/core/runtime_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/requires_member_attribute.dream",
+            include_str!("../system/core/requires_member_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/platform_main.dream",
+            include_str!("../system/core/platform_main.dream"),
         ),
         (
             "<std>/system/core/async_host_attribute.dream",

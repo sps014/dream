@@ -1,8 +1,8 @@
 //! Auto-import quick fixes and completion edits for missing `import …;` lines
 //! (stdlib and installed `dream_packages/`).
 
+use crate::symbols::{public_top_level_names, symbol_to_package};
 use dream::driver::source_loader::find_dream_packages_dir;
-use dream_stdlib::{public_top_level_names, symbol_to_package};
 use std::collections::HashMap;
 use std::path::Path;
 use tower_lsp::lsp_types::{

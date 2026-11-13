@@ -36,7 +36,7 @@ pub fn optimize(path: &Path, level: OptLevel, config: &Arc<ToolchainConfig>) -> 
 }
 
 pub fn resolve_existing(config: &ToolchainConfig) -> Option<PathBuf> {
-    let binaryen = dream_abi::toolchain::pinned_tool("binaryen")?;
+    let binaryen = dream_abi::toolchain::compiler_tool("binaryen")?;
     config.locate_tool(binaryen).ok().map(|tool| tool.primary())
 }
 

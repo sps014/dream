@@ -1,6 +1,7 @@
-//! Pinned external tools. One table drives `dreamer toolchain install`, compiler discovery under
-//! `~/.dream/toolchains`, `DREAM_<TOOL>` overrides and generator `@uses_tool` resolution, so
-//! adding a tool is adding an entry.
+//! Pinned external tools. [`COMPILER_TOOLS`] lists the tools the compiler itself runs; stdlib
+//! packages declare the tools their generators need on their package records, and the combined
+//! table drives `dreamer toolchain install`, discovery under `~/.dream/toolchains`,
+//! `DREAM_<TOOL>` overrides and generator `@uses_tool` resolution.
 
 /// Textual IR is only guaranteed to parse with the LLVM major it was written for. Must match
 /// `scripts/build-llvm-dist.sh` and `scripts/fetch-dev-llvm.sh`.
@@ -13,9 +14,6 @@ pub const BINARYEN_VERSION: &str = "133";
 /// the pin is a commit of mold's Rust tree. Must match `scripts/fetch-dev-llvm.sh` and
 /// `scripts/fetch-dev-llvm.ps1`.
 pub const MOLD_VERSION: &str = "3.0.0-331ac66";
-
-/// Slang shader compiler release available to generators.
-pub const SLANG_VERSION: &str = "2026.20";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArchiveKind {
@@ -82,6 +80,10 @@ impl PinnedTool {
             .find(|path| path.rsplit('/').next() == Some(executable))
     }
 
+    pub fn is_named(&self, name: &str) -> bool {
+        self.name == name || self.aliases.contains(&name)
+    }
+
     pub fn primary_executable(&self) -> &'static str {
         self.executables[0]
     }
@@ -104,20 +106,12 @@ pub fn current_host_key() -> Option<&'static str> {
     host_key(std::env::consts::OS, std::env::consts::ARCH)
 }
 
-pub fn pinned_tool(name: &str) -> Option<&'static PinnedTool> {
-    PINNED_TOOLS
-        .iter()
-        .find(|t| t.name == name || t.aliases.contains(&name))
+/// A tool the compiler itself runs.
+pub fn compiler_tool(name: &str) -> Option<&'static PinnedTool> {
+    COMPILER_TOOLS.iter().find(|t| t.is_named(name))
 }
 
-/// The pinned tool whose install provides `executable`, with its install-relative path.
-pub fn tool_providing(executable: &str) -> Option<(&'static PinnedTool, &'static str)> {
-    PINNED_TOOLS
-        .iter()
-        .find_map(|t| t.executable(executable).map(|path| (t, path)))
-}
-
-pub static PINNED_TOOLS: &[PinnedTool] = &[
+pub static COMPILER_TOOLS: &[PinnedTool] = &[
     PinnedTool {
         name: "llvm",
         aliases: &[],
@@ -218,58 +212,6 @@ pub static PINNED_TOOLS: &[PinnedTool] = &[
         archives: &[],
         install_hint: "mold ships with Dream releases in lib/dream/mold; for a development build \
                        run scripts/fetch-dev-llvm.sh, or set DREAM_MOLD to its install root",
-    },
-    PinnedTool {
-        name: "slang",
-        aliases: &[],
-        version: SLANG_VERSION,
-        // `dream-slang-layout` is not in the release archive: `dreamer toolchain install slang`
-        // builds it into the install root (tooling/dreamer/src/toolchain/slang_layout.rs).
-        executables: &["bin/slangc", "bin/dream-slang-layout"],
-        env: "DREAM_SLANG",
-        override_kind: OverrideKind::Root,
-        bundled: None,
-        timeout_secs: 120,
-        default_install: false,
-        archives: &[
-            HostArchive {
-                host: "linux-x64",
-                url: "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-linux-x86_64.tar.gz",
-                sha256: "e863e568c204810d6e8bc31852f056aef6763c55ea9925db2db7affa060347c9",
-                kind: ArchiveKind::TarGz,
-            },
-            HostArchive {
-                host: "linux-arm64",
-                url: "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-linux-aarch64.tar.gz",
-                sha256: "b0345743e2153d8c2bd33f56fb5696bcef63fc03513f054a1ae1b8d3dd0152a9",
-                kind: ArchiveKind::TarGz,
-            },
-            HostArchive {
-                host: "macos-x64",
-                url: "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-macos-x86_64.tar.gz",
-                sha256: "b4f01f615dc625f60c593d7d0a4bbd38e05dfa2a34bfd3973017c309d866feaa",
-                kind: ArchiveKind::TarGz,
-            },
-            HostArchive {
-                host: "macos-arm64",
-                url: "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-macos-aarch64.tar.gz",
-                sha256: "07fa8833fdbb343c3674c84fdd885910f495f3daaaa0c732b32980151e8b58c4",
-                kind: ArchiveKind::TarGz,
-            },
-            HostArchive {
-                host: "windows-x64",
-                url: "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-windows-x86_64.tar.gz",
-                sha256: "7b9bb838b105de0bb86390196ac5bcb02efc610c0542517204105cf87ec98399",
-                kind: ArchiveKind::TarGz,
-            },
-            HostArchive {
-                host: "windows-arm64",
-                url: "https://github.com/shader-slang/slang/releases/download/v2026.20/slang-2026.20-windows-aarch64.tar.gz",
-                sha256: "b5802a24e810b2b82e18cc796166692b4431431b66a65b108d111b668a920e7c",
-                kind: ArchiveKind::TarGz,
-            },
-        ],
-        install_hint: "run `dreamer toolchain install slang` or set DREAM_SLANG",
     },
     PinnedTool {
         name: "wasi-sdk",
@@ -427,46 +369,3 @@ pub static PINNED_TOOLS: &[PinnedTool] = &[
         install_hint: "run `dreamer toolchain install wit-bindgen` or set DREAM_WIT_BINDGEN",
     },
 ];
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_archive_is_pinned_to_its_tool_version() {
-        let mut names = std::collections::BTreeSet::new();
-        for tool in PINNED_TOOLS {
-            assert!(!tool.executables.is_empty(), "{}", tool.name);
-            assert!(tool.env.starts_with("DREAM_"), "{}", tool.name);
-            assert!(tool.timeout_secs > 0, "{}", tool.name);
-            for name in std::iter::once(&tool.name).chain(tool.aliases) {
-                assert!(names.insert(*name), "duplicate tool name {name}");
-            }
-            assert!(tool.archives.is_empty() || !tool.install_hint.is_empty());
-            for archive in tool.archives {
-                assert!(archive.url.contains(tool.version), "{}", archive.url);
-                assert_eq!(archive.sha256.len(), 64);
-                assert!(archive.sha256.chars().all(|c| c.is_ascii_hexdigit()));
-                assert_eq!(
-                    tool.archives
-                        .iter()
-                        .filter(|a| a.host == archive.host)
-                        .count(),
-                    1
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn executables_resolve_to_their_install_paths() {
-        let (tool, path) = tool_providing("wasm-opt").unwrap();
-        assert_eq!((tool.name, path), ("binaryen", "bin/wasm-opt"));
-        assert_eq!(tool.install_dir(), format!("binaryen-{BINARYEN_VERSION}"));
-        assert_eq!(tool_providing("slangc").unwrap().0.name, "slang");
-        let (tool, path) = tool_providing("dream-slang-layout").unwrap();
-        assert_eq!((tool.name, path), ("slang", "bin/dream-slang-layout"));
-        assert_eq!(tool_providing("ld64.mold").unwrap().0.name, "mold");
-        assert!(tool_providing("bash").is_none());
-    }
-}

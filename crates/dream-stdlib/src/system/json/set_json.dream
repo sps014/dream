@@ -1,0 +1,42 @@
+module system.json;
+
+import system.collections;
+
+// JSON arrays for `Set<T>` whose elements encode as JSON.
+extend Set<T> {
+    /// Appends the elements as a JSON array.
+    @requires_member("T", "write_json")
+    internal fun write_json(borrow sb: StringBuilder, borrow options: JsonOptions): void {
+        sb.append_char('[');
+        let first = true;
+        for (let item in this) {
+            if first == false {
+                sb.append_char(',');
+            }
+            first = false;
+            item.write_json(sb, options);
+        }
+        sb.append_char(']');
+    }
+
+    /// Reads the elements of a JSON array; a value that is not an array reads as empty.
+    @requires_member("T", "from_json")
+    internal static fun from_json(borrow v: JsonValue, borrow options: JsonOptions): Set<T> {
+        let out = Set<T>();
+        let i = 0;
+        while i < v.length {
+            out.add(T.from_json(v.at(i).unwrap_or(JsonValue.null()), options));
+            i = i + 1;
+        }
+        return out;
+    }
+
+    /// Parses JSON text holding an array of elements.
+    @requires_member("T", "from_json")
+    internal static fun read_json(
+        borrow text: string,
+        borrow options: JsonOptions
+    ): Result<Set<T>, ParseError> {
+        return Json.read_parsed<Set<T>>(text, options);
+    }
+}

@@ -1,0 +1,88 @@
+import system.testing;
+import system;
+import system.collections;
+
+class fd_Inner {
+    public xs: int[];
+}
+
+class fd_Implicit {
+    public name: string;
+    public count: int;
+    public items: List<int>;
+    public raw: int[];
+    public maybe: Option<int>;
+}
+
+class fd_Partial {
+    public items: List<int>;
+    public tags: Map<string, int>;
+    public inner: fd_Inner;
+
+    public constructor(fill: bool) {
+        if fill {
+            this.items = List<int>();
+            this.items.push(9);
+        }
+    }
+}
+
+class fd_Bag<T> {
+    public items: List<T>;
+}
+
+struct fd_Pair {
+    public names: List<string>;
+    public n: int;
+}
+
+class fd_Wrap {
+    public p: fd_Pair;
+
+    public constructor() {
+        this.p.n = 3;
+    }
+}
+
+class fd_Link {
+    public next: Option<fd_Link>;
+    public value: int;
+}
+
+@test
+@timeout(180000)
+fun implicit_constructor_defaults() {
+    let h = fd_Implicit();
+    Assert.eq(h.name, "");
+    Assert.eq(h.count.to_string(), "0");
+    Assert.eq(h.items.length.to_string(), "0");
+    Assert.eq(h.raw.length.to_string(), "0");
+    Assert.eq(h.maybe.is_none().to_string(), "true");
+    h.items.push(4);
+    Assert.eq(h.items[0].to_string(), "4");
+}
+
+@test
+@timeout(180000)
+fun explicit_constructor_defaults() {
+    let empty = fd_Partial(false);
+    Assert.eq(empty.items.length.to_string(), "0");
+    Assert.eq(empty.tags.length.to_string(), "0");
+    Assert.eq(empty.inner.xs.length.to_string(), "0");
+    let filled = fd_Partial(true);
+    Assert.eq(filled.items.length.to_string(), "1");
+    Assert.eq(filled.items[0].to_string(), "9");
+}
+
+@test
+@timeout(180000)
+fun generic_and_struct_defaults() {
+    let bag = fd_Bag<string>();
+    bag.items.push("x");
+    Assert.eq(bag.items.length.to_string(), "1");
+    let w = fd_Wrap();
+    Assert.eq(w.p.names.length.to_string(), "0");
+    Assert.eq(w.p.n.to_string(), "3");
+    let link = fd_Link();
+    Assert.eq(link.next.is_none().to_string(), "true");
+}

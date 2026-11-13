@@ -88,7 +88,7 @@ public class UploadedFile: AsyncReader {
     }
 
     @native
-    @runtime("httpServerCloseUpload")
+    @runtime("httpServerCloseUpload", "net")
     static extern fun close_host(handle: int): void;
 
     /// Deletes the stored contents now; later reads fail with `ECLOSED`. Safe to call repeatedly.

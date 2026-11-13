@@ -15,7 +15,7 @@ impl<'a> Analyzer<'a> {
     /// ABI (a boxed `[funcidx][env]` heap value); every call site is built directly here rather than
     /// through ordinary name resolution, so the stdlib class is never referenced by user code.
     pub(in crate::analyzer) fn closure_intrinsic(&self, method: &str) -> Option<DefId> {
-        let owner = self.type_ctx.resolved_type("Closure")?;
+        let owner = self.type_ctx.resolved_type(dream_abi::core_items::CLOSURE)?;
         self.unique_method_def(owner, method)
     }
 

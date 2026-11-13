@@ -5,7 +5,7 @@ internal static class UrlHost {
     // UTS #46 mapping and Punycode need Unicode IDNA tables, so only non-ASCII and `xn--`
     // labels reach the host, never with forbidden ASCII characters. It returns an empty string
     // when the domain is invalid.
-    @runtime("netDomainToAscii")
+    @runtime("netDomainToAscii", "net", RuntimeTrait.Component)
     static extern fun domain_to_ascii_host(borrow domain: string): string;
 
     /// Parses `input[start..end]` as the host of a special URL when `special` is set, or as an

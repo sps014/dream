@@ -18,10 +18,17 @@ impl<'a> Analyzer<'a> {
         }
         let parts = Self::resolve_struct_parts(&ret);
         if let Some((base, args)) = &parts
-            && base == "Result"
+            && base == dream_abi::core_items::RESULT_NAME
             && args.len() == 2
         {
-            return;
+            let ret_id = self.type_ctx.lower(&ret);
+            let def = match self.type_ctx.interner.kind(ret_id) {
+                dream_types::TyKind::Union(def, _) => Some(*def),
+                _ => None,
+            };
+            if def.is_some_and(|def| self.is_core_def(def, dream_abi::core_items::RESULT)) {
+                return;
+            }
         }
         let mut message = format!(
             "'main' must return void, int, or Result<T, E>, got {}",
@@ -77,10 +84,12 @@ impl<'a> Analyzer<'a> {
                     None,
                     Vec::new(),
                 );
-                if self
-                    .analyze_expression(&unit, function, symbol_table, diagnostics)
-                    .is_err()
-                {
+                let saved = self.core_ctor;
+                self.core_ctor = Some(dream_abi::core_items::UNIT);
+                let unit_result =
+                    self.analyze_expression(&unit, function, symbol_table, diagnostics);
+                self.core_ctor = saved;
+                if unit_result.is_err() {
                     self.hir_fail();
                     return;
                 }

@@ -1,0 +1,16 @@
+module system.core;
+
+/// Requires the type bound to the generic parameter `parameter` to provide `member` at every call
+/// of the function. A call whose type lacks it reports `message`, with `{type}` replaced by the bound
+/// type. A method on a generic extension uses a requirement without a message to state what its
+/// own type parameters need, and the caller's requirement checks those transitively.
+@repeatable
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+internal struct RequiresMemberAttribute {
+    /// Generic parameter whose bound type must provide the member.
+    public parameter: string;
+    /// Method name the bound type must declare, directly or through an extension.
+    public member: string;
+    /// Error reported at the call when the requirement fails.
+    public message: Option<string>;
+}

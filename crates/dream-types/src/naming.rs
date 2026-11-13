@@ -1,7 +1,7 @@
 //! Backend naming helpers.
 //!
-//! These derive the internal symbol names the semantic analyzer and codegen agree on (method,
-//! constructor, and `@json` converter names). Memory layout belongs to the HIR layout table.
+//! These derive the internal symbol names the semantic analyzer and codegen agree on (method and
+//! constructor names). Memory layout belongs to the HIR layout table.
 
 use dream_syntax::nodes::types::CONSTRUCTOR_NAME;
 
@@ -18,17 +18,4 @@ pub fn method_fn(struct_name: &str, method_name: &str) -> String {
 /// (e.g. `User_constructor`). Single source of truth for the constructor naming convention.
 pub fn constructor_fn(struct_name: &str) -> String {
     method_fn(struct_name, CONSTRUCTOR_NAME)
-}
-
-/// The name of the compiler-derived `to_json` converter for a `@json` struct (e.g. `User_to_json`).
-/// Single source of truth for the implicit naming contract shared by the `@json` source generator,
-/// the type checker, and the codegen backend.
-pub fn json_to_json_fn(struct_name: &str) -> String {
-    method_fn(struct_name, "to_json")
-}
-
-/// The name of the compiler-derived `from_json` converter for a `@json` struct (e.g.
-/// `User_from_json`). See [`json_to_json_fn`].
-pub fn json_from_json_fn(struct_name: &str) -> String {
-    method_fn(struct_name, "from_json")
 }

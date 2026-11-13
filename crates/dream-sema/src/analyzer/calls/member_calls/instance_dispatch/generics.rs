@@ -169,6 +169,10 @@ impl<'a> Analyzer<'a> {
             );
         }
 
+        if !self.member_requirements_met(template, &bindings, method.position, diagnostics) {
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
         self.verify_generic_constraints(
             &template.generic_constraints,
             &bindings,

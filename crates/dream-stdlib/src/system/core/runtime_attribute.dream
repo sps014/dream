@@ -5,4 +5,9 @@ module system.core;
 public struct RuntimeAttribute {
     /// Name exposed to callers of the foreign function.
     public export_name: string;
+    /// Native capability library that implements the service (`"net"`, `"gpu"`, …), or `"core"`
+    /// for services the core host or the runtime itself provides. Omitting it means `"core"`.
+    public host: Option<string>;
+    /// How the service behaves; see `RuntimeTrait`. Listing traits requires naming the host.
+    public traits: List<RuntimeTrait>;
 }

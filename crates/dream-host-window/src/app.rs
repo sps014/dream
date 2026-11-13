@@ -1,5 +1,5 @@
 //! The platform-owned loop for targets whose operating system keeps the main thread
-//! (`dream_abi::c_abi::PLATFORM_APP_MAIN`). SDL's main callbacks drive it: initialization runs
+//! (`system.core.platform_main`). SDL's main callbacks drive it: initialization runs
 //! the guest entry once, every iteration runs one bounded scheduler pass, and events are only
 //! recorded. SDL may deliver lifecycle events from another thread or while a pass is running, so
 //! the callback never re-enters Dream; the next `windowPoll` reads the recorded events.

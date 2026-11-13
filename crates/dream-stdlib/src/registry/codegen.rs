@@ -12,6 +12,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.json",
         "system.encoding",
     ],
+    core_language: true,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &[],
     files: &[
         (

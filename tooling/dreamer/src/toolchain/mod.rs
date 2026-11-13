@@ -1,5 +1,5 @@
 //! Pinned host toolchains under `~/.dream/toolchains/` (`dreamer toolchain install`), driven by
-//! the shared `dream_abi::toolchain::PINNED_TOOLS` table. A tool without archives (LLVM, which a
+//! the shared `dream_stdlib::toolchain::pinned_tools` table. A tool without archives (LLVM, which a
 //! release ships in `lib/dream/llvm`) reports its install hint instead.
 
 mod install;
@@ -8,14 +8,15 @@ mod slang_layout;
 pub use install::{install, list, uninstall};
 
 use anyhow::{Result, bail};
-use dream_abi::toolchain::{PINNED_TOOLS, PinnedTool};
+use dream_abi::toolchain::PinnedTool;
+use dream_stdlib::toolchain::pinned_tools;
 use std::path::{Path, PathBuf};
 
 pub fn parse_tool(name: &str) -> Result<&'static PinnedTool> {
-    match dream_abi::toolchain::pinned_tool(name) {
+    match dream_stdlib::toolchain::pinned_tool(name) {
         Some(tool) => Ok(tool),
         None => {
-            let known: Vec<_> = PINNED_TOOLS.iter().map(|t| t.name).collect();
+            let known: Vec<_> = pinned_tools().map(|t| t.name).collect();
             bail!(
                 "unknown toolchain component '{name}' (expected one of: {})",
                 known.join(", ")
@@ -114,8 +115,7 @@ pub fn is_installed(tool: &PinnedTool) -> bool {
 /// Tools a bare `dreamer toolchain install` downloads for this host.
 pub fn default_tools() -> Result<Vec<&'static PinnedTool>> {
     let host = host_key()?;
-    Ok(PINNED_TOOLS
-        .iter()
+    Ok(pinned_tools()
         .filter(|t| t.default_install && t.archive(host).is_some())
         .collect())
 }

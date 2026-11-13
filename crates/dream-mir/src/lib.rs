@@ -85,6 +85,8 @@ pub struct Mir {
     pub layouts: dream_hir::LayoutTable,
     /// Host/extern imports, carried verbatim from HIR for the backend to emit `(import ...)`.
     pub imports: Vec<dream_hir::HImport>,
+    /// See [`dream_hir::Hir::platform_main`].
+    pub platform_main: Option<String>,
     /// `@intrinsic` externs: `(callee DefId, intrinsic key)`. Carried from HIR so the backend's
     /// symbol table resolves intrinsic call targets (to the runtime helper `$<key>`, or the async
     /// scheduler for `sleep`) instead of the `$def{N}` fallback.

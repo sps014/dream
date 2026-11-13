@@ -10,15 +10,15 @@ extend System {
     @intrinsic(Intrinsic.Println)
     public static extern fun println<T>(borrow value: T): void;
 
-    @runtime("consoleReadLine")
+    @runtime("consoleReadLine", "core", RuntimeTrait.Component)
     static extern fun host_read_line(): string;
 
-    @runtime("consoleReadKey")
+    @runtime("consoleReadKey", "core", RuntimeTrait.Component)
     static extern fun host_read_key(): char;
 
     @native
     @node
-    @runtime("consoleExit")
+    @runtime("consoleExit", "core", RuntimeTrait.Component)
     static extern fun host_exit(code: int): void;
 
     @runtime("processPlatform")
@@ -37,10 +37,10 @@ extend System {
     static extern fun host_exe_path(): string;
 
     // Tagged: leading '1' + value when set, empty / other when unset.
-    @runtime("processEnvGet")
+    @runtime("processEnvGet", "core", RuntimeTrait.Component)
     static extern fun host_env_get(borrow name: string): string;
 
-    @runtime("processEnvSet")
+    @runtime("processEnvSet", "core", RuntimeTrait.Component)
     static extern fun host_env_set(borrow name: string, borrow value: string): void;
 
     @runtime("processCwd")
@@ -133,10 +133,10 @@ extend System {
         return Result.Ok(Unit());
     }
 
-    @runtime("processEnvUnset")
+    @runtime("processEnvUnset", "core", RuntimeTrait.Component)
     static extern fun host_env_unset(borrow name: string): void;
 
-    @runtime("processEnvKeys")
+    @runtime("processEnvKeys", "core", RuntimeTrait.Component)
     static extern fun host_env_keys(): string;
 
     @runtime("processTempDir")

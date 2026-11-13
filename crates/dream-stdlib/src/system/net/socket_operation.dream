@@ -11,23 +11,23 @@ internal class SocketOperation {
         this.id = id;
     }
 
-    @runtime("netSocketStart")
+    @runtime("netSocketStart", "net", RuntimeTrait.Component)
     static extern fun start_host(request: string, bytes: byte[]): int;
 
     @async_host
-    @runtime("netSocketWait")
+    @runtime("netSocketWait", "net", RuntimeTrait.Component)
     static extern async fun wait_host(id: int): int;
 
-    @runtime("netSocketResult")
+    @runtime("netSocketResult", "net", RuntimeTrait.Component)
     static extern fun result_host(id: int): byte[];
 
-    @runtime("netSocketCancel")
+    @runtime("netSocketCancel", "net", RuntimeTrait.Component)
     static extern fun cancel_host(id: int): void;
 
-    @runtime("netSocketRelease")
+    @runtime("netSocketRelease", "net", RuntimeTrait.Component)
     static extern fun release_host(id: int): void;
 
-    @runtime("netSocketClaim")
+    @runtime("netSocketClaim", "net", RuntimeTrait.Component)
     static extern fun claim_host(id: int): void;
 
     internal fun claim(): void {

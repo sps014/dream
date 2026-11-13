@@ -157,18 +157,6 @@ mod abi_h_lockstep {
             MAX_MEMORY_PAGES as i64
         );
         assert_eq!(header_define(h, "STRING_BASE"), STRING_BASE as i64);
-        assert_eq!(
-            header_define(h, "DREAM_REGEX_IGNORE_CASE"),
-            DREAM_REGEX_IGNORE_CASE as i64
-        );
-        assert_eq!(
-            header_define(h, "DREAM_REGEX_MULTILINE"),
-            DREAM_REGEX_MULTILINE as i64
-        );
-        assert_eq!(
-            header_define(h, "DREAM_REGEX_DOTALL"),
-            DREAM_REGEX_DOTALL as i64
-        );
         assert_eq!(header_define(h, "ALLOC_LOCK_ADDR"), ALLOC_LOCK_ADDR as i64);
         assert_eq!(header_define(h, "HEAP_PTR_ADDR"), HEAP_PTR_ADDR as i64);
         assert_eq!(

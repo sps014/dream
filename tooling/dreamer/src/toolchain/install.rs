@@ -3,7 +3,8 @@ use super::{
 };
 use crate::fetch::cache_dir;
 use anyhow::{Context, Result, bail};
-use dream_abi::toolchain::{ArchiveKind, HostArchive, PINNED_TOOLS, PinnedTool};
+use dream_abi::toolchain::{ArchiveKind, HostArchive, PinnedTool};
+use dream_stdlib::toolchain::pinned_tools;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -51,7 +52,7 @@ pub fn install(tools: &[&'static PinnedTool]) -> Result<()> {
 pub fn list() -> Result<()> {
     println!("prefix: {}", dream_prefix().display());
     println!("toolchains: {}", toolchains_dir().display());
-    for tool in PINNED_TOOLS {
+    for tool in pinned_tools() {
         let status = if is_installed(tool) {
             format!("installed ({})", tool_dir(tool).display())
         } else if tool.archives.is_empty() {
@@ -322,7 +323,7 @@ fn write_toolchains_env() -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     let mut body = String::from("# Written by `dreamer toolchain install`. Sourced from env.sh.\n");
-    for tool in PINNED_TOOLS {
+    for tool in pinned_tools() {
         if is_installed(tool) {
             body.push_str(&format!(
                 "{}={}\n",

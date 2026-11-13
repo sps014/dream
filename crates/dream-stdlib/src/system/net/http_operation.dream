@@ -18,21 +18,21 @@ internal class HttpOperation {
         }
     }
 
-    @runtime("netOperationPoll")
+    @runtime("netOperationPoll", "net", RuntimeTrait.Component)
     static extern fun poll_host(id: int): byte[];
 
     internal fun claim(): void {
         HttpOperation.claim_host(this.id);
     }
 
-    @runtime("netOperationClaim")
+    @runtime("netOperationClaim", "net", RuntimeTrait.Component)
     static extern fun claim_host(id: int): void;
 
-    @runtime("netOperationRelease")
+    @runtime("netOperationRelease", "net", RuntimeTrait.Component)
     static extern fun release_host(id: int): void;
 
     @async_host
-    @runtime("netOperationWait")
+    @runtime("netOperationWait", "net", RuntimeTrait.Component)
     static extern async fun wait_host(id: int): int;
 
     static fun payload(wire: byte[]): byte[] {

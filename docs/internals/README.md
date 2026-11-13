@@ -38,6 +38,7 @@ Additional engineering records:
 - [Stdlib v1 implementation status](16-stdlib-v1-implementation.md): delivered foundations and remaining release phases.
 - [Self-hosting readiness](13-self-hosting-readiness.md): resolved foundations and bootstrap acceptance gates.
 - [Self-hosting tracker](23-self-hosting-tracker.md): remaining stdlib, Stage 0 and port work for the mechanical Rust-to-Dream port.
+- [Core language boundary](24-core-language-boundary.md): which packages the compiler may name, and how library packages declare host data.
 - [Window host](17-window-host.md): main-thread event pump, event wire format, and the GPU surface C ABI.
 - [GPU shader bundle](18-gpu-shader-bundle.md): how shader modules are compiled ahead of time and the bundle format every GPU host reads.
 - [Native GPU host](19-gpu-host.md): the slang-rhi capability library, its pinned build, `dream-slang-layout`, futures, bindings and the backend test matrix.

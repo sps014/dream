@@ -33,13 +33,13 @@ public class HttpClient {
         HttpClient.close_host(this.id);
     }
 
-    @runtime("netClientCreate")
+    @runtime("netClientCreate", "net", RuntimeTrait.Component)
     static extern fun create_host(cookie_jar: int): int;
 
-    @runtime("netClientClose")
+    @runtime("netClientClose", "net", RuntimeTrait.Component)
     static extern fun close_host(id: int): void;
 
-    @runtime("netHttpStart")
+    @runtime("netHttpStart", "net", RuntimeTrait.Component)
     static extern fun send_host(id: int, borrow request: string, borrow bytes: byte[]): int;
 
     /// Sends with default options: a 30-second total deadline and the host redirect policy.

@@ -12,15 +12,15 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.json",
         "system.codegen",
     ],
+    core_language: false,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &[],
     files: &[
         (
             "<std>/system/json/derive/json_field_spec.dream",
             include_str!("../system/json/derive/json_field_spec.dream"),
-        ),
-        (
-            "<std>/system/json/derive/json_collection_spec.dream",
-            include_str!("../system/json/derive/json_collection_spec.dream"),
         ),
         (
             "<std>/system/json/derive/json_variant_spec.dream",

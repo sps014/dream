@@ -143,9 +143,6 @@ pub const ATTR_PRINT: &str = "print";
 pub const ATTR_PRINTLN: &str = "println";
 pub const ATTR_PROMISE_ALL: &str = "promise_all";
 pub const ATTR_PROMISE_RACE: &str = "promise_race";
-pub const ATTR_JSON_SERIALIZE: &str = "json_serialize";
-pub const ATTR_JSON_DESERIALIZE: &str = "json_deserialize";
-pub const ATTR_JSON_FROM_VALUE: &str = "json_from_value";
 /// `GenAttributes.id<A>()` / `decode<A>(attrs)` / `decode_all<A>(attrs)` — forward to the
 /// `__gen_*` statics the driver synthesizes on every `@attribute` type.
 pub const ATTR_GEN_ATTRIBUTE_ID: &str = "gen_attribute_id";
@@ -165,7 +162,6 @@ pub const ATTR_SLEEP: &str = "sleep";
 pub const ATTR_STRING_ALLOC: &str = "string_alloc";
 pub const ATTR_STRING_BUILDER_BUFFER: &str = "string_builder_buffer";
 pub const ATTR_STRING_CLONE_RANGE: &str = "string_clone_range";
-pub const ATTR_STRING_JSON_BOUNDARY: &str = "string_json_boundary";
 pub const ATTR_STRING_SET: &str = "string_set";
 /// `string.from_utf8(bytes)` — build a string from a full `byte[]` UTF-8 payload.
 pub const ATTR_STRING_FROM_UTF8: &str = "string_from_utf8";
@@ -236,15 +232,6 @@ pub const ATTR_WIRE_ENCODE: &str = "wire_encode";
 pub const ATTR_WIRE_DECODE: &str = "wire_decode";
 /// `System.panic(message)` — abort with `message`, reporting the call site's `file:line`.
 pub const ATTR_PANIC: &str = "dream_panic";
-pub const ATTR_REGEX_COMPILE: &str = "regex_compile";
-pub const ATTR_REGEX_FREE: &str = "regex_free";
-pub const ATTR_REGEX_FIND: &str = "regex_find";
-pub const ATTR_REGEX_TEST: &str = "regex_test";
-pub const ATTR_REGEX_FIND_ALL: &str = "regex_find_all";
-pub const ATTR_REGEX_GROUP_COUNT: &str = "regex_group_count";
-pub const ATTR_REGEX_NAME_COUNT: &str = "regex_name_count";
-pub const ATTR_REGEX_NAME_AT: &str = "regex_name_at";
-pub const ATTR_REGEX_NAME_NUMBER: &str = "regex_name_number";
 /// `Vector<T>.lane_count()` — number of `T` lanes in a `v128`.
 pub const ATTR_SIMD_LANE_COUNT: &str = "simd_lane_count";
 pub const ATTR_SIMD_V128_SPLAT: &str = "simd_v128_splat";
@@ -284,15 +271,6 @@ pub enum IntrinsicOp {
     PromiseAll,
     /// `Promise.race(xs)` — first to settle, yield `Future<T>`.
     PromiseRace,
-    /// `Json.serialize<T>(x)` — `T` to its JSON string.
-    JsonSerialize,
-    /// `Json.deserialize<T>(s)` — JSON string to `Result<T, ParseError>`.
-    JsonDeserialize,
-    /// `Json.from_value<T>(v)` — already-parsed `JsonValue` to `T`.
-    JsonFromValue,
-    ValidationDecode,
-    ValidationValidate,
-    ValidationSchema,
 
     /// `GenAttributes.id<A>()` — the `module::name` identity of attribute type `A`.
     GenAttributeId,
@@ -333,7 +311,6 @@ pub enum IntrinsicOp {
     StringView,
     StringBuilderBuffer,
     StringCloneRange,
-    StringJsonBoundary,
     /// `Debug.free_list_head()` — head of the allocator free list.
     DebugFreeList,
     /// `Debug.heap_ptr()` — current bump-pointer value.
@@ -382,8 +359,6 @@ pub enum IntrinsicOp {
     WireDecode,
     /// `System.panic(message)` — the backend appends the call site's source location.
     Panic,
-    /// `system.text` PCRE2 helpers (`regex_compile` / `regex_find` / …).
-    Regex,
     SimdLaneCount,
     SimdV128Splat,
     SimdV128Load,
@@ -440,12 +415,6 @@ impl IntrinsicOp {
             ATTR_PRINTLN => IntrinsicOp::Println,
             ATTR_PROMISE_ALL => IntrinsicOp::PromiseAll,
             ATTR_PROMISE_RACE => IntrinsicOp::PromiseRace,
-            ATTR_JSON_SERIALIZE => IntrinsicOp::JsonSerialize,
-            ATTR_JSON_DESERIALIZE => IntrinsicOp::JsonDeserialize,
-            ATTR_JSON_FROM_VALUE => IntrinsicOp::JsonFromValue,
-            "validation_decode" => IntrinsicOp::ValidationDecode,
-            "validation_validate" => IntrinsicOp::ValidationValidate,
-            "validation_schema" => IntrinsicOp::ValidationSchema,
 
             ATTR_GEN_ATTRIBUTE_ID => IntrinsicOp::GenAttributeId,
             ATTR_GEN_ATTRIBUTE_DECODE => IntrinsicOp::GenAttributeDecode,
@@ -460,7 +429,6 @@ impl IntrinsicOp {
             ATTR_STRING_CHAR_AT_UNCHECKED => IntrinsicOp::StringCharAtUnchecked,
             ATTR_STRING_BUILDER_BUFFER => IntrinsicOp::StringBuilderBuffer,
             ATTR_STRING_CLONE_RANGE => IntrinsicOp::StringCloneRange,
-            ATTR_STRING_JSON_BOUNDARY => IntrinsicOp::StringJsonBoundary,
             ATTR_STRING_SET => IntrinsicOp::StringSet,
             ATTR_STRING_FROM_UTF8 => IntrinsicOp::StringFromUtf8,
             ATTR_STRING_FROM_UTF8_PREFIX => IntrinsicOp::StringFromUtf8Prefix,
@@ -503,15 +471,6 @@ impl IntrinsicOp {
             ATTR_WIRE_ENCODE => IntrinsicOp::WireEncode,
             ATTR_WIRE_DECODE => IntrinsicOp::WireDecode,
             ATTR_PANIC => IntrinsicOp::Panic,
-            ATTR_REGEX_COMPILE
-            | ATTR_REGEX_FREE
-            | ATTR_REGEX_FIND_ALL
-            | ATTR_REGEX_FIND
-            | ATTR_REGEX_TEST
-            | ATTR_REGEX_GROUP_COUNT
-            | ATTR_REGEX_NAME_COUNT
-            | ATTR_REGEX_NAME_AT
-            | ATTR_REGEX_NAME_NUMBER => IntrinsicOp::Regex,
             ATTR_SIMD_LANE_COUNT => IntrinsicOp::SimdLaneCount,
             ATTR_SIMD_V128_SPLAT => IntrinsicOp::SimdV128Splat,
             ATTR_SIMD_V128_LOAD => IntrinsicOp::SimdV128Load,

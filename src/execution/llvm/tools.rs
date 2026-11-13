@@ -66,7 +66,7 @@ pub fn resolve_llvm(config: &Arc<ToolchainConfig>) -> Result<LlvmTools, String> 
 }
 
 fn resolve_uncached(config: &Arc<ToolchainConfig>) -> Result<PathBuf, String> {
-    let llvm = dream_abi::toolchain::pinned_tool("llvm").expect("llvm is a pinned tool");
+    let llvm = dream_abi::toolchain::compiler_tool("llvm").expect("llvm is a pinned tool");
     let tools = LlvmTools {
         bin: config.locate_tool(llvm)?.root.join("bin"),
         config: config.clone(),

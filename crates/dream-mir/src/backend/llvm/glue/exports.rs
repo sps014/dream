@@ -4,9 +4,9 @@ use super::glue;
 pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
     if needs_guest_context(l) {
         for (export, target) in context_exports(l) {
-            let sig = l.sig(target);
-            l.own(export, sig);
-            l.export(export, export);
+            let sig = l.sig(&target);
+            l.own(&export, sig);
+            l.export(&export, &export);
         }
     }
     for (def, export) in &l.mir.exports {
@@ -25,10 +25,10 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
 pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
     if needs_guest_context(l) {
         for (export, target) in context_exports(l) {
-            let count = l.sig(target).fty.params.len();
-            let mut fx = glue(l, export);
+            let count = l.sig(&target).fty.params.len();
+            let mut fx = glue(l, &export);
             let args = (0..count).map(|i| fx.arg(i)).collect::<Vec<_>>();
-            let result = fx.call(target, &args);
+            let result = fx.call(&target, &args);
             fx.w.ret(result.as_ref().map(|v| &v.v));
             fx.finish();
         }
@@ -58,25 +58,26 @@ fn needs_guest_context(l: &Lcx<'_>) -> bool {
         && (!l.mir.imports.is_empty() || !l.mir.exports.is_empty())
 }
 
-fn context_exports(l: &Lcx<'_>) -> Vec<(&'static str, &'static str)> {
-    let mut exports = dream_abi::guest_contract::EXPORTS.to_vec();
+fn context_exports(l: &Lcx<'_>) -> Vec<(String, String)> {
+    let mut exports: Vec<(String, String)> = dream_abi::guest_contract::EXPORTS
+        .iter()
+        .map(|(export, target)| (export.to_string(), target.to_string()))
+        .collect();
     if l.mir.imports.iter().any(|import| {
         import
             .params
             .iter()
             .any(|ty| matches!(l.interner.kind(*ty), dream_types::TyKind::Func(..)))
     }) {
-        exports.push(dream_abi::guest_contract::FUNCTION_EXPORT);
+        let (export, target) = dream_abi::guest_contract::FUNCTION_EXPORT;
+        exports.push((export.to_string(), target.to_string()));
     }
-    if l.mir
-        .imports
-        .iter()
-        .any(|import| import.module == "Dream" && import.field == "gpuLibraryLoad")
-    {
-        exports.extend([
-            ("__dream_gpu_version", "dream_gpu_bundle_abi_version"),
-            ("__dream_gpu_index", "dream_gpu_bundle_index"),
-        ]);
+    for import in &l.mir.imports {
+        for pair in &import.guest_exports {
+            if !exports.contains(pair) {
+                exports.push(pair.clone());
+            }
+        }
     }
     exports
 }

@@ -2,7 +2,7 @@
 //! - this module: the `try_analyze_static_method` dispatch (variant construction, generic-class
 //!   static methods, and routing to the generic-static / plain paths).
 //! - [`intrinsics`]: on-the-fly monomorphization of generic static methods, including the
-//!   `System.print`, `Buffer.alloc`, `Bytes.of`/`to`, `Promise.*`, and `Json.*` intrinsics.
+//!   `System.print`, `Buffer.alloc`, `Bytes.of`/`to`, and `Promise.*` intrinsics.
 //! - [`plain`]: plain (non-generic) static-method resolution (`analyze_static_call`).
 
 use super::super::super::*;
@@ -13,6 +13,90 @@ mod intrinsics;
 mod plain;
 
 impl<'a> Analyzer<'a> {
+    fn analyze_static_call_through_parameter(
+        &mut self,
+        bound: &Type,
+        method: &SyntaxToken,
+        generic_args: &Option<Vec<Type>>,
+        params: &Vec<ExpressionNode<'a>>,
+        ctx: &AnalyzerContext<'a, '_>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        if let Type::Struct(name, Some(args)) = bound
+            && self
+                .type_ctx
+                .nominal_kind(&name.text)
+                .and_then(|kind| self.type_ctx.resolve(kind, &name.text))
+                .and_then(|def| self.generic_struct(def))
+                .is_some()
+        {
+            self.ensure_struct_instantiated(&name.text, args, &method.position, diagnostics);
+        }
+        let owner = self.type_ctx.lower(bound);
+        let type_name = self.type_id_display(owner);
+        if let Some(template) = self.generic_static_template(owner, &method.text, params.len()) {
+            let base = format!("{type_name}.{}", method.text);
+            return self.analyze_generic_static_method(
+                intrinsics::GenericStaticMethodCall {
+                    template,
+                    base: &base,
+                    type_name: &type_name,
+                    method,
+                    generic_args,
+                    params,
+                },
+                ctx,
+                diagnostics,
+            );
+        }
+        if self.method_overloaded(owner, &method.text)
+            || self.method_info(owner, &method.text).is_ok()
+        {
+            return self.analyze_static_call(
+                owner,
+                method,
+                params,
+                ctx.parent_function,
+                ctx.symbol_table,
+                diagnostics,
+            );
+        }
+        Err(report_with_code(
+            diagnostics,
+            format!(
+                "Type '{}' has no static method '{}'",
+                type_name, method.text
+            ),
+            Some(method.position),
+            "missing-member",
+        ))
+    }
+
+    /// The generic static method `owner.name` whose parameter count accepts `argc` arguments,
+    /// or the first declared one when none does (its arity diagnostic then explains the call).
+    pub(in crate::analyzer) fn generic_static_template(
+        &self,
+        owner: dream_types::TypeId,
+        name: &str,
+        argc: usize,
+    ) -> Option<&'a FunctionNode<'a>> {
+        let defs = self
+            .function_table
+            .generic_method_overloads
+            .get(&(owner, name.to_string()))?;
+        let templates = defs.iter().filter_map(|def| self.generic_functions.get(def).copied());
+        let accepts = |template: &&'a FunctionNode<'a>| {
+            let required = template
+                .parameters
+                .iter()
+                .filter(|p| p.default.is_none() && !p.is_variadic)
+                .count();
+            let variadic = template.parameters.last().is_some_and(|p| p.is_variadic);
+            argc >= required && (variadic || argc <= template.parameters.len())
+        };
+        templates.clone().find(accepts).or_else(|| templates.into_iter().next())
+    }
+
     /// Handles `Type.method(args)` static dispatch when the receiver `id` names a type rather than
     /// a local: discriminated-union variant construction, on-the-fly monomorphization of generic
     /// static methods (including the `Buffer.alloc` and promise-combinator intrinsics), and plain
@@ -33,6 +117,21 @@ impl<'a> Analyzer<'a> {
         let is_local = (*ctx.symbol_table).as_ref().borrow().get_symbol(id).is_ok();
         if is_local {
             return Ok(None);
+        }
+
+        // Generic bodies are analyzed once per instantiation, so `T.member(...)` names the
+        // concrete type bound to `T` in this instance.
+        if let Some(bound) = self.current_generic_bindings.get(&id.text).cloned() {
+            return self
+                .analyze_static_call_through_parameter(
+                    &bound,
+                    method,
+                    generic_args,
+                    params,
+                    ctx,
+                    diagnostics,
+                )
+                .map(Some);
         }
 
         // `Enum.Variant(args)`: construct a discriminated-union value.
@@ -127,13 +226,29 @@ impl<'a> Analyzer<'a> {
             return Ok(Some(ret));
         }
 
-        // Support generic static method calls by monomorphizing them on the fly.
-        if let Some(&template) = self
-            .function_table
-            .generic_methods
-            .get(&(owner, method.text.clone()))
-            .and_then(|def| self.generic_functions.get(def))
+        // `Union<T>.method(...)` on a generic union: instantiate it so its template and
+        // extension methods attach, then dispatch on the concrete union.
+        if let Some(args) = generic_args.as_ref().filter(|a| !a.is_empty())
+            && nominal_def.is_some_and(|def| self.generic_union(def).is_some())
         {
+            let args: Vec<Type> = args
+                .iter()
+                .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
+                .collect();
+            self.ensure_union_instantiated(&type_name, &args, &id.position, diagnostics);
+            let concrete_id = self.type_ctx.lower(&Type::Struct(id.clone(), Some(args)));
+            return Ok(Some(self.analyze_static_call(
+                concrete_id,
+                method,
+                params,
+                ctx.parent_function,
+                ctx.symbol_table,
+                diagnostics,
+            )?));
+        }
+
+        // Support generic static method calls by monomorphizing them on the fly.
+        if let Some(template) = self.generic_static_template(owner, &method.text, params.len()) {
             let t = self.analyze_generic_static_method(
                 intrinsics::GenericStaticMethodCall {
                     template,

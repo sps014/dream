@@ -1,0 +1,23 @@
+module system.json;
+
+// JSON encoding of `float` for `Json.serialize`, `Json.deserialize`, `Json.from_value` and the
+// collection encoders.
+extend float {
+    /// Appends this value as JSON as a JSON number.
+    internal fun write_json(borrow sb: StringBuilder, borrow options: JsonOptions): void {
+        Json.write_number(sb, (double)this);
+    }
+
+    /// Reads a `float` from a parsed JSON value; a value of another kind reads as zero.
+    internal static fun from_json(borrow v: JsonValue, borrow options: JsonOptions): float {
+        return (float)v.as_double().unwrap_or(0.0d);
+    }
+
+    /// Parses JSON text holding a single `float`.
+    internal static fun read_json(
+        borrow text: string,
+        borrow options: JsonOptions
+    ): Result<float, ParseError> {
+        return Json.read_parsed<float>(text, options);
+    }
+}

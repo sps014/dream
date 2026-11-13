@@ -80,7 +80,7 @@ impl ModRefTable {
             })
             .chain(mir.imports.iter().filter_map(|import| {
                 (!mir.profile.is_debug() && !import.is_async && import.params.is_empty())
-                    .then(|| host_summary(&import.module, &import.field))
+                    .then(|| host_summary(import))
                     .flatten()
                     .map(|summary| (import.def, summary))
             }))

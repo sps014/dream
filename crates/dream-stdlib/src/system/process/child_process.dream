@@ -121,7 +121,7 @@ public class ChildProcess {
         }
     }
 
-    @runtime("processClose")
+    @runtime("processClose", "process")
     static extern fun close_host(id: int): void;
 
     @intrinsic(Intrinsic.DreamTaskProtect)

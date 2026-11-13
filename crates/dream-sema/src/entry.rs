@@ -20,7 +20,7 @@ pub(crate) enum EntryTail {
 }
 
 /// The stdlib's no-value success payload (`system.core::Unit`).
-pub(crate) const UNIT_TYPE: &str = "Unit";
+pub(crate) const UNIT_TYPE: &str = dream_abi::core_items::UNIT_NAME;
 
 /// The implicit tail return for `function`, or `None` when it must return on every path.
 ///

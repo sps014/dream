@@ -333,6 +333,11 @@ impl<'a> Analyzer<'a> {
             } else {
                 (Vec::new(), dream_hir::CShape::Void)
             };
+            let guest_exports = func
+                .file_path
+                .as_deref()
+                .map(|source| dream_stdlib::guest_exports_for(source, &field))
+                .unwrap_or_default();
             imports.push(HImport {
                 def,
                 name: sym_name,
@@ -343,6 +348,11 @@ impl<'a> Analyzer<'a> {
                 ret,
                 is_async: func.is_async,
                 async_host,
+                host_capability: dream_abi::attributes::runtime_host_capability(&func.attributes)
+                    .map(|c| c.name()),
+                component: dream_abi::attributes::runtime_is_component(&func.attributes),
+                quiet: dream_abi::attributes::runtime_is_quiet(&func.attributes),
+                guest_exports,
                 c_wide_strings,
                 c_params,
                 c_ret,

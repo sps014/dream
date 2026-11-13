@@ -158,7 +158,13 @@ pub(super) fn children(e: &HExpr) -> Children<'_> {
             new_len: b,
             ..
         } => out.extend([&**a, &**b]),
-        K::Call { args, .. } | K::UnionNew { args, .. } | K::New { args, .. } => out.extend(args),
+        K::Call { args, .. } | K::UnionNew { args, .. } => out.extend(args),
+        K::New {
+            args, field_inits, ..
+        } => {
+            out.extend(args);
+            out.extend(field_inits.iter().map(|(_, value)| value));
+        }
         K::ArrayLit { elems, .. } | K::Tuple { elems } => out.extend(elems),
         K::MethodCall { receiver, args, .. } | K::InterfaceCall { receiver, args, .. } => {
             out.push(receiver);

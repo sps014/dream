@@ -82,14 +82,21 @@ impl Compiler {
                     {
                         diagnostics.report_error("standalone WASI emits command components; exported libraries require a WIT world".into(), None);
                     }
-                    for (module, field) in &live_imports {
-                        if !dream_abi::runtime_hosts::component_host_supported(module, field) {
+                    for import in &mir.imports {
+                        let supported = import.module.starts_with("c/")
+                            || (import.module == dream_abi::js_abi::HOST_MODULE
+                                && (import.component
+                                    || dream_mir::runtime::modules::runtime_module_host_field(
+                                        &import.field,
+                                    )));
+                        if !supported {
                             diagnostics.report_error(
-                            format!(
-                                "capability '{module}.{field}' is not available on {environment}"
-                            ),
-                            None,
-                        );
+                                format!(
+                                    "capability '{}.{}' is not available on {environment}",
+                                    import.module, import.field
+                                ),
+                                None,
+                            );
                         }
                     }
                     if diagnostics.has_errors() {

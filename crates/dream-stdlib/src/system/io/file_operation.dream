@@ -13,7 +13,7 @@ internal class FileOperation {
         FileOperation.release_host(this.id);
     }
 
-    @runtime("fileOperationStart")
+    @runtime("fileOperationStart", "core", RuntimeTrait.Component)
     static extern fun start_host(
         kind: int,
         fd: int,
@@ -24,16 +24,16 @@ internal class FileOperation {
         position: long
     ): usize;
 
-    @runtime("fileOperationDone")
+    @runtime("fileOperationDone", "core", RuntimeTrait.Component)
     static extern fun done_host(id: usize): int;
 
-    @runtime("fileOperationResult")
+    @runtime("fileOperationResult", "core", RuntimeTrait.Component)
     static extern fun result_host(id: usize): long;
 
-    @runtime("fileOperationBytes")
+    @runtime("fileOperationBytes", "core", RuntimeTrait.Component)
     static extern fun bytes_host(id: usize): byte[];
 
-    @runtime("fileOperationRelease")
+    @runtime("fileOperationRelease", "core", RuntimeTrait.Component)
     static extern fun release_host(id: usize): void;
 
     internal static fun start(
@@ -53,7 +53,7 @@ internal class FileOperation {
     }
 
     @async_host
-    @runtime("fileOperationWait")
+    @runtime("fileOperationWait", "core", RuntimeTrait.Component)
     static extern async fun wait_host(id: usize): int;
 
     internal get done(): bool {

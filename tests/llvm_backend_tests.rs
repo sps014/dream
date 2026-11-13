@@ -202,7 +202,7 @@ fn optimized_wasm_audio_decoder_exports_worker_entry_points() {
         }
     }
     for name in
-        dream_mir::runtime::modules::worker_exports(dream_mir::runtime::RuntimeNeed::AUDIO_DECODE)
+        dream_mir::runtime::modules::worker_exports(dream_mir::runtime::runtime_need_from_keys(["audioDecodeStart"]))
     {
         assert!(
             exports.iter().any(|export| export == name),

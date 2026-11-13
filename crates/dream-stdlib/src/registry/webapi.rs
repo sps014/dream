@@ -13,6 +13,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.text",
         "system.collections",
     ],
+    core_language: false,
+    web_assets: None,
+    tools: &[],
+    guest_exports: &[],
     generators: &["system.webapi.derive"],
     files: &[
         (

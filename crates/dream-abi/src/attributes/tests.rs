@@ -297,6 +297,10 @@ fn catalog() -> &'static UserAttributes {
             ),
             (
                 "system.core",
+                include_str!("../../../dream-stdlib/src/system/core/runtime_trait.dream"),
+            ),
+            (
+                "system.core",
                 include_str!("../../../dream-stdlib/src/system/core/runtime_attribute.dream"),
             ),
             (
@@ -478,13 +482,13 @@ fn optional_attribute_fields_and_variadics_are_validated() {
     for source in [
         "@attribute struct good { first: string; second: Option<string>; }",
         "@attribute struct many { values: List<string>; }",
+        "@attribute struct tail { first: Option<string>; rest: List<string>; }",
     ] {
         let (_, diagnostics) = declared_registry(source);
         assert!(!diagnostics.has_errors(), "{:?}", diagnostics.diagnostics);
     }
     for source in [
         "@attribute struct bad { first: Option<string>; second: string; }",
-        "@attribute struct bad { first: Option<string>; rest: List<string>; }",
         "@attribute struct bad { rest: List<string>; last: string; }",
     ] {
         let (_, diagnostics) = declared_registry(source);

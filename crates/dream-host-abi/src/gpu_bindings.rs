@@ -121,7 +121,7 @@ pub fn artifacts() -> Vec<(&'static str, String)> {
             dream,
         ),
         ("runtime/src/hosts/gpu_layouts.js", js),
-        ("crates/dream-abi/gpu_binding_layouts.json", json),
+        ("crates/dream-host-abi/gpu_binding_layouts.json", json),
     ]
 }
 

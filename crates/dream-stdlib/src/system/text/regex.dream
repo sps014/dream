@@ -2,31 +2,31 @@ module system.text;
 
 // Compiled regular expressions. Native C uses PCRE2-16 JIT; WASM uses the in-module
 // PCRE2-compatible engine.
-@intrinsic(Intrinsic.RegexCompile)
+@runtime("regex_compile")
 static extern fun regex_compile(borrow pattern: string, flags: RegexFlags): usize;
 
-@intrinsic(Intrinsic.RegexFree)
+@runtime("regex_free")
 static extern fun regex_free(h: usize): void;
 
-@intrinsic(Intrinsic.RegexFind)
+@runtime("regex_find")
 static extern fun regex_find(h: usize, borrow input: string, pos: int): int[];
 
-@intrinsic(Intrinsic.RegexTest)
+@runtime("regex_test")
 static extern fun regex_test(h: usize, borrow input: string): int;
 
-@intrinsic(Intrinsic.RegexFindAll)
+@runtime("regex_find_all")
 static extern fun regex_find_all(h: usize, borrow input: string): int[];
 
-@intrinsic(Intrinsic.RegexGroupCount)
+@runtime("regex_group_count")
 static extern fun regex_group_count(h: usize): int;
 
-@intrinsic(Intrinsic.RegexNameCount)
+@runtime("regex_name_count")
 static extern fun regex_name_count(h: usize): int;
 
-@intrinsic(Intrinsic.RegexNameAt)
+@runtime("regex_name_at")
 static extern fun regex_name_at(h: usize, i: int): string;
 
-@intrinsic(Intrinsic.RegexNameNumber)
+@runtime("regex_name_number")
 static extern fun regex_name_number(h: usize, i: int): int;
 
 /// A compiled regular expression. Use `Regex.compile` to report invalid patterns.

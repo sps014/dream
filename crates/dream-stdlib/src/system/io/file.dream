@@ -3,63 +3,63 @@ module system.io;
 /// `File` - a small cross-runtime filesystem API.
 public static class File {
     // --- host bridge: `@runtime` WASM imports + matching native C symbols -------------------
-    @runtime("fileRead")
+    @runtime("fileRead", "core", RuntimeTrait.Component)
     static extern fun file_read(borrow path: string): string;
 
     // Overwrites `path` with `content`; returns the number of bytes written (-1 on error).
-    @runtime("fileWrite")
+    @runtime("fileWrite", "core", RuntimeTrait.Component)
     static extern fun file_write(borrow path: string, borrow content: string): long;
 
     // Appends `content` to `path`; returns the number of bytes written (-1 on error).
-    @runtime("fileAppend")
+    @runtime("fileAppend", "core", RuntimeTrait.Component)
     static extern fun file_append(borrow path: string, borrow content: string): long;
 
     // Binary I/O: bytes are bulk-copied straight between the file and a Dream `byte[]`, with no
     // string round-trip (binary-safe, minimal marshalling).
-    @runtime("fileReadBytes")
+    @runtime("fileReadBytes", "core", RuntimeTrait.Component)
     static extern fun file_read_bytes(borrow path: string): byte[];
 
-    @runtime("fileWriteBytes")
+    @runtime("fileWriteBytes", "core", RuntimeTrait.Component)
     static extern fun file_write_bytes(borrow path: string, borrow data: byte[]): long;
 
-    @runtime("fileExists")
+    @runtime("fileExists", "core", RuntimeTrait.Component)
     static extern fun file_exists(borrow path: string): bool;
 
     // Deletes `path`; returns true on success.
-    @runtime("fileDelete")
+    @runtime("fileDelete", "core", RuntimeTrait.Component)
     static extern fun file_delete(borrow path: string): bool;
 
     // Size of `path` in bytes (-1 if it does not exist).
-    @runtime("fileSize")
+    @runtime("fileSize", "core", RuntimeTrait.Component)
     static extern fun file_size(borrow path: string): long;
 
-    @runtime("fileIsDir")
+    @runtime("fileIsDir", "core", RuntimeTrait.Component)
     static extern fun file_is_dir(borrow path: string): bool;
 
     // Packed `stat` payload (`size\nmtime\nctime\natime\nmode\nkind`); empty when missing.
-    @runtime("fileStat")
+    @runtime("fileStat", "core", RuntimeTrait.Component)
     static extern fun file_stat(borrow path: string): string;
 
-    @runtime("fileCopy")
+    @runtime("fileCopy", "core", RuntimeTrait.Component)
     static extern fun file_copy(borrow from: string, borrow to: string): bool;
 
-    @runtime("fileRename")
+    @runtime("fileRename", "core", RuntimeTrait.Component)
     static extern fun file_rename(borrow from: string, borrow to: string): bool;
 
-    @runtime("dirRemove")
+    @runtime("dirRemove", "core", RuntimeTrait.Component)
     static extern fun dir_remove(borrow path: string): bool;
 
-    @runtime("dirRemoveAll")
+    @runtime("dirRemoveAll", "core", RuntimeTrait.Component)
     static extern fun dir_remove_all(borrow path: string): bool;
 
     // Directory entries joined by '\n' ("" when empty or not a directory); split into string[] below.
-    @runtime("dirList")
+    @runtime("dirList", "core", RuntimeTrait.Component)
     static extern fun dir_list(borrow path: string): string;
 
-    @runtime("dirCreate")
+    @runtime("dirCreate", "core", RuntimeTrait.Component)
     static extern fun dir_create(borrow path: string): bool;
 
-    @runtime("dirCreateAll")
+    @runtime("dirCreateAll", "core", RuntimeTrait.Component)
     static extern fun dir_create_all(borrow path: string): bool;
 
     /// Reads the whole file at `path` as UTF-8 text.

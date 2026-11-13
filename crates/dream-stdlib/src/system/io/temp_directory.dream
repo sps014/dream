@@ -15,10 +15,10 @@ public class TempDirectory {
         return this.location;
     }
 
-    @runtime("tempDirectoryCreate")
+    @runtime("tempDirectoryCreate", "io")
     static extern fun create_host(directory: string): string;
 
-    @runtime("dirRemoveAll")
+    @runtime("dirRemoveAll", "core", RuntimeTrait.Component)
     static extern fun remove_host(path: string): bool;
 
     /// Creates a private directory under the OS temporary directory; unsupported browser hosts return an error.

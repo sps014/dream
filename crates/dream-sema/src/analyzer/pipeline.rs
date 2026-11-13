@@ -125,6 +125,17 @@ impl<'a> Analyzer<'a> {
                 instances: vec![],
                 layouts,
                 imports,
+                platform_main: node
+                    .functions
+                    .iter()
+                    .find(|f| {
+                        let module = self.graph.module_for_file(f.file_path.as_deref());
+                        self.type_ctx.module_path(module).is_some_and(|path| {
+                            dream_abi::attributes::decl_identity(path, &f.name.text)
+                                == dream_abi::core_items::PLATFORM_MAIN
+                        })
+                    })
+                    .and_then(|f| dream_abi::attributes::runtime_import_field(&f.attributes)),
                 intrinsics,
                 interfaces,
                 enums: hir_enums,

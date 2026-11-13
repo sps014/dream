@@ -24,7 +24,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SHADERS = HERE.parent / "shaders"
 VERSION = "2026.20"
-BINDING_LAYOUTS = json.loads((HERE.parents[2] / "dream-abi/gpu_binding_layouts.json").read_text())
+BINDING_LAYOUTS = json.loads((HERE.parents[2] / "dream-host-abi/gpu_binding_layouts.json").read_text())
 COMMON = ["-matrix-layout-row-major", "-line-directive-mode", "none"]
 # target name -> (code format, extra slangc options)
 TARGETS = {

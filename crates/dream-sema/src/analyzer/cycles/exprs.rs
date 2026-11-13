@@ -70,9 +70,11 @@ impl Walker<'_, '_> {
                 instance,
                 ctor,
                 args,
+                field_inits,
                 ..
             } => {
-                let mut atoms = self.eval_all(args.iter());
+                let mut atoms =
+                    self.eval_all(args.iter().chain(field_inits.iter().map(|(_, value)| value)));
                 let this = if self.bearing(e.ty) {
                     let site = self.site_holding(key, 0, &mut atoms);
                     one(self.typed(site, e.ty))

@@ -4,7 +4,7 @@ module system.logging;
 public class FileHandler: LogHandler {
     path: string;
 
-    @runtime("fileAppend")
+    @runtime("fileAppend", "core", RuntimeTrait.Component)
     static extern fun file_append(borrow path: string, borrow content: string): long;
 
     /// Creates a handler that appends to `path`.

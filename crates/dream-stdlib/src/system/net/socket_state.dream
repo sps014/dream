@@ -9,10 +9,10 @@ internal class SocketState {
         this.metadata = metadata;
     }
 
-    @runtime("netSocketClose")
+    @runtime("netSocketClose", "net", RuntimeTrait.Component)
     static extern fun close_host(id: int): void;
 
-    @runtime("netSocketControl")
+    @runtime("netSocketControl", "net", RuntimeTrait.Component)
     static extern fun control_host(id: int, request: string): string;
 
     internal fun close(): void {

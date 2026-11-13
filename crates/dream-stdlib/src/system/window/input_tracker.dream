@@ -60,7 +60,7 @@ internal class InputTracker {
         this.focused = true;
     }
 
-    @runtime("timeNowNanos")
+    @runtime("timeNowNanos", "core", RuntimeTrait.Component, RuntimeTrait.Quiet)
     static extern fun now_nanos(): long;
 
     // Clears the previous frame's edges; levels and the cursor position carry over.

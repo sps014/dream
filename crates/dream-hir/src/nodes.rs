@@ -225,7 +225,8 @@ pub enum HExprKind {
     /// Constructor `Type(args)`; `instance` records the monomorphization type-args when generic.
     /// When `ctor` is `Some`, `args` are the user `constructor(){}`'s arguments (the backend
     /// allocates, then calls that constructor with `this` + args); when `None`, the implicit zero-arg
-    /// default constructor takes no args and every field is zero-initialized.
+    /// default constructor takes no args, every field starts zeroed, and `field_inits` then stores
+    /// a default value into each field whose zero is not a value of its type.
     New {
         def: DefId,
         instance: Vec<TypeId>,
@@ -234,6 +235,8 @@ pub enum HExprKind {
         /// Per-argument `take` flags from the constructor's declaration (empty = none). A `borrow`
         /// constructor parameter retains inside the constructor body, so the call site must not.
         take_params: Vec<bool>,
+        /// `(field index, default value)` stored right after allocation; empty when `ctor` is set.
+        field_inits: Vec<(usize, HExpr)>,
     },
     /// Union variant construction `Union.Variant(args)`.
     UnionNew {
@@ -495,6 +498,7 @@ mod tests {
             instances: vec![],
             layouts: LayoutTable::default(),
             imports: vec![],
+            platform_main: None,
             intrinsics: vec![],
             interfaces: InterfaceTable::default(),
             enums: indexmap::IndexMap::new(),

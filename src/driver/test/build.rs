@@ -144,14 +144,16 @@ impl BuildRequest<'_> {
             JsRuntimeTarget::Node.runtime_extension()
         ));
         if let BuildOutcome::Built(Some(stamp)) = self.compile(compiler, &wat)? {
-            stamp.store(&existing(&[
-                wasm.clone(),
-                js.clone(),
-                wat.with_extension("abi.json"),
-                out_dir.join("dream_drawing.js"),
-                out_dir.join("dream_drawing_bg.wasm"),
-                out_dir.join("NotoSans-OFL.txt"),
-            ]));
+            let outputs: Vec<PathBuf> = [wasm.clone(), js.clone(), wat.with_extension("abi.json")]
+                .into_iter()
+                .chain(
+                    dream_stdlib::STD_PACKAGES
+                        .iter()
+                        .filter_map(|package| package.web_assets)
+                        .flat_map(|assets| assets.files.iter().map(|name| out_dir.join(name))),
+                )
+                .collect();
+            stamp.store(&existing(&outputs));
         }
         let script = out_dir.join("runner.mjs");
         let source = format!(

@@ -3,10 +3,10 @@ module system.audio;
 // Browser URL playback uses the platform's media stack; native and Node return
 // zero and continue through the portable streaming decoder.
 internal static class AudioMedia {
-    @runtime("audioMediaCreate")
+    @runtime("audioMediaCreate", "audio")
     internal static extern fun create(borrow src: string): int;
 
-    @runtime("audioMediaSeek")
+    @runtime("audioMediaSeek", "audio")
     internal static extern async fun seek(handle: int, time: double): int;
 
     internal static async fun open(

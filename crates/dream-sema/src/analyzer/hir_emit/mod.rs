@@ -26,6 +26,7 @@ use indexmap::IndexMap as HashMap;
 mod build;
 mod entry_args;
 mod exprs;
+mod field_defaults;
 mod stmts;
 
 /// Per-analysis HIR-emission state, plus the accumulated [`HFunction`]s. Reset at the start of each

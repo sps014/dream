@@ -13,6 +13,24 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {
+    /// Whether the generic union `def` or a generic extension of it declares a method `name`
+    /// that is not also a variant, so `Union<T>.name(...)` is a static call.
+    fn generic_union_declares_method(&self, def: dream_types::DefId, name: &str) -> bool {
+        let Some(template) = self.generic_union(def) else {
+            return false;
+        };
+        if template.variants.iter().any(|v| v.name.text == name) {
+            return false;
+        }
+        template.methods.iter().any(|m| m.name.text == name)
+            || self
+                .generic_extends
+                .get(&GenericExtendTarget::Nominal(def))
+                .into_iter()
+                .flatten()
+                .any(|ext| ext.methods.iter().any(|m| m.name.text == name))
+    }
+
     /// If `enum_name` denotes a discriminated union (concrete or generic) and `variant` names one
     /// of its variants, type-checks the construction `Enum.Variant(args)` and returns its type.
     /// Returns `Ok(None)` when `enum_name` is not a union (so the caller can fall through to its
@@ -33,6 +51,12 @@ impl<'a> Analyzer<'a> {
         let is_generic = self.generic_union(def).is_some();
         let is_concrete = self.union_info(nominal).is_some();
         if !is_generic && !is_concrete {
+            return Ok(None);
+        }
+        if self.method_overloaded(nominal, &variant.text)
+            || self.method_info(nominal, &variant.text).is_ok()
+            || self.generic_union_declares_method(def, &variant.text)
+        {
             return Ok(None);
         }
 

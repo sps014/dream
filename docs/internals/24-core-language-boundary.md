@@ -37,15 +37,34 @@ To add a core item:
 
 ## Library host data
 
-A library package does not get a match arm in the compiler. Host wiring is data:
+A library package does not get a match arm in the compiler. Host wiring is data on the declaration or the package record.
 
-- `package_host_capability` records which native capability owns a package (`system.net` → `net`).
-- `runtime_field_capability` reads `@runtime("field")` from those packages. A field declared under two capabilities is left unset.
-- Link selection still uses the compiler field tables. The scan cannot replace them yet: `cryptoAuth` is declared in `system.webapi` while the crypto library implements it, and `timeNowNanos` is shared by the core clock, window, and audio. Pointing the linker at the scan would attach the wrong capability or add one that today's programs do not link.
-- A runtime C module is linked when the program references one of its symbols (`host_fields` or an intrinsic key).
-- Regex and audio FFT are ordinary `@runtime` declarations. Their C symbols use the same names as the field strings.
+`@runtime(export_name, host?, traits...)` binds an extern to a host service:
 
-The WASI component allow-list (`component_host_supported`) is the adapter's implemented surface, not a catalog of library APIs. The JS chunk manifest remains the browser and Node host layout.
+- `host` names the native capability library that implements the service (`"net"`, `"gpu"`, …). `"core"`, or omitting it, means the core host or the runtime itself. `runtime_host_capability` reads it, and the driver links the capability libraries the program's imports name.
+- `traits` are `RuntimeTrait` values. `Component` marks a service the standalone WASI component adapter implements; a component build rejects every other host import. `Quiet` marks a service that never touches Dream storage or ownership, so the optimizer may move retains and releases across the call. Listing traits requires spelling the host.
+- A runtime C module is linked when the program references one of its symbols. Regex and audio FFT are ordinary `@runtime` declarations whose C symbols use the field names.
+
+`StdPackage` records carry the rest:
+
+- `guest_exports` lists extra symbols the guest module must export when one of the package's host imports is used (the GPU bundle version and index).
+- `web_assets` and `tools` list files the package ships next to the program.
+
+`platform_main` is a core identity (`core_items::PLATFORM_MAIN`), not an attribute. On targets where the operating system owns the main thread, the generated `main` calls the host loop it names.
+
+## Generic library code
+
+Library code uses ordinary language features where the compiler used to rewrite calls:
+
+- `T.member` and generic overloads let a generic function call a static member of its type argument.
+- `@requires_member(param, member, message?)` states that a type argument must provide a member. The check runs at the call site, recursively through templates, and an extension method whose requirement fails is not attached to that instantiation. The message is the diagnostic users see.
+- Static calls on a generic union (`Opt<T>.parse(...)`) resolve as static calls, not variant construction, when the union declares a method of that name.
+
+`Json.serialize`, `Json.deserialize`, `Json.from_value`, and `Validation.*` are plain stdlib functions built from these pieces. The `@json` derive generator emits per-type methods, and nested collections fall back to `Json.from_value<T>`.
+
+## Field defaults
+
+Field defaults are core language. A field the constructor does not assign on every path starts as an empty array, `T()`, or the union's first variant without fields when its zero value is not a value of its type. A field with no such default is a compile error. `hir_emit/field_defaults.rs` assigns explicit-constructor defaults in a prologue and implicit-constructor defaults on `HExprKind::New::field_inits`. Stdlib sources are exempt and keep zeroed fields.
 
 ## Audit
 
@@ -53,4 +72,6 @@ The WASI component allow-list (`component_host_supported`) is the adapter's impl
 
 ## Still in the compiler
 
-`Json.serialize`, `Json.deserialize`, `Json.from_value`, and `Validation.*` are still expanded by the analyzer. A Dream body cannot replace that expansion yet: the language server skips generators, and the diagnostic (`'Map<string, object>' cannot be serialized to JSON: …`) has to be reported from the type before any `write_json` method exists. Moving that check into the derive generator would change the language-server message. GPU export glue, drawing asset paths, and the mobile app entry wrapper are still named by the driver for the same reason: the generic package-declared mechanism is not in place, and deleting the special case would change emitted output.
+- Stdlib trust is a `<std>/` path check (`dream_stdlib::is_std_source`) in sema, the driver, and the MIR inliner. It should become a package-origin flag on each source.
+- The JS chunk mapping and host effect summaries live in compiler tables, not on `@runtime` declarations or package records.
+- Drawing asset paths and the remaining GPU and audio wiring are still named by the driver.

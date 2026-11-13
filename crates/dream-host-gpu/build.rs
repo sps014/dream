@@ -251,9 +251,8 @@ fn cache_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("DREAM_GPU_CACHE") {
         return PathBuf::from(dir);
     }
-    let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-    out.ancestors()
-        .nth(4)
+    cargo_profile_dir()
+        .parent()
         .expect("Cargo target directory")
         .join("gpu-cache")
 }
@@ -311,8 +310,7 @@ fn dawn_library_names() -> &'static [&'static str] {
 fn stage_dawn(extracted: &Path) {
     let name = dawn_library_names()[0];
     let source = walk_for(extracted, name).expect("the Dawn archive has no shared library");
-    let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-    let profile = out.ancestors().nth(3).expect("Cargo profile directory");
+    let profile = cargo_profile_dir();
     for dir in [profile.to_path_buf(), profile.join("deps")] {
         std::fs::create_dir_all(&dir).ok();
         let dest = dir.join(name);

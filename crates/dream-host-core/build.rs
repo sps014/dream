@@ -1,11 +1,8 @@
+include!("../dream-host-abi/profile.rs");
+
 fn main() {
     // Cargo supplies this profile path for both host and cross-target builds.
-    let output = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("Cargo OUT_DIR"));
-    let directory = output
-        .ancestors()
-        .nth(3)
-        .expect("Cargo profile directory")
-        .join("deps");
+    let directory = cargo_profile_dir().join("deps");
     println!("cargo:library_dir={}", directory.display());
     // Cargo propagates cdylib-specific link arguments to dependents. Keep this
     // install identity local so capability libraries cannot inherit core's name.

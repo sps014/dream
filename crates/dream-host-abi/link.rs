@@ -1,37 +1,33 @@
 include!("profile.rs");
 
-fn core_host_library_name() -> &'static str {
-    match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
-        Ok("windows") => "dream_host_core.dll",
-        Ok("macos" | "ios") => "libdream_host_core.dylib",
-        _ => "libdream_host_core.so",
-    }
-}
-
-/// Directory containing the core host library. Cargo 1.99 keeps every cdylib in `<profile>/deps`.
-/// Cargo 1.100 keeps a dependency cdylib in `<profile>/build/dream-host-core/<hash>/out`.
+/// Directory that will contain the core host library when the linker runs.
+///
+/// Cargo 1.99 keeps every cdylib in `<profile>/deps`. Cargo 1.100 keeps a dependency cdylib in
+/// `<profile>/build/dream-host-core/<hash>/out`, and it runs this script while that library is
+/// still being linked, so the file itself may not exist yet. The library compile unit is the
+/// newest package directory that is neither the build-script binary nor its run directory.
 fn core_host_dir() -> std::path::PathBuf {
     let profile = cargo_profile_dir();
-    let file = core_host_library_name();
-    let shared = profile.join("deps");
-    if shared.join(file).is_file() {
-        return shared;
-    }
     let units = profile.join("build").join("dream-host-core");
-    let mut found = std::fs::read_dir(&units)
+    if !units.is_dir() {
+        return profile.join("deps");
+    }
+    let mut compiled = std::fs::read_dir(&units)
         .unwrap_or_else(|_| panic!("core host build directory {}", units.display()))
         .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path().join("out"))
-        .filter(|dir| dir.join(file).is_file())
+        .map(|entry| entry.path())
+        .filter(|dir| dir.is_dir() && !dir.join("run").is_dir() && !is_build_script_bin(dir))
         .collect::<Vec<_>>();
-    found.sort_by_key(|dir| {
-        std::fs::metadata(dir.join(file))
-            .and_then(|meta| meta.modified())
-            .ok()
-    });
-    found
+    compiled.sort_by_key(|dir| dir.metadata().and_then(|meta| meta.modified()).ok());
+    compiled
         .pop()
-        .unwrap_or_else(|| panic!("core host library {file} under {}", units.display()))
+        .map(|dir| dir.join("out"))
+        .unwrap_or_else(|| panic!("core host compile unit under {}", units.display()))
+}
+
+fn is_build_script_bin(unit: &std::path::Path) -> bool {
+    let out = unit.join("out");
+    out.join("build_script_build").exists() || out.join("build_script_build.exe").exists()
 }
 
 fn configure_library(capability: &str) {

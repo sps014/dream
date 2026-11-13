@@ -70,8 +70,12 @@ Field defaults are core language. A field the constructor does not assign on eve
 
 `compiler_does_not_name_library_packages` in `crates/dream-stdlib` reads the non-test Rust sources of the compiler crates. It fails when a string literal is a non-core package name, a `<std>/` path from a non-core package, or a qualified name under a non-core package. `core_items.rs` is the only compiler file allowed to name core identities. The registry and the rest of `dream-stdlib` are the package data, so the audit does not scan them.
 
-## Still in the compiler
+## Stdlib trust
 
-- Stdlib trust is a `<std>/` path check (`dream_stdlib::is_std_source`) in sema, the driver, and the MIR inliner. It should become a package-origin flag on each source.
-- The JS chunk mapping and host effect summaries live in compiler tables, not on `@runtime` declarations or package records.
-- Drawing asset paths and the remaining GPU and audio wiring are still named by the driver.
+Some checks exempt stdlib code (private intrinsics, field defaults, inlining limits). They test `dream_stdlib::is_std_source`, the `<std>/` virtual path prefix. Only the prelude loader assigns that prefix: program files are canonicalized to absolute paths, and `parse_source_recursive` rejects a `<std>/` path, so a program source cannot claim stdlib privileges.
+
+## Host tables that stay data
+
+- The browser and Node host chunks are listed in `runtime/src/chunks.manifest`, shared with `scripts/bundle-runtime.mjs`; the driver picks chunks by the program's live imports.
+- Host effect summaries come from the `Quiet` trait on each `@runtime` declaration.
+- Worker and process-argument host fields in `runtime_hosts.rs` serve `Task` and `System.args`, which are core.

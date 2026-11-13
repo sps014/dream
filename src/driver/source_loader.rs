@@ -247,6 +247,13 @@ pub fn parse_source_recursive<'a>(
     arena: &'a Bump,
     diagnostics: &mut DiagnosticBag,
 ) -> Result<(), Error> {
+    // Stdlib privileges follow the `<std>/` path, which only the prelude loader assigns.
+    if dream_stdlib::is_std_source(&path_str) {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("{path_str}: '<std>/' paths are reserved for the embedded standard library"),
+        ));
+    }
     if !acc.visited.insert(path_str.clone()) {
         return Ok(());
     }
@@ -385,6 +392,23 @@ pub fn parse_source_recursive<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn program_sources_cannot_claim_stdlib_paths() {
+        let arena = Bump::new();
+        let mut acc = ProgramAccumulator::default();
+        let mut diagnostics = DiagnosticBag::new(None);
+        let err = parse_source_recursive(
+            "<std>/system/core/fake.dream".to_string(),
+            "fun main(): void {}".to_string(),
+            &mut acc,
+            &arena,
+            &mut diagnostics,
+        )
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidInput);
+        assert!(acc.parsed_files.is_empty());
+    }
 
     #[test]
     fn non_utf8_source_error_names_the_file() {

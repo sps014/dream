@@ -122,7 +122,10 @@ fn binding_layout_ids_match_the_parameter_kind() {
             }],
         }])
     };
-    for (index, layout) in dream_host_abi::gpu_bindings::BINDING_LAYOUTS.iter().enumerate() {
+    for (index, layout) in dream_host_abi::gpu_bindings::BINDING_LAYOUTS
+        .iter()
+        .enumerate()
+    {
         let kind = ArgKind::from_i32(layout.kind as i32).unwrap();
         let mut p = param("resource", kind, 0);
         p.webgpu_layout = index as u32 + 1;

@@ -116,7 +116,8 @@ impl UserAttributes {
                     Type::Array(inner) => (inner.as_ref(), true, false),
                     ty => (ty, false, false),
                 };
-                if (variadic && i + 1 != s.fields.len()) || (!optional && !variadic && optional_seen)
+                if (variadic && i + 1 != s.fields.len())
+                    || (!optional && !variadic && optional_seen)
                 {
                     diagnostics.report_error(format!("attribute type '{name}': optional fields must follow every required field, and only the last field may be a List"), Some(field.name.position));
                 }

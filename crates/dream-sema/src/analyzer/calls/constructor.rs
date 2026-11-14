@@ -28,9 +28,9 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(Type, Option<crate::function_table::FunctionIdentity>), SemanticError> {
-        let pinned = self.core_ctor.filter(|identity| {
-            dream_abi::core_items::short_name(identity) == name.text
-        });
+        let pinned = self
+            .core_ctor
+            .filter(|identity| dream_abi::core_items::short_name(identity) == name.text);
         let lookup: &str = pinned.unwrap_or(name.text.as_str());
         let inferred_args = generic_args.clone().or_else(|| {
             let def = self.type_ctx.resolve(DefKind::Struct, lookup)?;

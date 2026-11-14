@@ -171,7 +171,10 @@ pub fn hir_expr_edges(e: &crate::HExpr, out: &mut HirEdges) {
                 out.callees.push((*c, vec![]));
             }
             out.types.push(e.ty);
-            for a in args.iter().chain(field_inits.iter().map(|(_, value)| value)) {
+            for a in args
+                .iter()
+                .chain(field_inits.iter().map(|(_, value)| value))
+            {
                 hir_expr_edges(a, out);
             }
         }

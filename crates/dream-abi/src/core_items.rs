@@ -70,5 +70,8 @@ pub const NATIVE_CALLBACK_NAME: &str = "NativeCallback";
 
 /// The unqualified declaration spelled by a qualified core identity.
 pub fn short_name(identity: &str) -> &str {
-    identity.rsplit_once("::").map(|(_, name)| name).unwrap_or(identity)
+    identity
+        .rsplit_once("::")
+        .map(|(_, name)| name)
+        .unwrap_or(identity)
 }

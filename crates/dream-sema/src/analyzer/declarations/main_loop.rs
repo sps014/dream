@@ -21,7 +21,10 @@ impl<'a> Analyzer<'a> {
             let types: Vec<&Type> = function.parameters.iter().map(|p| &p.type_).collect();
             let signature_ok = !function.is_async
                 && function.generic_parameters.is_none()
-                && function.parameters.iter().all(|p| !p.is_ref && !p.is_variadic)
+                && function
+                    .parameters
+                    .iter()
+                    .all(|p| !p.is_ref && !p.is_variadic)
                 && matches!(
                     types.as_slice(),
                     [

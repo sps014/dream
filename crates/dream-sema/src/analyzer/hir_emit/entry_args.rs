@@ -19,9 +19,12 @@ impl<'a> Analyzer<'a> {
         else {
             return;
         };
-        let getter = self.type_ctx.resolved_type(dream_abi::core_items::SYSTEM).and_then(|owner| {
-            self.unique_method_def(owner, &super::super::getter_member_name("args"))
-        });
+        let getter = self
+            .type_ctx
+            .resolved_type(dream_abi::core_items::SYSTEM)
+            .and_then(|owner| {
+                self.unique_method_def(owner, &super::super::getter_member_name("args"))
+            });
         let Some(getter) = getter else {
             diagnostics.report_error(
                 "'main(args: string[])' needs the System.args getter from system.core".to_string(),

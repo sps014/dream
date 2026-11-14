@@ -43,7 +43,11 @@ impl<'a> Analyzer<'a> {
         {
             return;
         }
-        let Some(this) = function.parameters.iter().find(|p| p.name.text == THIS_NAME) else {
+        let Some(this) = function
+            .parameters
+            .iter()
+            .find(|p| p.name.text == THIS_NAME)
+        else {
             return;
         };
         let owner = self.type_ctx.lower(&Self::monomorphize_type(
@@ -241,8 +245,7 @@ impl<'a> Analyzer<'a> {
                 // A niche union reads null as its empty variant, and a zeroed value union is its
                 // variant with discriminant 0.
                 return interner.is_niche_union(ty)
-                    || (interner.is_value_type(ty)
-                        && self.empty_variant(ty) == Some(0));
+                    || (interner.is_value_type(ty) && self.empty_variant(ty) == Some(0));
             }
             _ => return true,
         };
@@ -274,7 +277,12 @@ impl<'a> Analyzer<'a> {
 
     /// Whether building `ty`'s default constructs `owner` again, directly or through the
     /// defaults of its own fields.
-    fn default_builds(&mut self, ty: TypeId, owner: TypeId, visited: &mut BTreeSet<TypeId>) -> bool {
+    fn default_builds(
+        &mut self,
+        ty: TypeId,
+        owner: TypeId,
+        visited: &mut BTreeSet<TypeId>,
+    ) -> bool {
         if ty == owner {
             return true;
         }
@@ -316,7 +324,9 @@ fn definitely_assigned(body: &[StatementNode<'_>]) -> BTreeSet<String> {
     let Some(first) = paths.next() else {
         return BTreeSet::new();
     };
-    paths.fold(first, |all, path| all.intersection(&path).cloned().collect())
+    paths.fold(first, |all, path| {
+        all.intersection(&path).cloned().collect()
+    })
 }
 
 /// The fields assigned when control falls off the end of `statements`, or `None` when it never

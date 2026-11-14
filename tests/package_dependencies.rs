@@ -79,7 +79,11 @@ fn compile(compiler: Compiler, entry: &Path, out: &Path) {
 fn native_dependency_brings_c_sources_and_a_generator() {
     let dir = app();
     let ll = dir.path().join("main.ll");
-    compile(Compiler::new(Target::native()), &dir.path().join("main.dream"), &ll);
+    compile(
+        Compiler::new(Target::native()),
+        &dir.path().join("main.dream"),
+        &ll,
+    );
     let out = compile_and_capture_ex(
         &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
         ll.to_str().unwrap(),

@@ -271,8 +271,9 @@ pub(crate) fn build_abi_json(
             if !live.contains(&(module.as_str(), field.as_str())) {
                 continue;
             }
-            declared_capabilities
-                .extend(dream_abi::attributes::runtime_host_capability(&func.attributes));
+            declared_capabilities.extend(dream_abi::attributes::runtime_host_capability(
+                &func.attributes,
+            ));
             if let Some(lib) = c_lib {
                 c_lib_set.insert(lib);
             }
@@ -316,8 +317,8 @@ pub(crate) fn build_abi_json(
         dream_abi::host_capability::HostCapability::required(declared_capabilities)
             .into_iter()
             .map(|capability| format!("\"{}\"", capability.name()))
-        .collect::<Vec<_>>()
-        .join(", ");
+            .collect::<Vec<_>>()
+            .join(", ");
 
     format!(
         "{{\n  \"target_triple\": \"{}\",\n  \"execution_environment\": \"{}\",\n  \"native_abi_version\": 3,\n  \"main_async\": {},\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"export_functions\": {},\n  \"host_capabilities\": [{}]{}{}{}\n}}\n",

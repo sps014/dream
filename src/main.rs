@@ -6,7 +6,7 @@ use dream::driver::wasm_opt::OptLevel;
 use dream::execution::llvm::build::emit_llvm_artifacts;
 use dream::execution::llvm::compile_llvm;
 use dream::execution::native::{GuestAborted, Pgo, run_native_bin};
-use dream_abi::attributes::CompileTargets;
+use dream_abi::compile_targets::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

@@ -108,9 +108,7 @@ pub fn compiler_attribute_module(name: &str) -> Option<&'static str> {
         | "syntax_block" | "uses_tool" => "system.codegen",
         "attribute" | "repeatable" | "export" | "intrinsic" | "llvm" | "inline" | "noinline"
         | "unsafe" | "borrowed_result" | "slot_walk" | "allow_cycle" | "consuming" | "runtime"
-        | "async_host" | "requires_member" | "native" | "node" | "web" | "main_loop" => {
-            "system.core"
-        }
+        | "async_host" | "requires_member" | "main_loop" => "system.core",
         _ => return None,
     })
 }

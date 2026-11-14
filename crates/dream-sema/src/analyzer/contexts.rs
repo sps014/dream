@@ -51,21 +51,4 @@ impl<'a> Analyzer<'a> {
         self.current_function_is_unsafe = saved;
         result
     }
-
-    /// Runs `f` with `current_function_runtime` set to `runtime`, restoring the previous value
-    /// afterward so the flag cannot leak into a sibling function's analysis.
-    pub(in crate::analyzer) fn with_runtime_flag<F, R>(
-        &mut self,
-        runtime: RuntimeSupport,
-        f: F,
-    ) -> R
-    where
-        F: FnOnce(&mut Self) -> R,
-    {
-        let saved = self.current_function_runtime;
-        self.current_function_runtime = runtime;
-        let result = f(self);
-        self.current_function_runtime = saved;
-        result
-    }
 }

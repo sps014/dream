@@ -1,6 +1,6 @@
 import system;
 
-@web
+@cfg(Target.Browser)
 fun f(): void {
     System.println("web only");
 }

@@ -14,7 +14,7 @@ extend WebGenerator {
         this.imports.line("import system.collections;");
         for (let route in this.routes) {
             let out = this.source;
-            out.line("@native");
+            out.line("@cfg(Target.Native)");
             out.line(
                 "internal async fun __web_leaf"
                     + route.index.to_string()
@@ -69,7 +69,7 @@ extend WebGenerator {
             }
             out.line("}");
             out.line(
-                "@native public async fun __web_route"
+                "@cfg(Target.Native) public async fun __web_route"
                     + route.index.to_string()
                     + "(ctx: RequestContext, params: Map<string, string>): HttpOutgoing {"
             );

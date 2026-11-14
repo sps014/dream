@@ -53,9 +53,16 @@ pub fn run_tests(
     };
     let mut plans = Vec::with_capacity(hosts.len());
     for &host in &hosts {
-        let cfg = crate::driver::target::resolve(host == TestHost::Node, None)?
-            .spec()
-            .cfg_symbols(opts.release);
+        let node = host == TestHost::Node;
+        let hosts = dream_abi::compile_targets::CompileTargets {
+            native: !node,
+            node,
+            web: false,
+        };
+        let cfg = hosts.cfg_symbols(
+            crate::driver::target::resolve(node, None)?.spec(),
+            opts.release,
+        );
         plans.push(RunnerPlan::discover(
             &project,
             opts.filter.as_deref(),

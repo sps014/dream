@@ -18,8 +18,7 @@ public static class AesGcm {
         return SecureRandom.bytes(AesGcm.nonce_size);
     }
 
-    @native
-    @node
+    @cfg(Target.Native || Target.Node)
     @runtime("cryptoAesGcmEncrypt", "crypto")
     static extern fun encrypt_host(
         borrow key: byte[],
@@ -31,8 +30,7 @@ public static class AesGcm {
     // Host returns `[ok_flag, ...payload]` (see `decrypt_host`'s doc) so a hard authentication
     // failure can be distinguished from a genuinely empty plaintext without throwing across the
     // host boundary.
-    @native
-    @node
+    @cfg(Target.Native || Target.Node)
     @runtime("cryptoAesGcmDecrypt", "crypto")
     static extern fun decrypt_host(
         borrow key: byte[],
@@ -45,8 +43,7 @@ public static class AesGcm {
     /// data, not encrypted but tamper-checked) alongside it. Returns ciphertext with a 16-byte
     /// authentication tag appended. `nonce` must be exactly `nonce_size` bytes and must never be
     /// reused with the same key.
-    @native
-    @node
+    @cfg(Target.Native || Target.Node)
     public static fun encrypt(
         key: AesGcmKey,
         nonce: byte[],
@@ -66,8 +63,7 @@ public static class AesGcm {
     /// Decrypts and authenticates `ciphertext` (as produced by `encrypt`, tag included) under
     /// `key`/`nonce`/`aad`. Returns an error if the nonce length is wrong or authentication fails
     /// (tampered ciphertext, wrong key/nonce/aad, or truncated input).
-    @native
-    @node
+    @cfg(Target.Native || Target.Node)
     public static fun decrypt(
         key: AesGcmKey,
         nonce: byte[],

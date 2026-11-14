@@ -118,7 +118,9 @@ A condition names targets as `Target.<name>`. The names a build defines:
 | `Target.Release` | building with `--release` |
 | `Target.Native` | building a native binary |
 | `Target.Wasm` | building a WebAssembly module |
-| `Target.Browser` | building WebAssembly for a browser or Node.js host |
+| `Target.Js` | building WebAssembly for a JavaScript host: a browser, Node.js, or both |
+| `Target.Browser` | building WebAssembly for a browser (the default for `--wasm`, and `--runtime --web`) |
+| `Target.Node` | building WebAssembly for Node.js (`--runtime --node`) |
 | `Target.Wasi` | building WebAssembly for a WASI host |
 | `Target.Windows` | building a native binary for Windows |
 | `Target.Macos` | building a native binary for macOS |
@@ -126,7 +128,16 @@ A condition names targets as `Target.<name>`. The names a build defines:
 | `Target.Android` | building a native binary for Android |
 | `Target.Ios` | building a native binary for iOS |
 
-Every build defines exactly one of `Debug` and `Release`, and exactly one of `Native` and `Wasm`. A native build also defines its operating system, and a WebAssembly build defines `Browser` or `Wasi`.
+Every build defines exactly one of `Debug` and `Release`, and exactly one of `Native` and `Wasm`. A native build also defines its operating system. A WebAssembly build defines either `Wasi` or `Js`; a `Js` build also defines `Browser` or `Node` for its host. One module built for both hosts (`--runtime --web --node`) defines neither, so it only sees code that works on both.
+
+Use these names to keep an API to the hosts that can run it. A program that calls a function the current build leaves out gets an error that the function does not exist:
+
+```dream
+@cfg(Target.Native || Target.Node)
+fun exit_with(code: int): void {
+    System.exit(code);
+}
+```
 
 Pass `--target` with a target triple to build for another operating system.
 

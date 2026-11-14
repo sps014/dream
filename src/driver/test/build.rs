@@ -7,7 +7,7 @@ use crate::driver::compiler::{BuildOutcome, Compiler};
 use crate::driver::js_runtime::JsRuntimeTarget;
 use crate::driver::output::OutputKind;
 use crate::driver::wasm_opt::OptLevel;
-use dream_abi::attributes::CompileTargets;
+use dream_abi::compile_targets::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
 use std::process::Command;

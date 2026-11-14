@@ -16,8 +16,7 @@ extend System {
     @runtime("consoleReadKey", "core", RuntimeTrait.Component)
     static extern fun host_read_key(): char;
 
-    @native
-    @node
+    @cfg(Target.Native || Target.Node)
     @runtime("consoleExit", "core", RuntimeTrait.Component)
     static extern fun host_exit(code: int): void;
 
@@ -60,8 +59,7 @@ extend System {
     }
 
     /// Terminates the process with the given exit code.
-    @native
-    @node
+    @cfg(Target.Native || Target.Node)
     public static fun exit(code: int): void {
         System.host_exit(code);
     }

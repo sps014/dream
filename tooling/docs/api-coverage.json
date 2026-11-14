@@ -6985,32 +6985,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/core/native_attribute.dream",
-    "package": "system.core",
-    "page": "reference/api/core-native-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct NativeAttribute",
-        "description": "Marks a function/method as available on the native (C) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.",
-        "line": 10,
-        "page": "reference/api/core-native-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/core/node_attribute.dream",
-    "package": "system.core",
-    "page": "reference/api/core-node-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct NodeAttribute",
-        "description": "Marks a function/method as available on the Node.js host. Combine with `@native`/`@web` to restrict; absent all three means every runtime.",
-        "line": 10,
-        "page": "reference/api/core-node-attribute.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/core/noinline_attribute.dream",
     "package": "system.core",
     "page": "reference/api/core-noinline-attribute.md",
@@ -8362,19 +8336,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/core/web_attribute.dream",
-    "package": "system.core",
-    "page": "reference/api/core-web-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct WebAttribute",
-        "description": "Marks a function/method as available in the browser host. Combine with `@native`/`@node` to restrict; absent all three means every runtime.",
-        "line": 10,
-        "page": "reference/api/core-web-attribute.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/crypto/aes_gcm.dream",
     "package": "system.crypto",
     "page": "reference/api/crypto-aes-gcm.md",
@@ -8406,13 +8367,13 @@
       {
         "signature": "public static fun encrypt( key: AesGcmKey, nonce: byte[], plaintext: byte[], aad: byte[] ): Result<byte[], CryptoError>",
         "description": "Encrypts `plaintext` under `key`/`nonce`, authenticating `aad` (additional authenticated data, not encrypted but tamper-checked) alongside it. Returns ciphertext with a 16-byte authentication tag appended. `nonce` must be exactly `nonce_size` bytes and must never be reused with the same key.",
-        "line": 50,
+        "line": 47,
         "page": "reference/api/crypto-aes-gcm.md"
       },
       {
         "signature": "public static fun decrypt( key: AesGcmKey, nonce: byte[], ciphertext: byte[], aad: byte[] ): Result<byte[], CryptoError>",
         "description": "Decrypts and authenticates `ciphertext` (as produced by `encrypt`, tag included) under `key`/`nonce`/`aad`. Returns an error if the nonce length is wrong or authentication fails (tampered ciphertext, wrong key/nonce/aad, or truncated input).",
-        "line": 71,
+        "line": 67,
         "page": "reference/api/crypto-aes-gcm.md"
       }
     ]
@@ -14020,121 +13981,121 @@
       {
         "signature": "public static fun read_line(): string",
         "description": "Reads a line of input from stdin.",
-        "line": 53,
+        "line": 52,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun read_key(): char",
         "description": "Reads a single keypress from stdin.",
-        "line": 58,
+        "line": 57,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun exit(code: int): void",
         "description": "Terminates the process with the given exit code.",
-        "line": 65,
+        "line": 63,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get platform(): Platform",
         "description": "The current host platform.",
-        "line": 70,
+        "line": 68,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get os_family(): OsFamily",
         "description": "The OS family on native hosts (Unknown elsewhere).",
-        "line": 85,
+        "line": 83,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get cpu_time_nanos(): long",
         "description": "User+system CPU time of this process since it started, in nanoseconds (`0` if unknown).",
-        "line": 97,
+        "line": 95,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get memory_bytes(): long",
         "description": "Resident process memory in bytes (`0` if unknown). Not `Debug.live_objects`.",
-        "line": 102,
+        "line": 100,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get exe_path(): Option<string>",
         "description": "Absolute path of the running executable when known.",
-        "line": 107,
+        "line": 105,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun env(borrow name: string): Option<string>",
         "description": "Value of environment variable `name`, or `None` when unset.",
-        "line": 116,
+        "line": 114,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_env(borrow name: string, borrow value: string): Result<Unit, ArgumentError>",
         "description": "Sets environment variable `name` to `value`.",
-        "line": 128,
+        "line": 126,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun unset_env(borrow name: string): Result<Unit, ArgumentError>",
         "description": "Unsets environment variable `name`.",
-        "line": 149,
+        "line": 147,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get env_keys(): string[]",
         "description": "Names of all environment variables (empty on hosts without an env block).",
-        "line": 158,
+        "line": 156,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get temp_dir(): string",
         "description": "Process temp directory (`TMPDIR` / `GetTempPath` / `\"/tmp\"` in the browser).",
-        "line": 167,
+        "line": 165,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get home_dir(): Option<string>",
         "description": "User home directory when the host provides one.",
-        "line": 176,
+        "line": 174,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get cwd(): Result<string, IoError>",
         "description": "Current working directory.",
-        "line": 185,
+        "line": 183,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_cwd(borrow path: string): Result<Unit, IoError>",
         "description": "Sets the current working directory.",
-        "line": 194,
+        "line": 192,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun clear(): void",
         "description": "Clears the terminal screen.",
-        "line": 202,
+        "line": 200,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_foreground(color: ConsoleColor): void",
         "description": "Sets the foreground color for subsequent output.",
-        "line": 247,
+        "line": 245,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_background(color: ConsoleColor): void",
         "description": "Sets the background color for subsequent output.",
-        "line": 255,
+        "line": 253,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun reset_color(): void",
         "description": "Resets console colors to the terminal default.",
-        "line": 263,
+        "line": 261,
         "page": "reference/api/host-system.md"
       }
     ]
@@ -15438,55 +15399,55 @@
       {
         "signature": "public static fun object(): js",
         "description": "Creates an empty JavaScript object whose properties can be assigned dynamically.",
-        "line": 45,
+        "line": 40,
         "page": "reference/api/js-js.md"
       },
       {
         "signature": "public static fun array(): js",
         "description": "Creates an empty JavaScript array.",
-        "line": 52,
+        "line": 46,
         "page": "reference/api/js-js.md"
       },
       {
         "signature": "public static get null(): js",
         "description": "The JavaScript `null` value.",
-        "line": 71,
+        "line": 62,
         "page": "reference/api/js-js.md"
       },
       {
         "signature": "public static get undefined(): js",
         "description": "The JavaScript `undefined` value.",
-        "line": 78,
+        "line": 68,
         "page": "reference/api/js-js.md"
       },
       {
         "signature": "public fun to_int(): int",
         "description": "Converts this JavaScript value to a Dream integer.",
-        "line": 413,
+        "line": 357,
         "page": "reference/api/js-js.md"
       },
       {
         "signature": "public fun to_double(): double",
         "description": "Converts this JavaScript value to a Dream double.",
-        "line": 420,
+        "line": 363,
         "page": "reference/api/js-js.md"
       },
       {
         "signature": "public fun to_bool(): bool",
         "description": "Converts this JavaScript value to a Dream boolean.",
-        "line": 427,
+        "line": 369,
         "page": "reference/api/js-js.md"
       },
       {
         "signature": "public fun to_str(): string",
         "description": "Converts this JavaScript value to a Dream string.",
-        "line": 434,
+        "line": 375,
         "page": "reference/api/js-js.md"
       },
       {
         "signature": "public fun is_null(): bool",
         "description": "True if the referenced value is `null` or `undefined`.",
-        "line": 441,
+        "line": 381,
         "page": "reference/api/js-js.md"
       }
     ]
@@ -17992,7 +17953,7 @@
       {
         "signature": "public static fun which(cmd: string): Option<string>",
         "description": "Finds an existing nondirectory command path, directly or by searching `PATH`. This does not validate execute permissions or expand platform-specific extensions.",
-        "line": 164,
+        "line": 163,
         "page": "reference/api/process-process.md"
       }
     ]
@@ -18865,8 +18826,8 @@
     "declarations": [
       {
         "signature": "public static class Assert",
-        "description": "Assertion helpers for `system.testing`. On failure, prints a message and exits the process with a non-zero status (no exceptions/panics — assertions are meant to run in ordinary scripts). Exit-based failures require a real process model (`@native` / `@node`); not available on `@web`.",
-        "line": 6,
+        "description": "Assertion helpers for `system.testing`. On failure, prints a message and exits the process with a non-zero status (no exceptions/panics — assertions are meant to run in ordinary scripts). Exit-based failures need a process to end, so `Assert` is available on native builds and Node.js, not in browsers.",
+        "line": 7,
         "page": "reference/api/testing-assert.md"
       },
       {
@@ -18878,43 +18839,43 @@
       {
         "signature": "public static async fun eq_async<T>(actual: Future<T>, expected: T): void",
         "description": "Awaits actual and compares its value using the normal assertion diagnostics.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static async fun ok_async<T, E>(actual: Future<Result<T, E>>): T",
         "description": "Awaits a fallible operation and returns its success value, reporting the error on failure.",
-        "line": 27,
+        "line": 25,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun eq<T>(actual: T, expected: T): void",
         "description": "Asserts that `actual == expected`. String failures quote the expected and actual values.",
-        "line": 38,
+        "line": 35,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun ne<T>(actual: T, expected: T): void",
         "description": "Asserts that `actual != expected`.",
-        "line": 53,
+        "line": 49,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun is_true(value: bool): void",
         "description": "Asserts that `value` is `true`.",
-        "line": 63,
+        "line": 58,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun is_false(value: bool): void",
         "description": "Asserts that `value` is `false`.",
-        "line": 73,
+        "line": 67,
         "page": "reference/api/testing-assert.md"
       },
       {
         "signature": "public static fun approx(actual: double, expected: double, epsilon: double): void",
         "description": "Asserts that two doubles are within `epsilon` of each other.",
-        "line": 83,
+        "line": 76,
         "page": "reference/api/testing-assert.md"
       }
     ]

@@ -1,11 +1,11 @@
 module system.webapi.auth;
 
 internal static class AuthCrypto {
-    @native
+    @cfg(Target.Native)
     @runtime("cryptoAuth", "crypto")
     static extern fun host(request: string): string;
 
-    @native
+    @cfg(Target.Native)
     internal static fun call(request: JsonValue): Result<JsonValue, AuthError> {
         let result = Json.deserialize<JsonValue>(AuthCrypto.host(Json.serialize(request)));
         if result.is_err() {
@@ -31,7 +31,7 @@ internal static class AuthCrypto {
         return value;
     }
 
-    @native
+    @cfg(Target.Native)
     internal static fun random(): Result<string, AuthError> {
         let bytes = SecureRandom.bytes(32);
         if bytes.is_err() {
@@ -48,7 +48,7 @@ internal static class AuthCrypto {
         return DateTime.utc_now().epoch_millis / 1000L;
     }
 
-    @native
+    @cfg(Target.Native)
     internal static fun jwt(
         options: JwtOptions,
         action: string,

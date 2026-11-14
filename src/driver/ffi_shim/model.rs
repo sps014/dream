@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use dream_abi::attributes::{
     ALLOW_CYCLE, AttributeTarget, OwnedResult, allows_cycle, cpp_attr, cpp_header, cpp_member_name,
-    cpp_target_name, has_named_attr, has_packed_attr, owned_result, validate_attributes,
+    cpp_target_name, has_packed_attr, owned_result, validate_attributes,
 };
 use dream_abi::c_abi::{cpp_shim_symbol, is_cpp_id_expr};
 use dream_diagnostics::DiagnosticBag;
@@ -41,8 +41,6 @@ pub(super) struct Member {
     /// `@owned`: a returned `T*` transfers ownership.
     pub owned: bool,
     pub visibility: Visibility,
-    /// `@native` / `@node` / `@web` copied onto the generated member, each already suffixed with a space.
-    pub hosts: String,
     pub line: usize,
     pub at: TextSpan,
 }
@@ -652,7 +650,6 @@ fn member(
             .unwrap_or_else(|| "void".to_string()),
         owned: owned_result(&f.attributes).is_owned(),
         visibility: f.visibility,
-        hosts: host_prefix(&f.attributes),
         line: f.name.position.line_no,
         at: f.name.position,
         name,
@@ -660,18 +657,6 @@ fn member(
         params,
         ret,
     })
-}
-
-fn host_prefix(attributes: &[AttributeNode]) -> String {
-    let mut out = String::new();
-    for name in ["native", "node", "web"] {
-        if has_named_attr(attributes, name) {
-            out.push('@');
-            out.push_str(name);
-            out.push(' ');
-        }
-    }
-    out
 }
 
 fn no_exceptions(graph: &NativeGraph, set: &str) -> bool {

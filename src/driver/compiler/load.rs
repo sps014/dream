@@ -36,7 +36,9 @@ impl Compiler {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<FrontEnd<'a>, CompileError> {
         let mut acc = ProgramAccumulator {
-            cfg: self.target.spec().cfg_symbols(!self.profile.is_debug()),
+            cfg: self
+                .compile_targets
+                .cfg_symbols(self.target.spec(), !self.profile.is_debug()),
             package_base: self.package_base.clone(),
             ..ProgramAccumulator::default()
         };

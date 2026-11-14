@@ -201,12 +201,6 @@ impl<'a> Analyzer<'a> {
                 method.position,
                 diagnostics,
             );
-            self.check_runtime_intrinsic_call(
-                "Buffer.realloc",
-                template,
-                method.position,
-                diagnostics,
-            );
             let element = match generic_args.as_ref().and_then(|g| g.first()) {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => params_types
@@ -239,12 +233,6 @@ impl<'a> Analyzer<'a> {
             == Some(intrinsics::IntrinsicOp::ArrayElemsCopy)
         {
             self.check_unsafe_intrinsic_call(
-                "Buffer.elems_copy",
-                template,
-                method.position,
-                diagnostics,
-            );
-            self.check_runtime_intrinsic_call(
                 "Buffer.elems_copy",
                 template,
                 method.position,
@@ -297,12 +285,6 @@ impl<'a> Analyzer<'a> {
                 method.position,
                 diagnostics,
             );
-            self.check_runtime_intrinsic_call(
-                "Buffer.elems_fill",
-                template,
-                method.position,
-                diagnostics,
-            );
             let element = match generic_args.as_ref().and_then(|g| g.first()) {
                 Some(t) => Self::monomorphize_type(t, &self.current_generic_bindings),
                 None => {
@@ -345,12 +327,6 @@ impl<'a> Analyzer<'a> {
             == Some(intrinsics::IntrinsicOp::ForceFree)
         {
             self.check_unsafe_intrinsic_call("Buffer.free", template, method.position, diagnostics);
-            self.check_runtime_intrinsic_call(
-                "Buffer.free",
-                template,
-                method.position,
-                diagnostics,
-            );
             if params_types.len() != 1 {
                 diagnostics.report_error(
                     format!(

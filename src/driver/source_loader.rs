@@ -81,7 +81,10 @@ impl ProgramAccumulator<'_> {
     /// program being built.
     pub fn is_library_file(&self, path: &str) -> bool {
         !self.generated_files.contains(path)
-            && self.parsed_files.first().is_none_or(|(entry, _)| entry != path)
+            && self
+                .parsed_files
+                .first()
+                .is_none_or(|(entry, _)| entry != path)
             && self
                 .library_roots
                 .iter()

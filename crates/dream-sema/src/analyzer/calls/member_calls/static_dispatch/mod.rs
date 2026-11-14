@@ -84,7 +84,9 @@ impl<'a> Analyzer<'a> {
             .function_table
             .generic_method_overloads
             .get(&(owner, name.to_string()))?;
-        let templates = defs.iter().filter_map(|def| self.generic_functions.get(def).copied());
+        let templates = defs
+            .iter()
+            .filter_map(|def| self.generic_functions.get(def).copied());
         let accepts = |template: &&'a FunctionNode<'a>| {
             let required = template
                 .parameters
@@ -94,7 +96,10 @@ impl<'a> Analyzer<'a> {
             let variadic = template.parameters.last().is_some_and(|p| p.is_variadic);
             argc >= required && (variadic || argc <= template.parameters.len())
         };
-        templates.clone().find(accepts).or_else(|| templates.into_iter().next())
+        templates
+            .clone()
+            .find(accepts)
+            .or_else(|| templates.into_iter().next())
     }
 
     /// Handles `Type.method(args)` static dispatch when the receiver `id` names a type rather than

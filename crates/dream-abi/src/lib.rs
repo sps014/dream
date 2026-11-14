@@ -5,6 +5,7 @@
 
 pub mod attributes;
 pub mod c_abi;
+pub mod compile_targets;
 pub mod core_items;
 pub mod exports;
 pub mod guest_contract;

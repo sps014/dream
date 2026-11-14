@@ -28,7 +28,7 @@ fun main() {
 | Runtime | Digests / CSPRNG | AES-GCM |
 | --- | --- | --- |
 | Native / Node | yes | yes |
-| Browser | Web Crypto | compile error (`@native` / `@node` only) |
+| Browser | Web Crypto | compile error (native and Node.js only) |
 
 | Call | Meaning |
 | --- | --- |

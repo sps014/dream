@@ -213,7 +213,7 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
         .with_release(release_build)
         .with_debug_info(std::env::var_os("DREAM_CORPUS_DEBUG_INFO").is_some());
     if host == TestHost::Node {
-        compiler = compiler.with_compile_targets(dream_abi::attributes::CompileTargets {
+        compiler = compiler.with_compile_targets(dream_abi::compile_targets::CompileTargets {
             native: false,
             node: true,
             web: false,

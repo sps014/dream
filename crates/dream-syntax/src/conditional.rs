@@ -20,12 +20,15 @@ pub enum TargetSymbol {
     Ios,
     Native,
     Wasm,
+    /// A WebAssembly build hosted by JavaScript: a browser, Node.js, or both.
+    Js,
     Browser,
+    Node,
     Wasi,
 }
 
 impl TargetSymbol {
-    pub const ALL: [TargetSymbol; 11] = [
+    pub const ALL: [TargetSymbol; 13] = [
         TargetSymbol::Debug,
         TargetSymbol::Release,
         TargetSymbol::Windows,
@@ -35,7 +38,9 @@ impl TargetSymbol {
         TargetSymbol::Ios,
         TargetSymbol::Native,
         TargetSymbol::Wasm,
+        TargetSymbol::Js,
         TargetSymbol::Browser,
+        TargetSymbol::Node,
         TargetSymbol::Wasi,
     ];
 
@@ -51,7 +56,9 @@ impl TargetSymbol {
             TargetSymbol::Ios => "Ios",
             TargetSymbol::Native => "Native",
             TargetSymbol::Wasm => "Wasm",
+            TargetSymbol::Js => "Js",
             TargetSymbol::Browser => "Browser",
+            TargetSymbol::Node => "Node",
             TargetSymbol::Wasi => "Wasi",
         }
     }
@@ -81,6 +88,11 @@ impl CfgSymbols {
         self
     }
 
+    pub fn without(mut self, symbol: TargetSymbol) -> CfgSymbols {
+        self.bits &= !symbol.bit();
+        self
+    }
+
     pub fn defines(self, symbol: TargetSymbol) -> bool {
         self.bits & symbol.bit() != 0
     }
@@ -90,7 +102,10 @@ impl CfgSymbols {
     pub fn host_debug() -> CfgSymbols {
         let debug = CfgSymbols::empty().with(TargetSymbol::Debug);
         if cfg!(target_family = "wasm") {
-            return debug.with(TargetSymbol::Wasm).with(TargetSymbol::Browser);
+            return debug
+                .with(TargetSymbol::Wasm)
+                .with(TargetSymbol::Js)
+                .with(TargetSymbol::Browser);
         }
         let symbols = debug.with(TargetSymbol::Native);
         if cfg!(target_os = "windows") {

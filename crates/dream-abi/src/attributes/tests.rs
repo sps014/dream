@@ -173,41 +173,6 @@ fn runtime_conflicts_with_js() {
 }
 
 #[test]
-fn c_attr_is_available_on_native_and_wasm_runtimes() {
-    let attrs = &[attr("c", &["\"m\"", "\"f\""])];
-    let support = RuntimeSupport::from_attributes(attrs);
-    assert!(support.native);
-    assert!(support.node);
-    assert!(support.web);
-}
-
-#[test]
-fn c_with_native_is_accepted() {
-    let attrs = &[attr("c", &["\"m\"", "\"f\""]), attr("native", &[])];
-    let mut diagnostics = DiagnosticBag::new(None);
-    validate_c_extern_attrs(attrs, &mut diagnostics);
-    assert!(!diagnostics.has_errors());
-    let support = RuntimeSupport::from_attributes(attrs);
-    assert!(support.native);
-    assert!(!support.node);
-    assert!(!support.web);
-}
-
-#[test]
-fn c_with_web_or_node_restricts_runtime_availability() {
-    for host in ["web", "node"] {
-        let attrs = &[attr("c", &["\"m\"", "\"f\""]), attr(host, &[])];
-        let mut diagnostics = DiagnosticBag::new(None);
-        validate_c_extern_attrs(attrs, &mut diagnostics);
-        assert!(!diagnostics.has_errors());
-        let support = RuntimeSupport::from_attributes(attrs);
-        assert!(!support.native);
-        assert_eq!(support.web, host == "web");
-        assert_eq!(support.node, host == "node");
-    }
-}
-
-#[test]
 fn marshal_without_c_is_rejected() {
     // `@marshal` only affects `@c` externs — attaching it to a plain (or `@js`) extern is a
     // no-op and probably a bug, so the validator flags it.
@@ -306,18 +271,6 @@ fn catalog() -> &'static UserAttributes {
             (
                 "system.core",
                 include_str!("../../../dream-stdlib/src/system/core/async_host_attribute.dream"),
-            ),
-            (
-                "system.core",
-                include_str!("../../../dream-stdlib/src/system/core/native_attribute.dream"),
-            ),
-            (
-                "system.core",
-                include_str!("../../../dream-stdlib/src/system/core/node_attribute.dream"),
-            ),
-            (
-                "system.core",
-                include_str!("../../../dream-stdlib/src/system/core/web_attribute.dream"),
             ),
             (
                 "system.core",

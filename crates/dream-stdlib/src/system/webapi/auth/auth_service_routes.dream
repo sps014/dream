@@ -2,7 +2,7 @@ module system.webapi.auth;
 
 extend AuthService {
     /// Generates the auth endpoints; mount the result explicitly on one application.
-    @native
+    @cfg(Target.Native)
     public fun router(): Result<WebRouter, AuthError> {
         if this.frozen {
             return Result.Err(AuthError("EINVAL", "authentication configuration is frozen"));
@@ -159,7 +159,7 @@ extend AuthService {
             + token + "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=" + seconds.to_string();
     }
 
-    @native
+    @cfg(Target.Native)
     static async fun handle_local(
         service: AuthService,
         ctx: RequestContext,
@@ -231,7 +231,7 @@ extend AuthService {
         return response;
     }
 
-    @native
+    @cfg(Target.Native)
     static async fun handle_oidc(
         service: AuthService,
         ctx: RequestContext,

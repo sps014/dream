@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `Assert`
 
-Assertion helpers for `system.testing`. On failure, prints a message and exits the process with a non-zero status (no exceptions/panics — assertions are meant to run in ordinary scripts). Exit-based failures require a real process model (`@native` / `@node`); not available on `@web`.
+Assertion helpers for `system.testing`. On failure, prints a message and exits the process with a non-zero status (no exceptions/panics — assertions are meant to run in ordinary scripts). Exit-based failures need a process to end, so `Assert` is available on native builds and Node.js, not in browsers.
 
 ```dream
 public static class Assert

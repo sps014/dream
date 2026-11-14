@@ -80,7 +80,7 @@ public class HttpIncoming {
         return metadata.text();
     }
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerReleaseRequest", "net")
     static extern fun release_host(id: int): void;
 
@@ -120,7 +120,7 @@ public class HttpIncoming {
     /// Reads the whole request body as bytes and caches it; later calls return the same bytes.
     /// The server sets no size limit, so bound large bodies at a proxy or read them with
     /// `stream`. Fails with `ECLOSED` after `stream` was read.
-    @native
+    @cfg(Target.Native)
     public fun read_body_bytes(
         token: Option<CancellationToken> = Option.None
     ): Future<Result<byte[], IoError>> {
@@ -140,7 +140,7 @@ public class HttpIncoming {
 
     /// Reads the whole request body as UTF-8 text, with the caching and limits of
     /// `read_body_bytes`.
-    @native
+    @cfg(Target.Native)
     public async fun read_body_text(
         token: Option<CancellationToken> = Option.None
     ): Result<string, IoError> {
@@ -159,7 +159,7 @@ public class HttpIncoming {
     /// than `max_fields` text fields or more than `max_files` files fail with `EINVAL`; file
     /// parts have no size limit and spool to disk past 1 MiB. Later calls return the same
     /// `FormData`, whatever limits they pass. Fails with `ECLOSED` after `stream` was read.
-    @native
+    @cfg(Target.Native)
     public fun form(
         max_files: int = 1000,
         max_fields: int = 1000,

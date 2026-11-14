@@ -25,7 +25,7 @@ internal static class OidcTransport {
 
     /// Performs an OIDC begin or completion request built by `request`. Honors `token`
     /// cancellation and returns an I/O error on failure.
-    @native
+    @cfg(Target.Native)
     public static async fun exchange(
         request: WireWriter,
         token: Option<CancellationToken> = Option.None

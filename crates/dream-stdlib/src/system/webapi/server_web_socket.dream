@@ -44,11 +44,11 @@ public class ServerWebSocket {
         return this.token;
     }
 
-    @native
+    @cfg(Target.Native)
     @runtime("netWsStart", "net")
     static extern fun start_host(request: byte[], bytes: byte[]): int;
 
-    @native
+    @cfg(Target.Native)
     @runtime("netWsClose", "net")
     static extern fun close_host(id: int): void;
 
@@ -62,7 +62,7 @@ public class ServerWebSocket {
     /// checks on the handshake request such as its `Origin` header; messages can be sent and
     /// received only after it succeeds. Fails when the request is not a valid WebSocket upgrade,
     /// the client disconnected, or the socket was already accepted or closed.
-    @native
+    @cfg(Target.Native)
     public fun accept(
         token: Option<CancellationToken> = Option.None
     ): Future<Result<Unit, IoError>> {
@@ -126,7 +126,7 @@ public class ServerWebSocket {
     }
 
     /// Sends one text message.
-    @native
+    @cfg(Target.Native)
     public fun send_text(
         text: string,
         token: Option<CancellationToken> = Option.None
@@ -142,7 +142,7 @@ public class ServerWebSocket {
     }
 
     /// Sends one binary message.
-    @native
+    @cfg(Target.Native)
     public fun send_binary(
         bytes: byte[],
         token: Option<CancellationToken> = Option.None
@@ -158,7 +158,7 @@ public class ServerWebSocket {
     }
 
     /// Receives one complete message.
-    @native
+    @cfg(Target.Native)
     public fun receive(
         token: Option<CancellationToken> = Option.None
     ): Future<Result<WebSocketMessage, IoError>> {
@@ -179,7 +179,7 @@ public class ServerWebSocket {
     }
 
     /// Iterates messages through the final Close message.
-    @native
+    @cfg(Target.Native)
     public fun messages(
         token: Option<CancellationToken> = Option.None
     ): AsyncIterable<WebSocketMessage> {
@@ -212,7 +212,7 @@ public class ServerWebSocket {
 
     /// Sends a normal closing handshake; before `accept`, rejects the connection with 403
     /// Forbidden like `close_with`.
-    @native
+    @cfg(Target.Native)
     public fun close(
         token: Option<CancellationToken> = Option.None
     ): Future<Result<Unit, IoError>> {
@@ -222,7 +222,7 @@ public class ServerWebSocket {
     /// Sends a closing handshake with a code and reason. Before `accept`, this rejects the
     /// connection instead: the handshake is answered with 403 Forbidden when the handler returns,
     /// and `code` and `reason` are not sent. Use code 1008 (policy violation) for that case.
-    @native
+    @cfg(Target.Native)
     public fun close_with(
         code: int,
         reason: string,

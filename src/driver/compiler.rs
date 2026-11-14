@@ -13,7 +13,7 @@ use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{ProgramAccumulator, parse_file_recursive};
 use crate::driver::ui::{BuildReporter, SilentReporter};
 use crate::driver::wasm_opt::OptLevel;
-use dream_abi::attributes::CompileTargets;
+use dream_abi::compile_targets::CompileTargets;
 use dream_diagnostics::{DiagnosticBag, format_diagnostics, render_with};
 use dream_mir::backend::Target;
 use dream_sema::analyzer::Analyzer;
@@ -445,7 +445,7 @@ fn report_wasm_c_imports(
             format!(
                 "'{what}' has no package C/C++ source set for wasm32; \
                  provide portable sources in `native/`, bind the browser/Node equivalent with `@js`, \
-                 or guard the call with `@native`"
+                 or guard the declaration with `@cfg(Target.Native)`"
             ),
             Some(at),
             file,

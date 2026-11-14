@@ -576,12 +576,6 @@ impl<'a> Analyzer<'a> {
         }
 
         self.check_unsafe_call(&store_sig, name.position, diagnostics);
-        self.check_runtime_call(
-            &function_name,
-            store_sig.runtime_support,
-            name.position,
-            diagnostics,
-        );
         self.check_c_fun_args(store_sig.identity.0, params, 0, symbol_table, diagnostics);
 
         self.validate_ref_arguments(

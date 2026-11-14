@@ -59,7 +59,7 @@ fun c_option_getenv(): void {
     Assert.eq(c5e_strstr("prefix😀日本!", "😀").unwrap(), "😀日本!");
 }
 
-@native
+@cfg(Target.Native)
 fun c1ea_f(): string {
     return "ok";
 }

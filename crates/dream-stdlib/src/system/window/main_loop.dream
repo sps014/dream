@@ -1,7 +1,7 @@
 module system.window;
 
 // Programs never call this; on Android and iOS the generated `main` does, through `@main_loop`.
+@cfg(Target.Native)
 @main_loop
 @runtime("dream_window_app_main", "window")
-@native
 internal extern fun window_main_loop(argc: int, argv: isize, entry: isize, pump: isize): int;

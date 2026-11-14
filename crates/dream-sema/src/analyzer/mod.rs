@@ -5,7 +5,6 @@ use crate::struct_table::StructTable;
 use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionTable;
 use bumpalo::Bump;
-use dream_abi::attributes::{CompileTargets, RuntimeSupport};
 use dream_diagnostics::{Diagnostic, DiagnosticBag};
 use dream_syntax::nodes::types::FUTURE_TYPE;
 use dream_syntax::nodes::{EnumDeclarationNode, ExtendNode};
@@ -28,10 +27,10 @@ mod declarations;
 mod expressions;
 mod generics;
 mod hir_emit;
-mod member_requirements;
 pub mod ide;
 mod iterators;
 mod js_interop;
+mod member_requirements;
 mod ownership;
 mod receiver_modes;
 mod statements;
@@ -393,11 +392,6 @@ pub struct Analyzer<'a> {
     /// True while analyzing the body of an `@unsafe fun`/method. Gates calling another `@unsafe`
     /// function/method — see `Analyzer::check_unsafe_call`.
     current_function_is_unsafe: bool,
-    /// Runtime availability of the function whose body is currently being analyzed. Gates
-    /// `check_runtime_call` on nested calls — see `Analyzer::check_runtime_call`.
-    current_function_runtime: RuntimeSupport,
-    /// Active compile-time runtime target(s) from the driver/CLI. Defaults to native-only.
-    compile_targets: CompileTargets,
     /// Pointer facts used by the single HIR layout table.
     target_layout: dream_hir::TargetLayout,
     deferred_case_labels: Vec<Vec<(dream_hir::HExpr, Option<TextSpan>)>>,
@@ -521,8 +515,6 @@ impl<'a> Analyzer<'a> {
             ref_struct_escape_muted: false,
             current_function_is_async: false,
             current_function_is_unsafe: false,
-            current_function_runtime: RuntimeSupport::ALL,
-            compile_targets: CompileTargets::native_only(),
             target_layout: dream_hir::TargetLayout::default(),
             deferred_case_labels: Vec::new(),
             overflow: dream_hir::Overflow::Wrapping,
@@ -587,12 +579,6 @@ impl<'a> Analyzer<'a> {
     /// Library vs binary compilation unit. Call before [`Self::analyze`].
     pub fn with_crate_type(mut self, crate_type: CrateType) -> Self {
         self.crate_type = crate_type;
-        self
-    }
-
-    /// Active compile-time runtime target(s). Call before [`Self::analyze`].
-    pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
-        self.compile_targets = targets;
         self
     }
 

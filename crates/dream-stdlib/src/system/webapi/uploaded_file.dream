@@ -40,7 +40,7 @@ public class UploadedFile: AsyncReader {
     /// Reads up to `size` bytes from the current position; a negative `size` reads the rest of
     /// the file. An empty result means the end of the file. Fails with `ECLOSED` after `close`
     /// or once the request has finished.
-    @native
+    @cfg(Target.Native)
     public fun read(
         size: int = -1,
         token: Option<CancellationToken> = Option.None
@@ -62,7 +62,7 @@ public class UploadedFile: AsyncReader {
     }
 
     /// Moves the read position to `offset` bytes from the start of the file.
-    @native
+    @cfg(Target.Native)
     public fun seek(
         offset: long,
         token: Option<CancellationToken> = Option.None
@@ -87,7 +87,7 @@ public class UploadedFile: AsyncReader {
         return Result.Ok(Unit());
     }
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerCloseUpload", "net")
     static extern fun close_host(handle: int): void;
 

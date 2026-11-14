@@ -13,7 +13,6 @@ impl Compiler {
         let mut analyzer = Analyzer::new(&loaded.graph, arena)
             .with_aliased_imports(loaded.acc.aliased_imports.clone())
             .with_crate_type(self.crate_type)
-            .with_compile_targets(self.compile_targets)
             .with_lazy_library_bodies()
             .with_library_files(loaded.acc.library_files())
             .with_target_layout(dream_hir::TargetLayout {

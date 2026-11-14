@@ -26,9 +26,14 @@ pub(super) const CASES: &[Case] = &[
         "'@c' extern 'leaky' result: returning `OwnedCPtr` needs `@owned(\"free_fn\")` naming the C function that frees the pointer\n'@c' extern 'counted' result: `@owned(\"free_fn\")` applies only to a `@c` extern returning `OwnedCPtr`\n'@c' extern 'spaced' result: `@owned` names 'free me', which is not a C identifier\n'@c' extern 'reserved' binds 'dream_cs_x', which is not a C identifier\nargument 4 of '@c' extern 'qsort' must be a named function or a lambda literal\n'@c' extern 'puts' parameter 'lines': type 'List<string>' has no C representation here",
         true,
     ),
+    Case::error_targets(
+        "cfg_browser_only",
+        Some("Function does not exist (f)"),
+        Some("Function does not exist (f)"),
+    ),
     Case::error(
         "cfg_errors",
-        "unknown target 'Target.Freebsd'; expected one of Target.Debug, Target.Release, Target.Windows, Target.Macos, Target.Linux, Target.Android, Target.Ios, Target.Native, Target.Wasm, Target.Browser, Target.Wasi\n'@cfg' conditions test 'Target.<name>', but found 'Os'\nexpected '&&', '||', or ')' in a '@cfg' condition but found identifier\nan item can have only one '@cfg'; combine the conditions with '&&' or '||'\n'@cfg' must be the first attribute of a declaration, member, or statement\n'@cfg' must be followed by the declaration, member, or statement it controls",
+        "unknown target 'Target.Freebsd'; expected one of Target.Debug, Target.Release, Target.Windows, Target.Macos, Target.Linux, Target.Android, Target.Ios, Target.Native, Target.Wasm, Target.Js, Target.Browser, Target.Node, Target.Wasi\n'@cfg' conditions test 'Target.<name>', but found 'Os'\nexpected '&&', '||', or ')' in a '@cfg' condition but found identifier\nan item can have only one '@cfg'; combine the conditions with '&&' or '||'\n'@cfg' must be the first attribute of a declaration, member, or statement\n'@cfg' must be followed by the declaration, member, or statement it controls",
         true,
     ),
     Case::error(
@@ -181,11 +186,6 @@ pub(super) const CASES: &[Case] = &[
         "private_member_errors",
         "'_secret' is private to 'Box'\n'reveal' is private to 'Box'\nconstructor of 'Hidden' is not accessible here",
         true,
-    ),
-    Case::error_targets(
-        "runtime_attr_web_only",
-        Some("'f' is not available on compile target 'native' (available on: web)"),
-        Some("'f' is not available on compile target 'node' (available on: web)"),
     ),
     Case::error("sizeof_case_duplicates", "duplicate case label '8'", true),
     Case::error(

@@ -17,36 +17,50 @@ const HOST_SOURCES: &[&str] = &[
 ];
 
 fn prelude_dream_host_names(include_native_only: bool) -> HashSet<String> {
-    use dream_abi::attributes::{RuntimeSupport, js_import_target, runtime_import_field};
+    use dream_abi::attributes::{js_import_target, runtime_import_field};
+    use dream_abi::compile_targets::CompileTargets;
+    use dream_abi::target::TargetSpec;
     use dream_syntax::{lexer::Lexer, parser::Parser};
+    let wasm = TargetSpec::parse("wasm32-unknown-unknown").unwrap();
+    let js_host = |node: bool| {
+        CompileTargets {
+            native: false,
+            node,
+            web: !node,
+        }
+        .cfg_symbols(&wasm, false)
+    };
+    let mut builds = vec![js_host(false), js_host(true)];
+    if include_native_only {
+        builds.push(CompileTargets::native_only().cfg_symbols(&TargetSpec::host(), false));
+    }
     let mut declared = HashSet::new();
     for (path, source) in dream_stdlib::all_prelude_files() {
-        let arena = bumpalo::Bump::new();
-        let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
-        let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
-        let syntax = parser
-            .parse()
-            .unwrap_or_else(|_| panic!("invalid stdlib source: {path}"));
-        let program = syntax.get_root();
-        dream_stdlib::attributes::resolve_source_attribute_ids(program);
-        let functions = program
-            .functions
-            .iter()
-            .chain(program.structs.iter().flat_map(|d| &d.methods))
-            .chain(program.enums.iter().flat_map(|d| &d.methods))
-            .chain(program.extends.iter().flat_map(|d| &d.methods));
-        for function in functions {
-            let support = RuntimeSupport::from_attributes(&function.attributes);
-            if !include_native_only && !support.node && !support.web {
-                continue;
-            }
-            if let Some(field) = runtime_import_field(&function.attributes) {
-                declared.insert(field);
-            }
-            if let Some((module, field)) = js_import_target(&function.attributes)
-                && module == HOST_MODULE
-            {
-                declared.insert(field);
+        for &cfg in &builds {
+            let arena = bumpalo::Bump::new();
+            let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+            let mut parser =
+                Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics).with_cfg(cfg);
+            let syntax = parser
+                .parse()
+                .unwrap_or_else(|_| panic!("invalid stdlib source: {path}"));
+            let program = syntax.get_root();
+            dream_stdlib::attributes::resolve_source_attribute_ids(program);
+            let functions = program
+                .functions
+                .iter()
+                .chain(program.structs.iter().flat_map(|d| &d.methods))
+                .chain(program.enums.iter().flat_map(|d| &d.methods))
+                .chain(program.extends.iter().flat_map(|d| &d.methods));
+            for function in functions {
+                if let Some(field) = runtime_import_field(&function.attributes) {
+                    declared.insert(field);
+                }
+                if let Some((module, field)) = js_import_target(&function.attributes)
+                    && module == HOST_MODULE
+                {
+                    declared.insert(field);
+                }
             }
         }
     }
@@ -118,12 +132,7 @@ fn capability_inventory_matches_each_library_exports() {
             .filter(|(_, host)| *host == capability.name())
             .map(|(field, _)| field.to_string())
             .collect();
-        assert_eq!(
-            exported,
-            declared,
-            "{} export inventory",
-            capability.name()
-        );
+        assert_eq!(exported, declared, "{} export inventory", capability.name());
     }
 }
 

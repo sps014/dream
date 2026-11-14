@@ -247,7 +247,7 @@ export function emitBindings(rootType, id, global = false) {
   const files = [], header = `module ${namespace};\n\nimport system.js;\n\n`;
   if (global) files.push({ name: "globals.dream", source: header + members(rootType, "js.global", false, true).join("\n\n") + "\n" });
   else {
-    const load = `@node\n@web\n@js(${quote(`dream.js.${id}`)}, "namespace")\ninternal static extern fun __module(): js;`;
+    const load = `@cfg(Target.Js)\n@js(${quote(`dream.js.${id}`)}, "namespace")\ninternal static extern fun __module(): js;`;
     files.push({ name: "bindings.dream", source: `${header}import dream.js.types;\n\n/// JavaScript exports resolved from the imported module.\n@js_type(${quote(rootType.namespace ?? "JavaScript")})\npublic static class ${rootName} {\n${indent([load, ...members(rootType, `${rootName}.__module()`, true)].join("\n\n"))}\n}\n` });
   }
   for (const entry of types.values()) {

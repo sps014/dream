@@ -338,12 +338,6 @@ impl<'a> Analyzer<'a> {
             ctx.symbol_table,
             diagnostics,
         );
-        self.check_runtime_call(
-            &format!("{}.{}", effective_struct, method.text),
-            store_sig.runtime_support,
-            method.position,
-            diagnostics,
-        );
 
         let mut expected_params = store_sig.parameters.clone();
         let mut expected_defaults = store_sig.defaults.clone();

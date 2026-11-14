@@ -279,9 +279,10 @@ impl TargetSpec {
         });
         symbols = match self.execution_environment {
             ExecutionEnvironment::Native => symbols.with(TargetSymbol::Native),
-            ExecutionEnvironment::Browser => {
-                symbols.with(TargetSymbol::Wasm).with(TargetSymbol::Browser)
-            }
+            ExecutionEnvironment::Browser => symbols
+                .with(TargetSymbol::Wasm)
+                .with(TargetSymbol::Js)
+                .with(TargetSymbol::Browser),
             ExecutionEnvironment::WasiP2 | ExecutionEnvironment::WasiP3 => {
                 symbols.with(TargetSymbol::Wasm).with(TargetSymbol::Wasi)
             }
@@ -482,7 +483,10 @@ mod tests {
                 .unwrap()
                 .hosts_event_loop()
         );
-        assert_eq!(key("wasm32-unknown-unknown", false), "Debug,Wasm,Browser");
+        assert_eq!(
+            key("wasm32-unknown-unknown", false),
+            "Debug,Wasm,Js,Browser"
+        );
         assert_eq!(key("wasm32-wasip2", true), "Release,Wasm,Wasi");
     }
 

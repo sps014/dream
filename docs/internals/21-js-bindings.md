@@ -79,7 +79,7 @@ Stdlib functions implemented by the Dream runtime (files, process, crypto, …) 
 static internal extern fun file_read(borrow path: string): string;
 ```
 
-`@runtime` cannot be combined with `@js`, `@c`, or `@intrinsic` on the same extern. `@native` / `@node` / `@web` still restrict *which* targets may mention the API (`@native @node @runtime("processRun")`).
+`@runtime` cannot be combined with `@js`, `@c`, or `@intrinsic` on the same extern. A leading `@cfg(...)` restricts which builds contain the API at all (`@cfg(Target.Native || Target.Node)`).
 
 ## Running it from JavaScript
 

@@ -1,6 +1,9 @@
 module system.process;
 
-/// Owns a child and its pipes; explicit close terminates and reaps unfinished work.
+/// A running child process launched by `Process.spawn`, with streaming access to its stdin,
+/// stdout, and stderr. Closing the child, explicitly or by dropping it, kills and reaps a child
+/// that is still running.
+@cfg(Target.Native || Target.Node)
 public class ChildProcess {
     id: int;
     closing: bool;
@@ -18,22 +21,25 @@ public class ChildProcess {
         return this.id;
     }
 
-    /// Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.
+    /// The child's standard output. Keep one reader when using `read_line`, because it buffers
+    /// bytes past the returned line.
     public get stdout(): ProcessReader {
         return ProcessReader(this, 0);
     }
 
-    /// Borrows stderr through an AsyncReader; drain it concurrently with stdout.
+    /// The child's standard error. Drain it alongside stdout so a child that fills one pipe
+    /// does not stall.
     public get stderr(): ProcessReader {
         return ProcessReader(this, 1);
     }
 
-    /// Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.
+    /// The child's standard input. Call `close_stdin` to signal end of input.
     public get stdin(): ProcessWriter {
         return ProcessWriter(this);
     }
 
-    /// Closes stdin after pending writes, allowing commands waiting for input EOF to finish.
+    /// Closes the child's stdin once pending writes finish, so a child reading until end of
+    /// input can complete. Returns `ECLOSED` when the child was already closed.
     public fun close_stdin(
         token: Option<CancellationToken> = Option.None
     ): Future<Result<Unit, ProcessError>> {
@@ -45,19 +51,15 @@ public class ChildProcess {
         token: Option<CancellationToken>
     ): Result<Unit, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
-        let operation = ProcessOperation(
-            ProcessOperation.request("close_stdin", child.id),
-            Buffer.alloc<byte>(0)
-        );
-        let result = operation.wait(token).await;
-        operation.close();
-        if result.is_err() {
-            return Result.Err(result.unwrap_err());
+        if child.id <= 0 {
+            return Result.Err(ProcessError("ECLOSED", "child process is closed"));
         }
+        ChildProcess.close_stdin_host(child.id);
         return Result.Ok(Unit());
     }
 
-    /// Waits for process exit without discarding unread output or closing the child handle.
+    /// Waits for the child to exit and returns its exit status, negative when a signal ended
+    /// it. Unread output stays readable, and the child stays open.
     public fun wait(
         token: Option<CancellationToken> = Option.None
     ): Future<Result<int, ProcessError>> {
@@ -69,19 +71,13 @@ public class ChildProcess {
         token: Option<CancellationToken>
     ): Result<int, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
-        let operation = ProcessOperation(
-            ProcessOperation.request("wait", child.id),
-            Buffer.alloc<byte>(0)
-        );
-        let result = operation.wait(token).await;
-        operation.close();
-        if result.is_err() {
-            return Result.Err(result.unwrap_err());
-        }
-        return Result.Ok(int.parse(Encoding.utf8_decode(result.unwrap())).unwrap_or(-2));
+        let call = ProcessCall.exit(child.id);
+        call.finish(token).await?;
+        return Result.Ok((int)call.value());
     }
 
-    /// Terminates and reaps the owned child; repeated or concurrent closes share the outcome.
+    /// Kills the child if it is still running and waits until it is reaped. Repeated or
+    /// concurrent calls share the first outcome.
     public fun close(): Future<Result<Unit, ProcessError>> {
         return ChildProcess.close_owned(this);
     }
@@ -97,32 +93,41 @@ public class ChildProcess {
         child.closing = true;
         let shield = CancellationSource();
         ChildProcess.protect_host(shield);
-        let operation = ProcessOperation(
-            ProcessOperation.request("close", child.id),
-            Buffer.alloc<byte>(0)
-        );
-        let result = operation.wait(Option.Some(shield.token)).await;
-        operation.close();
+        child.terminate();
+        let call = ProcessCall.exit(child.id);
+        let reaped = call.finish(Option.Some(shield.token)).await;
         let outcome: Result<Unit, ProcessError> = Result.Ok(Unit());
-        if result.is_err() {
-            outcome = Result.Err(result.unwrap_err());
+        if reaped.is_err() {
+            outcome = Result.Err(reaped.unwrap_err());
         }
         child.closed = Option.Some(outcome);
-        // Submission failure must still release the child registry entry and request reaping.
-        ChildProcess.close_host(child.id);
+        ChildProcess.release_host(child.id);
         child.id = 0;
         child.completed.cancel();
         return outcome;
     }
 
-    del() {
+    // Kills a running child and ends its pending reads and writes; exit waits still complete.
+    internal fun terminate(): void {
         if this.id > 0 {
-            ChildProcess.close_host(this.id);
+            ChildProcess.kill_host(this.id);
         }
     }
 
-    @runtime("processClose", "process")
-    static extern fun close_host(id: int): void;
+    del() {
+        if this.id > 0 {
+            ChildProcess.release_host(this.id);
+        }
+    }
+
+    @runtime("processCloseStdin", "core")
+    static extern fun close_stdin_host(id: int): void;
+
+    @runtime("processKill", "core")
+    static extern fun kill_host(id: int): void;
+
+    @runtime("processRelease", "core")
+    static extern fun release_host(id: int): void;
 
     @intrinsic(Intrinsic.DreamTaskProtect)
     static extern fun protect_host(borrow source: CancellationSource): void;

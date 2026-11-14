@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `ProcessReader`
 
-A borrowed child output pipe; cancellation preserves bytes already consumed by the host.
+Reads one output pipe of a `ChildProcess`. Cancelling a read keeps any bytes it already took from the pipe, so the next read returns them.
 
 ```dream
 public class ProcessReader: AsyncReader

@@ -8,7 +8,6 @@ license.workspace = true
 dream-host-core = { path = "../dream-host-core", optional = true }
 
 dream-host-crypto = { path = "../dream-host-crypto", optional = true }
-dream-host-process = { path = "../dream-host-process", optional = true }
 dream-host-timezone = { path = "../dream-host-timezone", optional = true }
 
 dream-host-net = { path = "../dream-host-net", optional = true }
@@ -25,10 +24,9 @@ dream-host-drawing = { path = "../dream-host-drawing", optional = true }
 dream-host-app = { path = "../dream-host-app", optional = true }
 
 [features]
-default = ["core", "crypto", "process", "timezone", "net", "io", "window", "gpu", "audio", "drawing", "app"]
+default = ["core", "crypto", "timezone", "net", "io", "window", "gpu", "audio", "drawing", "app"]
 core = ["dep:dream-host-core"]
 crypto = ["core", "dep:dream-host-crypto"]
-process = ["core", "dep:dream-host-process"]
 timezone = ["core", "dep:dream-host-timezone"]
 net = ["core", "dep:dream-host-net"]
 io = ["core", "dep:dream-host-io"]

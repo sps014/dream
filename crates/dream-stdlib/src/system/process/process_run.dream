@@ -1,0 +1,133 @@
+module system.process;
+
+// One `Process.run`: feeds stdin, drains both outputs, and waits for exit concurrently. The first
+// failure, the deadline, or cancellation kills the child, which ends every other step, and that
+// first error is the result.
+@cfg(Target.Native || Target.Node)
+internal class ProcessRun {
+    child: ChildProcess;
+    failure: Option<ProcessError>;
+
+    internal constructor(child: ChildProcess) {
+        this.child = child;
+        this.failure = Option.None;
+    }
+
+    fun fail(error: ProcessError): void {
+        if this.failure.is_none() {
+            this.failure = Option.Some(error);
+        }
+        this.child.terminate();
+    }
+
+    internal static async fun execute(
+        child: ChildProcess,
+        options: ProcessOptions,
+        token: Option<CancellationToken>
+    ): Result<ProcessOutput, ProcessError> {
+        let run = ProcessRun(child);
+        let limit = options.max_output_bytes;
+        if limit == 0 {
+            limit = 8388608;
+        }
+
+        let stop = CancellationSource();
+        let deadline = ProcessRun.expire(run, options.timeout_ms, stop.token);
+        let abandon = ProcessRun.abandon(run, token, stop.token);
+        Promise.start(deadline);
+        Promise.start(abandon);
+
+        let stdout = ProcessRun.collect(run, 0, limit);
+        let stderr = ProcessRun.collect(run, 1, limit);
+        let feed = ProcessRun.feed(run, options.input);
+        Promise.start(stdout);
+        Promise.start(stderr);
+        Promise.start(feed);
+        feed.await;
+        let out = stdout.await;
+        let err = stderr.await;
+        let status = child.wait(Option.None).await;
+
+        stop.cancel();
+        deadline.await;
+        abandon.await;
+        if run.failure.is_some() {
+            return Result.Err(run.failure.unwrap());
+        }
+        if status.is_err() {
+            return Result.Err(status.unwrap_err());
+        }
+        return Result.Ok(
+            ProcessOutput(status.unwrap(), Encoding.utf8_decode(out), Encoding.utf8_decode(err))
+        );
+    }
+
+    static async fun collect(run: ProcessRun, stream: int, limit: int): byte[] {
+        let output = List<byte>();
+        while true {
+            let call = ProcessCall.read(run.child.handle, stream, 65536);
+            let finished = call.finish(Option.None).await;
+            if finished.is_err() {
+                run.fail(finished.unwrap_err());
+                break;
+            }
+            let bytes = call.bytes();
+            if bytes.length == 0 {
+                break;
+            }
+            if bytes.length > limit - output.length {
+                run.fail(
+                    ProcessError("ELIMIT", "captured process output exceeds the configured limit")
+                );
+                break;
+            }
+            output.push_all(bytes);
+        }
+        return output.take_array();
+    }
+
+    static async fun feed(run: ProcessRun, input: byte[]): void {
+        let remaining = input;
+        while remaining.length > 0 {
+            let call = ProcessCall.write(run.child.handle, remaining);
+            let finished = call.finish(Option.None).await;
+            if finished.is_err() {
+                // A child that exits or closes stdin early simply does not want the rest.
+                let error = finished.unwrap_err();
+                if error.code() != "EPIPE" {
+                    run.fail(error);
+                }
+                break;
+            }
+            let written = (int)call.value();
+            if written <= 0 {
+                run.fail(ProcessError.io("stdin made no progress"));
+                break;
+            }
+            remaining = remaining.slice(written, remaining.length);
+        }
+        run.child.close_stdin(Option.None).await;
+    }
+
+    static async fun expire(run: ProcessRun, timeout_ms: int, stop: CancellationToken): void {
+        if timeout_ms <= 0 {
+            return;
+        }
+        if Time.delay(timeout_ms, Option.Some(stop)).await.is_ok() {
+            run.fail(ProcessError("ETIMEOUT", "process deadline exceeded"));
+        }
+    }
+
+    static async fun abandon(
+        run: ProcessRun,
+        token: Option<CancellationToken>,
+        stop: CancellationToken
+    ): void {
+        if token.is_none() {
+            return;
+        }
+        if token.unwrap().wait(stop.wait_cancelled()).await.is_err() {
+            run.fail(ProcessError.cancelled());
+        }
+    }
+}

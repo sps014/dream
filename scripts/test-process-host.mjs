@@ -3,74 +3,71 @@ import test from "node:test";
 import childProcess from "node:child_process";
 import { setNodeChildProcess } from "../runtime/src/platform.js";
 import { makeProcessHost } from "../runtime/src/hosts/process_service.js";
-import { encodeProcessArgs } from "../runtime/src/hosts/process_wire.js";
-import { WireReader } from "../runtime/src/wire.js";
 setNodeChildProcess(childProcess);
 const decode = bytes => new TextDecoder().decode(Uint8Array.from(bytes));
-async function complete(host, id) {
-  await host.processOperationWait(id);
-  const bytes = host.processOperationResult(id);
-  host.processOperationRelease(id);
-  assert.notEqual(bytes[0], 0);
-  return bytes[0] === 1 ? { value: bytes.slice(1) } : { error: { code: new WireReader(bytes.slice(1)).text() } };
+
+async function finish(host, id) {
+  await host.processCallWait(id);
+  const code = host.processCallCode(id);
+  const result = code ? { code } : { value: host.processCallValue(id), bytes: host.processCallBytes(id) };
+  host.processCallRelease(id);
+  return result;
 }
-function start(host, code, options = {}) {
-  return host.processStart(JSON.stringify({ action: "run", command: process.execPath, options }), encodeProcessArgs(["-e", code]));
+
+async function spawn(host, code, env = []) {
+  const launched = await finish(host, host.processSpawn(process.execPath, ["-e", code], "", env, false));
+  assert.equal(launched.code, undefined);
+  return Number(launched.value);
 }
-test("run preserves argument boundaries, environment overrides, and asynchronous progress", async () => {
+
+async function readAll(host, child, stream) {
+  let text = "";
+  for (;;) {
+    const read = await finish(host, host.processRead(child, stream, 65536));
+    assert.equal(read.code, undefined);
+    if (!read.bytes.length) return text;
+    text += decode(read.bytes);
+  }
+}
+
+test("arguments and environment overrides reach the child unchanged", async () => {
   const host = makeProcessHost();
   const args = ["", "two words", "a\nb", "こんにちは"];
-  const id = host.processStart(JSON.stringify({ action: "run", command: process.execPath, options: { env: { DREAM_PROCESS_TEST: "ready" } } }), encodeProcessArgs(["-e", "console.log(JSON.stringify(process.argv.slice(1))); console.error(process.env.DREAM_PROCESS_TEST)", ...args]));
-  let progressed = false;
-  setImmediate(() => { progressed = true; });
-  const result = await complete(host, id);
-  assert.equal(result.error, undefined);
-  assert.ok(progressed);
-  assert.ok(decode(result.value).includes(JSON.stringify(args)));
-  assert.ok(decode(result.value).endsWith("ready\n"));
-});
-test("run concurrently feeds input and drains saturated stdout and stderr", async () => {
-  const host = makeProcessHost();
-  const input = new Array(200000).fill(120);
-  const result = await complete(host, start(host, "process.stdout.write('a'.repeat(200000)); process.stderr.write('b'.repeat(200000)); process.stdin.resume(); process.stdin.on('end',()=>console.log('done'))", { input, timeout_ms: 5000 }));
-  assert.equal(result.error, undefined);
-  assert.ok(result.value.length > 400000);
-});
-test("deadline, cancellation, and output limits settle before returning", async () => {
-  const host = makeProcessHost();
-  const deadline = await complete(host, start(host, "setInterval(()=>{},1000)", { timeout_ms: 50 }));
-  assert.equal(deadline.error.code, "ETIMEOUT");
-  const id = start(host, "setInterval(()=>{},1000)");
-  const abandoned = host.processOperationWait(id);
-  await new Promise(resolve => setTimeout(resolve, 50));
-  host.processOperationCancel(id);
-  const cancelled = await complete(host, id);
-  await abandoned;
-  assert.equal(cancelled.error.code, "ECANCELLED");
-  const limited = await complete(host, start(host, "process.stdout.write('x'.repeat(1000000))", { max_output_bytes: 1000 }));
-  assert.equal(limited.error.code, "ELIMIT");
-});
-test("spawned pipes stream, stdin EOF completes the child, and close invalidates handles", async () => {
-  const host = makeProcessHost();
-  const started = host.processStart(JSON.stringify({ action: "spawn", command: process.execPath, options: {} }), encodeProcessArgs(["-e", "process.stdin.pipe(process.stdout)"]));
-  await host.processOperationWait(started);
-  const wire = host.processOperationResult(started);
-  assert.equal(wire[0], 1);
-  const handle = Number(decode(wire.slice(1)));
-  host.processOperationClaim(started);
-  host.processOperationRelease(started);
-  const operation = (action, extra = {}, bytes = []) => host.processStart(JSON.stringify({ action, handle, ...extra }), bytes);
-  assert.equal(decode((await complete(host, operation("write", {}, [104, 105]))).value), "2");
-  assert.equal(decode((await complete(host, operation("read", { stream: 0, max_bytes: 2 }))).value), "hi");
-  assert.equal((await complete(host, operation("close_stdin"))).error, undefined);
-  assert.equal(decode((await complete(host, operation("wait"))).value), "0");
-  assert.equal((await complete(host, operation("close"))).error, undefined);
-  assert.equal((await complete(host, operation("read", { stream: 0, max_bytes: 1 }))).error.code, "ECLOSED");
+  const launched = await finish(host, host.processSpawn(process.execPath, ["-e", "console.log(JSON.stringify(process.argv.slice(1))); console.error(process.env.DREAM_PROCESS_TEST)", ...args], "", ["DREAM_PROCESS_TEST", "ready"], false));
+  const child = Number(launched.value);
+  assert.ok((await readAll(host, child, 0)).includes(JSON.stringify(args)));
+  assert.equal(await readAll(host, child, 1), "ready\n");
+  assert.equal((await finish(host, host.processWait(child))).value, 0n);
+  host.processRelease(child);
 });
 
-test("malformed argument wires and invalid capture bounds agree with native validation", async () => {
+test("pipes stream, stdin EOF ends the child, and release invalidates the handle", async () => {
   const host = makeProcessHost();
-  const id = host.processStart(JSON.stringify({ action: "run", command: process.execPath, options: {} }), [255, 255, 255, 255]);
-  assert.equal((await complete(host, id)).error.code, "EINVAL");
-  assert.equal((await complete(host, start(host, "", { max_output_bytes: 2147483647 }))).error.code, "EINVAL");
+  const child = await spawn(host, "process.stdin.pipe(process.stdout)");
+  assert.equal((await finish(host, host.processWrite(child, [104, 105]))).value, 2n);
+  assert.equal(decode((await finish(host, host.processRead(child, 0, 2))).bytes), "hi");
+  host.processCloseStdin(child);
+  assert.equal((await finish(host, host.processWait(child))).value, 0n);
+  host.processRelease(child);
+  assert.equal((await finish(host, host.processRead(child, 0, 1))).code, "ECLOSED");
+});
+
+test("cancelled reads keep their bytes and kill ends pending reads", async () => {
+  const host = makeProcessHost();
+  const child = await spawn(host, "setInterval(()=>{},1000)");
+  const read = host.processRead(child, 0, 16);
+  host.processCallCancel(read);
+  assert.equal((await finish(host, read)).code, "ECANCELLED");
+  const pending = host.processRead(child, 0, 16);
+  host.processKill(child);
+  assert.equal((await finish(host, pending)).code, "ECLOSED");
+  assert.ok((await finish(host, host.processWait(child))).value < 0n);
+  host.processRelease(child);
+});
+
+test("launch failures and invalid text are reported", async () => {
+  const host = makeProcessHost();
+  assert.equal((await finish(host, host.processSpawn("dream-missing-binary", [], "", [], false))).code, "ESPAWN");
+  assert.equal((await finish(host, host.processSpawn(process.execPath, ["a\0b"], "", [], false))).code, "EINVAL");
+  assert.equal((await finish(host, host.processSpawn(process.execPath, [], "", ["A=B", "x"], false))).code, "EINVAL");
 });

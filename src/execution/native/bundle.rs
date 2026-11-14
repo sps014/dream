@@ -123,7 +123,7 @@ mod tests {
         assert!(
             !args
                 .iter()
-                .any(|arg| arg.contains("dream_host_process_abi"))
+                .any(|arg| arg.contains("dream_host_timezone_abi"))
         );
         assert!(!args.iter().any(|arg| arg.contains("abi_v1")));
     }
@@ -154,7 +154,7 @@ mod tests {
             &dream_abi::target::TargetSpec::host(),
         );
         let args = format!("{args:?}");
-        for capability in [HostCapability::Crypto, HostCapability::Process] {
+        for capability in [HostCapability::Crypto, HostCapability::Net] {
             assert!(!args.contains(capability.link_name()));
         }
     }

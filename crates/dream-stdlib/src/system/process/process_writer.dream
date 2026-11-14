@@ -1,6 +1,8 @@
 module system.process;
 
-/// A borrowed child input pipe implementing partial async writes.
+/// Writes to the stdin pipe of a `ChildProcess`. A write may accept only part of the data;
+/// the result is the number of bytes written.
+@cfg(Target.Native || Target.Node)
 public class ProcessWriter: AsyncWriter {
     owner: ChildProcess;
 
@@ -29,17 +31,13 @@ public class ProcessWriter: AsyncWriter {
         if data.length == 0 {
             return Result.Ok(0);
         }
-        let operation = ProcessOperation(
-            ProcessOperation.request("write", writer.owner.handle),
-            data
-        );
-        let result = operation.wait(token).await;
-        operation.close();
-        if result.is_err() {
-            let error = result.unwrap_err();
+        let call = ProcessCall.write(writer.owner.handle, data);
+        let finished = call.finish(token).await;
+        if finished.is_err() {
+            let error = finished.unwrap_err();
             return Result.Err(IoError("", error.code(), error.message()));
         }
-        return Result.Ok(int.parse(Encoding.utf8_decode(result.unwrap())).unwrap_or(0));
+        return Result.Ok((int)call.value());
     }
 
     /// Confirms cancellation and ownership; the process pipe has no guest-side output buffer.

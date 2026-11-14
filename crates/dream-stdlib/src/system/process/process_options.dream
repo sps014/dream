@@ -11,13 +11,16 @@ public class ProcessOptions {
     /// Starts with an empty environment when true.
     public clear_env: bool;
 
-    /// Wall-clock deadline in milliseconds; zero disables the deadline.
+    /// Wall-clock deadline for `Process.run` in milliseconds; zero disables it. When it passes,
+    /// the child is killed and `run` fails with `ETIMEOUT`. Spawned children have no deadline.
     public timeout_ms: int;
 
-    /// Maximum captured bytes per output stream for run; defaults to 8 MiB.
+    /// Maximum captured bytes per output stream for `Process.run`; defaults to 8 MiB, and zero
+    /// also selects the default. A larger output kills the child and fails with `ELIMIT`.
     public max_output_bytes: int;
 
-    /// Bytes written to stdin by run before closing the input pipe.
+    /// Bytes `Process.run` writes to stdin before closing it. A child that exits without reading
+    /// all of them does not cause an error.
     public input: byte[];
 
     /// Creates options that inherit the environment and directory with empty stdin.
@@ -28,24 +31,5 @@ public class ProcessOptions {
         this.timeout_ms = 0;
         this.max_output_bytes = 8388608;
         this.input = Buffer.alloc<byte>(0);
-    }
-
-    internal fun wire(): JsonValue {
-        let value = JsonValue.dict();
-        value["cwd"] = JsonValue.from_string(this.cwd);
-        value["timeout_ms"] = JsonValue.from_double((double)this.timeout_ms);
-        value["max_output_bytes"] = JsonValue.from_double((double)this.max_output_bytes);
-        value["clear_env"] = JsonValue.from_bool(this.clear_env);
-        let environment = JsonValue.dict();
-        for (let entry in this.env) {
-            environment[entry.key] = JsonValue.from_string(entry.value);
-        }
-        value["env"] = environment;
-        let input = JsonValue.array();
-        for (let i = 0; i < this.input.length; i = i + 1) {
-            input.push(JsonValue.from_double((double)this.input[i]));
-        }
-        value["input"] = input;
-        return value;
     }
 }

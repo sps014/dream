@@ -69,12 +69,14 @@ unsafe extern "C" fn set_park(
 
 #[test]
 fn capabilities_share_core_binding_and_allocation() {
-    let directory = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
+    let core = HostCapability::Core.library_name(&dream_abi::target::TargetSpec::host());
+    let executable = std::env::current_exe().unwrap();
+    let directory = executable
+        .ancestors()
+        .find(|dir| dir.join(&core).is_file())
+        .unwrap_or_else(|| {
+            panic!("{core} not found; `cargo test` does not build the host libraries, run `cargo build --workspace` first")
+        })
         .to_path_buf();
     unsafe {
         let libraries: Vec<_> = HostCapability::ALL
@@ -115,18 +117,15 @@ fn capabilities_share_core_binding_and_allocation() {
 
         let crypto: Symbol<unsafe extern "C" fn(i32) -> *mut u8> =
             libraries[1].get(b"cryptoSecureRandomBytes").unwrap();
-        let process: Symbol<unsafe extern "C" fn(i32) -> *mut u8> =
-            libraries[2].get(b"processOperationResult").unwrap();
         let timezone: Symbol<unsafe extern "C" fn() -> *mut u8> =
-            libraries[3].get(b"dateLocalZoneName").unwrap();
+            libraries[2].get(b"dateLocalZoneName").unwrap();
         let before_strings = STRINGS.load(Ordering::Relaxed);
         let before_arrays = ARRAYS.load(Ordering::Relaxed);
         let random = crypto(7);
         assert_eq!(*(random as *const i32), 7);
-        assert!(!process(-1).is_null());
         assert!(!timezone().is_null());
         assert_eq!(STRINGS.load(Ordering::Relaxed), before_strings + 1);
-        assert_eq!(ARRAYS.load(Ordering::Relaxed), before_arrays + 2);
+        assert_eq!(ARRAYS.load(Ordering::Relaxed), before_arrays + 1);
 
         ALLOCATIONS.lock().unwrap().clear();
         drop(libraries);

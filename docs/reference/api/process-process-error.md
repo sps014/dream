@@ -30,7 +30,7 @@ public fun message(): string
 
 ## `code`
 
-Stable machine code (`ESPAWN`, `EIO`, `EUNSUPPORTED`, …).
+Stable machine code: `ESPAWN`, `EEXIT`, `ETIMEOUT`, `ECANCELLED`, `ELIMIT`, `EINVAL`, `ECLOSED`, `EPIPE`, or `EIO`.
 
 ```dream
 public fun code(): string
@@ -50,14 +50,6 @@ A read/write against a running child's stdin/stdout/stderr failed.
 
 ```dream
 public static fun io(message: string): ProcessError
-```
-
-## `unsupported`
-
-Process control is not available on the current host (e.g. the browser).
-
-```dream
-public static fun unsupported(message: string): ProcessError
 ```
 
 ## `failed`

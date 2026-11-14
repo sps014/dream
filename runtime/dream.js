@@ -2546,208 +2546,176 @@ function encodeProcessArgs(args) {
   return wire;
 }
 
-function splitProcessArgs(input) {
-  const bytes = Uint8Array.from(input);
-  const view = new DataView(bytes.buffer);
-  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-  let position = 0;
-  const length = () => {
-    if (bytes.length - position < 4) throw new Error("invalid process argument encoding");
-    const value = view.getUint32(position, true);
-    position += 4;
-    return value;
-  };
-  const count = length();
-  if (count > Math.floor((bytes.length - position) / 4)) throw new Error("invalid process argument count");
-  const args = [];
-  for (let i = 0; i < count; i++) {
-    const size = length();
-    if (size > bytes.length - position) throw new Error("truncated process argument");
-    const argument = decoder.decode(bytes.subarray(position, position + size));
-    if (argument.includes("\0")) throw new Error("NUL in process argument");
-    args.push(argument);
-    position += size;
-  }
-  if (position !== bytes.length) throw new Error("trailing process argument data");
-  return args;
+// ----- hosts/process_service.js -----
+// Mirrors runtime/c/sys/native/process_child.c: every launch, pipe read or write, and exit
+// wait is a call the guest polls, cancels, and releases by id.
+const children = new Map();
+const calls = new Map();
+let nextChild = 1;
+let nextCall = 1;
+const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGABRT: 6, SIGKILL: 9, SIGSEGV: 11, SIGPIPE: 13, SIGTERM: 15 };
+
+function failure(code, message) { return { code, message }; }
+const cancelled = () => failure("ECANCELLED", "process operation cancelled");
+const closed = () => failure("ECLOSED", "child process closed");
+
+function newCall(kind, state) {
+  if (calls.size >= 4096 || nextCall >= 2147483647) return null;
+  const call = { id: nextCall++, kind, state, done: false, value: -1n, bytes: [], code: "", message: "", waiters: [], claimed: false, released: false, cancel: null, pipe: null };
+  calls.set(call.id, call);
+  state?.calls.add(call);
+  return call;
 }
 
-// ----- hosts/process_service.js -----
-const processChildren = new Map();
-const processOperations = new Map();
-let nextProcessServiceId = 1;
-function processFailure(code, message) { return { code, message }; }
-function processReason(signal) { return signal.reason?.code ? signal.reason : processFailure("ECANCELLED", "process operation cancelled"); }
-function processRequire(id) {
-  const child = processChildren.get(id);
-  if (!child) throw processFailure("ECLOSED", "child process is closed");
-  return child;
+function settle(call, value, bytes, error) {
+  if (call.done) return;
+  call.done = true;
+  call.cancel = null;
+  call.state?.calls.delete(call);
+  if (error) { call.code = error.code; call.message = error.message; }
+  else { call.value = BigInt(value); if (bytes) call.bytes = bytes; }
+  if (call.released) dispose(call);
+  for (const resolve of call.waiters.splice(0)) resolve(0);
 }
-function processOptions(options = {}) {
-  const timeout = options.timeout_ms ?? 0;
-  const maximum = options.max_output_bytes || 8388608;
-  if (!Number.isInteger(timeout) || timeout < 0 || timeout > 2147483647 || !Number.isInteger(maximum) || maximum < 0 || maximum > 1073741791) throw processFailure("EINVAL", "invalid process options");
-  const environment = options.clear_env ? {} : { ...process.env };
-  for (const [key, value] of Object.entries(options.env || {})) {
-    if (!key || /[=\0]/.test(key) || typeof value !== "string" || value.includes("\0")) throw processFailure("EINVAL", "invalid environment override");
-    Object.defineProperty(environment, key, { value, enumerable: true, writable: true, configurable: true });
+
+// Unclaimed results: read bytes return to the front of their pipe, a launched child is killed.
+function dispose(call) {
+  if (call.claimed || call.code) return;
+  if (call.kind === "read" && call.bytes.length) call.pipe.unshift(Buffer.from(call.bytes));
+  if (call.kind === "spawn") release(Number(call.value));
+}
+
+function interrupt(state) {
+  for (const call of [...state.calls]) if (call.kind !== "wait") call.cancel?.(closed());
+}
+
+function kill(state) {
+  if (state.status === null) state.proc.kill("SIGKILL");
+  interrupt(state);
+}
+
+function release(id) {
+  const state = children.get(id);
+  if (!state) return;
+  children.delete(id);
+  kill(state);
+}
+
+function textValid(text) { return typeof text === "string" && !text.includes("\0"); }
+
+function launch(call, command, args, cwd, env, clearEnv) {
+  if (!isNode || !getNodeChildProcess()) return settle(call, -1, null, failure("EUNSUPPORTED", "processes are unavailable in the browser"));
+  if (![command, cwd, ...args, ...env].every(textValid) || env.length % 2) return settle(call, -1, null, failure("EINVAL", "process text contains a NUL character"));
+  const environment = clearEnv ? {} : { ...process.env };
+  for (let i = 0; i < env.length; i += 2) {
+    if (!env[i] || env[i].includes("=")) return settle(call, -1, null, failure("EINVAL", `invalid environment override: ${env[i]}`));
+    Object.defineProperty(environment, env[i], { value: env[i + 1], enumerable: true, writable: true, configurable: true });
   }
-  return { cwd: options.cwd || undefined, env: environment, timeout, maximum, input: options.input || [] };
-}
-async function processStop(state) {
-  if (!state.closed) state.child.kill("SIGKILL");
-  await state.exited;
-  processChildren.delete(state.id);
-}
-function processAbortable(signal, setup) {
-  if (signal.aborted) return Promise.reject(processReason(signal));
-  return new Promise((resolve, reject) => {
-    let cleanup = () => {};
-    const finish = (error, value) => { signal.removeEventListener("abort", abort); cleanup(); error ? reject(error) : resolve(value); };
-    const abort = () => finish(processReason(signal));
-    signal.addEventListener("abort", abort, { once: true });
-    cleanup = setup(value => finish(null, value), error => finish(error));
-  });
-}
-async function processCreate(command, bytes, options, signal) {
-  if (!isNode || !getNodeChildProcess()) throw processFailure("EUNSUPPORTED", "processes are unavailable in the browser");
-  const settings = processOptions(options);
-  let args;
-  try { args = splitProcessArgs(bytes); } catch (_) { throw processFailure("EINVAL", "invalid process argument encoding"); }
-  let child;
-  try { child = getNodeChildProcess().spawn(command, args, { cwd: settings.cwd, env: settings.env, stdio: "pipe", windowsHide: true }); }
-  catch (error) { throw processFailure(error?.code === "EINVAL" ? "EINVAL" : "ESPAWN", error.message || String(error)); }
-  const state = { id: nextProcessServiceId++, child, closed: false, error: null, timer: null, settings };
+  let proc;
+  try { proc = getNodeChildProcess().spawn(command, args, { cwd: cwd || undefined, env: environment, stdio: "pipe", windowsHide: true }); }
+  catch (error) { return settle(call, -1, null, failure(error?.code === "EINVAL" ? "EINVAL" : "ESPAWN", error.message || String(error))); }
+  const state = { id: nextChild++, proc, status: null, error: null, calls: new Set() };
   state.exited = new Promise(resolve => {
-    child.once("error", error => { state.error = processFailure("ESPAWN", error.message); });
-    child.once("close", code => { state.closed = true; clearTimeout(state.timer); resolve(code ?? -2); });
+    proc.once("error", error => { state.error ??= failure("ESPAWN", error.message); });
+    proc.once("close", (code, signal) => { state.status = code ?? -(SIGNALS[signal] || 2); resolve(state.status); });
   });
-  for (const pipe of [child.stdin, child.stdout, child.stderr]) pipe?.on("error", () => {});
-  processChildren.set(state.id, state);
-  try {
-    await processAbortable(signal, (resolve, reject) => {
-      const spawned = () => resolve();
-      const error = error => reject(processFailure("ESPAWN", error.message));
-      child.once("spawn", spawned); child.once("error", error);
-      return () => { child.off("spawn", spawned); child.off("error", error); };
-    });
-    return state;
-  } catch (error) { await processStop(state); throw error; }
+  for (const pipe of [proc.stdin, proc.stdout, proc.stderr]) pipe?.on("error", () => {});
+  children.set(state.id, state);
+  const detach = () => { proc.off("spawn", spawned); proc.off("error", errored); };
+  const spawned = () => { detach(); settle(call, state.id); };
+  const errored = error => { detach(); children.delete(state.id); settle(call, -1, null, failure("ESPAWN", error.message)); };
+  proc.once("spawn", spawned);
+  proc.once("error", errored);
+  call.cancel = error => { detach(); release(state.id); settle(call, -1, null, error); };
 }
-async function processRead(state, stream, maximum, signal) {
-  if (!Number.isInteger(maximum) || maximum < 0 || maximum > 16777216 || ![0, 1].includes(stream)) throw processFailure("EINVAL", "invalid process read");
-  if (maximum === 0) return [];
-  const pipe = stream === 0 ? state.child.stdout : state.child.stderr;
-  while (true) {
-    if (signal.aborted) throw processReason(signal);
-    if (state.error) throw state.error;
-    const available = pipe.readableLength;
-    if (available) return pipe.read(Math.min(maximum, available));
-    if (pipe.readableEnded || pipe.destroyed) return [];
-    await processAbortable(signal, (resolve, reject) => {
-      const ready = () => resolve();
-      const error = error => reject(processFailure("EIO", error.message));
-      pipe.once("readable", ready); pipe.once("end", ready); pipe.once("close", ready); pipe.once("error", error);
-      return () => { pipe.off("readable", ready); pipe.off("end", ready); pipe.off("close", ready); pipe.off("error", error); };
-    });
+
+function read(call, max) {
+  const { state, pipe } = call;
+  if (call.done) return;
+  if (state.error) return settle(call, -1, null, state.error);
+  const available = pipe.readableLength;
+  if (available) {
+    const chunk = pipe.read(Math.min(max, available));
+    return settle(call, chunk.length, Array.from(chunk));
   }
+  if (pipe.readableEnded || pipe.destroyed) return settle(call, 0, []);
+  const detach = () => { pipe.off("readable", ready); pipe.off("end", ready); pipe.off("close", ready); pipe.off("error", failed); };
+  const ready = () => { detach(); read(call, max); };
+  const failed = error => { detach(); settle(call, -1, null, failure("EIO", error.message)); };
+  pipe.once("readable", ready); pipe.once("end", ready); pipe.once("close", ready); pipe.once("error", failed);
+  call.cancel = error => { detach(); settle(call, -1, null, error); };
 }
-async function processWrite(state, bytes, signal) {
-  const pipe = state.child.stdin;
-  if (pipe.destroyed || pipe.writableEnded) throw processFailure("ECLOSED", "stdin closed");
-  await processAbortable(signal, (resolve, reject) => {
-    pipe.write(Buffer.from(bytes), error => error ? reject(processFailure("EIO", error.message)) : resolve());
-    return () => {};
-  });
-  return bytes.length;
-}
-async function processExit(state, signal) {
-  const result = await processAbortable(signal, (resolve) => { state.exited.then(resolve); return () => {}; });
-  if (state.error) throw state.error;
-  return result;
-}
-async function processCollect(state, stream, limit, signal) {
-  const chunks = [];
-  let count = 0;
-  while (true) {
-    const chunk = await processRead(state, stream, 65536, signal);
-    if (!chunk.length) return Buffer.concat(chunks, count);
-    count += chunk.length;
-    if (count > limit) throw processFailure("ELIMIT", "captured process output exceeds configured limit");
-    chunks.push(Buffer.from(chunk));
-  }
-}
-async function processExecute(request, bytes, op) {
-  const signal = op.controller.signal;
-  if (signal.aborted) throw processReason(signal);
-  if (request.action === "run" || request.action === "spawn") {
-    const state = await processCreate(request.command, bytes, request.options, signal);
-    if (request.action === "spawn") {
-      if (state.settings.timeout) state.timer = setTimeout(() => { state.error = processFailure("ETIMEOUT", "process deadline exceeded"); processStop(state).catch(() => {}); }, state.settings.timeout);
-      return { bytes: new TextEncoder().encode(String(state.id)), child: state };
-    }
-    let timer;
-    if (state.settings.timeout) timer = setTimeout(() => op.controller.abort(processFailure("ETIMEOUT", "process deadline exceeded")), state.settings.timeout);
-    try {
-      const input = async () => { if (state.settings.input.length) await processWrite(state, state.settings.input, signal); state.child.stdin.end(); };
-      const [, stdout, stderr, code] = await Promise.all([input(), processCollect(state, 0, state.settings.maximum, signal), processCollect(state, 1, state.settings.maximum, signal), processExit(state, signal)]);
-      return { bytes: Buffer.concat([Buffer.from(`${code}\n${stdout.length}\n`), stdout, stderr]) };
-    } finally { clearTimeout(timer); await processStop(state); }
-  }
-  const state = processRequire(request.handle);
-  switch (request.action) {
-    case "read": return { bytes: await processRead(state, request.stream, request.max_bytes, signal) };
-    case "write": return { bytes: new TextEncoder().encode(String(await processWrite(state, bytes, signal))) };
-    case "close_stdin": state.child.stdin.end(); return { bytes: [] };
-    case "wait": return { bytes: new TextEncoder().encode(String(await processExit(state, signal))) };
-    case "close": await processStop(state); return { bytes: [] };
-    default: throw processFailure("EINVAL", "invalid process action");
-  }
-}
+
 function makeProcessHost() {
+  const start = (kind, id, run) => {
+    const state = children.get(id);
+    const call = newCall(kind, state);
+    if (!call) return 0;
+    if (!state) settle(call, -1, null, failure("ECLOSED", "child process is closed"));
+    else run(call, state);
+    return call.id;
+  };
   return {
-    processStart: (request, bytes) => {
-      if (processOperations.size >= 4096 || nextProcessServiceId >= 2147483647) return 0;
-      const input = Uint8Array.from(bytes || []);
-      const id = nextProcessServiceId++;
-      const op = { controller: new AbortController(), result: null, released: false, waiters: [], claimed: false };
-      processOperations.set(id, op);
-      Promise.resolve().then(() => {
-        if (!isNode) throw processFailure("EUNSUPPORTED", "processes are unavailable in the browser");
-        let parsed; try { parsed = JSON.parse(request); } catch (_) { throw processFailure("EINVAL", "invalid process request"); }
-        return processExecute(parsed, input, op);
-      }).then(result => {
-        if (op.released) { if (result.child) processStop(result.child).catch(() => {}); return; }
-        op.result = result;
-      }, error => { if (!op.released) op.result = { error: error?.code ? error : processFailure("EIO", error?.message || String(error)) }; }).finally(() => {
-        for (const resolve of op.waiters.splice(0)) resolve(0);
-      });
-      return id;
+    processSpawn: (command, args, cwd, env, clearEnv) => {
+      const call = newCall("spawn", null);
+      if (!call) return 0;
+      launch(call, command, args, cwd, env, clearEnv);
+      return call.id;
     },
-    processOperationWait: id => {
-      const op = processOperations.get(id);
-      if (!op || op.result || op.released) return Promise.resolve(0);
-      return new Promise(resolve => op.waiters.push(resolve));
+    processRead: (id, stream, max) => start("read", id, (call, state) => {
+      if (![0, 1].includes(stream) || max < 0 || max > 16777216) return settle(call, -1, null, failure("EINVAL", "invalid process read"));
+      if (max === 0) return settle(call, 0, []);
+      call.pipe = stream === 0 ? state.proc.stdout : state.proc.stderr;
+      read(call, max);
+    }),
+    processWrite: (id, data) => start("write", id, (call, state) => {
+      const pipe = state.proc.stdin;
+      if (pipe.destroyed || pipe.writableEnded) return settle(call, -1, null, failure("ECLOSED", "stdin closed"));
+      if (!data.length) return settle(call, 0, []);
+      call.cancel = error => settle(call, -1, null, error);
+      pipe.write(Buffer.from(data), error => error
+        ? settle(call, -1, null, failure(error.code === "EPIPE" ? "EPIPE" : "EIO", error.message))
+        : settle(call, data.length));
+    }),
+    processWait: id => start("wait", id, (call, state) => {
+      call.cancel = error => settle(call, -1, null, error);
+      state.exited.then(status => state.error ? settle(call, -1, null, state.error) : settle(call, status));
+    }),
+    processCallWait: id => {
+      const call = calls.get(id);
+      if (!call || call.done) return Promise.resolve(0);
+      return new Promise(resolve => call.waiters.push(resolve));
     },
-    processOperationResult: id => {
-      const op = processOperations.get(id);
-      if (!op) return wireFailure("ECLOSED", "process operation closed");
-      if (!op.result) return [0];
-      if (op.result.error) return wireFailure(op.result.error.code, op.result.error.message);
-      const result = new Uint8Array(op.result.bytes.length + 1);
-      result[0] = 1; result.set(op.result.bytes, 1);
-      return result;
+    processCallValue: id => {
+      const call = calls.get(id);
+      if (!call?.done) return -1n;
+      call.claimed = true;
+      return call.code ? -1n : call.value;
     },
-    processOperationCancel: id => processOperations.get(id)?.controller.abort(processFailure("ECANCELLED", "process operation cancelled")),
-    processOperationClaim: id => { const op = processOperations.get(id); if (op) op.claimed = true; },
-    processOperationRelease: id => {
-      const op = processOperations.get(id); processOperations.delete(id);
-      if (!op) return;
-      op.released = true; op.controller.abort();
-      if (op.result?.child && !op.claimed) processStop(op.result.child).catch(() => {});
-      for (const resolve of op.waiters.splice(0)) resolve(0);
+    processCallBytes: id => {
+      const call = calls.get(id);
+      if (!call?.done) return [];
+      call.claimed = true;
+      return call.code ? [] : call.bytes;
     },
-    processClose: id => { const state = processChildren.get(id); if (state) processStop(state).catch(() => {}); },
+    processCallCode: id => {
+      const call = calls.get(id);
+      if (!call) return "ELIMIT";
+      return call.done ? call.code : "";
+    },
+    processCallMessage: id => calls.get(id)?.message ?? "process call capacity exhausted",
+    processCallCancel: id => { const call = calls.get(id); if (call && !call.done) call.cancel?.(cancelled()); },
+    processCallRelease: id => {
+      const call = calls.get(id);
+      if (!call) return;
+      calls.delete(id);
+      call.released = true;
+      if (!call.done) call.cancel?.(cancelled());
+      else dispose(call);
+    },
+    processCloseStdin: id => { const stdin = children.get(id)?.proc.stdin; if (stdin && !stdin.writableEnded) stdin.end(); },
+    processKill: id => { const state = children.get(id); if (state) kill(state); },
+    processRelease: release,
   };
 }
 

@@ -5,7 +5,6 @@ import path from "node:path";
 import test from "node:test";
 import { makeFsHost } from "../runtime/src/hosts/fs.js";
 import { makeConsoleProcessHost } from "../runtime/src/hosts/console_process.js";
-import { splitProcessArgs } from "../runtime/src/hosts/process_wire.js";
 import { setNodeFs, setNodeChildProcess } from "../runtime/src/platform.js";
 import { makeSessionTable, makeWorkerModule } from "../runtime/src/workers.js";
 
@@ -156,15 +155,6 @@ function argumentWire(args) {
   }
   return Buffer.concat(parts);
 }
-
-test("process arguments preserve byte boundaries and reject malformed input", () => {
-  const args = ["", "two words", "first\nsecond", "こんにちは", "\uFEFFleading", '\"quoted\"\\tail'];
-  assert.deepEqual(splitProcessArgs(argumentWire(args)), args);
-  const valid = argumentWire(args);
-  for (let length = 0; length < valid.length; length++) assert.throws(() => splitProcessArgs(valid.subarray(0, length)));
-  assert.throws(() => splitProcessArgs(argumentWire(["a\0b"])));
-});
-
 
 test("System.args host preserves empty, multiline, and Unicode arguments", () => {
   const original = process.argv;

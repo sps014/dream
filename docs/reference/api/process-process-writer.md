@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `ProcessWriter`
 
-A borrowed child input pipe implementing partial async writes.
+Writes to the stdin pipe of a `ChildProcess`. A write may accept only part of the data; the result is the number of bytes written.
 
 ```dream
 public class ProcessWriter: AsyncWriter

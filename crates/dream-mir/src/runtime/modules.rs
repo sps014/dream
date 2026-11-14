@@ -273,6 +273,8 @@ const NATIVE_SYS_C: &[&str] = &[
     "file_operation.c",
     "dirs.c",
     "process.c",
+    "process_spawn.c",
+    "process_child.c",
     "env.c",
     "time.c",
     "stdio.c",

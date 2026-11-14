@@ -1,6 +1,5 @@
 import system;
 import system.task;
-import system.process;
 
 async fun structured_browser_value(value: int): Result<int, string> {
     Time.delay(1).await;
@@ -38,7 +37,4 @@ async fun main(): void {
         return child.join().await;
     }, timeout_ms: 10).await;
     if timeout.is_ok() { System.panic("missing scope deadline"); }
-    let arguments: string[] = [];
-    let process = Process.run("unavailable", arguments).await;
-    if process.is_ok() || process.unwrap_err().code() != "EUNSUPPORTED" { System.panic("browser process restriction mismatch"); }
 }

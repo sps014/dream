@@ -35,13 +35,13 @@ fn minimal_pack_runs_without_hosts_and_replaces_capability_heavy_pack() {
     let project = temp.path().join("project");
     std::fs::create_dir_all(project.join("src")).unwrap();
     std::fs::write(project.join("dream.toml"), "[package]\nname = \"hello\"\nversion = \"0.1.0\"\ntype = \"bin\"\nentry = \"src/main.dream\"\n").unwrap();
-    let compiler = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join(if cfg!(windows) { "dream.exe" } else { "dream" });
+    let name = if cfg!(windows) { "dream.exe" } else { "dream" };
+    let executable = std::env::current_exe().unwrap();
+    let compiler = executable
+        .ancestors()
+        .map(|dir| dir.join(name))
+        .find(|path| path.is_file())
+        .expect("build the workspace before running the pack tests");
     let target = format!(
         "{}-{}",
         std::env::consts::OS,

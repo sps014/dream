@@ -55,7 +55,7 @@ Native Rust hosts live in `crates/dream-host-{core,crypto,process,timezone,net,i
 The root `dream` library is an rlib only and has no GUI/network host dependencies.
 `cargo build --workspace` builds the compiler and all nine native capability libraries:
 `dream_host_core`,
-`dream_host_crypto`, `dream_host_process`, `dream_host_timezone`, `dream_host_net`, `dream_host_io`, `dream_host_window`, `dream_host_gpu`, and `dream_host_audio` (with the
+`dream_host_crypto`, `dream_host_timezone`, `dream_host_net`, `dream_host_io`, `dream_host_window`, `dream_host_gpu`, and `dream_host_audio` (with the
 platform's shared-library prefix/suffix). `dream-host` is a distribution feature set, not
 another host implementation: its independent capability features
 select these packages. The workspace contains only retained core services.

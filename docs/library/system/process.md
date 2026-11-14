@@ -7,7 +7,7 @@ api: reference/api/system-process.md
 
 # Process
 
-`system.process` launches owned child processes on native and Node. Browser launch operations return `ProcessError` with code `EUNSUPPORTED`.
+`system.process` launches child processes from native programs and from Node.js. Browsers have no process API, so a browser build that uses `Process` fails to compile.
 
 ```dream
 import system;
@@ -31,7 +31,7 @@ Arguments keep empty strings, Unicode, spaces, and newlines. The command is star
 
 Options inherit the environment and working directory. Set `env`, `clear_env`, `cwd`, and `timeout_ms` when you need something else.
 
-Each captured stream stops at `max_output_bytes` (default 8 MiB) and then returns `ELIMIT`. `input` is written to stdin before it is closed; a child that rejects those bytes can return an I/O error.
+Each captured stream stops at `max_output_bytes` (default 8 MiB); a larger output kills the child and returns `ELIMIT`. `input` is written to stdin before it is closed. A child that exits or closes stdin without reading all of it is not an error.
 
 A nonzero exit status is a successful transport result; `run_checked` turns it into `EEXIT`. `which` searches for an existing nondirectory path, without validating execute permissions.
 
@@ -57,7 +57,7 @@ Every launching function accepts an optional trailing `token: Option<Cancellatio
 | `cwd` | `""` | Working directory; empty inherits the parent's directory. |
 | `env` | empty `Map<string, string>` | Variables added on top of the inherited environment. |
 | `clear_env` | `false` | When true, the child starts with only the `env` entries. |
-| `timeout_ms` | `0` | Wall-clock deadline in milliseconds; zero means no deadline. |
+| `timeout_ms` | `0` | Wall-clock deadline for `run` in milliseconds; zero means no deadline. |
 | `max_output_bytes` | `8388608` (8 MiB) | Limit per captured stream for `run`; exceeding it returns `ELIMIT`. |
 | `input` | empty `byte[]` | Bytes `run` writes to stdin before closing it. |
 
@@ -112,7 +112,7 @@ If you omit a token, the call uses the current task's cancellation.
 
 - Cancelling `run`, or hitting its deadline, stops the child and then returns `ECANCELLED` or `ETIMEOUT`.
 - Cancelling one pipe operation keeps bytes already transferred and leaves the child open for you to close.
-- A spawned child's deadline also stops that child. Processes that the child itself starts are not stopped with it.
+- A spawned child has no deadline; cancel its operations or call `close` to stop it. Processes that the child itself starts are not stopped with it.
 
 ## Error codes
 
@@ -127,5 +127,5 @@ If you omit a token, the call uses the current task's cancellation.
 | `ELIMIT` | Captured output exceeded `max_output_bytes`, or a line exceeded the `read_line` limit. |
 | `EINVAL` | A request was malformed, such as an environment name containing `=`. |
 | `ECLOSED` | The child or the pipe was already closed. |
+| `EPIPE` | A stdin write failed because the child closed its input or exited. |
 | `EIO` | Reading from or writing to the child failed. |
-| `EUNSUPPORTED` | The host cannot launch processes, as in browsers. |

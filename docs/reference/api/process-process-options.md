@@ -38,7 +38,7 @@ public clear_env: bool
 
 ## `timeout_ms`
 
-Wall-clock deadline in milliseconds; zero disables the deadline.
+Wall-clock deadline for `Process.run` in milliseconds; zero disables it. When it passes, the child is killed and `run` fails with `ETIMEOUT`. Spawned children have no deadline.
 
 ```dream
 public timeout_ms: int
@@ -46,7 +46,7 @@ public timeout_ms: int
 
 ## `max_output_bytes`
 
-Maximum captured bytes per output stream for run; defaults to 8 MiB.
+Maximum captured bytes per output stream for `Process.run`; defaults to 8 MiB, and zero also selects the default. A larger output kills the child and fails with `ELIMIT`.
 
 ```dream
 public max_output_bytes: int
@@ -54,7 +54,7 @@ public max_output_bytes: int
 
 ## `input`
 
-Bytes written to stdin by run before closing the input pipe.
+Bytes `Process.run` writes to stdin before closing it. A child that exits without reading all of them does not cause an error.
 
 ```dream
 public input: byte[]

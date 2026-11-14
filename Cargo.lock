@@ -1408,7 +1408,6 @@ dependencies = [
  "dream-host-gpu",
  "dream-host-io",
  "dream-host-net",
- "dream-host-process",
  "dream-host-timezone",
  "dream-host-window",
 ]
@@ -1543,19 +1542,6 @@ dependencies = [
  "tokio-stream",
  "tokio-tungstenite",
  "url",
-]
-
-[[package]]
-name = "dream-host-process"
-version = "0.1.0"
-dependencies = [
- "dream-host-abi",
- "dream-host-core",
- "indexmap 2.14.0",
- "libc",
- "serde",
- "serde_json",
- "tokio",
 ]
 
 [[package]]
@@ -6251,7 +6237,6 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
- "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",

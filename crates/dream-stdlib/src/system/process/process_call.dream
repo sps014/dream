@@ -1,0 +1,112 @@
+module system.process;
+
+// One host process call: a launch, a pipe read or write, or an exit wait. The host keeps its own
+// reference while blocked I/O runs, so releasing a call never frees a buffer still in use;
+// releasing an unfinished call cancels it, and bytes a cancelled read took stay readable.
+@cfg(Target.Native || Target.Node)
+internal class ProcessCall {
+    id: usize;
+
+    internal constructor(id: usize) {
+        this.id = id;
+    }
+
+    del() {
+        ProcessCall.release_host(this.id);
+    }
+
+    @runtime("processSpawn", "core")
+    static extern fun spawn_host(
+        borrow command: string,
+        borrow args: string[],
+        borrow cwd: string,
+        borrow env: string[],
+        clear_env: bool
+    ): usize;
+
+    @runtime("processRead", "core")
+    static extern fun read_host(child: int, stream: int, max_bytes: int): usize;
+
+    @runtime("processWrite", "core")
+    static extern fun write_host(child: int, borrow data: byte[]): usize;
+
+    @runtime("processWait", "core")
+    static extern fun exit_host(child: int): usize;
+
+    @async_host
+    @runtime("processCallWait", "core")
+    static extern async fun wait_host(id: usize): int;
+
+    @runtime("processCallValue", "core")
+    static extern fun value_host(id: usize): long;
+
+    @runtime("processCallBytes", "core")
+    static extern fun bytes_host(id: usize): byte[];
+
+    @runtime("processCallCode", "core")
+    static extern fun code_host(id: usize): string;
+
+    @runtime("processCallMessage", "core")
+    static extern fun message_host(id: usize): string;
+
+    @runtime("processCallCancel", "core")
+    static extern fun cancel_host(id: usize): void;
+
+    @runtime("processCallRelease", "core")
+    static extern fun release_host(id: usize): void;
+
+    internal static fun spawn(cmd: string, args: string[], options: ProcessOptions): ProcessCall {
+        let env = List<string>();
+        for (let entry in options.env) {
+            env.push(entry.key);
+            env.push(entry.value);
+        }
+        return ProcessCall(
+            ProcessCall.spawn_host(cmd, args, options.cwd, env.take_array(), options.clear_env)
+        );
+    }
+
+    internal static fun read(child: int, stream: int, max_bytes: int): ProcessCall {
+        return ProcessCall(ProcessCall.read_host(child, stream, max_bytes));
+    }
+
+    internal static fun write(child: int, data: byte[]): ProcessCall {
+        return ProcessCall(ProcessCall.write_host(child, data));
+    }
+
+    internal static fun exit(child: int): ProcessCall {
+        return ProcessCall(ProcessCall.exit_host(child));
+    }
+
+    // Waits for the host result. Cancellation stops the host work and reports ECANCELLED.
+    internal async fun finish(token: Option<CancellationToken>): Result<Unit, ProcessError> {
+        let effective_token = CancellationToken.resolve(token);
+        let lifetime = [this];
+        if lifetime[0].id == (usize)0 {
+            return Result.Err(ProcessError("ELIMIT", "process call capacity exhausted"));
+        }
+        let pending = ProcessCall.wait_host(lifetime[0].id);
+        if effective_token.is_some() {
+            if effective_token.unwrap().wait(pending).await.is_err() {
+                ProcessCall.cancel_host(lifetime[0].id);
+                return Result.Err(ProcessError.cancelled());
+            }
+        } else {
+            pending.await;
+        }
+        let code = ProcessCall.code_host(lifetime[0].id);
+        if !code.is_empty() {
+            return Result.Err(ProcessError(code, ProcessCall.message_host(lifetime[0].id)));
+        }
+        return Result.Ok(Unit());
+    }
+
+    // The launched child id, bytes written, or exit status; claims a launched child.
+    internal fun value(): long {
+        return ProcessCall.value_host(this.id);
+    }
+
+    internal fun bytes(): byte[] {
+        return ProcessCall.bytes_host(this.id);
+    }
+}

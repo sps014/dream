@@ -6,7 +6,7 @@ Read the [process guide](../../library/system/process.md) for launch settings, c
 
 ## `ChildProcess`
 
-Owns a child and its pipes; explicit close terminates and reaps unfinished work.
+A running child process launched by `Process.spawn`, with streaming access to its stdin, stdout, and stderr. Closing the child, explicitly or by dropping it, kills and reaps a child that is still running.
 
 ```dream
 public class ChildProcess
@@ -14,7 +14,7 @@ public class ChildProcess
 
 ## `stdout`
 
-Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.
+The child's standard output. Keep one reader when using `read_line`, because it buffers bytes past the returned line.
 
 ```dream
 public get stdout(): ProcessReader
@@ -22,7 +22,7 @@ public get stdout(): ProcessReader
 
 ## `stderr`
 
-Borrows stderr through an AsyncReader; drain it concurrently with stdout.
+The child's standard error. Drain it alongside stdout so a child that fills one pipe does not stall.
 
 ```dream
 public get stderr(): ProcessReader
@@ -30,7 +30,7 @@ public get stderr(): ProcessReader
 
 ## `stdin`
 
-Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.
+The child's standard input. Call `close_stdin` to signal end of input.
 
 ```dream
 public get stdin(): ProcessWriter
@@ -38,7 +38,7 @@ public get stdin(): ProcessWriter
 
 ## `close_stdin`
 
-Closes stdin after pending writes, allowing commands waiting for input EOF to finish.
+Closes the child's stdin once pending writes finish, so a child reading until end of input can complete. Returns `ECLOSED` when the child was already closed.
 
 ```dream
 public fun close_stdin(
@@ -48,7 +48,7 @@ public fun close_stdin(
 
 ## `wait`
 
-Waits for process exit without discarding unread output or closing the child handle.
+Waits for the child to exit and returns its exit status, negative when a signal ended it. Unread output stays readable, and the child stays open.
 
 ```dream
 public fun wait(token: Option<CancellationToken> = Option.None): Future<Result<int, ProcessError>>
@@ -56,7 +56,7 @@ public fun wait(token: Option<CancellationToken> = Option.None): Future<Result<i
 
 ## `close`
 
-Terminates and reaps the owned child; repeated or concurrent closes share the outcome.
+Kills the child if it is still running and waits until it is reaped. Repeated or concurrent calls share the first outcome.
 
 ```dream
 public fun close(): Future<Result<Unit, ProcessError>>

@@ -17855,44 +17855,44 @@
     "declarations": [
       {
         "signature": "public class ChildProcess",
-        "description": "Owns a child and its pipes; explicit close terminates and reaps unfinished work.",
-        "line": 4,
+        "description": "A running child process launched by `Process.spawn`, with streaming access to its stdin, stdout, and stderr. Closing the child, explicitly or by dropping it, kills and reaps a child that is still running.",
+        "line": 7,
         "page": "reference/api/process-child-process.md"
       },
       {
         "signature": "public get stdout(): ProcessReader",
-        "description": "Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.",
-        "line": 22,
+        "description": "The child's standard output. Keep one reader when using `read_line`, because it buffers bytes past the returned line.",
+        "line": 26,
         "page": "reference/api/process-child-process.md"
       },
       {
         "signature": "public get stderr(): ProcessReader",
-        "description": "Borrows stderr through an AsyncReader; drain it concurrently with stdout.",
-        "line": 27,
-        "page": "reference/api/process-child-process.md"
-      },
-      {
-        "signature": "public get stdin(): ProcessWriter",
-        "description": "Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.",
+        "description": "The child's standard error. Drain it alongside stdout so a child that fills one pipe does not stall.",
         "line": 32,
         "page": "reference/api/process-child-process.md"
       },
       {
-        "signature": "public fun close_stdin( token: Option<CancellationToken> = Option.None ): Future<Result<Unit, ProcessError>>",
-        "description": "Closes stdin after pending writes, allowing commands waiting for input EOF to finish.",
+        "signature": "public get stdin(): ProcessWriter",
+        "description": "The child's standard input. Call `close_stdin` to signal end of input.",
         "line": 37,
         "page": "reference/api/process-child-process.md"
       },
       {
+        "signature": "public fun close_stdin( token: Option<CancellationToken> = Option.None ): Future<Result<Unit, ProcessError>>",
+        "description": "Closes the child's stdin once pending writes finish, so a child reading until end of input can complete. Returns `ECLOSED` when the child was already closed.",
+        "line": 43,
+        "page": "reference/api/process-child-process.md"
+      },
+      {
         "signature": "public fun wait( token: Option<CancellationToken> = Option.None ): Future<Result<int, ProcessError>>",
-        "description": "Waits for process exit without discarding unread output or closing the child handle.",
-        "line": 61,
+        "description": "Waits for the child to exit and returns its exit status, negative when a signal ended it. Unread output stays readable, and the child stays open.",
+        "line": 63,
         "page": "reference/api/process-child-process.md"
       },
       {
         "signature": "public fun close(): Future<Result<Unit, ProcessError>>",
-        "description": "Terminates and reaps the owned child; repeated or concurrent closes share the outcome.",
-        "line": 85,
+        "description": "Kills the child if it is still running and waits until it is reaped. Repeated or concurrent calls share the first outcome.",
+        "line": 81,
         "page": "reference/api/process-child-process.md"
       }
     ]
@@ -17904,56 +17904,56 @@
     "declarations": [
       {
         "signature": "public static class Process",
-        "description": "Launches processes asynchronously on native and Node; browser operations return EUNSUPPORTED.",
-        "line": 4,
+        "description": "Launches child processes and finds commands on `PATH`. Available in native programs and in Node.js; browsers have no process API.",
+        "line": 6,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun run( cmd: string, args: string[], token: Option<CancellationToken> = Option.None ): Future<Result<ProcessOutput, ProcessError>>",
-        "description": "Runs a command, concurrently drains both outputs, and closes stdin after sending input.",
-        "line": 27,
+        "description": "Runs a command to completion with default options: writes nothing to stdin, captures stdout and stderr as UTF-8 text, and returns them with the exit status. A nonzero exit status is not an error; check `ProcessOutput.success`. Fails with `ESPAWN` when the command cannot be launched.",
+        "line": 11,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun run( cmd: string, args: string[], options: ProcessOptions, token: Option<CancellationToken> = Option.None ): Future<Result<ProcessOutput, ProcessError>>",
-        "description": "Runs with explicit environment, input, output limits, and an optional deadline.",
-        "line": 36,
+        "description": "Runs a command with explicit options: working directory, environment, stdin bytes, output limit, and deadline. Fails with `ETIMEOUT` after the deadline, `ELIMIT` when an output exceeds the limit, and `ECANCELLED` when `token` is cancelled; each kills the child first.",
+        "line": 23,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun run_in( cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None ): Future<Result<ProcessOutput, ProcessError>>",
-        "description": "Runs a command in a specific working directory with otherwise default options.",
-        "line": 72,
+        "description": "Runs a command in `cwd` with otherwise default options.",
+        "line": 46,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun spawn( cmd: string, args: string[], token: Option<CancellationToken> = Option.None ): Future<Result<ChildProcess, ProcessError>>",
-        "description": "Spawns an owned child exposing streaming stdin, stdout, and stderr pipes.",
-        "line": 84,
+        "description": "Launches a command and returns the running child with streaming stdin, stdout, and stderr pipes. Fails with `ESPAWN` when the command cannot be launched.",
+        "line": 59,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun spawn( cmd: string, args: string[], options: ProcessOptions, token: Option<CancellationToken> = Option.None ): Future<Result<ChildProcess, ProcessError>>",
-        "description": "Spawns with explicit launch settings; child closure terminates and reaps unfinished work.",
-        "line": 93,
+        "description": "Launches a command with an explicit working directory and environment. The deadline, output limit, and input options apply only to `run`.",
+        "line": 69,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun spawn_in( cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None ): Future<Result<ChildProcess, ProcessError>>",
-        "description": "Spawns a child in a specific directory with otherwise default options.",
-        "line": 134,
+        "description": "Launches a child in `cwd` with otherwise default options.",
+        "line": 91,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static async fun run_checked( cmd: string, args: string[], token: Option<CancellationToken> = Option.None ): Result<ProcessOutput, ProcessError>",
-        "description": "Captures output and additionally treats nonzero exit statuses as EEXIT errors.",
-        "line": 146,
+        "description": "Runs a command like `run`, and also fails with `EEXIT` when it exits with a nonzero status.",
+        "line": 104,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun which(cmd: string): Option<string>",
         "description": "Finds an existing nondirectory command path, directly or by searching `PATH`. This does not validate execute permissions or expand platform-specific extensions.",
-        "line": 163,
+        "line": 120,
         "page": "reference/api/process-process.md"
       }
     ]
@@ -17983,38 +17983,32 @@
       },
       {
         "signature": "public fun code(): string",
-        "description": "Stable machine code (`ESPAWN`, `EIO`, `EUNSUPPORTED`, …).",
-        "line": 20,
+        "description": "Stable machine code: `ESPAWN`, `EEXIT`, `ETIMEOUT`, `ECANCELLED`, `ELIMIT`, `EINVAL`, `ECLOSED`, `EPIPE`, or `EIO`.",
+        "line": 21,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun spawn_failed(message: string): ProcessError",
         "description": "The executable could not be launched (not found, not executable, permission denied, ...).",
-        "line": 25,
+        "line": 26,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun io(message: string): ProcessError",
         "description": "A read/write against a running child's stdin/stdout/stderr failed.",
-        "line": 30,
-        "page": "reference/api/process-process-error.md"
-      },
-      {
-        "signature": "public static fun unsupported(message: string): ProcessError",
-        "description": "Process control is not available on the current host (e.g. the browser).",
-        "line": 35,
+        "line": 31,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun failed(message: string): ProcessError",
         "description": "Reports a nonzero exit status from run_checked.",
-        "line": 40,
+        "line": 36,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun cancelled(): ProcessError",
         "description": "Cooperative cancellation (`CancellationToken`).",
-        "line": 45,
+        "line": 41,
         "page": "reference/api/process-process-error.md"
       }
     ]
@@ -18050,26 +18044,26 @@
       },
       {
         "signature": "public timeout_ms: int",
-        "description": "Wall-clock deadline in milliseconds; zero disables the deadline.",
-        "line": 15,
+        "description": "Wall-clock deadline for `Process.run` in milliseconds; zero disables it. When it passes, the child is killed and `run` fails with `ETIMEOUT`. Spawned children have no deadline.",
+        "line": 16,
         "page": "reference/api/process-process-options.md"
       },
       {
         "signature": "public max_output_bytes: int",
-        "description": "Maximum captured bytes per output stream for run; defaults to 8 MiB.",
-        "line": 18,
+        "description": "Maximum captured bytes per output stream for `Process.run`; defaults to 8 MiB, and zero also selects the default. A larger output kills the child and fails with `ELIMIT`.",
+        "line": 20,
         "page": "reference/api/process-process-options.md"
       },
       {
         "signature": "public input: byte[]",
-        "description": "Bytes written to stdin by run before closing the input pipe.",
-        "line": 21,
+        "description": "Bytes `Process.run` writes to stdin before closing it. A child that exits without reading all of them does not cause an error.",
+        "line": 24,
         "page": "reference/api/process-process-options.md"
       },
       {
         "signature": "public constructor()",
         "description": "Creates options that inherit the environment and directory with empty stdin.",
-        "line": 24,
+        "line": 27,
         "page": "reference/api/process-process-options.md"
       }
     ]
@@ -18118,20 +18112,20 @@
     "declarations": [
       {
         "signature": "public class ProcessReader: AsyncReader",
-        "description": "A borrowed child output pipe; cancellation preserves bytes already consumed by the host.",
-        "line": 4,
+        "description": "Reads one output pipe of a `ChildProcess`. Cancelling a read keeps any bytes it already took from the pipe, so the next read returns them.",
+        "line": 6,
         "page": "reference/api/process-process-reader.md"
       },
       {
         "signature": "public async unique fun read_async( max_bytes: int, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
         "description": "Reads at most max_bytes; a successful empty read for a positive size means EOF.",
-        "line": 18,
+        "line": 20,
         "page": "reference/api/process-process-reader.md"
       },
       {
         "signature": "public unique fun read_line( max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None ): Future<Result<Option<string>, IoError>>",
         "description": "Reads a buffered UTF-8 line, removing LF or CRLF and preserving a final unterminated line.",
-        "line": 79,
+        "line": 77,
         "page": "reference/api/process-process-reader.md"
       }
     ]
@@ -18143,20 +18137,20 @@
     "declarations": [
       {
         "signature": "public class ProcessWriter: AsyncWriter",
-        "description": "A borrowed child input pipe implementing partial async writes.",
-        "line": 4,
+        "description": "Writes to the stdin pipe of a `ChildProcess`. A write may accept only part of the data; the result is the number of bytes written.",
+        "line": 6,
         "page": "reference/api/process-process-writer.md"
       },
       {
         "signature": "public async unique fun write_async( data: byte[], token: Option<CancellationToken> = Option.None ): Result<int, IoError>",
         "description": "Writes bytes with partial progress; closing stdin delivers EOF to the child.",
-        "line": 12,
+        "line": 14,
         "page": "reference/api/process-process-writer.md"
       },
       {
         "signature": "public async unique fun flush_async( token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Confirms cancellation and ownership; the process pipe has no guest-side output buffer.",
-        "line": 46,
+        "line": 44,
         "page": "reference/api/process-process-writer.md"
       }
     ]

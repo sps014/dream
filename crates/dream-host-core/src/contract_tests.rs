@@ -5,7 +5,6 @@ use std::collections::HashSet;
 
 const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-crypto/src/exports.rs"),
-    include_str!("../../dream-host-process/src/exports.rs"),
     include_str!("../../dream-host-timezone/src/exports.rs"),
     include_str!("../../dream-host-net/src/exports.rs"),
     include_str!("../../dream-host-io/src/exports.rs"),
@@ -116,15 +115,14 @@ fn capability_inventory_matches_each_library_exports() {
     use dream_abi::host_capability::HostCapability;
     for (capability, sources) in [
         (HostCapability::Crypto, vec![HOST_SOURCES[0]]),
-        (HostCapability::Process, vec![HOST_SOURCES[1]]),
-        (HostCapability::Timezone, vec![HOST_SOURCES[2]]),
-        (HostCapability::Net, vec![HOST_SOURCES[3]]),
-        (HostCapability::Io, vec![HOST_SOURCES[4]]),
-        (HostCapability::Window, vec![HOST_SOURCES[5]]),
-        (HostCapability::Gpu, vec![HOST_SOURCES[6]]),
-        (HostCapability::Audio, vec![HOST_SOURCES[7]]),
-        (HostCapability::Drawing, vec![HOST_SOURCES[8]]),
-        (HostCapability::App, vec![HOST_SOURCES[9]]),
+        (HostCapability::Timezone, vec![HOST_SOURCES[1]]),
+        (HostCapability::Net, vec![HOST_SOURCES[2]]),
+        (HostCapability::Io, vec![HOST_SOURCES[3]]),
+        (HostCapability::Window, vec![HOST_SOURCES[4]]),
+        (HostCapability::Gpu, vec![HOST_SOURCES[5]]),
+        (HostCapability::Audio, vec![HOST_SOURCES[6]]),
+        (HostCapability::Drawing, vec![HOST_SOURCES[7]]),
+        (HostCapability::App, vec![HOST_SOURCES[8]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let declared: HashSet<_> = dream_stdlib::runtime_host_fields()

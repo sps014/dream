@@ -1,29 +1,13 @@
 module system.process;
 
-/// Launches processes asynchronously on native and Node; browser operations return EUNSUPPORTED.
+/// Launches child processes and finds commands on `PATH`. Available in native programs and in
+/// Node.js; browsers have no process API.
+@cfg(Target.Native || Target.Node)
 public static class Process {
-    static fun encode_args(args: string[]): byte[] {
-        let bytes = List<byte>();
-        Process.append_length(bytes, args.length);
-        for (let i = 0; i < args.length; i = i + 1) {
-            let encoded = Encoding.utf8_encode(args[i]);
-            Process.append_length(bytes, encoded.length);
-            for (let j = 0; j < encoded.length; j = j + 1) {
-                bytes.push(encoded[j]);
-            }
-        }
-        return bytes.take_array();
-    }
-
-    static fun append_length(bytes: List<byte>, length: int): void {
-        let value = (uint)length;
-        for (let i = 0; i < 4; i = i + 1) {
-            bytes.push((byte)(value & 255u));
-            value = value >> 8u;
-        }
-    }
-
-    /// Runs a command, concurrently drains both outputs, and closes stdin after sending input.
+    /// Runs a command to completion with default options: writes nothing to stdin, captures
+    /// stdout and stderr as UTF-8 text, and returns them with the exit status. A nonzero exit
+    /// status is not an error; check `ProcessOutput.success`. Fails with `ESPAWN` when the
+    /// command cannot be launched.
     public static fun run(
         cmd: string,
         args: string[],
@@ -32,43 +16,33 @@ public static class Process {
         return Process.run(cmd, args, ProcessOptions(), token);
     }
 
-    /// Runs with explicit environment, input, output limits, and an optional deadline.
+    /// Runs a command with explicit options: working directory, environment, stdin bytes,
+    /// output limit, and deadline. Fails with `ETIMEOUT` after the deadline, `ELIMIT` when an
+    /// output exceeds the limit, and `ECANCELLED` when `token` is cancelled; each kills the
+    /// child first.
     public static fun run(
         cmd: string,
         args: string[],
         options: ProcessOptions,
         token: Option<CancellationToken> = Option.None
     ): Future<Result<ProcessOutput, ProcessError>> {
-        let request = JsonValue.dict();
-        request["action"] = JsonValue.from_string("run");
-        request["command"] = JsonValue.from_string(cmd);
-        request["options"] = options.wire();
-        return Process.run_owned(
-            request,
-            Process.encode_args(args),
-            CancellationToken.resolve(token)
-        );
+        return Process.run_owned(cmd, args, options, CancellationToken.resolve(token));
     }
 
     static async fun run_owned(
-        request: JsonValue,
-        args: byte[],
+        cmd: string,
+        args: string[],
+        options: ProcessOptions,
         token: Option<CancellationToken>
     ): Result<ProcessOutput, ProcessError> {
-        CancellationToken.rejected(token, ProcessError.cancelled())?;
-        let operation = ProcessOperation(request, args);
-        let completed = operation.wait(token).await;
-        operation.close();
-        let raw = completed?;
-        let reader = ProcessWireReader(raw);
-        let exit_code = int.parse(reader.read_line()).unwrap_or(-2);
-        let stdout_len = int.parse(reader.read_line()).unwrap_or(0);
-        let stdout = Encoding.utf8_decode(reader.read_bytes(stdout_len));
-        let stderr = Encoding.utf8_decode(reader.read_remaining_bytes());
-        return Result.Ok(ProcessOutput(exit_code, stdout, stderr));
+        if options.timeout_ms < 0 || options.max_output_bytes < 0 {
+            return Result.Err(ProcessError("EINVAL", "invalid process options"));
+        }
+        let child = Process.spawn_owned(cmd, args, options, token).await?;
+        return ProcessRun.execute(child, options, token).await;
     }
 
-    /// Runs a command in a specific working directory with otherwise default options.
+    /// Runs a command in `cwd` with otherwise default options.
     public static fun run_in(
         cmd: string,
         args: string[],
@@ -80,7 +54,8 @@ public static class Process {
         return Process.run(cmd, args, options, token);
     }
 
-    /// Spawns an owned child exposing streaming stdin, stdout, and stderr pipes.
+    /// Launches a command and returns the running child with streaming stdin, stdout, and
+    /// stderr pipes. Fails with `ESPAWN` when the command cannot be launched.
     public static fun spawn(
         cmd: string,
         args: string[],
@@ -89,48 +64,30 @@ public static class Process {
         return Process.spawn(cmd, args, ProcessOptions(), token);
     }
 
-    /// Spawns with explicit launch settings; child closure terminates and reaps unfinished work.
+    /// Launches a command with an explicit working directory and environment. The deadline,
+    /// output limit, and input options apply only to `run`.
     public static fun spawn(
         cmd: string,
         args: string[],
         options: ProcessOptions,
         token: Option<CancellationToken> = Option.None
     ): Future<Result<ChildProcess, ProcessError>> {
-        let request = JsonValue.dict();
-        request["action"] = JsonValue.from_string("spawn");
-        request["command"] = JsonValue.from_string(cmd);
-        request["options"] = options.wire();
-        return Process.spawn_owned(
-            request,
-            Process.encode_args(args),
-            CancellationToken.resolve(token)
-        );
+        return Process.spawn_owned(cmd, args, options, CancellationToken.resolve(token));
     }
 
     static async fun spawn_owned(
-        request: JsonValue,
-        args: byte[],
+        cmd: string,
+        args: string[],
+        options: ProcessOptions,
         token: Option<CancellationToken>
     ): Result<ChildProcess, ProcessError> {
         CancellationToken.rejected(token, ProcessError.cancelled())?;
-        let operation = ProcessOperation(request, args);
-        let result = operation.wait(token).await;
-        if result.is_err() {
-            operation.close();
-            return Result.Err(result.unwrap_err());
-        }
-        let id = int.parse(Encoding.utf8_decode(result.unwrap()));
-        if id.is_err() {
-            operation.close();
-            return Result.Err(ProcessError.io("invalid child handle"));
-        }
-        let child = ChildProcess(id.unwrap());
-        operation.claim();
-        operation.close();
-        return Result.Ok(child);
+        let call = ProcessCall.spawn(cmd, args, options);
+        call.finish(token).await?;
+        return Result.Ok(ChildProcess((int)call.value()));
     }
 
-    /// Spawns a child in a specific directory with otherwise default options.
+    /// Launches a child in `cwd` with otherwise default options.
     public static fun spawn_in(
         cmd: string,
         args: string[],
@@ -142,7 +99,8 @@ public static class Process {
         return Process.spawn(cmd, args, options, token);
     }
 
-    /// Captures output and additionally treats nonzero exit statuses as EEXIT errors.
+    /// Runs a command like `run`, and also fails with `EEXIT` when it exits with a nonzero
+    /// status.
     public static async fun run_checked(
         cmd: string,
         args: string[],
@@ -159,7 +117,6 @@ public static class Process {
 
     /// Finds an existing nondirectory command path, directly or by searching `PATH`.
     /// This does not validate execute permissions or expand platform-specific extensions.
-    @cfg(Target.Native || Target.Node)
     public static fun which(cmd: string): Option<string> {
         if cmd.is_empty() {
             return Option.None;

@@ -88,7 +88,6 @@ fn optional_services_select_exact_libraries_and_bind_core() {
     );
     for (stem, capability) in [
         ("crypto_basic", HostCapability::Crypto),
-        ("process_run_basic", HostCapability::Process),
         ("app_signals", HostCapability::App),
     ] {
         let source = std::fs::read_to_string(crate::common::compiler_fixture(stem)).unwrap();

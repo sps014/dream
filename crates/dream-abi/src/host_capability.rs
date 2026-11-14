@@ -6,7 +6,6 @@
 pub enum HostCapability {
     Core,
     Crypto,
-    Process,
     Timezone,
     Net,
     Io,
@@ -18,10 +17,9 @@ pub enum HostCapability {
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 10] = [
         Self::Core,
         Self::Crypto,
-        Self::Process,
         Self::Timezone,
         Self::Net,
         Self::Io,
@@ -36,7 +34,6 @@ impl HostCapability {
         match self {
             Self::Core => "core",
             Self::Crypto => "crypto",
-            Self::Process => "process",
             Self::Timezone => "timezone",
             Self::Net => "net",
             Self::Io => "io",
@@ -52,7 +49,6 @@ impl HostCapability {
         match self {
             Self::Core => "dream_host_core",
             Self::Crypto => "dream_host_crypto",
-            Self::Process => "dream_host_process",
             Self::Timezone => "dream_host_timezone",
             Self::Net => "dream_host_net",
             Self::Io => "dream_host_io",
@@ -166,7 +162,7 @@ mod tests {
                 .is_err()
         );
         let manifest = HostManifest::parse(
-            r#"{"native_abi_version":3,"host_capabilities":["timezone","process","crypto","process"]}"#,
+            r#"{"native_abi_version":3,"host_capabilities":["timezone","net","crypto","net"]}"#,
         )
         .unwrap();
         assert_eq!(
@@ -174,8 +170,8 @@ mod tests {
             vec![
                 HostCapability::Core,
                 HostCapability::Crypto,
-                HostCapability::Process,
                 HostCapability::Timezone,
+                HostCapability::Net,
             ]
         );
     }

@@ -129,7 +129,7 @@ edition = "2024"
 license = "MIT"
 
 [workspace]
-default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-crypto", "crates/dream-host-process", "crates/dream-host-timezone", "crates/dream-host-net",
+default-members = [".", "crates/dream-host", "crates/dream-host-core", "crates/dream-host-crypto", "crates/dream-host-timezone", "crates/dream-host-net",
     "crates/dream-host-io", "crates/dream-host-window", "crates/dream-host-gpu", "crates/dream-host-audio", "crates/dream-host-app"]
 members = [
     ".",
@@ -146,7 +146,6 @@ members = [
     "crates/dream-host",
     "crates/dream-host-core",
     "crates/dream-host-crypto",
-    "crates/dream-host-process",
     "crates/dream-host-timezone",
     "crates/dream-host-net",
     "crates/dream-host-io",

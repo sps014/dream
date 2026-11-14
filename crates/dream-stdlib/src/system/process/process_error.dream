@@ -16,7 +16,8 @@ public class ProcessError: Error {
         return this._message;
     }
 
-    /// Stable machine code (`ESPAWN`, `EIO`, `EUNSUPPORTED`, …).
+    /// Stable machine code: `ESPAWN`, `EEXIT`, `ETIMEOUT`, `ECANCELLED`, `ELIMIT`, `EINVAL`,
+    /// `ECLOSED`, `EPIPE`, or `EIO`.
     public fun code(): string {
         return this._code;
     }
@@ -29,11 +30,6 @@ public class ProcessError: Error {
     /// A read/write against a running child's stdin/stdout/stderr failed.
     public static fun io(message: string): ProcessError {
         return ProcessError("EIO", message);
-    }
-
-    /// Process control is not available on the current host (e.g. the browser).
-    public static fun unsupported(message: string): ProcessError {
-        return ProcessError("EUNSUPPORTED", message);
     }
 
     /// Reports a nonzero exit status from run_checked.

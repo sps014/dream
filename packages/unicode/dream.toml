@@ -1,0 +1,9 @@
+[package]
+name = "unicode"
+version = "0.1.0"
+edition = "2026"
+type = "lib"
+description = "Unicode normalization and grapheme clusters."
+
+[dev-dependencies]
+unicode = { path = "." }

@@ -3,3 +3,9 @@ name = "http-csv-pipeline"
 version = "0.1.0"
 type = "bin"
 entry = "main.dream"
+
+[dependencies]
+cli = { path = "../../packages/cli" }
+config = { path = "../../packages/config" }
+csv = { path = "../../packages/csv" }
+uuid = { path = "../../packages/uuid" }

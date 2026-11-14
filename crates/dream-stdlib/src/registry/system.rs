@@ -31,10 +31,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/host_system.dream"),
         ),
         (
-            "<std>/system/random.dream",
-            include_str!("../system/random.dream"),
-        ),
-        (
             "<std>/system/console_color.dream",
             include_str!("../system/console_color.dream"),
         ),

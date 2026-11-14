@@ -6,7 +6,7 @@ icon: material/toolbox-outline
 
 # Application utilities
 
-`system.csv`, `system.uuid`, `system.config`, and the temporary-resource helpers in `system.io` cover common application work. Every fallible operation returns `Result`.
+`csv`, `uuid`, `config`, and the temporary-resource helpers in `system.io` cover common application work. Every fallible operation returns `Result`.
 
 ## UUID values
 
@@ -17,7 +17,7 @@ icon: material/toolbox-outline
 
 ```dream
 import system;
-import system.uuid;
+import uuid;
 
 fun main(): void {
     let id = Uuid.parse("550E8400-E29B-41D4-A716-446655440000").unwrap();
@@ -53,7 +53,7 @@ Failures return `UuidError`, whose `code()` is `EUUID`.
 ```dream
 import system;
 import system.io;
-import system.csv;
+import csv;
 
 fun main(): void {
     let memory = MemoryStream();
@@ -140,8 +140,8 @@ when the operating system refuses to create them.
 
 ```dream
 import system;
-import system.config;
-import system.cli;
+import config;
+import cli;
 
 fun main(): void {
     let command = Command("server").int_option("port", default_value: 80);
@@ -205,12 +205,12 @@ Save this as `convert.dream`. It downloads CSV into a temporary file, adds a UUI
 ```dream
 import system.encoding;
 import system;
-import system.cli;
-import system.config;
-import system.csv;
+import cli;
+import config;
+import csv;
 import system.io;
 import system.http;
-import system.uuid;
+import uuid;
 
 fun http_failure(error: HttpError): IoError {
     return IoError.other("", error.message());

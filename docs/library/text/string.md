@@ -7,7 +7,7 @@ api: reference/api/system-text.md
 
 # Strings
 
-Join text with `+`, interpolation, or the helpers below. Stored text is UTF-16. Import `system.unicode` when you need grapheme clusters.
+Join text with `+`, interpolation, or the helpers below. Import `unicode` for grapheme clusters and normalization.
 
 ```dream
 import system;
@@ -130,7 +130,7 @@ Also: `append_char`, `append_int`, `append_long`, `append_double`, `append_bool`
 
 ## Choose a Unicode normalization form
 
-Import `system.unicode` when you need normalization or grapheme clusters. The same visible text can be represented by different sequences of characters. Normalization gives it a consistent representation before comparison or storage.
+Import `unicode` when you need normalization or grapheme clusters. The same visible text can be represented by different sequences of characters. Normalization gives it a consistent representation before comparison or storage.
 
 | Form | What it does |
 | --- | --- |
@@ -143,6 +143,6 @@ Use `text.normalize(UnicodeNormForm.Nfc)`. Compatibility forms can change distin
 
 `graphemes()` returns the pieces a reader sees as characters, unlike `.length`, which counts UTF-16 units. Use it to split visible text, including accents and emoji.
 
-For reusable message patterns, read [Formatting](formatting.md). Exact methods and overloads are in the [string reference](../../reference/api/text-string-text.md), [normalization forms reference](../../reference/api/unicode-unicode-norm-form.md), and [StringBuilder reference](../../reference/api/core-string-builder.md).
+For reusable message patterns, read [Formatting](formatting.md). Exact methods and overloads are in the [string reference](../../reference/api/text-string-text.md) and [StringBuilder reference](../../reference/api/core-string-builder.md).
 
 `append_utf8_slice(text, start, byte_len)` indexes stored bytes, not characters. Use `append` for a whole string; a bad nonempty range stops the program.

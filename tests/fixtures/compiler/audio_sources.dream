@@ -1,5 +1,5 @@
 import system;
-import system.audio;
+import audio;
 import system.testing;
 
 // Waits for the named event, failing on terminal errors or after two seconds.

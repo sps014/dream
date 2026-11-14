@@ -1,0 +1,16 @@
+module unicode;
+
+extend string {
+    /// Splits the string into extended grapheme clusters (Unicode UAX #29), the units a reader
+    /// perceives as single characters: a letter with its accents, an emoji sequence joined by
+    /// zero-width joiners, or a flag. Returns an empty array for an empty string.
+    public fun graphemes(): string[] {
+        return GraphemeBreaker.split(this);
+    }
+
+    /// Returns the string in Unicode normalization `form` (UAX #15). `Nfc` and `Nfd` preserve
+    /// meaning; `Nfkc` and `Nfkd` also replace compatibility characters such as `ﬁ` with `fi`.
+    public fun normalize(form: UnicodeNormForm): string {
+        return UnicodeNormalizer.normalize(this, form);
+    }
+}

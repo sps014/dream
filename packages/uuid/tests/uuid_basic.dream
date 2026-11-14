@@ -1,0 +1,25 @@
+import system.testing;
+import system.collections;
+import uuid;
+
+@test
+fun uuid_round_trip(): void {
+    Assert.eq(sizeof(Uuid), 16);
+    let id = Uuid.v4().unwrap().to_string();
+    Assert.eq(id.length, 36);
+    Assert.is_true(id[14] == '4');
+    Assert.is_true("89ab".index_of(id[19]).is_some());
+    Assert.eq(Uuid.parse(id.to_upper()).unwrap().to_string(), id);
+    Assert.is_false(Uuid.is_valid("wrong"));
+    let original = Uuid.parse(id).unwrap();
+    let copied = original;
+    Assert.is_true(original == copied);
+    Assert.eq(original.hash_code(), copied.hash_code());
+    let ids = Map<Uuid, int>();
+    ids[original] = 42;
+    Assert.eq(ids.get(Uuid.parse(id).unwrap()).unwrap(), 42);
+    Assert.is_true(Uuid.from_bytes([(byte)1]).is_err());
+    let raw = original.to_bytes();
+    raw[0] = (byte)((int)raw[0] ^ 1);
+    Assert.is_true(original != Uuid.from_bytes(raw).unwrap());
+}

@@ -1,0 +1,12 @@
+import system.testing;
+import unicode;
+
+@test
+fun unicode_string(): void {
+    let s = "Straße";
+    Assert.eq(s.normalize(UnicodeNormForm.Nfc), "Straße");
+    let gs = s.graphemes();
+    Assert.eq(gs.length, 6);
+    Assert.eq(gs[0], "S");
+    Assert.eq(gs[gs.length - 1], "e");
+}

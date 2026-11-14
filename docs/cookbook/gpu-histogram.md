@@ -14,6 +14,7 @@ Building it needs the shader compiler, which you install once with
 ```dream
 import system;
 import system.gpu;
+import random;
 
 @compute(256, 1, 1)
 fun count_scores(@readonly scores: GpuBuffer<int>, bins: GpuBuffer<int>, n: int): void {

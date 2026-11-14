@@ -25,8 +25,7 @@ public fun probe(ctx: GenContext): void {
         dir.path().join("main.dream"),
         r#"
 import gen;
-import system.logging;
-@probe(level_name)
+@probe(Math.sqrt)
 fun handler(): void {}
 fun main(): void {}
 "#,
@@ -40,7 +39,7 @@ fun main(): void {}
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("cannot consume 'system.logging::level_name'"),
+        stderr.contains("cannot consume") && stderr.contains("Math.sqrt"),
         "{stderr}"
     );
 }

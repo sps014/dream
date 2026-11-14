@@ -1,0 +1,48 @@
+module csv;
+
+/// CSV writer over a borrowed byte stream; records use CRLF and standard doubled-quote escaping.
+public class CsvWriter {
+    destination: Writer;
+    delimiter: char;
+    limit: int;
+
+    /// Borrows destination; callers retain responsibility for closure and explicit flushing.
+    public constructor(destination: Writer, delimiter: char = ',', max_record_bytes: int = 1048576) {
+        this.destination = destination;
+        this.delimiter = delimiter;
+        this.limit = max_record_bytes;
+    }
+
+    /// Writes exactly one record, retrying partial writes and reporting quoting/size/I/O failures.
+    public fun write_record(fields: string[]): Result<Unit, CsvError> {
+        if !CsvSyntax.valid_delimiter(this.delimiter) || this.limit <= 0 || this.limit > 4194304 {
+            return Result.Err(CsvError(0L, 0L, "invalid delimiter or record limit"));
+        }
+        let size = 0;
+        for (let field in fields) {
+            let bytes = (field).to_utf8();
+            if bytes.length > this.limit - size {
+                return Result.Err(CsvError(0L, 0L, "record exceeds configured byte limit"));
+            }
+            size = size + bytes.length;
+        }
+        let bytes = (CsvSyntax.encode(fields, this.delimiter)).to_utf8();
+        if bytes.length > this.limit {
+            return Result.Err(CsvError(0L, 0L, "encoded record exceeds configured byte limit"));
+        }
+        let written = this.destination.write_all(bytes);
+        if written.is_err() {
+            return Result.Err(CsvError(0L, 0L, written.unwrap_err().message()));
+        }
+        return Result.Ok(Unit());
+    }
+
+    /// Flushes the borrowed destination and reports underlying failures.
+    public fun flush(): Result<Unit, CsvError> {
+        let result = this.destination.flush();
+        if result.is_err() {
+            return Result.Err(CsvError(0L, 0L, result.unwrap_err().message()));
+        }
+        return Result.Ok(Unit());
+    }
+}

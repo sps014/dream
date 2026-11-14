@@ -1,0 +1,12 @@
+module unicode;
+
+import system.collections;
+import system.text;
+import code_points;
+import unicode_lookup;
+import unicode_norm_form;
+import unicode_normalization_data;
+import unicode_normalizer;
+import grapheme_data;
+import grapheme_breaker;
+import string_unicode;

@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,17 +17,22 @@ def main():
     args = parser.parse_args()
     directory = ROOT / "target/audio-trimming"
     directory.mkdir(parents=True, exist_ok=True)
+    installed = directory / "dream_packages" / "audio"
+    if installed.exists():
+        shutil.rmtree(installed)
+    shutil.copytree(ROOT / "packages" / "audio" / "src", installed / "src")
+    shutil.copyfile(ROOT / "packages" / "audio" / "dream.toml", installed / "dream.toml")
     source = directory / "main.dream"
     output = directory / "main.wasm"
     baseline = None
     cases = {
         "baseline": "async fun main(): void {}",
-        "unused import": "import system.audio; async fun main(): void {}",
-        "dead calls": "import system.audio; async fun main(): void { if false { let audio = Audio(\"unused.mp3\"); audio.play().await; } }",
-        "analysis": "import system.audio; fun main(): void { let analyzer = AudioAnalyzer(); analyzer.analyze([0.0f], 48000, 1); }",
-        "PCM playback": "import system.audio; async fun main(): void { let buffer = AudioBuffer.from_pcm([0.0f], 48000, 1).unwrap(); let audio = Audio(buffer); audio.play().await; audio.close(); }",
-        "capture": "import system.audio; async fun main(): void { let buffer = AudioBuffer.from_pcm([0.0f], 48000, 1).unwrap(); let audio = Audio(buffer); audio.play().await; audio.capture(2048); audio.close(); }",
-        "decode": "import system.audio; async fun main(): void { AudioBuffer.decode([(byte)1]).await; }",
+        "unused import": "import audio; async fun main(): void {}",
+        "dead calls": "import audio; async fun main(): void { if false { let audio = Audio(\"unused.mp3\"); audio.play().await; } }",
+        "analysis": "import audio; fun main(): void { let analyzer = AudioAnalyzer(); analyzer.analyze([0.0f], 48000, 1); }",
+        "PCM playback": "import audio; async fun main(): void { let buffer = AudioBuffer.from_pcm([0.0f], 48000, 1).unwrap(); let audio = Audio(buffer); audio.play().await; audio.close(); }",
+        "capture": "import audio; async fun main(): void { let buffer = AudioBuffer.from_pcm([0.0f], 48000, 1).unwrap(); let audio = Audio(buffer); audio.play().await; audio.capture(2048); audio.close(); }",
+        "decode": "import audio; async fun main(): void { AudioBuffer.decode([(byte)1]).await; }",
         "rebuilt without audio": "async fun main(): void {}",
     }
     for label, text in (() if args.native_only else cases.items()):

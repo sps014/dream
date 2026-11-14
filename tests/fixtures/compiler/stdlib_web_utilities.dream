@@ -1,10 +1,10 @@
 import system;
-import system.csv;
+import csv;
 import system.io;
-import system.uuid;
-import system.config;
-import system.cli;
-import system.compress;
+import uuid;
+import config;
+import cli;
+import compress;
 
 async fun main(): int {
     if sizeof(Uuid) != 16 { return 1; }

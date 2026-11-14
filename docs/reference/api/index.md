@@ -29,8 +29,6 @@ These declaration snippets show the interface; they are not complete programs. T
 ## Packages
 
 - [system](package-system.md)
-- [system.audio](system-audio.md)
-- [system.cli](system-cli.md)
 - [system.codegen](system-codegen.md)
 - [system.collections](system-collections.md)
 - [system.core](system-core.md)
@@ -41,7 +39,6 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.io](system-io.md)
 - [system.js](system-js.md)
 - [system.json](system-json.md)
-- [system.logging](system-logging.md)
 - [system.net](system-net.md)
 - [system.webapi](system-webapi.md)
 - [system.primitives](system-primitives.md)
@@ -51,7 +48,6 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.task](system-task.md)
 - [system.testing](system-testing.md)
 - [system.text](system-text.md)
-- [system.unicode](system-unicode.md)
 - [system.window](system-window.md)
 
 - [C/C++ attribute declarations](system-interop.md)

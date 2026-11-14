@@ -14,7 +14,6 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [OsFamily](os-family.md)
 - [OwnedCPtr](owned-c-ptr.md)
 - [Platform](platform.md)
-- [Random](random.md)
 - [Stopwatch](stopwatch.md)
 - [System host services](host-system.md)
 - [Time](time.md)

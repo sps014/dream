@@ -1,0 +1,9 @@
+[package]
+name = "logging"
+version = "0.1.0"
+edition = "2026"
+type = "lib"
+description = "Named loggers, severity levels, and console or file handlers."
+
+[dev-dependencies]
+logging = { path = "." }

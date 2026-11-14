@@ -1,11 +1,11 @@
 import system.text;
 import system;
-import system.cli;
-import system.config;
-import system.csv;
+import cli;
+import config;
+import csv;
 import system.io;
 import system.http;
-import system.uuid;
+import uuid;
 
 fun http_failure(error: HttpError): IoError {
     return IoError.other("", error.message());

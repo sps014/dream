@@ -14,13 +14,13 @@ Create `download.dream` and add the following three blocks in order.
 
 ```dream
 import system;
-import system.cli;
+import cli;
 import system.encoding;
 import system.io;
 import system.http;
 ```
 
-`system.cli` handles arguments, `system.http` handles HTTP, `system.io` provides the
+`cli` handles arguments, `system.http` handles HTTP, `system.io` provides the
 file and stream APIs, and `system.encoding` turns error messages into bytes for
 standard error.
 

@@ -1,0 +1,12 @@
+[package]
+name = "config"
+version = "0.1.0"
+edition = "2026"
+type = "lib"
+description = "Layered configuration from defaults, files, environment, and arguments."
+
+[dependencies]
+cli = { path = "../cli" }
+
+[dev-dependencies]
+config = { path = "." }

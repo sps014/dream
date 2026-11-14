@@ -1,12 +1,11 @@
 ---
 title: Audio playback and FFT
 summary: Play audio, select outputs, and inspect PCM and frequency data.
-api: reference/api/system-audio.md
 ---
 
 # Audio playback and FFT
 
-Import `system.audio` to play WAV, MP3, and WebM/Opus on native desktops and in
+Import `audio` to play WAV, MP3, and WebM/Opus on native desktops and in
 browsers.
 
 - Format detection uses the bytes. The file extension does not have to match.
@@ -16,7 +15,7 @@ browsers.
 
 ```dream
 import system;
-import system.audio;
+import audio;
 
 async fun main(): void {
     let audio = Audio("music.mp3");
@@ -84,7 +83,7 @@ The browser buffers URL media on its own, separate from `AudioOptions`. Byte sou
 Decoding runs off your program's thread, so timers and input keep running. A stream decodes the next chunk while the current one plays.
 
 ```dream
-import system.audio;
+import audio;
 
 let options = AudioOptions();
 options.max_compressed_bytes = 16 * 1024 * 1024;
@@ -122,7 +121,7 @@ A stopped native device or a closed browser audio context is reported as device 
 Each player has its own `sink_id`, and an empty ID uses the system default. Switching keeps position, volume, mute, and looping; a failed switch leaves the old output active.
 
 ```dream
-import system.audio;
+import audio;
 
 async fun select_output(audio: Audio): Result<Unit, AudioError> {
     let devices = Audio.devices().await?;
@@ -146,7 +145,7 @@ The following produces a single-sided spectrum for a generated tone:
 
 ```dream
 import system;
-import system.audio;
+import audio;
 
 fun main(): void {
     let samples = [0.0f; 2048];
@@ -183,7 +182,7 @@ For size `N`, there are `N / 2 + 1` bins at `bin * sample_rate / N` Hz.
 
 ```dream
 import system;
-import system.audio;
+import audio;
 import system.io;
 
 async fun main(): void {
@@ -216,10 +215,9 @@ async fun main(): void {
 
 ## Deployment
 
-An optimized native build and a browser build drop an unused `system.audio` import. A debug native build keeps the type anyway.
+An optimized native build and a browser build drop an unused `audio` import. A debug native build keeps the type anyway.
 
 - PCM playback does not include decoders or FFT. Analysis-only code does not include playback.
 - Playing encoded audio includes every supported codec, because the format is read from the bytes.
 - A string source also includes file and HTTP loading.
 
-The [Audio API reference](../../reference/api/system-audio.md) lists declarations.

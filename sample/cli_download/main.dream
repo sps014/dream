@@ -1,6 +1,6 @@
 import system.text;
 import system;
-import system.cli;
+import cli;
 import system.io;
 import system.http;
 

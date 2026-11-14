@@ -1,0 +1,13 @@
+module unicode;
+
+/// Unicode normalization forms accepted by `string.normalize`.
+public enum UnicodeNormForm {
+    /// Canonical composition normalization.
+    Nfc,
+    /// Canonical decomposition normalization.
+    Nfd,
+    /// Compatibility composition normalization.
+    Nfkc,
+    /// Compatibility decomposition normalization.
+    Nfkd,
+}

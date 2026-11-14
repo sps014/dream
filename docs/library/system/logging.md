@@ -2,7 +2,6 @@
 title: Logging
 summary: "Record events with named loggers, levels, and handlers."
 icon: material/text-box-outline
-api: reference/api/system-logging.md
 ---
 
 # Logging
@@ -10,13 +9,13 @@ api: reference/api/system-logging.md
 
 Logging records events while your app runs. Give each logger a name, choose a minimum severity, and add handlers to send records to the console, a file, or your own destination.
 
-**Import:** `import system.logging;`
+**Import:** `import logging;`
 
 Named loggers, levels, and handlers (console or file).
 
 ```dream
 import system;
-import system.logging;
+import logging;
 
 fun main() {
     let log = Logger.get("app");
@@ -26,7 +25,7 @@ fun main() {
 }
 ```
 
-Levels, low to high: `Trace`, `Debug`, `Info`, `Warn`, `Error`. Records below the logger’s level are dropped, and `level_name(LogLevel.Info)` is `"Info"`.
+Levels, low to high: `Trace`, `Debug`, `Info`, `Warn`, `Error`. Records below the logger’s level are dropped, and `level_name(LogLevel.Info)` is `"INFO"`.
 
 | Call | Meaning |
 | --- | --- |
@@ -51,7 +50,7 @@ A `LogHandler` implements `emit(record: LogRecord): void`. Each record has four 
 
 ```dream
 import system;
-import system.logging;
+import logging;
 
 class ShortHandler: LogHandler {
     public fun emit(record: LogRecord): void {
@@ -67,5 +66,3 @@ fun main() {
 ```
 
 This prints `app: ready`. `Logger(name)` makes a new logger and `Logger.get(name)` reuses one; do not log credentials or private data.
-
-See [LogRecord](../../reference/api/logging-log-record.md), [LogHandler](../../reference/api/logging-log-handler.md), and [Logger](../../reference/api/logging-logger.md) for all declarations.

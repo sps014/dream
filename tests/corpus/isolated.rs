@@ -92,12 +92,6 @@ pub(super) const CASES: &[Case] = &[
         "destructor ordering and exit cleanup",
     ),
     Case::isolated(
-        "logging_basic",
-        "[DEBUG] app: hello\n[INFO] app: world\n[WARN] app: again",
-        true,
-        "console formatting or runner/logging output protocol",
-    ),
-    Case::isolated(
         "main_result_ok",
         "half is 10\nquarter is 5",
         true,

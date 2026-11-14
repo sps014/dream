@@ -103,14 +103,14 @@ Async methods below also accept an optional trailing `token: Option<Cancellation
 
 ## Streaming gzip and zlib
 
-`system.compress` reads and writes gzip and zlib (DEFLATE) streams that match other tools, on every target, with nothing extra to deploy.
+`compress` reads and writes gzip and zlib (DEFLATE) streams that match other tools, on every target, with nothing extra to deploy.
 
 A wrapper borrows the underlying stream. It works in chunks and stops at `max_output_bytes` (default 64 MiB, at most 1 GiB).
 
 ```dream
 import system;
 import system.io;
-import system.compress;
+import compress;
 
 fun main(): void {
     let encoded = MemoryStream();

@@ -1,0 +1,9 @@
+[package]
+name = "compress"
+version = "0.1.0"
+edition = "2026"
+type = "lib"
+description = "Gzip and zlib compression streams."
+
+[dev-dependencies]
+compress = { path = "." }

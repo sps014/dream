@@ -1,0 +1,73 @@
+module config;
+
+import system;
+import system.io;
+import system.json;
+import system.collections;
+import system.text;
+import cli;
+import config_error;
+import config_builder;
+
+/// Validated snapshot with typed lookups and per-setting provenance.
+public class Config {
+    internal values: Map<string, string>;
+    internal sources: Map<string, string>;
+
+    internal constructor() {
+        this.values = Map<string, string>();
+        this.sources = Map<string, string>();
+    }
+
+    internal fun put(key: string, value: string, source: string): void {
+        this.values[key] = value;
+        this.sources[key] = source;
+    }
+
+    /// Returns the source that supplied the setting, or None if absent.
+    public fun source(key: string): Option<string> {
+        return this.sources.get(key);
+    }
+
+    /// Returns a setting or a source-aware missing-setting error.
+    public fun get_string(key: string): Result<string, ConfigError> {
+        let value = this.values.get(key);
+        if value.is_none() {
+            return Result.Err(ConfigError(key, "configuration", "required setting is missing"));
+        }
+        return Result.Ok(value.unwrap());
+    }
+
+    /// Parses a signed 32-bit decimal integer, rejecting invalid or overflowing values.
+    public fun get_int(key: string): Result<int, ConfigError> {
+        let value = int.parse(this.get_string(key)?);
+        if value.is_err() {
+            return Result.Err(
+                ConfigError(
+                    key,
+                    this.sources.get(key).unwrap_or("configuration"),
+                    "expected an integer"
+                )
+            );
+        }
+        return Result.Ok(value.unwrap());
+    }
+
+    /// Accepts the exact boolean spellings true and false.
+    public fun get_bool(key: string): Result<bool, ConfigError> {
+        let value = this.get_string(key)?;
+        if value == "true" {
+            return Result.Ok(true);
+        }
+        if value == "false" {
+            return Result.Ok(false);
+        }
+        return Result.Err(
+            ConfigError(
+                key,
+                this.sources.get(key).unwrap_or("configuration"),
+                "expected true or false"
+            )
+        );
+    }
+}

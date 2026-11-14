@@ -1,15 +1,10 @@
 use dream_abi::toolchain::PinnedTool;
 
 mod app;
-mod audio;
-mod cli;
 mod codegen;
 mod collections;
-mod compress;
-mod config;
 mod core;
 mod crypto;
-mod csv;
 mod drawing;
 mod drawing_gpu;
 mod encoding;
@@ -21,7 +16,6 @@ mod io;
 mod js;
 mod json;
 mod json_derive;
-mod logging;
 mod net;
 mod primitives;
 mod process;
@@ -31,8 +25,6 @@ mod system;
 mod task;
 mod testing;
 mod text;
-mod unicode;
-mod uuid;
 mod validation;
 mod validation_derive;
 mod webapi;
@@ -104,13 +96,11 @@ pub const BOOTSTRAP_PACKAGES: &[&str] = &["system.core", "system.primitives"];
 pub const STD_PACKAGES: &[StdPackage] = &[
     core::PACKAGE,
     js::PACKAGE,
-    audio::PACKAGE,
     primitives::PACKAGE,
     collections::PACKAGE,
     simd::PACKAGE,
     task::PACKAGE,
     text::PACKAGE,
-    unicode::PACKAGE,
     regex::PACKAGE,
     encoding::PACKAGE,
     json::PACKAGE,
@@ -118,14 +108,9 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     interop::PACKAGE,
     net::PACKAGE,
     http::PACKAGE,
-    cli::PACKAGE,
-    config::PACKAGE,
-    csv::PACKAGE,
-    compress::PACKAGE,
     crypto::PACKAGE,
     drawing::PACKAGE,
     drawing_gpu::PACKAGE,
-    uuid::PACKAGE,
     validation::PACKAGE,
     validation_derive::PACKAGE,
     process::PACKAGE,
@@ -134,7 +119,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     testing::PACKAGE,
     codegen::PACKAGE,
     json_derive::PACKAGE,
-    logging::PACKAGE,
     webapi::PACKAGE,
     webapi_auth::PACKAGE,
     webapi_derive::PACKAGE,

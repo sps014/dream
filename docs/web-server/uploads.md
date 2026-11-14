@@ -10,7 +10,7 @@ Multipart fields use `@form`; file parts use `@file`.
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 @router("")
 class Routes {
@@ -73,7 +73,7 @@ To use other limits, take the `HttpIncoming` and call `form` yourself. It return
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 @router("")
 class Routes {
@@ -114,7 +114,7 @@ The server sets no limit on body size. To accept a body of any size without hold
 ```dream
 import system;
 import system.io;
-import system.webapi;
+import webapi;
 
 @router("")
 class Routes {
@@ -145,4 +145,4 @@ Try it with `curl -T backup.bin http://127.0.0.1:8000/files/backup.bin`. See [Re
 
 OpenAPI describes file fields as binary multipart properties. Swagger UI provides upload controls for those fields.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

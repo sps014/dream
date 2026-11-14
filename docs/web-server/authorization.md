@@ -10,8 +10,8 @@ Authentication establishes identity. A protected handler injects `AuthService.cu
 
 ```dream
 import system;
-import system.webapi;
-import system.webapi.auth;
+import webapi;
+import webapi.auth;
 
 @router("/reports")
 class Routes {
@@ -77,4 +77,4 @@ Keep authorization on the route that injects `AuthService.current_user`. A metad
 
 `AuthPrincipal.has_scope` checks one permission. For a resource, add a dependency that injects `AuthService.current_user`, loads the resource, checks ownership, and returns `Result<Resource, HttpStatus>`, and do not accept an identity or permission set from request headers without checking it.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

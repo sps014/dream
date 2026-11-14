@@ -10,7 +10,7 @@ Middleware receives a context and a continuation. Register global layers explici
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 async fun request_id(ctx: RequestContext, next: Next): HttpOutgoing {
     ctx.set("request_id", ctx.incoming.header("X-Request-ID").unwrap_or("local"));
@@ -72,4 +72,4 @@ List values are comma-separated strings, such as `"GET,POST"`.
 
 With credentials enabled, the response echoes the allowed request origin instead of sending `*`, because browsers reject credentials with a wildcard origin. Include custom response headers in `expose_headers` when browser code must read them.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

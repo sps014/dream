@@ -1,8 +1,8 @@
 import system;
-import system.webapi;
-import system.webapi.auth;
+import webapi;
+import webapi.auth;
 import system.testing;
-import system.http;
+import http;
 import system.json;
 import system.text;
 

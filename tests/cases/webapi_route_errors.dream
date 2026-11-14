@@ -1,5 +1,5 @@
 // Per-route validation reports every invalid handler signature in one pass.
-import system.webapi;
+import webapi;
 
 fun wrong(): int { return 1; }
 

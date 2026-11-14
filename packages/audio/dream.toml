@@ -5,6 +5,9 @@ edition = "2026"
 type = "lib"
 description = "Audio playback, capture, and frequency analysis."
 
+[dependencies]
+http = { path = "../http" }
+
 [dev-dependencies]
 audio = { path = "." }
 encoding = { path = "../encoding" }

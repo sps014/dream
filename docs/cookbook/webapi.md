@@ -11,7 +11,7 @@ Save this as `app.dream`. It accepts a name from the URL and returns a JSON gree
 ```dream
 import system;
 import system.json;
-import system.webapi;
+import webapi;
 
 @json
 class Greeting {

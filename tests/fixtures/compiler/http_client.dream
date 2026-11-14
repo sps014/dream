@@ -1,5 +1,5 @@
 import system;
-import system.http;
+import http;
 import system.io;
 import system.testing;
 

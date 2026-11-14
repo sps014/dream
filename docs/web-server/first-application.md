@@ -10,7 +10,7 @@ Save this as `app.dream`, then run `dream run app.dream`.
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 @router("")
 class Routes {
@@ -33,4 +33,4 @@ Open `http://127.0.0.1:8000/hello/Dream` for a `text/plain` response. `/docs` is
 
 Handlers may be synchronous or asynchronous, and they stay static. Use [JSON models](validation.md) for typed bodies, and pass services and per-request values through [dependencies](dependencies.md).
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

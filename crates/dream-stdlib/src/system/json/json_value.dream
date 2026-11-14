@@ -7,6 +7,8 @@ module system.json;
 // objects own `obj_keys` + `obj_vals` (insertion order) + `obj_map` (O(1) lookup).
 /// A JSON value: null, boolean, number, string, array, or object. Arrays and objects can
 /// contain nested values. Object properties retain insertion order when serialized.
+// Arrays and objects can contain other values, including a value reachable from itself.
+@allow_cycle
 public class JsonValue {
     internal kind: int;
     internal bool_val: bool;

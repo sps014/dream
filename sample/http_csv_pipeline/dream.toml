@@ -9,3 +9,4 @@ cli = { path = "../../packages/cli" }
 config = { path = "../../packages/config" }
 csv = { path = "../../packages/csv" }
 uuid = { path = "../../packages/uuid" }
+http = { path = "../../packages/http" }

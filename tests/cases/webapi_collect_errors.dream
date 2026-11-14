@@ -1,5 +1,5 @@
 // Web API declaration and dependency-graph errors are all reported before routes are validated.
-import system.webapi;
+import webapi;
 
 fun typed_provider(): string { return "value"; }
 fun cyclic_provider(): string { return "value"; }

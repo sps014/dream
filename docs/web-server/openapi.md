@@ -10,7 +10,7 @@ Configure documentation assets and behavior with typed options. Host the JS/CSS 
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 @router("/items")
 class Routes {
@@ -55,7 +55,7 @@ Without `@operation`, a route documents status 200, or 204 when the handler retu
 
 ## Built-in security providers
 
-These providers in `system.webapi` already carry `@security_scheme`, so injecting one with `@dep` adds the matching Swagger Authorize control.
+These providers in `webapi` already carry `@security_scheme`, so injecting one with `@dep` adds the matching Swagger Authorize control.
 
 | Provider | Reads | Returns | Scheme |
 | --- | --- | --- | --- |
@@ -83,4 +83,4 @@ Set these on `options.swagger`, a `SwaggerOptions` value.
 
 Keep client secrets on the server, not in the Swagger UI configuration. Leave OpenAPI enabled when you serve Swagger or ReDoc, because an empty document URL leaves those pages with nothing to load ([`WebAppOptions`](configuration.md#app-options-webappoptions) sets the documentation URLs).
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

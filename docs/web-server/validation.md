@@ -111,4 +111,4 @@ A `@body` parameter whose type is an `@json` model is decoded with `Validation.d
 
 Use `Json.deserialize` for ordinary JSON decoding without these rules. `@default_json` is validation metadata; it does not change a constructor's default arguments.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

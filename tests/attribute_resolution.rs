@@ -256,12 +256,13 @@ fn webapi_generated_native_ir_is_deterministic() {
     use dream::{driver::compiler::Compiler, driver::toolchain::ToolchainConfig};
     use dream_mir::backend::Target;
     let root = tempfile::tempdir().unwrap();
+    crate::common::link_packages(root.path(), &["http", "webapi"]);
     let source = root.path().join("main.dream");
     let output = root.path().join("main.ll");
     std::fs::write(
         &source,
         r#"
-import system.webapi;
+import webapi;
 @router("")
 class Routes { @get("/hello/{id}") public static fun hello(@path id: int): string { return id.to_string(); } }
 async fun main(): void {
@@ -292,6 +293,7 @@ async fun main(): void {
 #[test]
 fn webapi_router_imports_model_types_from_loaded_modules() {
     let root = tempfile::tempdir().unwrap();
+    crate::common::link_packages(root.path(), &["http", "webapi"]);
     std::fs::write(
         root.path().join("models.dream"),
         r#"
@@ -306,7 +308,7 @@ public class Payload { public text: string; public constructor(text: string) { t
         root.path().join("routes.dream"),
         r#"
 module api.routes;
-import system.webapi;
+import webapi;
 import models;
 @router("/api")
 public class Routes {
@@ -320,7 +322,7 @@ public class Routes {
         root.path().join("main.dream"),
         r#"
 import system;
-import system.webapi;
+import webapi;
 import routes;
 fun main(): void {
     let app = WebApp(); app.include_router(Routes.router()).unwrap();

@@ -10,7 +10,7 @@ A router class groups static handlers under a path prefix. Mounting adds an opti
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 @router("/users")
 class Routes {
@@ -64,4 +64,4 @@ For several files, put a public router class in `users.dream`, import it from th
 
 Only mounted routers are served or documented. Duplicate methods and paths in one router are compile-time errors, duplicates created by mounting are startup errors, and clients that use generated operation IDs need those names and paths to stay stable.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

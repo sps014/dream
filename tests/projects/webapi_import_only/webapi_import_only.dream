@@ -1,6 +1,6 @@
 import system;
-import system.webapi;
-import system.http;
+import webapi;
+import http;
 import system.testing;
 
 @test

@@ -17,10 +17,10 @@ import system;
 import cli;
 import encoding;
 import system.io;
-import system.http;
+import http;
 ```
 
-`cli` handles arguments, `system.http` handles HTTP, `system.io` provides the
+`cli` handles arguments, `http` handles HTTP, `system.io` provides the
 file and stream APIs, and `import encoding` turns error messages into bytes for
 standard error.
 

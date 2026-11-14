@@ -1,7 +1,7 @@
 import system;
-import system.http;
+import http;
 import system.task;
-import system.webapi;
+import webapi;
 
 @router("")
 class SoakRoutes {

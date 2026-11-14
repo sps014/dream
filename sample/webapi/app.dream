@@ -1,6 +1,6 @@
 import system;
 import system.app;
-import system.webapi;
+import webapi;
 import system.json;
 
 @json

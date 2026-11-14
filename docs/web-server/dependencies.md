@@ -10,7 +10,7 @@ Declare a provider function and inject its value with `@dep(provider)`.
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 fun request_key(@header("X-Key") key: string): Result<string, HttpStatus> {
     if key.is_empty() {
@@ -57,4 +57,4 @@ A `Result<T, HttpStatus>` failure stops the endpoint with that status, and a res
 
 Use dependencies for values an endpoint needs, such as identity, a repository, or a request-scoped resource. Use middleware for behavior surrounding requests and responses.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

@@ -1,0 +1,16 @@
+[package]
+name = "webapi"
+version = "0.1.0"
+edition = "2026"
+type = "lib"
+description = "HTTP server, routes, and request handlers."
+
+[dependencies]
+http = { path = "../http" }
+encoding = { path = "../encoding" }
+
+[dev-dependencies]
+webapi = { path = "." }
+
+[[generators]]
+path = "src/derive/webapi_derive.dream"

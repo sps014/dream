@@ -1,6 +1,6 @@
 import system;
 import system.io;
-import system.http;
+import http;
 
 async fun main(): void {
     let url = Url.parse("HTTPS://Example.COM:443/a/../v1/").unwrap().resolve("users").unwrap();

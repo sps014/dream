@@ -10,8 +10,8 @@ External login uses Authorization Code + PKCE and verified OIDC identity claims.
 
 ```dream
 import system;
-import system.webapi;
-import system.webapi.auth;
+import webapi;
+import webapi.auth;
 
 class Accounts: AuthAccounts {
     hash: string;
@@ -87,4 +87,4 @@ Login checks the issuer, audience, signature, expiry, nonce, and access-token ha
 
 Successful login returns tokens and sets a `Secure; HttpOnly; SameSite=Lax` host-only session cookie. Cookie writes need an `X-CSRF-Token` that matches the session, the callback transaction expires after ten minutes and cannot be reused, and browser sessions need TLS.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

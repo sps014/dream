@@ -41,6 +41,7 @@ fn websocket_client_echo_and_cancellation_on_native_and_node() {
         "[package]\nname = \"websocket-client\"\nversion = \"0.1.0\"\ntype = \"test\"\n",
     )
     .unwrap();
+    crate::common::link_packages(root.path(), &["http"]);
     std::fs::write(
         root.path().join("main.dream"),
         include_str!("fixtures/compiler/websocket_client.dream").replace("__URL__", &url),
@@ -79,9 +80,10 @@ type = "test"
 "#,
     )
     .unwrap();
+    crate::common::link_packages(root.path(), &["http", "webapi"]);
     let source = format!(
         r#"
-import system.webapi;
+import webapi;
 import system.testing;
 @test
 @timeout(5000)

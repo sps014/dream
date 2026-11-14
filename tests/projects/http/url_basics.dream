@@ -1,4 +1,4 @@
-import system.http;
+import http;
 import system.testing;
 
 @test

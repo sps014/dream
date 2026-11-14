@@ -1,0 +1,12 @@
+module webapi;
+
+/// A typed reference box keeps cached primitive values out of the erased object representation.
+public class DependencyValue<T> {
+    /// The cached value.
+    public value: T;
+
+    /// Creates a box holding `value`.
+    public constructor(value: T) {
+        this.value = value;
+    }
+}

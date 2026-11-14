@@ -1,0 +1,57 @@
+module webapi;
+
+// Parses a hex digit; returns `-1` when `c` is not hex.
+fun hex_value(c: char): int {
+    if (c >= '0') && (c <= '9') {
+        return (int)c - 48;
+    }
+    if (c >= 'a') && (c <= 'f') {
+        return (int)c - 97 + 10;
+    }
+    if (c >= 'A') && (c <= 'F') {
+        return (int)c - 65 + 10;
+    }
+    return 0 - 1;
+}
+
+fun decode_percent(text: string, form: bool): Result<string, ParseError> {
+        let bytes = text.to_utf8();
+        let out = Array.alloc<byte>(bytes.length);
+        let count = 0;
+        let i = 0;
+        while i < bytes.length {
+            if bytes[i] == (byte)37 {
+                if bytes.length - i < 3 {
+                    return Result.Err(ParseError.invalid("truncated percent-encoding"));
+                }
+                let hi = hex_value((char)bytes[i + 1]);
+                let lo = hex_value((char)bytes[i + 2]);
+                if hi < 0 || lo < 0 {
+                    return Result.Err(ParseError.invalid("invalid percent-encoding"));
+                }
+                out[count] = (byte)(hi * 16 + lo);
+                i = i + 3;
+            } else {
+                let value = bytes[i];
+                if form && value == (byte)43 {
+                    value = (byte)32;
+                }
+                out[count] = value;
+                i = i + 1;
+            }
+            count = count + 1;
+        }
+        let exact = Array.alloc<byte>(count);
+        for (let j = 0; j < count; j = j + 1) {
+            exact[j] = out[j];
+        }
+        let decoder = Utf8Decoder();
+        let decoded = decoder.decode_chunk(exact)?;
+        return Result.Ok(decoded + decoder.finish()?);
+    }
+
+/// Decodes percent escapes as strict UTF-8, preserving literal `+`.
+    /// Malformed escapes or invalid UTF-8 return a parse error.
+    internal fun route_percent_decode(text: string): Result<string, ParseError> {
+        return decode_percent(text, false);
+    }

@@ -45,7 +45,7 @@ public class CreateMessage {
 
 ```dream
 module service.accounts;
-import system.webapi.auth;
+import webapi.auth;
 
 public class DemoAccounts: AuthAccounts {
     hash: string;
@@ -78,8 +78,8 @@ public class DemoAccounts: AuthAccounts {
 
 ```dream
 module service.routes;
-import system.webapi;
-import system.webapi.auth;
+import webapi;
+import webapi.auth;
 import models;
 
 public fun request_label(@header("X-Request-ID") label: Option<string>): string {
@@ -108,8 +108,8 @@ public class Messages {
 ```dream
 module service.application;
 import system;
-import system.webapi;
-import system.webapi.auth;
+import webapi;
+import webapi.auth;
 import accounts;
 import routes;
 
@@ -182,7 +182,7 @@ Save this as `service_tests.dream` in the same directory:
 
 ```dream
 import system;
-import system.http;
+import http;
 import system.testing;
 import application;
 
@@ -215,4 +215,4 @@ The test supplies explicit non-production keys and credentials, binds an ephemer
 
 For external login, configure `OidcOptions` and implement `AuthAccounts.link_identity` according to your account policy. See [OAuth2/OIDC](oidc.md) for callback URLs, transaction storage, and browser cookies.
 
-See the [API lookup](../reference/api/system-webapi.md) for public signatures and [testing guide](testing.md) for dependency overrides and failure cases.
+See the [testing guide](testing.md) for dependency overrides and failure cases.

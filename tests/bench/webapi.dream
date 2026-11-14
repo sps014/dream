@@ -1,5 +1,5 @@
 import system;
-import system.webapi;
+import webapi;
 import system.json;
 import logging;
 

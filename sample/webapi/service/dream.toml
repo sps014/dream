@@ -2,3 +2,8 @@
 name = "webapi_service"
 version = "0.1.0"
 entry = "app.dream"
+
+[dependencies]
+webapi = { path = "../../../packages/webapi" }
+http = { path = "../../../packages/http" }
+encoding = { path = "../../../packages/encoding" }

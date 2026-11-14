@@ -1,0 +1,125 @@
+module webapi;
+
+/// One in-flight request to the HTTP server.
+public class WebOperation {
+    id: int;
+
+    internal constructor(id: int) {
+        this.id = id;
+    }
+
+    internal static fun start(request: WireWriter, bytes: byte[]): WebOperation {
+        return WebOperation(WebOperation.start_host(request.finish(), bytes));
+    }
+
+    @cfg(Target.Native)
+    @runtime("httpServerStart", "net")
+    static extern fun start_host(request: byte[], bytes: byte[]): int;
+
+    @cfg(Target.Native)
+    @async_host
+    @runtime("httpServerWait", "net")
+    static extern async fun wait_host(id: int): int;
+
+    @cfg(Target.Native)
+    @runtime("httpServerResult", "net")
+    static extern fun result_host(id: int): byte[];
+
+    @cfg(Target.Native)
+    @runtime("httpServerCancel", "net")
+    static extern fun cancel_host(id: int): void;
+
+    @cfg(Target.Native)
+    @runtime("httpServerRelease", "net")
+    static extern fun release_host(id: int): void;
+
+    @cfg(Target.Native)
+    @runtime("httpServerClaim", "net")
+    static extern fun claim_host(id: int): void;
+
+    internal fun claim(): void {
+        WebOperation.claim_host(this.id);
+    }
+
+    internal fun close(): void {
+        if this.id > 0 {
+            WebOperation.release_host(this.id);
+            this.id = 0;
+        }
+    }
+
+    del() {
+        this.close();
+    }
+
+    /// Builds the header for `action` on connection `id`.
+    /// `timeout_ms` is how long the server may wait; `0` means no extra limit.
+    public static fun request(action: WebAction, id: int, timeout_ms: int = 0): WireWriter {
+        let request = WireWriter(32);
+        request.u8(1);
+        request.u8(action);
+        request.i32(id);
+        request.i32(timeout_ms);
+        return request;
+    }
+
+    /// Writes a response head: the status code and every header pair in order.
+    internal static fun response_head(request: WireWriter, response: HttpOutgoing): void {
+        request.i32(response.status);
+        response.headers.write_wire(request);
+    }
+
+    /// Decodes a JSON completion payload such as a parsed form or an OIDC result.
+    internal static fun parse(bytes: byte[]): Result<JsonValue, IoError> {
+        let parsed = Json.deserialize<JsonValue>(string.from_utf8(bytes));
+        if parsed.is_err() {
+            return Result.Err(IoError.other("", "invalid HTTP server metadata"));
+        }
+        return Result.Ok(parsed.unwrap());
+    }
+
+    internal async fun wait(token: Option<CancellationToken>): Result<byte[], IoError> {
+        let lifetime = [this];
+        if lifetime[0].id <= 0 {
+            return Result.Err(IoError("", "ELIMIT", "HTTP operation capacity exhausted"));
+        }
+        let effective = CancellationToken.resolve(token);
+        let pending = WebOperation.wait_host(lifetime[0].id);
+        if effective.is_some() {
+            if effective.unwrap().wait(pending).await.is_err() {
+                WebOperation.cancel_host(lifetime[0].id);
+                WebOperation.wait_host(lifetime[0].id).await;
+            }
+        } else {
+            pending.await;
+        }
+        let wire = WebOperation.result_host(lifetime[0].id);
+        if wire.length == 0 {
+            return Result.Err(IoError.other("", "invalid HTTP server completion"));
+        }
+        if wire[0] == (byte)1 {
+            return Result.Ok(wire.slice(1, wire.length));
+        }
+        let error = WireReader(wire, 1);
+        let code = error.text();
+        let message = error.text();
+        if !error.at_end() {
+            return Result.Err(IoError.other("", "invalid HTTP server error"));
+        }
+        return Result.Err(IoError("", code, message));
+    }
+
+    /// Sends `request` with `bytes` and returns the server's completion payload.
+    public static async fun submit(
+        request: WireWriter,
+        bytes: byte[],
+        token: Option<CancellationToken>
+    ): Result<byte[], IoError> {
+        let effective = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective, IoError.cancelled())?;
+        let operation = WebOperation.start(request, bytes);
+        let result = operation.wait(effective).await;
+        operation.close();
+        return result;
+    }
+}

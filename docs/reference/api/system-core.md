@@ -59,3 +59,5 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [Text iterators and string views](core-string-span-iterators.md)
 - [Unit](core-unit.md)
 - [UnsafeAttribute](core-unsafe-attribute.md)
+- [WireReader](core-wire-reader.md)
+- [WireWriter](core-wire-writer.md)

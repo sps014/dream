@@ -1,0 +1,9 @@
+[package]
+name = "http"
+version = "0.1.0"
+edition = "2026"
+type = "lib"
+description = "HTTP client, URLs, and WebSockets."
+
+[dev-dependencies]
+http = { path = "." }

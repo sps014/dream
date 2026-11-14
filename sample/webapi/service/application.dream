@@ -1,7 +1,7 @@
 module service.application;
 import system;
-import system.webapi;
-import system.webapi.auth;
+import webapi;
+import webapi.auth;
 import accounts;
 import routes;
 

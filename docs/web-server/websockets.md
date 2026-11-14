@@ -10,7 +10,7 @@ Use `@websocket` inside an explicitly mounted router.
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 @router("")
 class Routes {
@@ -51,7 +51,7 @@ Browsers send the page's cookies on a WebSocket handshake from any site, and COR
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 @router("")
 class ChatRoutes {
@@ -116,6 +116,6 @@ The server pings every `ws_ping_interval_ms` (20 seconds by default) and answers
 
 A route may use dependencies and middleware before the upgrade. After the upgrade, you cannot change the HTTP status.
 
-WebSocket operations do not appear as ordinary OpenAPI paths. The client `WebSocket` type is in `system.http` and works on its documented native, Node, and browser targets.
+WebSocket operations do not appear as ordinary OpenAPI paths. The client `WebSocket` type is in `http` and works on its documented native, Node, and browser targets.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

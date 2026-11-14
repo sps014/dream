@@ -9,7 +9,6 @@ mod drawing;
 mod drawing_gpu;
 mod gpu;
 mod gpu_shaders;
-mod http;
 mod interop;
 mod io;
 mod js;
@@ -25,9 +24,6 @@ mod testing;
 mod text;
 mod validation;
 mod validation_derive;
-mod webapi;
-mod webapi_auth;
-mod webapi_derive;
 mod window;
 
 /// One embedded stdlib package: dotted import name, ordered source files, and package deps.
@@ -103,7 +99,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     io::PACKAGE,
     interop::PACKAGE,
     net::PACKAGE,
-    http::PACKAGE,
     crypto::PACKAGE,
     drawing::PACKAGE,
     drawing_gpu::PACKAGE,
@@ -115,9 +110,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     testing::PACKAGE,
     codegen::PACKAGE,
     json_derive::PACKAGE,
-    webapi::PACKAGE,
-    webapi_auth::PACKAGE,
-    webapi_derive::PACKAGE,
     window::PACKAGE,
     gpu::PACKAGE,
     gpu_shaders::PACKAGE,

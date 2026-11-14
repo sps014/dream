@@ -9,7 +9,7 @@ api: reference/api/system-net.md
 
 ## TCP and UDP
 
-`TcpListener`, `TcpStream`, and `UdpSocket` work on native, Node, and WASI builds. They do not exist in a browser build, so code that uses them fails to compile there; use the HTTP client from `system.http` instead.
+`TcpListener`, `TcpStream`, and `UdpSocket` work on native, Node, and WASI builds. They do not exist in a browser build, so code that uses them fails to compile there; use the HTTP client from `http` instead.
 
 ```dream
 import system;

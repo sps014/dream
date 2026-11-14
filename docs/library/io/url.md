@@ -2,16 +2,15 @@
 title: URLs
 summary: Parse URLs and work with query parameters.
 icon: material/link-variant
-api: reference/api/system-http.md
 ---
 
 # URLs and query parameters
 
-Import `system.http` to parse an absolute URL and resolve a relative one. Parsing follows the WHATWG URL Standard on every target and returns `Result<Url, ParseError>`.
+Import `http` to parse an absolute URL and resolve a relative one. Parsing follows the WHATWG URL Standard on every target and returns `Result<Url, ParseError>`.
 
 ```dream
 import system;
-import system.http;
+import http;
 
 fun main(): Result<Unit, ParseError> {
     let base = Url.parse("HTTPS://Example.COM:443/v1/")?;

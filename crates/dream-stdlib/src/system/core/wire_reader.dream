@@ -1,17 +1,17 @@
 module system.core;
 
-/// Reads a little-endian record written by a native host in the `WireWriter` layout. A read
-/// past the end or a malformed length yields a zero value and clears `ok`, so callers check
-/// `ok` once after decoding every field.
-internal class WireReader {
+/// Reads a little-endian record in the `WireWriter` layout. A read past the end or a
+/// malformed length yields a zero value and clears `ok`, so callers check `ok` once after
+/// decoding every field.
+public class WireReader {
     bytes: byte[];
     at: int;
 
     /// False once any read ran past the end of the record.
-    internal ok: bool;
+    public ok: bool;
 
     /// Reads `bytes` from byte offset `start`.
-    internal constructor(bytes: byte[], start: int) {
+    public constructor(bytes: byte[], start: int) {
         this.ok = start >= 0 && start <= bytes.length;
         this.bytes = bytes;
         this.at = start;
@@ -32,18 +32,18 @@ internal class WireReader {
     }
 
     /// Whether every byte of the record has been read.
-    internal fun at_end(): bool {
+    public fun at_end(): bool {
         return this.ok && this.at == this.bytes.length;
     }
 
     /// Reads one unsigned byte.
-    internal fun u8(): int {
+    public fun u8(): int {
         let at = this.take(1);
         return at < 0 ? 0 : this.get(at);
     }
 
     /// Reads four bytes as a signed 32-bit integer.
-    internal fun i32(): int {
+    public fun i32(): int {
         let at = this.take(4);
         if at < 0 {
             return 0;
@@ -54,13 +54,13 @@ internal class WireReader {
     }
 
     /// Reads eight bytes as a signed 64-bit integer.
-    internal fun i64(): long {
+    public fun i64(): long {
         let low = (long)this.i32() & 4294967295L;
         return low | ((long)this.i32() << 32);
     }
 
     /// Reads a 32-bit byte length and that many bytes.
-    internal fun bytes_field(): byte[] {
+    public fun bytes_field(): byte[] {
         let length = this.i32();
         let at = this.take(length);
         if at < 0 {
@@ -71,7 +71,7 @@ internal class WireReader {
 
     /// Reads a 32-bit byte length and that many UTF-8 bytes as a string. Malformed sequences
     /// become U+FFFD.
-    internal fun text(): string {
+    public fun text(): string {
         let length = this.i32();
         let at = this.take(length);
         if at < 0 {

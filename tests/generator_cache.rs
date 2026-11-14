@@ -223,7 +223,7 @@ fn program_cache_matches_a_generation_that_skips_the_cache() {
 
 const ROUTE_PROGRAM: &str = r#"import system;
 import encoding;
-import system.webapi;
+import webapi;
 
 @router("")
 class Routes {
@@ -258,6 +258,7 @@ fn program_cache_hit_keeps_access_to_private_referenced_functions() {
         packages.join("encoding"),
     )
     .unwrap();
+    crate::common::link_packages(&dir, &["http", "webapi"]);
     let (_, first_ir) = compile(&dir);
     let (hit_log, hit_ir) = compile(&dir);
     assert!(has(&hit_log, "gen program: cache hit"), "{hit_log:?}");

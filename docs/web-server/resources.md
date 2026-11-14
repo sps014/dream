@@ -10,7 +10,7 @@ A resource provider pairs a typed value with an asynchronous cleanup callback.
 
 ```dream
 import system;
-import system.webapi;
+import webapi;
 
 fun connection(): DependencyResource<string> {
     return DependencyResource<string>(
@@ -62,4 +62,4 @@ A replacement can take its own parameters and dependencies, and it must return t
 
 Overrides belong to one app, so a test can replace a provider without changing another running app, and a request still caches the resolved provider. An incompatible type, an unresolved function, or a cycle is a compile-time error.
 
-See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
+See the [complete example](example.md).

@@ -49,7 +49,7 @@ def qualify(args, handler, tcp_port):
         source = directory / "check.dream"
         source.write_text('''import system;
 import system.io;
-import system.http;
+import http;
 import system.net;
 import system.interop;
 

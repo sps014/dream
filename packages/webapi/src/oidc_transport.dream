@@ -1,0 +1,35 @@
+module webapi;
+
+/// OIDC exchange transport used by `webapi.auth`. Completion obeys cancellation.
+public static class OidcTransport {
+    /// Starts a provider request: the issuer, client id, client secret and redirect URI, to
+    /// which a completion appends the authorization code, nonce and PKCE verifier.
+    public static fun request(
+        complete: bool,
+        issuer: string,
+        client_id: string,
+        client_secret: string,
+        redirect_uri: string
+    ): WireWriter {
+        let action = WebAction.OidcBegin;
+        if complete {
+            action = WebAction.OidcComplete;
+        }
+        let request = WebOperation.request(action, 0, 30000);
+        request.text(issuer);
+        request.text(client_id);
+        request.text(client_secret);
+        request.text(redirect_uri);
+        return request;
+    }
+
+    /// Performs an OIDC begin or completion request built by `request`. Honors `token`
+    /// cancellation and returns an I/O error on failure.
+    @cfg(Target.Native)
+    public static async fun exchange(
+        request: WireWriter,
+        token: Option<CancellationToken> = Option.None
+    ): Result<JsonValue, IoError> {
+        return WebOperation.parse(WebOperation.submit(request, [], token).await?);
+    }
+}

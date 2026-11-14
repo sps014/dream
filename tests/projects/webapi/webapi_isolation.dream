@@ -1,7 +1,7 @@
 import system;
-import system.webapi;
+import webapi;
 import system.app;
-import system.http;
+import http;
 import system.testing;
 import webapi_basic;
 

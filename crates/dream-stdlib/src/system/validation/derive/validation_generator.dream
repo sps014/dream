@@ -5,7 +5,7 @@ import system.codegen;
 import system.validation;
 
 /// Schema generation shared by standalone validation and the web API generator.
-internal static class ValidationGenerator {
+public static class ValidationGenerator {
     /// Adds the constraints described by `attributes` to the JSON schema.
     public static fun constraints(attributes: List<GenAttribute>, schema: JsonValue): void {
         let minimum = GenAttributes.decode<MinimumAttribute>(attributes);
@@ -152,12 +152,33 @@ internal static class ValidationGenerator {
         if ty.name == nameof(JsonValue) {
             return schema;
         }
+        if ty.name == nameof(List) || ty.name == nameof(Set) {
+            schema["type"] = JsonValue.from_string("array");
+            if ty.args.length == 1 {
+                schema["items"] = ValidationGenerator.type_schema(ty.arg(0), ctx, definitions);
+            }
+            return schema;
+        }
+        if ty.name == nameof(Map) || ty.name == nameof(SortedMap) {
+            schema["type"] = JsonValue.from_string("object");
+            if ty.args.length == 2 {
+                schema["additionalProperties"] = ValidationGenerator.type_schema(
+                    ty.arg(1),
+                    ctx,
+                    definitions
+                );
+            }
+            return schema;
+        }
         let symbol = ctx.find_symbol(ty.decl);
         if symbol.is_none() || symbol.unwrap().declaration.is_none() {
             ctx.error("cannot derive validation for " + ty.display);
             return schema;
         }
         let d = symbol.unwrap().declaration.unwrap();
+        if !d.generics.is_empty() {
+            return schema;
+        }
         if !d.has<JsonAttribute>() {
             ctx.error_at(d.id, "validated models must be @json");
             return schema;

@@ -21,6 +21,7 @@ def main():
     if installed.exists():
         shutil.rmtree(installed)
     shutil.copytree(ROOT / "packages" / "audio" / "src", installed / "src")
+    shutil.copytree(ROOT / "packages" / "audio" / "native", installed / "native")
     shutil.copyfile(ROOT / "packages" / "audio" / "dream.toml", installed / "dream.toml")
     source = directory / "main.dream"
     output = directory / "main.wasm"
@@ -86,7 +87,7 @@ def main():
             if label in ("unused import", "dead calls", "rebuilt without audio"):
                 assert artifacts == baseline, f"native {label} changed deployment artifacts"
             libraries = list(directory.glob("*dream_host_audio*"))
-            assert bool(libraries) == (label == "PCM playback"), f"native {label}: unexpected audio libraries"
+            assert libraries == [], f"native {label}: audio output is linked into the program"
             print(f"native {label}: passed ({len(artifacts['bin'])} bytes)")
     return 0
 

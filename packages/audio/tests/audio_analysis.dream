@@ -287,6 +287,26 @@ async fun audio_decode_runs_off_the_scheduler(): void {
     Assert.eq(cancelled.unwrap_err().code(), "ECANCELLED");
 }
 
+@cfg(Target.Native)
+async fun audio_playback_advances(): void {
+    let samples = Array.alloc<float>(48000);
+    for (let i = 0; i < samples.length; i = i + 1) {
+        samples[i] = (float)Math.sin(6.283185307179586d * 440.0d * (double)i / 48000.0d) * 0.2f;
+    }
+    let player = Audio(AudioBuffer.from_pcm(samples, 48000, 1).unwrap());
+    let started = player.play().await;
+    if started.is_err() {
+        return;
+    }
+    Time.delay(200).await;
+    Assert.is_true(player.paused == false);
+    Assert.is_true(player.current_time > 0.05d);
+    player.close();
+}
+
+@cfg(Target.Wasm)
+async fun audio_playback_advances(): void {}
+
 @test
 async fun audio_analysis(): void {
     audio_fft_sine_and_levels();
@@ -296,4 +316,5 @@ async fun audio_analysis(): void {
     audio_event_queue_is_bounded();
     audio_content_detection_and_webm_opus().await;
     audio_decode_runs_off_the_scheduler().await;
+    audio_playback_advances().await;
 }

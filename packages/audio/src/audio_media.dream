@@ -1,11 +1,33 @@
 module audio;
 
+import system.interop;
+
 // Browser URL playback uses the platform's media stack; native and Node return
 // zero and continue through the portable streaming decoder.
 internal static class AudioMedia {
+    @cfg(Target.Native)
+    @c
+    internal static extern fun audio_media_create(src: string): int;
+
+    @cfg(Target.Native)
+    @c
+    internal static extern fun audio_media_seek(handle: int, time: double): int;
+
+    @cfg(Target.Native)
+    internal static fun create(borrow src: string): int {
+        return AudioMedia.audio_media_create(src);
+    }
+
+    @cfg(Target.Wasm)
     @runtime("audioMediaCreate", "audio")
     internal static extern fun create(borrow src: string): int;
 
+    @cfg(Target.Native)
+    internal static async fun seek(handle: int, time: double): int {
+        return AudioMedia.audio_media_seek(handle, time);
+    }
+
+    @cfg(Target.Wasm)
     @runtime("audioMediaSeek", "audio")
     internal static extern async fun seek(handle: int, time: double): int;
 

@@ -11,13 +11,12 @@ pub enum HostCapability {
     Io,
     Window,
     Gpu,
-    Audio,
     Drawing,
     App,
 }
 
 impl HostCapability {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 9] = [
         Self::Core,
         Self::Crypto,
         Self::Timezone,
@@ -25,7 +24,6 @@ impl HostCapability {
         Self::Io,
         Self::Window,
         Self::Gpu,
-        Self::Audio,
         Self::Drawing,
         Self::App,
     ];
@@ -39,7 +37,6 @@ impl HostCapability {
             Self::Io => "io",
             Self::Window => "window",
             Self::Gpu => "gpu",
-            Self::Audio => "audio",
             Self::Drawing => "drawing",
             Self::App => "app",
         }
@@ -54,7 +51,6 @@ impl HostCapability {
             Self::Io => "dream_host_io",
             Self::Window => "dream_host_window",
             Self::Gpu => "dream_host_gpu",
-            Self::Audio => "dream_host_audio",
             Self::Drawing => "dream_host_drawing",
             Self::App => "dream_host_app",
         }

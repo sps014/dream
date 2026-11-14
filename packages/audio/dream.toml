@@ -7,3 +7,16 @@ description = "Audio playback, capture, and frequency analysis."
 
 [dev-dependencies]
 audio = { path = "." }
+
+[native.audio]
+include = ["native/vendor"]
+cflags = ["-w"]
+
+[native.audio.macos]
+frameworks = ["CoreAudio", "AudioToolbox", "CoreFoundation", "AVFoundation"]
+
+[native.audio.linux]
+libs = ["dl", "pthread", "m"]
+
+[native.audio.windows]
+libs = ["ole32", "user32", "uuid"]

@@ -1401,7 +1401,6 @@ name = "dream-host"
 version = "0.1.0"
 dependencies = [
  "dream-host-app",
- "dream-host-audio",
  "dream-host-core",
  "dream-host-crypto",
  "dream-host-drawing",
@@ -1430,16 +1429,6 @@ dependencies = [
  "libc",
  "signal-hook",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "dream-host-audio"
-version = "0.1.0"
-dependencies = [
- "cc",
- "dream-host-abi",
- "dream-host-core",
- "serde_json",
 ]
 
 [[package]]

@@ -3,6 +3,7 @@ import system.collections;
 import system.json;
 import system.task;
 import system.text;
+import system.regex;
 
 // Application-shaped workloads: each op is one request/document/query/batch, so the time covers
 // allocation, ARC, collections, strings and scheduling together instead of one isolated loop.

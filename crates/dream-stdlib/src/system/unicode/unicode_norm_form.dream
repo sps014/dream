@@ -1,4 +1,4 @@
-module system.text;
+module system.unicode;
 
 /// Unicode normalization forms accepted by `string.normalize`.
 public enum UnicodeNormForm {

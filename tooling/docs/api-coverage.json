@@ -18369,6 +18369,160 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/regex/regex.dream",
+    "package": "system.regex",
+    "page": "reference/api/regex-regex.md",
+    "declarations": [
+      {
+        "signature": "public class Regex",
+        "description": "A compiled regular expression. Use `Regex.compile` to report invalid patterns.",
+        "line": 33,
+        "page": "reference/api/regex-regex.md"
+      },
+      {
+        "signature": "public static fun compile( pattern: string, flags: RegexFlags = RegexFlags.None ): Result<Regex, RegexError>",
+        "description": "Compiles a pattern with optional flags, returning an error for invalid patterns.",
+        "line": 41,
+        "page": "reference/api/regex-regex.md"
+      },
+      {
+        "signature": "public fun test(borrow input: string): bool",
+        "description": "Returns whether the regular expression matches anywhere in `input`.",
+        "line": 81,
+        "page": "reference/api/regex-regex.md"
+      },
+      {
+        "signature": "public fun replace(input: string, replacement: string): string",
+        "description": "Replaces matching text. Replaces every match with `Global`; otherwise replaces only the first.",
+        "line": 87,
+        "page": "reference/api/regex-regex.md"
+      },
+      {
+        "signature": "public fun match(input: string): string[]",
+        "description": "Returns complete matches with `Global`, or the first match followed by its capture groups otherwise. Returns an empty array when unmatched.",
+        "line": 210,
+        "page": "reference/api/regex-regex.md"
+      },
+      {
+        "signature": "public fun match_info(input: string): Option<RegexMatchInfo>",
+        "description": "Returns the first match and its named and numbered capture groups, or `None` when unmatched.",
+        "line": 230,
+        "page": "reference/api/regex-regex.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/regex/regex_error.dream",
+    "package": "system.regex",
+    "page": "reference/api/regex-regex-error.md",
+    "declarations": [
+      {
+        "signature": "public class RegexError: Error",
+        "description": "Failure to compile a regular expression.",
+        "line": 4,
+        "page": "reference/api/regex-regex-error.md"
+      },
+      {
+        "signature": "public pattern: string",
+        "description": "Pattern that could not be compiled.",
+        "line": 6,
+        "page": "reference/api/regex-regex-error.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "A description of the compilation failure.",
+        "line": 13,
+        "page": "reference/api/regex-regex-error.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Stable compilation-failure code.",
+        "line": 18,
+        "page": "reference/api/regex-regex-error.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/regex/regex_flags.dream",
+    "package": "system.regex",
+    "page": "reference/api/regex-regex-flags.md",
+    "declarations": [
+      {
+        "signature": "public enum RegexFlags",
+        "description": "Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.IgnoreCase`).",
+        "line": 4,
+        "page": "reference/api/regex-regex-flags.md"
+      },
+      {
+        "signature": "None = 0",
+        "description": "No optional matching flags are enabled.",
+        "line": 6,
+        "page": "reference/api/regex-regex-flags.md"
+      },
+      {
+        "signature": "Global = 1",
+        "description": "Match every occurrence rather than only the first.",
+        "line": 8,
+        "page": "reference/api/regex-regex-flags.md"
+      },
+      {
+        "signature": "IgnoreCase = 2",
+        "description": "Ignore case when matching.",
+        "line": 10,
+        "page": "reference/api/regex-regex-flags.md"
+      },
+      {
+        "signature": "Multiline = 4",
+        "description": "Allow line anchors to match individual lines.",
+        "line": 12,
+        "page": "reference/api/regex-regex-flags.md"
+      },
+      {
+        "signature": "DotAll = 8",
+        "description": "Allow a dot to match newline characters.",
+        "line": 14,
+        "page": "reference/api/regex-regex-flags.md"
+      },
+      {
+        "signature": "public fun has(flag: RegexFlags): bool",
+        "description": "Returns whether this flag set contains `flag`.",
+        "line": 17,
+        "page": "reference/api/regex-regex-flags.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/regex/regex_match_info.dream",
+    "package": "system.regex",
+    "page": "reference/api/regex-regex-match-info.md",
+    "declarations": [
+      {
+        "signature": "public class RegexMatchInfo",
+        "description": "Rich match result returned by `Regex.match_info`. `full` is the overall match text; `groups` holds each capturing group's text in group-number order (1, 2, 3, ... — `groups[0]` is group 1, since `full` already covers group 0), with `\"\"` for a group that didn't participate; `named` looks a group up by the name it was given via `(?<name>...)`.",
+        "line": 7,
+        "page": "reference/api/regex-regex-match-info.md"
+      },
+      {
+        "signature": "public full: string",
+        "description": "Text of the complete regular-expression match.",
+        "line": 9,
+        "page": "reference/api/regex-regex-match-info.md"
+      },
+      {
+        "signature": "public groups: string[]",
+        "description": "Text captured by each numbered group.",
+        "line": 12,
+        "page": "reference/api/regex-regex-match-info.md"
+      },
+      {
+        "signature": "public fun named(name: string): Option<string>",
+        "description": "The text captured by the named group `name`, or `None` if no such name exists on this pattern or the group didn't participate in the match.",
+        "line": 26,
+        "page": "reference/api/regex-regex-match-info.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/stopwatch.dream",
     "package": "system",
     "page": "reference/api/stopwatch.md",
@@ -19196,160 +19350,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/text/regex.dream",
-    "package": "system.text",
-    "page": "reference/api/text-regex.md",
-    "declarations": [
-      {
-        "signature": "public class Regex",
-        "description": "A compiled regular expression. Use `Regex.compile` to report invalid patterns.",
-        "line": 33,
-        "page": "reference/api/text-regex.md"
-      },
-      {
-        "signature": "public static fun compile( pattern: string, flags: RegexFlags = RegexFlags.None ): Result<Regex, RegexError>",
-        "description": "Compiles a pattern with optional flags, returning an error for invalid patterns.",
-        "line": 41,
-        "page": "reference/api/text-regex.md"
-      },
-      {
-        "signature": "public fun test(borrow input: string): bool",
-        "description": "Returns whether the regular expression matches anywhere in `input`.",
-        "line": 81,
-        "page": "reference/api/text-regex.md"
-      },
-      {
-        "signature": "public fun replace(input: string, replacement: string): string",
-        "description": "Replaces matching text. Replaces every match with `Global`; otherwise replaces only the first.",
-        "line": 87,
-        "page": "reference/api/text-regex.md"
-      },
-      {
-        "signature": "public fun match(input: string): string[]",
-        "description": "Returns complete matches with `Global`, or the first match followed by its capture groups otherwise. Returns an empty array when unmatched.",
-        "line": 210,
-        "page": "reference/api/text-regex.md"
-      },
-      {
-        "signature": "public fun match_info(input: string): Option<RegexMatchInfo>",
-        "description": "Returns the first match and its named and numbered capture groups, or `None` when unmatched.",
-        "line": 230,
-        "page": "reference/api/text-regex.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/text/regex_error.dream",
-    "package": "system.text",
-    "page": "reference/api/text-regex-error.md",
-    "declarations": [
-      {
-        "signature": "public class RegexError: Error",
-        "description": "Failure to compile a regular expression.",
-        "line": 4,
-        "page": "reference/api/text-regex-error.md"
-      },
-      {
-        "signature": "public pattern: string",
-        "description": "Pattern that could not be compiled.",
-        "line": 6,
-        "page": "reference/api/text-regex-error.md"
-      },
-      {
-        "signature": "public fun message(): string",
-        "description": "A description of the compilation failure.",
-        "line": 13,
-        "page": "reference/api/text-regex-error.md"
-      },
-      {
-        "signature": "public fun code(): string",
-        "description": "Stable compilation-failure code.",
-        "line": 18,
-        "page": "reference/api/text-regex-error.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/text/regex_flags.dream",
-    "package": "system.text",
-    "page": "reference/api/text-regex-flags.md",
-    "declarations": [
-      {
-        "signature": "public enum RegexFlags",
-        "description": "Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.IgnoreCase`).",
-        "line": 4,
-        "page": "reference/api/text-regex-flags.md"
-      },
-      {
-        "signature": "None = 0",
-        "description": "No optional matching flags are enabled.",
-        "line": 6,
-        "page": "reference/api/text-regex-flags.md"
-      },
-      {
-        "signature": "Global = 1",
-        "description": "Match every occurrence rather than only the first.",
-        "line": 8,
-        "page": "reference/api/text-regex-flags.md"
-      },
-      {
-        "signature": "IgnoreCase = 2",
-        "description": "Ignore case when matching.",
-        "line": 10,
-        "page": "reference/api/text-regex-flags.md"
-      },
-      {
-        "signature": "Multiline = 4",
-        "description": "Allow line anchors to match individual lines.",
-        "line": 12,
-        "page": "reference/api/text-regex-flags.md"
-      },
-      {
-        "signature": "DotAll = 8",
-        "description": "Allow a dot to match newline characters.",
-        "line": 14,
-        "page": "reference/api/text-regex-flags.md"
-      },
-      {
-        "signature": "public fun has(flag: RegexFlags): bool",
-        "description": "Returns whether this flag set contains `flag`.",
-        "line": 17,
-        "page": "reference/api/text-regex-flags.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/text/regex_match_info.dream",
-    "package": "system.text",
-    "page": "reference/api/text-regex-match-info.md",
-    "declarations": [
-      {
-        "signature": "public class RegexMatchInfo",
-        "description": "Rich match result returned by `Regex.match_info`. `full` is the overall match text; `groups` holds each capturing group's text in group-number order (1, 2, 3, ... — `groups[0]` is group 1, since `full` already covers group 0), with `\"\"` for a group that didn't participate; `named` looks a group up by the name it was given via `(?<name>...)`.",
-        "line": 7,
-        "page": "reference/api/text-regex-match-info.md"
-      },
-      {
-        "signature": "public full: string",
-        "description": "Text of the complete regular-expression match.",
-        "line": 9,
-        "page": "reference/api/text-regex-match-info.md"
-      },
-      {
-        "signature": "public groups: string[]",
-        "description": "Text captured by each numbered group.",
-        "line": 12,
-        "page": "reference/api/text-regex-match-info.md"
-      },
-      {
-        "signature": "public fun named(name: string): Option<string>",
-        "description": "The text captured by the named group `name`, or `None` if no such name exists on this pattern or the group didn't participate in the match.",
-        "line": 26,
-        "page": "reference/api/text-regex-match-info.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/text/string_array.dream",
     "package": "system.text",
     "page": "reference/api/text-string-array.md",
@@ -19483,179 +19483,130 @@
         "page": "reference/api/text-string-text-1.md"
       },
       {
-        "signature": "public fun graphemes(): string[]",
-        "description": "Splits the string into extended grapheme clusters (Unicode UAX #29), the units a reader perceives as single characters: a letter with its accents, an emoji sequence joined by zero-width joiners, or a flag. Returns an empty array for an empty string.",
-        "line": 125,
-        "page": "reference/api/text-string-text-1.md"
-      },
-      {
-        "signature": "public fun normalize(form: UnicodeNormForm): string",
-        "description": "Returns the string in Unicode normalization `form` (UAX #15). `Nfc` and `Nfd` preserve meaning; `Nfkc` and `Nfkd` also replace compatibility characters such as `ﬁ` with `fi`.",
-        "line": 131,
-        "page": "reference/api/text-string-text-1.md"
-      },
-      {
         "signature": "public fun trim(): string",
         "description": "A new string with leading and trailing whitespace removed.",
-        "line": 136,
+        "line": 123,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun trim_start(): string",
         "description": "A new string with leading whitespace removed.",
-        "line": 150,
+        "line": 137,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun trim_end(): string",
         "description": "A new string with trailing whitespace removed.",
-        "line": 160,
+        "line": 147,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun is_blank(): bool",
         "description": "True when `trim()` is empty.",
-        "line": 170,
+        "line": 157,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun pad_start(width: int, pad: string): string",
         "description": "Left-pads this string with `pad` until `width` code units (no-op when `pad` is empty).",
-        "line": 175,
+        "line": 162,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun pad_end(width: int, pad: string): string",
         "description": "Right-pads this string with `pad` until `width` code units (no-op when `pad` is empty).",
-        "line": 192,
+        "line": 179,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun last_index_of(target: char): Option<int>",
         "description": "The index of the last occurrence of `target`, or `None`.",
-        "line": 209,
+        "line": 196,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow sub: string): Option<int>",
         "description": "The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`. Byte-compare scan like `index_of` — allocates nothing per candidate.",
-        "line": 219,
-        "page": "reference/api/text-string-text-2.md"
+        "line": 206,
+        "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun replace_first(borrow old: string, borrow replacement: string): string",
         "description": "Replaces the first occurrence of `old` with `replacement`.",
-        "line": 228,
-        "page": "reference/api/text-string-text-2.md"
+        "line": 215,
+        "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun split_once(sep: char): string[]",
         "description": "Splits at the first occurrence of `sep` into exactly two parts. When `sep` does not occur, returns `[this]` (consistent with `split`), never an empty array.",
-        "line": 239,
+        "line": 226,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split_once(borrow sep: string): string[]",
         "description": "Splits at the first occurrence of `sep`; returns a one-element array when no separator is found.",
-        "line": 255,
+        "line": 242,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun strip_prefix(borrow prefix: string): Option<string>",
         "description": "`Some` remainder when this starts with `prefix`.",
-        "line": 275,
+        "line": 262,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun strip_suffix(borrow suffix: string): Option<string>",
         "description": "`Some` remainder when this ends with `suffix`.",
-        "line": 283,
+        "line": 270,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun lines(): StringLines",
         "description": "Iterates over the lines without copying them. Lines end at `\\n`; a trailing `\\r` is dropped from each line, and a final line terminator does not produce an empty line. Call `to_string()` on a line to keep an owned copy.",
-        "line": 293,
+        "line": 280,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun repeat(times: int): string",
         "description": "A new string repeated `times` times.",
-        "line": 298,
+        "line": 285,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun equals(borrow other: string): bool",
         "description": "Value equality (`Equatable<string>`); identical to `this == other`.",
-        "line": 317,
+        "line": 304,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(sep: char): string[]",
         "description": "Splits this string on the single character `sep`.",
-        "line": 322,
+        "line": 309,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string): string[]",
         "description": "Splits this string on every occurrence of substring `sep`.",
-        "line": 341,
+        "line": 328,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(sep: char, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 371,
+        "line": 358,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 403,
+        "line": 390,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun replace(borrow old: string, borrow replacement: string): string",
         "description": "A new string with every occurrence of `old` replaced by `replacement`.",
-        "line": 435,
+        "line": 422,
         "page": "reference/api/text-string-text-2.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/text/unicode_norm_form.dream",
-    "package": "system.text",
-    "page": "reference/api/text-unicode-norm-form.md",
-    "declarations": [
-      {
-        "signature": "public enum UnicodeNormForm",
-        "description": "Unicode normalization forms accepted by `string.normalize`.",
-        "line": 4,
-        "page": "reference/api/text-unicode-norm-form.md"
-      },
-      {
-        "signature": "Nfc",
-        "description": "Canonical composition normalization.",
-        "line": 6,
-        "page": "reference/api/text-unicode-norm-form.md"
-      },
-      {
-        "signature": "Nfd",
-        "description": "Canonical decomposition normalization.",
-        "line": 8,
-        "page": "reference/api/text-unicode-norm-form.md"
-      },
-      {
-        "signature": "Nfkc",
-        "description": "Compatibility composition normalization.",
-        "line": 10,
-        "page": "reference/api/text-unicode-norm-form.md"
-      },
-      {
-        "signature": "Nfkd",
-        "description": "Compatibility decomposition normalization.",
-        "line": 12,
-        "page": "reference/api/text-unicode-norm-form.md"
       }
     ]
   },
@@ -19755,6 +19706,62 @@
         "description": "This zone's UTC offset in minutes at `epoch_millis` (accounting for DST rules in effect at that instant). Falls back to `0` if the zone is no longer recognized by the host.",
         "line": 56,
         "page": "reference/api/time-zone.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/unicode/string_unicode.dream",
+    "package": "system.unicode",
+    "page": "reference/api/unicode-string-unicode.md",
+    "declarations": [
+      {
+        "signature": "public fun graphemes(): string[]",
+        "description": "Splits the string into extended grapheme clusters (Unicode UAX #29), the units a reader perceives as single characters: a letter with its accents, an emoji sequence joined by zero-width joiners, or a flag. Returns an empty array for an empty string.",
+        "line": 7,
+        "page": "reference/api/unicode-string-unicode.md"
+      },
+      {
+        "signature": "public fun normalize(form: UnicodeNormForm): string",
+        "description": "Returns the string in Unicode normalization `form` (UAX #15). `Nfc` and `Nfd` preserve meaning; `Nfkc` and `Nfkd` also replace compatibility characters such as `ﬁ` with `fi`.",
+        "line": 13,
+        "page": "reference/api/unicode-string-unicode.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/unicode/unicode_norm_form.dream",
+    "package": "system.unicode",
+    "page": "reference/api/unicode-unicode-norm-form.md",
+    "declarations": [
+      {
+        "signature": "public enum UnicodeNormForm",
+        "description": "Unicode normalization forms accepted by `string.normalize`.",
+        "line": 4,
+        "page": "reference/api/unicode-unicode-norm-form.md"
+      },
+      {
+        "signature": "Nfc",
+        "description": "Canonical composition normalization.",
+        "line": 6,
+        "page": "reference/api/unicode-unicode-norm-form.md"
+      },
+      {
+        "signature": "Nfd",
+        "description": "Canonical decomposition normalization.",
+        "line": 8,
+        "page": "reference/api/unicode-unicode-norm-form.md"
+      },
+      {
+        "signature": "Nfkc",
+        "description": "Compatibility composition normalization.",
+        "line": 10,
+        "page": "reference/api/unicode-unicode-norm-form.md"
+      },
+      {
+        "signature": "Nfkd",
+        "description": "Compatibility decomposition normalization.",
+        "line": 12,
+        "page": "reference/api/unicode-unicode-norm-form.md"
       }
     ]
   },

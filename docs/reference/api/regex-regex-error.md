@@ -1,6 +1,6 @@
 # RegexError
 
-**Import:** `import system.text;`
+**Import:** `import system.regex;`
 
 ## `RegexError`
 

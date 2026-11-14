@@ -2,6 +2,7 @@ import system.testing;
 import system;
 import system.encoding;
 import system.text;
+import system.unicode;
 
 @test
 @timeout(180000)

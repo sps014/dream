@@ -1,4 +1,4 @@
-module system.text;
+module system.regex;
 
 /// Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.IgnoreCase`).
 public enum RegexFlags {

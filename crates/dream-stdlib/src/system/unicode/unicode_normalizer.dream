@@ -1,4 +1,4 @@
-module system.text;
+module system.unicode;
 
 /// Unicode normalization (UAX #15): decomposition, canonical ordering, and canonical composition.
 internal static class UnicodeNormalizer {

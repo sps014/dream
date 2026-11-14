@@ -1,4 +1,4 @@
-module system.text;
+module system.unicode;
 
 /// Extended grapheme cluster segmentation (UAX #29).
 internal static class GraphemeBreaker {

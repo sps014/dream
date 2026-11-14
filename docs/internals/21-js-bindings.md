@@ -166,7 +166,7 @@ Functions cross the boundary in both directions too — see [Callbacks](../langu
 
 ## Built on interop
 
-- [Regex](../library/text/regex.md) — `Regex` in `system.text` (not a JS `RegExp`).
+- [Regex](../library/text/regex.md) — `Regex` in `system.regex` (not a JS `RegExp`).
 
 ## Host feature matrix
 

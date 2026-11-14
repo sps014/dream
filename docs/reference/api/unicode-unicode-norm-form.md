@@ -1,6 +1,6 @@
 # UnicodeNormForm
 
-**Import:** `import system.text;`
+**Import:** `import system.unicode;`
 
 Read the [usage guide](../../library/text/string.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 

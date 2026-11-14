@@ -10,10 +10,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
-            "<std>/system/text/regex_error.dream",
-            include_str!("../system/text/regex_error.dream"),
-        ),
-        (
             "<std>/system/text/invalid_encoding.dream",
             include_str!("../system/text/invalid_encoding.dream"),
         ),
@@ -28,10 +24,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/text/string_array.dream",
             include_str!("../system/text/string_array.dream"),
-        ),
-        (
-            "<std>/system/text/unicode_norm_form.dream",
-            include_str!("../system/text/unicode_norm_form.dream"),
         ),
         (
             "<std>/system/text/code_points.dream",
@@ -50,44 +42,12 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/text/unicode_case.dream"),
         ),
         (
-            "<std>/system/text/unicode_normalization_data.dream",
-            include_str!("../system/text/unicode_normalization_data.dream"),
-        ),
-        (
-            "<std>/system/text/unicode_normalizer.dream",
-            include_str!("../system/text/unicode_normalizer.dream"),
-        ),
-        (
-            "<std>/system/text/grapheme_data.dream",
-            include_str!("../system/text/grapheme_data.dream"),
-        ),
-        (
-            "<std>/system/text/grapheme_breaker.dream",
-            include_str!("../system/text/grapheme_breaker.dream"),
-        ),
-        (
             "<std>/system/text/string_iterator.dream",
             include_str!("../system/text/string_iterator.dream"),
         ),
         (
             "<std>/system/text/fmt.dream",
             include_str!("../system/text/fmt.dream"),
-        ),
-        (
-            "<std>/system/text/regex_match_info.dream",
-            include_str!("../system/text/regex_match_info.dream"),
-        ),
-        (
-            "<std>/system/text/regex_match.dream",
-            include_str!("../system/text/regex_match.dream"),
-        ),
-        (
-            "<std>/system/text/regex_flags.dream",
-            include_str!("../system/text/regex_flags.dream"),
-        ),
-        (
-            "<std>/system/text/regex.dream",
-            include_str!("../system/text/regex.dream"),
         ),
     ],
 };

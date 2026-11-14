@@ -100,7 +100,7 @@ fn service_combinations_keep_one_core_and_canonical_order() {
     assert_eq!(
         inventory(
             r#"
-        import system; import system.text; import system.crypto;
+        import system; import system.text; import system.unicode; import system.crypto;
         fun main(): void {
             let text = "X".to_lower_unicode().normalize(UnicodeNormForm.Nfc);
             let bytes = SecureRandom.bytes(1);
@@ -120,7 +120,7 @@ fn service_combinations_keep_one_core_and_canonical_order() {
 fn unicode_text_needs_no_host_library() {
     assert_eq!(
         inventory(
-            r#"import system.text; fun main(): void { let x = "Ǆ".to_lower_unicode().normalize(UnicodeNormForm.Nfkc).graphemes(); }"#
+            r#"import system.text; import system.unicode; fun main(): void { let x = "Ǆ".to_lower_unicode().normalize(UnicodeNormForm.Nfkc).graphemes(); }"#
         ),
         vec![]
     );

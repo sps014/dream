@@ -1,4 +1,4 @@
-module system.text;
+module system.regex;
 
 // Compiled regular expressions. Native C uses PCRE2-16 JIT; WASM uses the in-module
 // PCRE2-compatible engine.

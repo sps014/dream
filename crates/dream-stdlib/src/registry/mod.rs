@@ -25,11 +25,13 @@ mod logging;
 mod net;
 mod primitives;
 mod process;
+mod regex;
 mod simd;
 mod system;
 mod task;
 mod testing;
 mod text;
+mod unicode;
 mod uuid;
 mod validation;
 mod validation_derive;
@@ -108,6 +110,8 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     simd::PACKAGE,
     task::PACKAGE,
     text::PACKAGE,
+    unicode::PACKAGE,
+    regex::PACKAGE,
     encoding::PACKAGE,
     json::PACKAGE,
     io::PACKAGE,

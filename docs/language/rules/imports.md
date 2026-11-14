@@ -37,7 +37,9 @@ Opt-in stdlib APIs live under the reserved `system.*` package tree. A plain impo
 ```dream
 import system; // System, DateTime, Stopwatch, Random, …
 import system.collections; // List, Map, Set, Queue, Stack
-import system.text; // string methods, StringBuilder, Regex
+import system.text; // string methods, StringBuilder, formatting
+import system.unicode; // normalize, graphemes
+import system.regex; // Regex
 import system.json; // Json, JsonValue
 import system.io; // File, FileHandle, Path, IoError
 import system.encoding; // Encoding (UTF-8 / hex / Base64)

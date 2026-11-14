@@ -262,6 +262,7 @@ def conformance_tests():
         f"{UCD_VERSION} conformance files; do not edit.",
         "import system.testing;",
         "import system.text;",
+        "import system.unicode;",
         "",
         "fun from_cps(cps: int[]): string {",
         "    let out = StringBuilder();",

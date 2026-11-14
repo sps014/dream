@@ -4,7 +4,7 @@
 //   cargo run -- run sample/interop/regex.dream
 //   node sample/interop/regex.mjs sample/interop/regex.wasm
 import system;
-import system.text;
+import system.regex;
 
 fun main(): void {
     let digits = Regex.compile("\\d+", RegexFlags.Global).unwrap();

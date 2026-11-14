@@ -1,7 +1,7 @@
 import system.testing;
 import system;
 import system.crypto;
-import system.encoding;
+import encoding;
 
 @test
 @timeout(180000)

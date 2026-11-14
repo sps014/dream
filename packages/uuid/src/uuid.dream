@@ -1,7 +1,7 @@
 module uuid;
 
 import system.crypto;
-import system.encoding;
+import encoding;
 import system.text;
 import uuid_error;
 

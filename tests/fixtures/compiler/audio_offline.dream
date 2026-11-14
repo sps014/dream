@@ -1,6 +1,6 @@
 import system;
 import audio;
-import system.encoding;
+import encoding;
 
 async fun main(): void {
     let wav = Encoding.base64_decode(

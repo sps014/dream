@@ -33,7 +33,6 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.collections](system-collections.md)
 - [system.core](system-core.md)
 - [system.crypto](system-crypto.md)
-- [system.encoding](system-encoding.md)
 - [system.gpu](system-gpu.md)
 - [system.http](system-http.md)
 - [system.io](system-io.md)

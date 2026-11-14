@@ -43,7 +43,6 @@ pub(super) const CASES: &[Case] = &[
     Case::project("file_dir", "native", false),
     Case::project("file_handle_stream", "native", true),
     Case::project("incremental_utf8", "text", true),
-    Case::project("encoding_basics", "encoding", true),
     Case::project("url_basics", "http", true),
     Case::project("interfaces", "types", true),
     Case::project("typed_attribute_decode", "serialization", true),

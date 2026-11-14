@@ -125,9 +125,9 @@ public class UrlQuery {
             if i > 0 {
                 output.append("&");
             }
-            output.append(Encoding.form_encode_component(this.keys[i]));
+            output.append(form_component(this.keys[i]));
             output.append("=");
-            output.append(Encoding.form_encode_component(this.values[i]));
+            output.append(form_component(this.values[i]));
         }
         return output.to_string();
     }

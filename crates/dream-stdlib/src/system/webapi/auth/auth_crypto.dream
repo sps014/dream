@@ -37,11 +37,11 @@ internal static class AuthCrypto {
         if bytes.is_err() {
             return Result.Err(AuthError("EENTROPY", "secure random source failed"));
         }
-        return Result.Ok(Encoding.hex_encode(bytes.unwrap()));
+        return Result.Ok(token_hex(bytes.unwrap()));
     }
 
     internal static fun digest(token: string): string {
-        return Encoding.hex_encode(Sha256.hash((token).to_utf8()));
+        return token_hex(Sha256.hash((token).to_utf8()));
     }
 
     internal static fun now(): long {

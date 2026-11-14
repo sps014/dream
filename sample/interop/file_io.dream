@@ -2,7 +2,7 @@
 // and under Node via runtime/dream.js, using one code path on both.
 import system;
 import system.io;
-import system.encoding;
+import encoding;
 
 async fun main(): void {
     let path = "scratch_file_io.txt";

@@ -42,7 +42,7 @@ import system.text; // string methods, StringBuilder, formatting
 import regex; // Regex
 import system.json; // Json, JsonValue
 import system.io; // File, FileHandle, Path, IoError
-import system.encoding; // Encoding (UTF-8 / hex / Base64)
+import encoding; // Encoding (hex / Base64)
 import system.crypto; // Sha256, HmacSha256, SecureRandom
 import system.task; // Task, TaskPool (real threads)
 ```

@@ -3,8 +3,6 @@ module system.codegen;
 import system;
 import system.io;
 import system.collections;
-import system.encoding;
-
 // Snapshot format this package reads; the compiler writes the same number.
 fun gen_snapshot_version(): int {
     return 3;
@@ -469,7 +467,7 @@ public class GenContext {
         let out = GenWire.dict();
         out["kind"] = GenWire.from_string("artifact");
         out["path"] = GenWire.from_string(path);
-        out["contents"] = GenWire.from_string(Encoding.base64_encode(contents));
+        out["contents"] = GenWire.from_string(artifact_base64(contents));
         out["mappings"] = GenWire.array();
         out["publish"] = GenWire.from_bool(publish);
         out["binary"] = GenWire.from_bool(true);

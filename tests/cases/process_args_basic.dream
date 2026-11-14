@@ -1,6 +1,6 @@
 import system;
 import system.testing;
-import system.encoding;
+import encoding;
 
 fun main(entry_args: string[]): void {
     System.println(System.os_family == OsFamily.Unix || System.os_family == OsFamily.Windows);

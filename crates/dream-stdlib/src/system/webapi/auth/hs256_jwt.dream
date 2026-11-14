@@ -15,9 +15,9 @@ internal static class Hs256Jwt {
         claims["aud"] = JsonValue.from_string(options.audience);
         let header = ("{\"alg\":\"HS256\",\"typ\":\"JWT\"}").to_utf8();
         let body = (Json.serialize(claims)).to_utf8();
-        let signing_input = Encoding.base64url_encode(header) + "." + Encoding.base64url_encode(body);
+        let signing_input = token_base64url_encode(header) + "." + token_base64url_encode(body);
         let signature = HmacSha256.sign(key, (signing_input).to_utf8());
-        return Result.Ok(signing_input + "." + Encoding.base64url_encode(signature));
+        return Result.Ok(signing_input + "." + token_base64url_encode(signature));
     }
 
     /// Verifies `token` and returns its claims. The header must name HS256, the signature must
@@ -115,7 +115,7 @@ internal static class Hs256Jwt {
         if segment.index_of('=').is_some() {
             return Option.None;
         }
-        let decoded = Encoding.base64url_decode(segment);
+        let decoded = token_base64url_decode(segment);
         if decoded.is_err() {
             return Option.None;
         }

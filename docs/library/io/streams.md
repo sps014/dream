@@ -117,7 +117,7 @@ buffered wrappers:
 
 ```dream
 import system.io;
-import system.encoding;
+import encoding;
 
 fun main(): Result<Unit, IoError> {
     let source = MemoryStream(("first\r\nsecond\n").to_utf8());
@@ -195,7 +195,7 @@ Stream operations fail with `IoError`, which has `code()`, `message()`, and a
 
 ```dream
 import system.io;
-import system.encoding;
+import encoding;
 
 async fun main(): Result<Unit, IoError> {
     let source = MemoryStream(("hello").to_utf8());
@@ -217,7 +217,7 @@ With `system.io`, `System.stdin` is a `Reader` and `System.stdout` and `System.s
 ```dream
 import system;
 import system.io;
-import system.encoding;
+import encoding;
 
 fun main(): void {
     let writer = BufferedWriter(System.stdout);

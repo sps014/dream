@@ -1,0 +1,225 @@
+module system.webapi.auth;
+
+// Maps 0–15 to a lowercase hex digit character.
+fun hex_digit(v: int): char {
+    if v < 10 {
+        return (char)(48 + v);
+    }
+    return (char)(97 + (v - 10));
+}
+
+internal fun token_hex(bytes: byte[]): string {
+        let n = bytes.length;
+        let out = string.alloc(n * 2);
+        let i = 0;
+        while i < n {
+            let b = (int)bytes[i];
+            string.set(out, i * 2, hex_digit(b / 16));
+            string.set(out, i * 2 + 1, hex_digit(b % 16));
+            i = i + 1;
+        }
+        return out;
+    }
+
+// Maps a Base64 alphabet character to 0–63, or `-1` when invalid.
+fun b64_value(c: char): int {
+    if (c >= 'A') && (c <= 'Z') {
+        return (int)c - 65;
+    }
+    if (c >= 'a') && (c <= 'z') {
+        return (int)c - 97 + 26;
+    }
+    if (c >= '0') && (c <= '9') {
+        return (int)c - 48 + 52;
+    }
+    if c == '+' {
+        return 62;
+    }
+    if c == '/' {
+        return 63;
+    }
+    return 0 - 1;
+}
+
+/// Encodes `bytes` as standard Base64 (with `=` padding).
+    fun base64_encode(bytes: byte[]): string {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let n = bytes.length;
+        let out_len = ((n + 2) / 3) * 4;
+        let out = string.alloc(out_len);
+        let i = 0;
+        let oi = 0;
+        while i < n {
+            let b0 = (int)bytes[i];
+            let b1 = 0;
+            let b2 = 0;
+            let remain = n - i;
+            if remain > 1 {
+                b1 = (int)bytes[i + 1];
+            }
+            if remain > 2 {
+                b2 = (int)bytes[i + 2];
+            }
+            let triple = (b0 * 65536) + (b1 * 256) + b2;
+            string.set(out, oi, alphabet.char_at((triple / 262144) % 64));
+            string.set(out, oi + 1, alphabet.char_at((triple / 4096) % 64));
+            if remain > 1 {
+                string.set(out, oi + 2, alphabet.char_at((triple / 64) % 64));
+            } else {
+                string.set(out, oi + 2, '=');
+            }
+            if remain > 2 {
+                string.set(out, oi + 3, alphabet.char_at(triple % 64));
+            } else {
+                string.set(out, oi + 3, '=');
+            }
+            oi = oi + 4;
+            i = i + 3;
+        }
+        return out;
+    }
+
+/// Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.
+    fun base64_decode(text: string): Result<byte[], ParseError> {
+        let n = text.length;
+        let cleaned_len = 0;
+        let i = 0;
+        while i < n {
+            let c = text.char_at(i);
+            if c != '=' {
+                if (c != ' ') && (c != '\n') && (c != '\r') && (c != '\t') {
+                    cleaned_len = cleaned_len + 1;
+                }
+            }
+            i = i + 1;
+        }
+        if (cleaned_len % 4) == 1 {
+            return Result.Err(ParseError.invalid("invalid base64 length"));
+        }
+        let padded_len = cleaned_len;
+        while (padded_len % 4) != 0 {
+            padded_len = padded_len + 1;
+        }
+        let cleaned = string.alloc(padded_len);
+        let ci = 0;
+        i = 0;
+        while i < n {
+            let c = text.char_at(i);
+            if c != '=' {
+                if (c != ' ') && (c != '\n') && (c != '\r') && (c != '\t') {
+                    string.set(cleaned, ci, c);
+                    ci = ci + 1;
+                }
+            }
+            i = i + 1;
+        }
+        while ci < padded_len {
+            string.set(cleaned, ci, 'A');
+            ci = ci + 1;
+        }
+        let pad = 0;
+        if text.ends_with("==") {
+            pad = 2;
+        } else if (text.ends_with("=")) {
+            pad = 1;
+        }
+        let out_len = (padded_len / 4) * 3 - pad;
+        if out_len < 0 {
+            out_len = 0;
+        }
+        let out = Buffer.alloc<byte>(out_len);
+        let oi = 0;
+        i = 0;
+        while i < padded_len {
+            let c0 = b64_value(cleaned.char_at(i));
+            let c1 = b64_value(cleaned.char_at(i + 1));
+            let c2 = b64_value(cleaned.char_at(i + 2));
+            let c3 = b64_value(cleaned.char_at(i + 3));
+            if (c0 < 0) || (c1 < 0) || (c2 < 0) || (c3 < 0) {
+                return Result.Err(ParseError.invalid("invalid base64 character"));
+            }
+            let triple = (c0 * 262144) + (c1 * 4096) + (c2 * 64) + c3;
+            if oi < out_len {
+                let b = (triple / 65536) % 256;
+                out[oi] = (byte)b;
+                oi = oi + 1;
+            }
+            if oi < out_len {
+                let b = (triple / 256) % 256;
+                out[oi] = (byte)b;
+                oi = oi + 1;
+            }
+            if oi < out_len {
+                let b = triple % 256;
+                out[oi] = (byte)b;
+                oi = oi + 1;
+            }
+            i = i + 4;
+        }
+        return Result.Ok(out);
+    }
+
+// Base64url alphabet map (`-`/`_` instead of `+`/`/`).
+    fun b64url_value(c: char): int {
+        if c == '-' {
+            return 62;
+        }
+        if c == '_' {
+            return 63;
+        }
+        return b64_value(c);
+    }
+
+/// Encodes `bytes` as Base64url without padding.
+    internal fun token_base64url_encode(bytes: byte[]): string {
+        let padded = base64_encode(bytes);
+        let n = padded.length;
+        while (n > 0) && (padded.char_at(n - 1) == '=') {
+            n = n - 1;
+        }
+        let out = string.alloc(n);
+        let i = 0;
+        while i < n {
+            let c = padded.char_at(i);
+            if c == '+' {
+                c = '-';
+            } else if (c == '/') {
+                c = '_';
+            }
+            string.set(out, i, c);
+            i = i + 1;
+        }
+        return out;
+    }
+
+/// Decodes Base64url text (`-`/`_`, padding optional).
+    internal fun token_base64url_decode(text: string): Result<byte[], ParseError> {
+        let n = text.length;
+        let pad = 0;
+        let rem = n % 4;
+        if rem == 1 {
+            return Result.Err(ParseError.invalid("invalid base64url length"));
+        }
+        if rem == 2 {
+            pad = 2;
+        } else if (rem == 3) {
+            pad = 1;
+        }
+        let std = string.alloc(n + pad);
+        let i = 0;
+        while i < n {
+            let c = text.char_at(i);
+            if c == '-' {
+                c = '+';
+            } else if (c == '_') {
+                c = '/';
+            }
+            string.set(std, i, c);
+            i = i + 1;
+        }
+        while i < n + pad {
+            string.set(std, i, '=');
+            i = i + 1;
+        }
+        return base64_decode(std);
+    }

@@ -3,8 +3,6 @@ module system.gpu.shaders;
 import system;
 import system.collections;
 import system.crypto;
-import system.encoding;
-
 // Writes the binary shader bundle described in docs/internals/18-gpu-shader-bundle.md and its
 // readable JSON view. Identical blobs are stored once; every reference carries the blob's
 // SHA-256.
@@ -189,7 +187,7 @@ internal class Bundle {
     // Stores `bytes` once and returns its blob index.
     fun blob(bytes: byte[]): int {
         let digest = Sha256.hash(bytes);
-        let hex = Encoding.hex_encode(digest);
+        let hex = shader_hex(digest);
         let i = 0;
         while i < this.hashes.length {
             if this.hashes[i] == hex && this.sizes[i] == bytes.length {

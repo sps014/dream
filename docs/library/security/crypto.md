@@ -17,7 +17,7 @@ SHA-256, SHA-512, and HMAC-SHA256 match on every target, including the browser. 
 ```dream
 import system;
 import system.crypto;
-import system.encoding;
+import encoding;
 
 fun main() {
     let msg = ("hello").to_utf8();

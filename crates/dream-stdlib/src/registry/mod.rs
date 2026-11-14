@@ -7,7 +7,6 @@ mod core;
 mod crypto;
 mod drawing;
 mod drawing_gpu;
-mod encoding;
 mod gpu;
 mod gpu_shaders;
 mod http;
@@ -100,7 +99,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     simd::PACKAGE,
     task::PACKAGE,
     text::PACKAGE,
-    encoding::PACKAGE,
     json::PACKAGE,
     io::PACKAGE,
     interop::PACKAGE,

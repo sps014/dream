@@ -1,0 +1,49 @@
+module system.http;
+
+// Maps 0–15 to a lowercase hex digit character.
+fun hex_digit(v: int): char {
+    if v < 10 {
+        return (char)(48 + v);
+    }
+    return (char)(97 + (v - 10));
+}
+
+fun uri_unreserved(c: char): bool {
+        if (c >= 'A') && (c <= 'Z') {
+            return true;
+        }
+        if (c >= 'a') && (c <= 'z') {
+            return true;
+        }
+        if (c >= '0') && (c <= '9') {
+            return true;
+        }
+        return (c == '-') || (c == '_') || (c == '.') || (c == '~');
+    }
+
+fun encode_percent(text: string, form: bool): string {
+        let bytes = text.to_utf8();
+        let sb = StringBuilder();
+        let i = 0;
+        while i < bytes.length {
+            let b = (int)bytes[i];
+            let c = (char)b;
+            if form && c == ' ' {
+                sb.append_char('+');
+            } else if (uri_unreserved(c) && (!form || c != '~')) || (form && c == '*') {
+                sb.append_char(c);
+            } else {
+                sb.append_char('%');
+                sb.append_char(hex_digit(b / 16));
+                sb.append_char(hex_digit(b % 16));
+            }
+            i = i + 1;
+        }
+        return sb.build();
+    }
+
+/// Encodes a form component as UTF-8, using `+` for spaces and percent escapes
+    /// except for ASCII letters, digits, `*`, `-`, `.`, and `_`.
+    internal fun form_component(text: string): string {
+        return encode_percent(text, true);
+    }

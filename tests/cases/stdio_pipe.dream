@@ -1,6 +1,6 @@
 import system;
 import system.io;
-import system.encoding;
+import encoding;
 
 // `System.print` and the `Writer` view of stdout share one stream, so their output interleaves.
 fun write_streams(): void {

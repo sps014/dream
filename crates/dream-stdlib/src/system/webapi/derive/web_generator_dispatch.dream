@@ -10,7 +10,6 @@ extend WebGenerator {
         this.imports.line("import system.http;");
         this.imports.line("import system.json;");
         this.imports.line("import system.validation;");
-        this.imports.line("import system.encoding;");
         this.imports.line("import system.collections;");
         for (let route in this.routes) {
             let out = this.source;

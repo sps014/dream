@@ -9,7 +9,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.http",
         "system.task",
         "system.json",
-        "system.encoding",
         "system.text",
         "system.collections",
     ],
@@ -82,6 +81,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/webapi/middleware.dream",
             include_str!("../system/webapi/middleware.dream"),
+        ),
+        (
+            "<std>/system/webapi/route_decode.dream",
+            include_str!("../system/webapi/route_decode.dream"),
         ),
         (
             "<std>/system/webapi/web_routing.dream",

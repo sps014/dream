@@ -3,7 +3,6 @@ module system.gpu.shaders;
 import system;
 import system.collections;
 import system.codegen;
-import system.encoding;
 import system.gpu;
 
 /// Compiles the program's GPU shaders ahead of time. Phase 0 checks every shader against the
@@ -240,7 +239,7 @@ fun file_bytes(borrow result: GenToolResult, borrow path: string): Option<byte[]
             continue;
         }
         if f.binary {
-            switch (Encoding.base64_decode(f.contents)) {
+            switch (shader_base64_decode(f.contents)) {
                 Ok(bytes) => {
                     return Option.Some(bytes);
                 }

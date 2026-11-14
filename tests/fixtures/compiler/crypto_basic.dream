@@ -1,6 +1,6 @@
 import system;
 import system.crypto;
-import system.encoding;
+import encoding;
 
 fun main(): void {
     let empty = Sha256.hash(Array.alloc<byte>(0));

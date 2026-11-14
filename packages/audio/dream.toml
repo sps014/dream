@@ -7,6 +7,7 @@ description = "Audio playback, capture, and frequency analysis."
 
 [dev-dependencies]
 audio = { path = "." }
+encoding = { path = "../encoding" }
 
 [native.audio]
 include = ["native/vendor"]

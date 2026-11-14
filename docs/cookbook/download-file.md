@@ -15,13 +15,13 @@ Create `download.dream` and add the following three blocks in order.
 ```dream
 import system;
 import cli;
-import system.encoding;
+import encoding;
 import system.io;
 import system.http;
 ```
 
 `cli` handles arguments, `system.http` handles HTTP, `system.io` provides the
-file and stream APIs, and `system.encoding` turns error messages into bytes for
+file and stream APIs, and `import encoding` turns error messages into bytes for
 standard error.
 
 ## 2. Download and close resources

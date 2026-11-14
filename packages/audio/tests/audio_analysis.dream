@@ -1,5 +1,5 @@
 import system;
-import system.encoding;
+import encoding;
 import audio;
 import system.testing;
 

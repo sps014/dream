@@ -14,7 +14,7 @@ internal class WebRouting {
             let se = WebRouting.find_slash(path, si);
             if WebRouting.is_param(pattern, pi, pe) {
                 let raw = path.substring(si, se);
-                params[pattern.substring(pi + 1, pe - 1)] = Encoding.uri_decode_component(raw)
+                params[pattern.substring(pi + 1, pe - 1)] = route_percent_decode(raw)
                     .unwrap_or(raw);
             }
             pi = WebRouting.skip_slash(pattern, pe);

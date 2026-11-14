@@ -5,5 +5,8 @@ edition = "2026"
 type = "lib"
 description = "16-byte UUID values."
 
+[dependencies]
+encoding = { path = "../encoding" }
+
 [dev-dependencies]
 uuid = { path = "." }

@@ -1218,319 +1218,319 @@
       {
         "signature": "public class GenContext",
         "description": "Input and output of a source generator. Inspect selected declarations, request tools, report diagnostics, and add or replace generated source through this context.",
-        "line": 19,
+        "line": 17,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public generator_name: string",
         "description": "The running generator's name and `module::name` identity.",
-        "line": 21,
+        "line": 19,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public generator_id: string",
         "description": "Stable identifier of the generator being executed.",
-        "line": 24,
+        "line": 22,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public target: string",
         "description": "Target triple of the compile (`aarch64-apple-darwin`, `wasm32-unknown-wasi`, ...).",
-        "line": 27,
+        "line": 25,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public static async fun load(args: string[]): Result<GenContext, string>",
         "description": "Reads `--snapshot` / `--result` from the program arguments.",
-        "line": 51,
+        "line": 49,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun types_with<A>(): List<GenDecl>",
         "description": "Declarations carrying `@A` (on the declaration or on one of its members).",
-        "line": 95,
+        "line": 93,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun functions_with<A>(): List<GenFunction>",
         "description": "Top-level functions carrying `@A` (on the function or a parameter).",
-        "line": 107,
+        "line": 105,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun modules_with<A>(): List<GenModule>",
         "description": "User modules whose `module` declaration carries `@A`, in source order.",
-        "line": 119,
+        "line": 117,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun module_of(borrow decl: GenDecl): Option<GenModule>",
         "description": "The trigger-carrying module that declares `decl`, so module-level settings can be merged with the declaration's own attributes. `None` when its module carries no trigger.",
-        "line": 132,
+        "line": 130,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun module_of(borrow f: GenFunction): Option<GenModule>",
         "description": "The trigger-carrying module that declares function or method `f`, or `None` when its module carries no trigger attribute.",
-        "line": 138,
+        "line": 136,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun decls(): List<GenDecl>",
         "description": "Every declaration selected by this generator's `@on_attribute` triggers.",
-        "line": 159,
+        "line": 157,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun phase(): int",
         "description": "Current generation round, starting at zero and increasing after tool requests.",
-        "line": 165,
+        "line": 163,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun referenced_decls(): List<GenDecl>",
         "description": "Transitive dependencies of the declarations selected by this generator.",
-        "line": 170,
+        "line": 168,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun referenced_functions(): List<GenFunction>",
         "description": "Top-level functions referenced by selected declarations or their dependencies.",
-        "line": 175,
+        "line": 173,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun find_decl(borrow id: string): Option<GenDecl>",
         "description": "Looks up a selected or referenced declaration by its stable identifier.",
-        "line": 181,
+        "line": 179,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun find_function(borrow id: string): Option<GenFunction>",
         "description": "Looks up a selected or referenced function, including methods.",
-        "line": 196,
+        "line": 194,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun type_of(borrow expr: GenExpr): GenTypeRef",
         "description": "The inferred type, or an explicit Unknown when pre-analysis could not resolve it.",
-        "line": 225,
+        "line": 223,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun type_of(borrow stmt: GenStmt): GenTypeRef",
         "description": "The inferred type attached to a statement, or Unknown when it has no value type.",
-        "line": 230,
+        "line": 228,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun symbol_of(borrow expr: GenExpr): string",
         "description": "The resolved symbol identity, or an empty string for an unresolved expression.",
-        "line": 235,
+        "line": 233,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun find_symbol(borrow id: string): Option<GenSymbol>",
         "description": "Looks up a signature view anywhere in the pre-generation compilation.",
-        "line": 240,
+        "line": 238,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun compilation_errors(): List<GenCompilationError>",
         "description": "Errors found before generation within declarations selected by this generator's triggers.",
-        "line": 258,
+        "line": 256,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun implementations_of(borrow id: string): List<GenSymbol>",
         "description": "Classes and structs implementing an interface, including inherited interface relations.",
-        "line": 263,
+        "line": 261,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun subtypes_of(borrow id: string): List<GenSymbol>",
         "description": "Signature views whose declared interface ancestry includes the given identity.",
-        "line": 274,
+        "line": 272,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun type_index(): List<GenIndexEntry>",
         "description": "Every type in the program, by name and kind.",
-        "line": 303,
+        "line": 301,
         "page": "reference/api/codegen-gen-context-1.md"
       },
       {
         "signature": "public fun find_type(borrow name: string): Option<GenIndexEntry>",
         "description": "The index entry named `name`, if the program declares such a type.",
-        "line": 308,
+        "line": 306,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun syntax_blocks(): List<GenSyntaxBlock>",
         "description": "`name { ... }` sites introduced by this generator's name (`@syntax_block` generators).",
-        "line": 318,
+        "line": 316,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun call_sites(): List<GenCallSite>",
         "description": "Calls of the functions named in this generator's `@on_call(...)`.",
-        "line": 323,
+        "line": 321,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun option_or(borrow key: string, fallback: string): string",
         "description": "One option as text (`fallback` when unset). Strings are returned as written; numbers and booleans are returned in decimal or `true`/`false` form.",
-        "line": 329,
+        "line": 327,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun additional_files(): List<GenFile>",
         "description": "Returns the files listed in `[[generators]].additional_files` in `dream.toml`.",
-        "line": 349,
+        "line": 347,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun replace(borrow block: GenSyntaxBlock, source: string): void",
         "description": "Rewrites `block`'s site to the Dream expression `source`.",
-        "line": 354,
+        "line": 352,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun emit_file(path: string, source: string): void",
         "description": "Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`). It is written under `generated/<entry>/<module-path>/<generator>/` and compiled with the program.",
-        "line": 364,
+        "line": 362,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun tools(): List<GenToolInfo>",
         "description": "Declared tools with the versions and fingerprints used in this compilation.",
-        "line": 373,
+        "line": 371,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun tool_results(): List<GenToolResult>",
         "description": "Returns tool results from the previous generation round.",
-        "line": 379,
+        "line": 377,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun run_tool( id: string, tool: string, args: List<string>, inputs: List<string>, outputs: List<string>, opaque_outputs: List<string> ): void",
         "description": "Requests a declared tool. The generator runs again with the result in the next phase.  `id` names the request (no `/`); `inputs` are emitted artifact paths copied into the tool's scratch folder; `args` are passed as-is with that folder as the working directory. `outputs` are files whose contents the next phase reads through `tool_results()`. `opaque_outputs` are files the generator only sees as path, hash and size, for large or binary results it embeds (`emit_asset`) or publishes (`publish_tool_output`) as `tool:<id>/<path>` without reading them. All requests of a phase run in parallel; results keep request order.",
-        "line": 392,
+        "line": 390,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun publish_tool_output(source: string, path: string): void",
         "description": "Copies a tool output, named `tool:<request id>/<path>`, to `path` next to the compiled program. Publishing the same path twice, or a path a compiler output uses, is an error.",
-        "line": 413,
+        "line": 411,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun emit_asset(name: string, source: string): void",
         "description": "Embeds an emitted artifact path, or a tool output named `tool:<request id>/<path>`, into every compilation target as the asset `name`, read at run time with `Assets.bytes(name)`.",
-        "line": 423,
+        "line": 421,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun emit_asset(name: string, source: string, targets: List<string>): void",
         "description": "Embeds an artifact or tool output for the selected target triples or families.",
-        "line": 428,
+        "line": 426,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun consume(borrow f: GenFunction, help: string = \"\"): void",
         "description": "Takes over a selected or referenced top-level user function: it stays type-checked but is not compiled, and calling it from ordinary code is an error. `help` is shown under that error to say what to use instead, for example `dispatch it with Shaders.blur.dispatch(...)`.",
-        "line": 440,
+        "line": 438,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun emit_artifact( path: string, contents: string, borrow map: GenSourceMap, publish: bool = false ): void",
         "description": "Emits a non-Dream file with source mappings under this generator's directory.",
-        "line": 449,
+        "line": 447,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun emit_artifact(path: string, contents: byte[], publish: bool = false): void",
         "description": "Emits a binary file, such as packed GPU code, under this generator's directory. Binary artifacts have no source map; embed them with `emit_asset` or pass them to `run_tool` as inputs like text artifacts. With `publish`, the file is also copied beside the build output.",
-        "line": 468,
+        "line": 466,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error_in_artifact(path: string, line: int, column: int, message: string): void",
         "description": "Reports an artifact location through its source map to the originating Dream node.",
-        "line": 480,
+        "line": 478,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun emit_extend(borrow decl: GenDecl, body: string): void",
         "description": "Extensions keep their declaring module, including its internal visibility and name scope.",
-        "line": 492,
+        "line": 490,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error_at(borrow target: string, message: string): void",
         "description": "An error at the node with identity `target` (any model node's `id`), or at the generator itself for an empty `target`.",
-        "line": 518,
+        "line": 516,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun warning_at(borrow target: string, message: string): void",
         "description": "A warning at the node with identity `target` (any model node's `id`), or at the generator itself for an empty `target`.",
-        "line": 524,
+        "line": 522,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(message: string): void",
         "description": "Reports an error at the generator itself; generation fails after the generator exits.",
-        "line": 529,
+        "line": 527,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(borrow block: GenSyntaxBlock, message: string): void",
         "description": "Reports an error at the syntax block's site; generation fails after the generator exits.",
-        "line": 534,
+        "line": 532,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(borrow decl: GenDecl, message: string): void",
         "description": "Reports an error at the declaration; generation fails after the generator exits.",
-        "line": 539,
+        "line": 537,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(borrow field: GenField, message: string): void",
         "description": "Reports an error at the field; generation fails after the generator exits.",
-        "line": 544,
+        "line": 542,
         "page": "reference/api/codegen-gen-context-2.md"
       },
       {
         "signature": "public fun error(borrow call: GenCallSite, message: string): void",
         "description": "Reports an error at the call site; generation fails after the generator exits.",
-        "line": 549,
+        "line": 547,
         "page": "reference/api/codegen-gen-context-3.md"
       },
       {
         "signature": "public fun warning(borrow decl: GenDecl, message: string): void",
         "description": "Reports a warning at the declaration without failing generation.",
-        "line": 554,
+        "line": 552,
         "page": "reference/api/codegen-gen-context-3.md"
       },
       {
         "signature": "public fun has_errors(): bool",
         "description": "Whether this generator has reported any error so far.",
-        "line": 559,
+        "line": 557,
         "page": "reference/api/codegen-gen-context-3.md"
       },
       {
         "signature": "public fun log(message: string): void",
         "description": "A line shown with `dream -v` / `dream generate --explain`.",
-        "line": 564,
+        "line": 562,
         "page": "reference/api/codegen-gen-context-3.md"
       },
       {
         "signature": "public async fun finish(): int",
         "description": "Writes the generator result and returns its exit status.",
-        "line": 570,
+        "line": 568,
         "page": "reference/api/codegen-gen-context-3.md"
       }
     ]
@@ -8729,79 +8729,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/encoding.dream",
-    "package": "system.encoding",
-    "page": "reference/api/encoding.md",
-    "declarations": [
-      {
-        "signature": "public static class Encoding",
-        "description": "Hex and Base64 encode and decode helpers. Convert text with `string.to_utf8` and `string.from_utf8`.",
-        "line": 50,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun hex_encode(bytes: byte[]): string",
-        "description": "Encodes `bytes` as lowercase hexadecimal text.",
-        "line": 52,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun hex_decode(text: string): Result<byte[], ParseError>",
-        "description": "Decodes hexadecimal text into bytes; rejects odd length and non-hex digits.",
-        "line": 66,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun base64_encode(bytes: byte[]): string",
-        "description": "Encodes `bytes` as standard Base64 (with `=` padding).",
-        "line": 87,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun base64_decode(text: string): Result<byte[], ParseError>",
-        "description": "Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.",
-        "line": 125,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun base64url_encode(bytes: byte[]): string",
-        "description": "Encodes `bytes` as Base64url without padding.",
-        "line": 216,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun base64url_decode(text: string): Result<byte[], ParseError>",
-        "description": "Decodes Base64url text (`-`/`_`, padding optional).",
-        "line": 238,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun uri_encode_component(text: string): string",
-        "description": "Percent-encodes `text` as UTF-8 bytes (RFC 3986 unreserved set left as-is).",
-        "line": 283,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun uri_decode_component(text: string): Result<string, ParseError>",
-        "description": "Decodes percent escapes as strict UTF-8, preserving literal `+`. Malformed escapes or invalid UTF-8 return a parse error.",
-        "line": 310,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun form_encode_component(text: string): string",
-        "description": "Encodes a form component as UTF-8, using `+` for spaces and percent escapes except for ASCII letters, digits, `*`, `-`, `.`, and `_`.",
-        "line": 316,
-        "page": "reference/api/encoding.md"
-      },
-      {
-        "signature": "public static fun form_decode_component(text: string): Result<string, ParseError>",
-        "description": "Decodes a form component, interpreting `+` as space and validating escaped UTF-8. Malformed escapes or invalid UTF-8 return a parse error.",
-        "line": 322,
-        "page": "reference/api/encoding.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/ffi.dream",
     "package": "system",
     "page": "reference/api/ffi.md",
@@ -12527,7 +12454,7 @@
       {
         "signature": "public fun gpu_shaders(ctx: GenContext): void",
         "description": "Compiles the program's GPU shaders ahead of time. Phase 0 checks every shader against the shader rules, translates each module's shaders to a readable Slang file (published next to the build output) and asks the pinned `slangc` for every `@gpu_targets` target. Phase 1 maps Slang errors back to Dream code, embeds one shader bundle per module and emits the module's `GpuShaders` class.",
-        "line": 30,
+        "line": 29,
         "page": "reference/api/gpu-shaders-gpu-shaders.md"
       }
     ]

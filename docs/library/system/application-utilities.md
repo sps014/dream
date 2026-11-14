@@ -203,7 +203,7 @@ setting, and `message()` combines them with the reason.
 Save this as `convert.dream`. It downloads CSV into a temporary file, adds a UUID column, and replaces the destination only after the write succeeds.
 
 ```dream
-import system.encoding;
+import encoding;
 import system;
 import cli;
 import config;

@@ -1,4 +1,4 @@
-import system.encoding;
+import encoding;
 import system.testing;
 
 @test
@@ -20,4 +20,8 @@ fun encoding_hex(): void {
     Assert.eq(Encoding.hex_encode(bytes), "6869");
     Assert.eq(string.from_utf8(Encoding.hex_decode("6869").unwrap()), "hi");
     Assert.eq(Encoding.hex_decode("xyz").unwrap_err().code(), "EPARSE");
+    Assert.eq(Encoding.base64_encode(bytes), "aGk=");
+    Assert.eq(string.from_utf8(Encoding.base64_decode("aGk=").unwrap()), "hi");
+    Assert.eq(Encoding.base64url_encode(bytes), "aGk");
+    Assert.eq(string.from_utf8(Encoding.base64url_decode("aGk").unwrap()), "hi");
 }

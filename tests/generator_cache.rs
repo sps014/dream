@@ -222,7 +222,7 @@ fn program_cache_matches_a_generation_that_skips_the_cache() {
 }
 
 const ROUTE_PROGRAM: &str = r#"import system;
-import system.encoding;
+import encoding;
 import system.webapi;
 
 @router("")
@@ -246,6 +246,18 @@ fn program_cache_hit_keeps_access_to_private_referenced_functions() {
         return;
     }
     let dir = project("access", ROUTE_PROGRAM);
+    std::fs::write(
+        dir.join("dream.toml"),
+        "[package]\nname = \"access\"\ntype = \"bin\"\nentry = \"main.dream\"\n",
+    )
+    .unwrap();
+    let packages = dir.join("dream_packages");
+    std::fs::create_dir_all(&packages).unwrap();
+    std::os::unix::fs::symlink(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/encoding"),
+        packages.join("encoding"),
+    )
+    .unwrap();
     let (_, first_ir) = compile(&dir);
     let (hit_log, hit_ir) = compile(&dir);
     assert!(has(&hit_log, "gen program: cache hit"), "{hit_log:?}");

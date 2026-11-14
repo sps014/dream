@@ -2,7 +2,6 @@
 title: Encoding
 summary: "Convert between bytes, hexadecimal, and Base64."
 icon: material/swap-vertical
-api: reference/api/system-encoding.md
 ---
 
 # Encoding
@@ -10,11 +9,11 @@ api: reference/api/system-encoding.md
 
 Encoding converts bytes to hexadecimal and Base64. Decoding returns a Result so you can handle invalid input. Convert text with `to_utf8` and `string.from_utf8`, which are always available; invalid UTF-8 becomes U+FFFD.
 
-**Import:** `import system.encoding;`
+**Import:** `import encoding;`
 
 ```dream
 import system;
-import system.encoding;
+import encoding;
 
 fun main() {
     let bytes = "hi".to_utf8();

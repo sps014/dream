@@ -6,7 +6,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.webapi",
         "system.crypto",
         "system.json",
-        "system.encoding",
         "system.text",
         "system",
         "system.collections",
@@ -52,6 +51,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/webapi/auth/jwt_options.dream",
             include_str!("../system/webapi/auth/jwt_options.dream"),
+        ),
+        (
+            "<std>/system/webapi/auth/token_codec.dream",
+            include_str!("../system/webapi/auth/token_codec.dream"),
         ),
         (
             "<std>/system/webapi/auth/hs256_jwt.dream",

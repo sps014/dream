@@ -7,7 +7,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.primitives",
         "system.collections",
         "system.text",
-        "system.encoding",
         "system.io",
         "system.json",
     ],
@@ -96,6 +95,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/http/url.dream",
             include_str!("../system/http/url.dream"),
+        ),
+        (
+            "<std>/system/http/form_component.dream",
+            include_str!("../system/http/form_component.dream"),
         ),
         (
             "<std>/system/http/url_query.dream",

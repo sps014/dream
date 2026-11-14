@@ -145,7 +145,7 @@ check help and version before starting the program's work.
 
 ```dream
 import system.io;
-import system.encoding;
+import encoding;
 import system;
 import cli;
 

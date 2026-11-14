@@ -67,7 +67,7 @@ decoded, and repeated keys stay distinct.
 
 Existing query text stays until you change the query. After a change, spaces become `+`, a literal `+` becomes `%2b`, and an empty value keeps `=`.
 
-`system.encoding` treats `+` differently from query form encoding. A bad percent escape stays as written, and invalid UTF-8 in a decoded value becomes U+FFFD instead of failing the parse.
+`import encoding` treats `+` differently from query form encoding. A bad percent escape stays as written, and invalid UTF-8 in a decoded value becomes U+FFFD instead of failing the parse.
 
 Opaque paths preserve spaces inside the path. A final path space before a query
 or fragment is serialized as `%20`.

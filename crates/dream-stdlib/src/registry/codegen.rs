@@ -9,7 +9,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system",
         "system.io",
         "system.collections",
-        "system.encoding",
     ],
     core_language: true,
     web_assets: None,
@@ -212,6 +211,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/codegen/gen_snapshot.dream",
             include_str!("../system/codegen/gen_snapshot.dream"),
+        ),
+        (
+            "<std>/system/codegen/artifact_base64.dream",
+            include_str!("../system/codegen/artifact_base64.dream"),
         ),
         (
             "<std>/system/codegen/gen_context.dream",

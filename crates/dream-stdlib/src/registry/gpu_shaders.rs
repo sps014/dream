@@ -69,7 +69,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.text",
         "system",
         "system.json",
-        "system.encoding",
         "system.crypto",
         "system.codegen",
         "system.gpu",
@@ -95,6 +94,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/gpu/shaders/builtins.dream",
             include_str!("../system/gpu/shaders/builtins.dream"),
+        ),
+        (
+            "<std>/system/gpu/shaders/shader_codec.dream",
+            include_str!("../system/gpu/shaders/shader_codec.dream"),
         ),
         (
             "<std>/system/gpu/shaders/bundle.dream",

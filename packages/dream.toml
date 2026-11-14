@@ -1,2 +1,2 @@
 [workspace]
-members = ["unicode", "random", "logging", "csv", "compress", "cli", "config", "uuid", "audio", "regex", "datetime"]
+members = ["unicode", "random", "logging", "csv", "compress", "cli", "config", "uuid", "audio", "regex", "datetime", "encoding"]

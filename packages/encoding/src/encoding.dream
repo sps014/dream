@@ -1,4 +1,6 @@
-module system.encoding;
+module encoding;
+
+import system.text;
 
 // Base64 / hex codecs over `byte[]` and `string`. UTF-8 conversion is `string.to_utf8` and
 // `string.from_utf8`.
@@ -51,15 +53,15 @@ public static class Encoding {
     /// Encodes `bytes` as lowercase hexadecimal text.
     public static fun hex_encode(bytes: byte[]): string {
         let n = bytes.length;
-        let out = string.alloc(n * 2);
+        let out = StringBuilder(n * 2);
         let i = 0;
         while i < n {
             let b = (int)bytes[i];
-            string.set(out, i * 2, hex_digit(b / 16));
-            string.set(out, i * 2 + 1, hex_digit(b % 16));
+            out.append_char(hex_digit(b / 16));
+            out.append_char(hex_digit(b % 16));
             i = i + 1;
         }
-        return out;
+        return out.build();
     }
 
     /// Decodes hexadecimal text into bytes; rejects odd length and non-hex digits.
@@ -68,11 +70,11 @@ public static class Encoding {
         if (n % 2) != 0 {
             return Result.Err(ParseError.invalid("hex string length must be even"));
         }
-        let out = Buffer.alloc<byte>(n / 2);
+        let out = Array.alloc<byte>(n / 2);
         let i = 0;
         while i < n {
-            let hi = hex_value(text.char_at(i));
-            let lo = hex_value(text.char_at(i + 1));
+            let hi = hex_value(text[i]);
+            let lo = hex_value(text[i + 1]);
             if (hi < 0) || (lo < 0) {
                 return Result.Err(ParseError.invalid("invalid hex digit"));
             }
@@ -87,10 +89,8 @@ public static class Encoding {
     public static fun base64_encode(bytes: byte[]): string {
         let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let n = bytes.length;
-        let out_len = ((n + 2) / 3) * 4;
-        let out = string.alloc(out_len);
+        let out = StringBuilder(((n + 2) / 3) * 4);
         let i = 0;
-        let oi = 0;
         while i < n {
             let b0 = (int)bytes[i];
             let b1 = 0;
@@ -103,22 +103,21 @@ public static class Encoding {
                 b2 = (int)bytes[i + 2];
             }
             let triple = (b0 * 65536) + (b1 * 256) + b2;
-            string.set(out, oi, alphabet.char_at((triple / 262144) % 64));
-            string.set(out, oi + 1, alphabet.char_at((triple / 4096) % 64));
+            out.append_char(alphabet[(triple / 262144) % 64]);
+            out.append_char(alphabet[(triple / 4096) % 64]);
             if remain > 1 {
-                string.set(out, oi + 2, alphabet.char_at((triple / 64) % 64));
+                out.append_char(alphabet[(triple / 64) % 64]);
             } else {
-                string.set(out, oi + 2, '=');
+                out.append_char('=');
             }
             if remain > 2 {
-                string.set(out, oi + 3, alphabet.char_at(triple % 64));
+                out.append_char(alphabet[triple % 64]);
             } else {
-                string.set(out, oi + 3, '=');
+                out.append_char('=');
             }
-            oi = oi + 4;
             i = i + 3;
         }
-        return out;
+        return out.build();
     }
 
     /// Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.
@@ -127,7 +126,7 @@ public static class Encoding {
         let cleaned_len = 0;
         let i = 0;
         while i < n {
-            let c = text.char_at(i);
+            let c = text[i];
             if c != '=' {
                 if (c != ' ') && (c != '\n') && (c != '\r') && (c != '\t') {
                     cleaned_len = cleaned_len + 1;
@@ -142,23 +141,21 @@ public static class Encoding {
         while (padded_len % 4) != 0 {
             padded_len = padded_len + 1;
         }
-        let cleaned = string.alloc(padded_len);
-        let ci = 0;
+        let cleaned_builder = StringBuilder(padded_len);
         i = 0;
         while i < n {
-            let c = text.char_at(i);
+            let c = text[i];
             if c != '=' {
                 if (c != ' ') && (c != '\n') && (c != '\r') && (c != '\t') {
-                    string.set(cleaned, ci, c);
-                    ci = ci + 1;
+                    cleaned_builder.append_char(c);
                 }
             }
             i = i + 1;
         }
-        while ci < padded_len {
-            string.set(cleaned, ci, 'A');
-            ci = ci + 1;
+        while cleaned_builder.length < padded_len {
+            cleaned_builder.append_char('A');
         }
+        let cleaned = cleaned_builder.build();
         let pad = 0;
         if text.ends_with("==") {
             pad = 2;
@@ -169,14 +166,14 @@ public static class Encoding {
         if out_len < 0 {
             out_len = 0;
         }
-        let out = Buffer.alloc<byte>(out_len);
+        let out = Array.alloc<byte>(out_len);
         let oi = 0;
         i = 0;
         while i < padded_len {
-            let c0 = b64_value(cleaned.char_at(i));
-            let c1 = b64_value(cleaned.char_at(i + 1));
-            let c2 = b64_value(cleaned.char_at(i + 2));
-            let c3 = b64_value(cleaned.char_at(i + 3));
+            let c0 = b64_value(cleaned[i]);
+            let c1 = b64_value(cleaned[i + 1]);
+            let c2 = b64_value(cleaned[i + 2]);
+            let c3 = b64_value(cleaned[i + 3]);
             if (c0 < 0) || (c1 < 0) || (c2 < 0) || (c3 < 0) {
                 return Result.Err(ParseError.invalid("invalid base64 character"));
             }
@@ -216,22 +213,22 @@ public static class Encoding {
     public static fun base64url_encode(bytes: byte[]): string {
         let padded = Encoding.base64_encode(bytes);
         let n = padded.length;
-        while (n > 0) && (padded.char_at(n - 1) == '=') {
+        while (n > 0) && (padded[n - 1] == '=') {
             n = n - 1;
         }
-        let out = string.alloc(n);
+        let out = StringBuilder(n);
         let i = 0;
         while i < n {
-            let c = padded.char_at(i);
+            let c = padded[i];
             if c == '+' {
                 c = '-';
             } else if (c == '/') {
                 c = '_';
             }
-            string.set(out, i, c);
+            out.append_char(c);
             i = i + 1;
         }
-        return out;
+        return out.build();
     }
 
     /// Decodes Base64url text (`-`/`_`, padding optional).
@@ -247,23 +244,23 @@ public static class Encoding {
         } else if (rem == 3) {
             pad = 1;
         }
-        let std = string.alloc(n + pad);
+        let std = StringBuilder(n + pad);
         let i = 0;
         while i < n {
-            let c = text.char_at(i);
+            let c = text[i];
             if c == '-' {
                 c = '+';
             } else if (c == '_') {
                 c = '/';
             }
-            string.set(std, i, c);
+            std.append_char(c);
             i = i + 1;
         }
         while i < n + pad {
-            string.set(std, i, '=');
+            std.append_char('=');
             i = i + 1;
         }
-        return Encoding.base64_decode(std);
+        return Encoding.base64_decode(std.build());
     }
 
     static fun uri_unreserved(c: char): bool {
@@ -325,7 +322,7 @@ public static class Encoding {
 
     static fun decode_percent(text: string, form: bool): Result<string, ParseError> {
         let bytes = text.to_utf8();
-        let out = Buffer.alloc<byte>(bytes.length);
+        let out = Array.alloc<byte>(bytes.length);
         let count = 0;
         let i = 0;
         while i < bytes.length {
@@ -350,7 +347,7 @@ public static class Encoding {
             }
             count = count + 1;
         }
-        let exact = Buffer.alloc<byte>(count);
+        let exact = Array.alloc<byte>(count);
         for (let j = 0; j < count; j = j + 1) {
             exact[j] = out[j];
         }

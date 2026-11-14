@@ -6,23 +6,44 @@ use std::path::{Path, PathBuf};
 use crate::driver::project_manifest::{GeneratorEntry, ProjectManifest};
 use dream_abi::project::find_project_root;
 
-/// `[[generators]]` entries from the nearest `dream.toml`, keyed by the canonical generator path.
-pub fn load_manifest_generators(entry_file: &str) -> Vec<(String, GeneratorEntry)> {
-    let Some(dir) = find_project_root(Path::new(entry_file)) else {
-        return Vec::new();
+/// `[[generators]]` entries from the entry project's `dream.toml` and from every package that owns
+/// a loaded source file, keyed by the canonical generator path. A dependency's generators register
+/// only once the program imports that dependency, like the generator packages of std packages.
+pub fn load_manifest_generators<'f>(
+    entry_file: &str,
+    loaded_files: impl IntoIterator<Item = &'f String>,
+) -> Vec<(String, GeneratorEntry)> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    let mut add_root = |root: PathBuf| {
+        let root = dunce::canonicalize(&root).unwrap_or(root);
+        if !roots.contains(&root) {
+            roots.push(root);
+        }
     };
-    let Ok(manifest) = ProjectManifest::load(&dir) else {
-        return Vec::new();
-    };
-    manifest
-        .generators
-        .into_iter()
-        .map(|entry| {
+    if let Some(dir) = find_project_root(Path::new(entry_file)) {
+        add_root(dir);
+    }
+    for file in loaded_files {
+        let path = Path::new(file);
+        if path.is_absolute()
+            && path.is_file()
+            && let Some(dir) = path.parent().and_then(find_project_root)
+        {
+            add_root(dir);
+        }
+    }
+    let mut out = Vec::new();
+    for dir in roots {
+        let Ok(manifest) = ProjectManifest::load(&dir) else {
+            continue;
+        };
+        out.extend(manifest.generators.into_iter().map(|entry| {
             let resolved = dir.join(&entry.path);
             let path = dunce::canonicalize(&resolved).unwrap_or(resolved);
             (path.to_string_lossy().into_owned(), entry)
-        })
-        .collect()
+        }));
+    }
+    out
 }
 
 /// `[package].entry` from `dream.toml`, resolved against the manifest directory.
@@ -97,9 +118,32 @@ mod tests {
         )
         .unwrap();
         let entry = root.join("src/main.dream");
-        let gens = load_manifest_generators(entry.to_str().unwrap());
+        let gens = load_manifest_generators(entry.to_str().unwrap(), &[]);
         assert_eq!(gens.len(), 1);
         assert!(gens[0].0.ends_with("gen.dream"), "{:?}", gens);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn loaded_dependency_packages_contribute_generators() {
+        let root = temp_root("dep-gens-test");
+        let dep = root.join("dream_packages/derive_kit");
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::create_dir_all(dep.join("src")).unwrap();
+        std::fs::write(root.join("dream.toml"), "[package]\nname = \"app\"\n").unwrap();
+        std::fs::write(
+            dep.join("dream.toml"),
+            "[package]\nname = \"derive_kit\"\n\n[[generators]]\npath = \"gen/derive.dream\"\n",
+        )
+        .unwrap();
+        let dep_file = dep.join("src/derive_kit.dream");
+        std::fs::write(&dep_file, "").unwrap();
+        let entry = root.join("src/main.dream");
+        assert!(load_manifest_generators(entry.to_str().unwrap(), &[]).is_empty());
+        let loaded = vec![dep_file.to_string_lossy().into_owned()];
+        let gens = load_manifest_generators(entry.to_str().unwrap(), &loaded);
+        assert_eq!(gens.len(), 1);
+        assert!(gens[0].0.ends_with("gen/derive.dream"), "{:?}", gens);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

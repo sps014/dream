@@ -1,0 +1,7 @@
+[package]
+name = "native_demo"
+version = "0.1.0"
+type = "lib"
+
+[[generators]]
+path = "gen/derive.dream"

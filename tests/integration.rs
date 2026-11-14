@@ -41,6 +41,7 @@ mod native_dead_strip;
 mod native_interop;
 mod native_pointer_emission;
 mod noinline_attribute_tests;
+mod package_dependencies;
 mod perf_symbols;
 mod publication_emission;
 mod raw_memory_emission;

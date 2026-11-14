@@ -11,6 +11,54 @@ fn root(entry: &str) -> PathBuf {
     dream_abi::project::find_project_root(parent).unwrap_or_else(|| parent.to_path_buf())
 }
 
+/// Adds the `[npm]` tables of dependency packages whose files contain a `jsimport`, so a package
+/// can depend on an npm module without every program repeating it. One npm package must resolve
+/// to one version across the program.
+fn merge_dependency_npm(
+    root: &Path,
+    imports: &[(String, dream_syntax::nodes::ImportNode)],
+    npm: &mut BTreeMap<String, String>,
+    acc: &mut ProgramAccumulator<'_>,
+) -> Result<(), String> {
+    let mut owners: BTreeMap<String, PathBuf> = npm
+        .keys()
+        .map(|name| (name.clone(), root.join("dream.toml")))
+        .collect();
+    let mut seen = std::collections::BTreeSet::new();
+    for (file, _) in imports {
+        let Some(package) = Path::new(file)
+            .parent()
+            .and_then(dream_abi::project::find_project_root)
+        else {
+            continue;
+        };
+        let package = dunce::canonicalize(&package).unwrap_or(package);
+        if dunce::canonicalize(root).is_ok_and(|r| r == package) || !seen.insert(package.clone()) {
+            continue;
+        }
+        let manifest_path = package.join("dream.toml");
+        acc.resolution_inputs.insert(manifest_path.clone());
+        let manifest = crate::driver::project_manifest::ProjectManifest::load(&package)?;
+        for (name, version) in manifest.npm {
+            match npm.get(&name) {
+                Some(existing) if existing != &version => {
+                    return Err(format!(
+                        "npm package '{name}' is required as '{existing}' by {} and as '{version}' by {}",
+                        owners[&name].display(),
+                        manifest_path.display()
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    owners.insert(name.clone(), manifest_path.clone());
+                    npm.insert(name, version);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Expands JS imports before prelude/attribute preparation, shared by builds and editor analysis.
 pub fn prepare<'a>(
     arena: &'a Bump,
@@ -39,7 +87,7 @@ pub fn prepare<'a>(
     let root = std::path::absolute(root(entry))?;
     acc.js_project_root = Some(root.clone());
     let manifest = root.join("dream.toml");
-    let npm = if manifest.is_file() {
+    let mut npm = if manifest.is_file() {
         crate::driver::project_manifest::ProjectManifest::load(&root)
             .map_err(Error::other)?
             .npm
@@ -48,6 +96,10 @@ pub fn prepare<'a>(
     };
     acc.resolution_inputs.insert(manifest);
     acc.resolution_inputs.insert(root.join("dream.npm.lock"));
+    if let Err(message) = merge_dependency_npm(&root, &imports, &mut npm, acc) {
+        diagnostics.report_error(message, None);
+        return Ok(());
+    }
     let mut requested = Vec::new();
     for (file, import) in &imports {
         let specifier: String = match serde_json::from_str(&import.module_name.text) {

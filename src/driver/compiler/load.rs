@@ -37,6 +37,7 @@ impl Compiler {
     ) -> Result<FrontEnd<'a>, CompileError> {
         let mut acc = ProgramAccumulator {
             cfg: self.target.spec().cfg_symbols(!self.profile.is_debug()),
+            package_base: self.package_base.clone(),
             ..ProgramAccumulator::default()
         };
         let source_phase = tracing::info_span!("compile_phase", phase = "source_load").entered();

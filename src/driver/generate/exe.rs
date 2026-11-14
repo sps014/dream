@@ -122,6 +122,7 @@ pub struct ExePlan {
     pub dir: PathBuf,
     pub entry: String,
     pub harness: String,
+    pub package_base: Option<PathBuf>,
     pub stage: GeneratorStage,
     pub generators: Vec<String>,
     /// `(label, value or digest)` pairs the key hashes, in hash order; `--explain` diffs them
@@ -137,11 +138,12 @@ pub struct GenExe {
 
 /// User sources the executable is built from (the generator file and its user imports); std
 /// sources are part of the compiler identity.
-fn user_sources(entry: &str, harness: &str) -> BTreeMap<String, String> {
+fn user_sources(entry: &str, harness: &str, package_base: &Path) -> BTreeMap<String, String> {
     let arena = bumpalo::Bump::new();
     // Generator executables are host release builds.
     let mut acc = crate::driver::source_loader::ProgramAccumulator {
         cfg: dream_abi::target::TargetSpec::host().cfg_symbols(true),
+        package_base: Some(package_base.to_path_buf()),
         ..Default::default()
     };
     let mut scratch = dream_diagnostics::DiagnosticBag::new(None);
@@ -174,8 +176,10 @@ pub fn plan(
         ("entry".to_string(), entry.clone()),
         ("harness".to_string(), digest(&harness)),
     ];
-    if !group.is_std() {
-        for (path, text) in user_sources(&entry, &harness) {
+    // A generator shipped by a dependency imports packages installed for this program.
+    let package_base = (!group.is_std()).then(|| paths.root.clone());
+    if let Some(base) = &package_base {
+        for (path, text) in user_sources(&entry, &harness, base) {
             components.push((format!("source {path}"), digest(&text)));
         }
     }
@@ -192,6 +196,7 @@ pub fn plan(
         key,
         entry,
         harness,
+        package_base,
         stage,
         generators: group.gens.iter().map(|g| g.id.clone()).collect(),
         components,
@@ -302,7 +307,7 @@ fn build_into(config: &Arc<ToolchainConfig>, plan: &ExePlan, dir: &Path) -> Resu
 
     let ll = dir.join("gen.ll");
     let ll_str = ll.to_string_lossy().into_owned();
-    let compiler =
+    let mut compiler =
         Compiler::new_with_toolchain_config(dream_mir::backend::Target::native(), config.clone())
             .with_generator_stage(plan.stage)
             .with_virtual_entry(plan.harness.clone())
@@ -310,6 +315,9 @@ fn build_into(config: &Arc<ToolchainConfig>, plan: &ExePlan, dir: &Path) -> Resu
             .with_release(true)
             .with_debug_info(true)
             .with_optimize(Some(OptLevel::O0));
+    if let Some(base) = &plan.package_base {
+        compiler = compiler.with_package_base(base.clone());
+    }
     compiler
         .compile(&plan.entry, &ll_str)
         .map_err(|e| match e.diagnostic_text() {

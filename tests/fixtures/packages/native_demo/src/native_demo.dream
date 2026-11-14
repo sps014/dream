@@ -1,0 +1,35 @@
+module native_demo;
+
+@cfg(Target.Wasm)
+jsimport "../js/demo.mjs" as demo_js;
+
+import system.interop;
+
+/// Marks a class that receives a generated `demo_stamp()` method.
+@attribute(AttributeTarget.Class)
+public struct DemoStampAttribute {}
+
+@cfg(Target.Native)
+@c
+extern fun demo_add(a: int, b: int): int;
+
+@cfg(Target.Native)
+@c
+extern fun demo_apply(callback: fun(int): int, value: int): int;
+
+/// Adds two numbers in the package's C code, or in its JavaScript module on WebAssembly.
+@cfg(Target.Native)
+public fun demo_sum(a: int, b: int): int {
+    return demo_add(a, b);
+}
+
+@cfg(Target.Wasm)
+public fun demo_sum(a: int, b: int): int {
+    return (int)demo_js.add(a, b);
+}
+
+/// Calls `callback` from C with `value`, then adds one to its result.
+@cfg(Target.Native)
+public fun demo_apply_plus_one(callback: fun(int): int, value: int): int {
+    return demo_apply(callback, value);
+}

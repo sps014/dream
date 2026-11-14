@@ -61,7 +61,7 @@ fn gather_unresolved(
     diagnostics: &mut DiagnosticBag,
 ) -> PassInputs {
     let manifest = if req.stage == GeneratorStage::All {
-        super::manifest::load_manifest_generators(req.entry_file)
+        super::manifest::load_manifest_generators(req.entry_file, acc.file_contents.keys())
     } else {
         Vec::new()
     };
@@ -74,6 +74,7 @@ fn gather_unresolved(
         if let Ok(source) = std::fs::read_to_string(file) {
             let mut auxiliary = ProgramAccumulator {
                 cfg: acc.cfg,
+                package_base: acc.package_base.clone(),
                 ..ProgramAccumulator::default()
             };
             let mut scratch = DiagnosticBag::new(Some(file.clone()));

@@ -1,0 +1,15 @@
+module native_demo.derive;
+
+import system.codegen;
+import native_demo;
+
+/// Adds `demo_stamp(): int` to every class marked `@demo_stamp`.
+@generator
+@on_attribute(DemoStampAttribute)
+internal fun demo_stamp(ctx: GenContext): void {
+    for (let d in ctx.types_with<DemoStampAttribute>()) {
+        if d.has<DemoStampAttribute>() {
+            ctx.emit_extend(d, "public fun demo_stamp(): int {\n    return 7;\n}\n");
+        }
+    }
+}

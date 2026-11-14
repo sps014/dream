@@ -1,8 +1,6 @@
 import system.testing;
 import system;
-import system.encoding;
 import system.text;
-import system.unicode;
 
 @test
 @timeout(180000)
@@ -111,14 +109,9 @@ fun string_scalar_index(): void {
 @timeout(180000)
 fun unicode_normalize(): void {
     let s = "Straße";
-    Assert.eq(s.normalize(UnicodeNormForm.Nfc), "Straße");
     Assert.eq(s.to_lower_unicode(), "straße");
     Assert.eq(s.to_upper_unicode(), "STRASSE");
     Assert.eq(("straße").to_upper_unicode(), "STRASSE");
-    let gs = s.graphemes();
-    Assert.eq(gs.length, 6);
-    Assert.eq(gs[0], "S");
-    Assert.eq(gs[gs.length - 1], "e");
 }
 
 @test

@@ -1,0 +1,23 @@
+import system.testing;
+import system.json;
+
+@json
+enum c279_Box {
+    Full(value: int),
+    Empty,
+}
+
+@json
+enum c279_Pair {
+    Pos(int),
+    Named(x: int),
+}
+
+@test
+@timeout(180000)
+fun union_named_json(): void {
+    let a = c279_Box.Full(7);
+    Assert.eq(Json.serialize(a), "{\"type\":\"Full\",\"value\":7}");
+    Assert.eq(Json.serialize(c279_Pair.Pos(3)), "{\"type\":\"Pos\",\"_0\":3}");
+    Assert.eq(Json.serialize(c279_Pair.Named(4)), "{\"type\":\"Named\",\"x\":4}");
+}

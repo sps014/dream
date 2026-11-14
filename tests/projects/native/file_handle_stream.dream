@@ -1,7 +1,6 @@
 import system.testing;
 import system;
 import system.io;
-import system.encoding;
 
 // Exercises FileHandle streaming over a live handle (no whole-file preload).
 @test

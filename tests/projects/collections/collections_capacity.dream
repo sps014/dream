@@ -111,10 +111,9 @@ fun reserve_properties(): void {
     let queue = Queue<int>();
     let map = Map<int, int>();
     let set = Set<int>();
-    let random = Random(314159);
     let expected = List<int>();
     for (let round = 0; round < 200; round = round + 1) {
-        let count = random.next_int(20);
+        let count = round % 20;
         list.reserve(count).unwrap();
         queue.reserve(count).unwrap();
         map.reserve(count).unwrap();

@@ -131,7 +131,7 @@ libraries only after the last sibling manifest releases them.
 
 ## Focused checks
 
-`tests/projects/core/audio_analysis.dream` covers PCM ownership and bounds,
+`tests/projects/audio/audio_analysis.dream` covers PCM ownership and bounds,
 content detection, WebM/Opus tone analysis, FFT normalization, control errors,
 closure, ordered event overflow, a large decode that must leave a timer turn
 free, and a cancelled decode. `optimized_wasm_audio_decoder_exports_worker_entry_points`

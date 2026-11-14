@@ -55,5 +55,5 @@ public variants: List<GenVariant>
 Decodes an instantiated type view exported by semantic analysis.
 
 ```dream
-public constructor(borrow v: JsonValue)
+public constructor(borrow v: GenWire)
 ```

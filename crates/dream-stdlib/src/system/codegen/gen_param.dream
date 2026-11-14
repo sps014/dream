@@ -2,7 +2,6 @@ module system.codegen;
 
 import system;
 import system.collections;
-import system.json;
 
 /// A function parameter and its type and attributes.
 public class GenParam {

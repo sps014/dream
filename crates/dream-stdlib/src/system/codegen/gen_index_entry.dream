@@ -2,7 +2,6 @@ module system.codegen;
 
 import system;
 import system.collections;
-import system.json;
 
 /// Every type in the program (user and stdlib), names and kinds only.
 public class GenIndexEntry {

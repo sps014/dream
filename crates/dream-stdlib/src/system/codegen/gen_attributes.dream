@@ -2,7 +2,6 @@ module system.codegen;
 
 import system;
 import system.collections;
-import system.json;
 
 // Typed attribute access. `A` is an `@attribute` struct; the compiler gives every such type the
 // statics these forward to.

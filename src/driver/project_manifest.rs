@@ -84,7 +84,7 @@ pub struct GeneratorEntry {
     pub path: String,
     /// Extra input files (relative to the manifest directory) passed in the generator snapshot.
     pub additional_files: Vec<String>,
-    /// `options = { key = "value" }`, read in Dream through `ctx.options<T>()`.
+    /// `options = { key = "value" }`, read in Dream through `ctx.option_or`.
     pub options: std::collections::BTreeMap<String, serde_json::Value>,
     /// Per-run limit in seconds; `None` uses the compiler default.
     pub timeout_secs: Option<u64>,

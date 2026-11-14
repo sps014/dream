@@ -9,7 +9,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system",
         "system.io",
         "system.collections",
-        "system.json",
         "system.encoding",
     ],
     core_language: true,
@@ -18,6 +17,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     guest_exports: &[],
     generators: &[],
     files: &[
+        (
+            "<std>/system/codegen/gen_wire.dream",
+            include_str!("../system/codegen/gen_wire.dream"),
+        ),
         (
             "<std>/system/codegen/gen_symbol_kind.dream",
             include_str!("../system/codegen/gen_symbol_kind.dream"),

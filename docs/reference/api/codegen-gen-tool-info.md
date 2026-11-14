@@ -44,8 +44,8 @@ public available: bool
 
 ## `constructor`
 
-Reads an available tool description from its JSON representation.
+Reads an available tool description from its wire value.
 
 ```dream
-public constructor(borrow v: JsonValue)
+public constructor(borrow v: GenWire)
 ```

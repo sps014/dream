@@ -31,5 +31,5 @@ public value: string
 Decodes an exact compile-time scalar value; absence means no safe constant was inferred.
 
 ```dream
-public constructor(borrow v: JsonValue)
+public constructor(borrow v: GenWire)
 ```

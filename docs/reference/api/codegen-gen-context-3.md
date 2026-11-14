@@ -4,14 +4,6 @@
 
 ## `error`
 
-Reports an error at the field; generation fails after the generator exits.
-
-```dream
-public fun error(borrow field: GenField, message: string): void
-```
-
-## `error`
-
 Reports an error at the call site; generation fails after the generator exits.
 
 ```dream

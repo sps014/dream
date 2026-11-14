@@ -2,7 +2,6 @@ module system.codegen;
 
 import system;
 import system.collections;
-import system.json;
 
 /// Result of a tool requested during generation, including output and files.
 public class GenToolResult {
@@ -22,8 +21,8 @@ public class GenToolResult {
     public files: List<GenToolFile>;
 
     // Decodes compiler-collected tool metadata from a snapshot.
-    /// Reads a tool result from its JSON representation.
-    public constructor(borrow v: JsonValue) {
+    /// Reads a tool result from its wire value.
+    public constructor(borrow v: GenWire) {
         this.id = gen_str(v, "id");
         this.exit = gen_int(v, "exit");
         this.stdout = gen_str(v, "stdout");

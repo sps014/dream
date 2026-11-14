@@ -1,14 +1,14 @@
-//! The JSON contract between the compiler and a generator executable: the per-generator
-//! [`Snapshot`] it reads (`--snapshot`) and the [`GenResult`] it writes (`--result`). Decoded on
-//! the Dream side by `system.codegen` (`gen_decode.dream` / `GenContext.finish`). Paths are
-//! project-relative and every collection is in source order, so the bytes are deterministic and
-//! relocatable (the incremental cache keys on them).
+//! The contract between the compiler and a generator executable: the per-generator
+//! [`Snapshot`] it reads (`--snapshot`) and the [`GenResult`] it writes (`--result`), encoded
+//! by [`super::wire`]. Decoded on the Dream side by `system.codegen` (`gen_decode.dream` /
+//! `GenContext.finish`). Paths are project-relative and every collection is in source order, so
+//! the bytes are deterministic and relocatable (the incremental cache keys on the same shape).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// The single protocol contract; compiler identity invalidates caches when its shape changes.
-pub const SNAPSHOT_VERSION: u32 = 2;
+pub const SNAPSHOT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Snapshot {
@@ -23,7 +23,7 @@ pub struct Snapshot {
     pub referenced_functions: Vec<Function>,
     pub tool_results: Vec<ToolResult>,
     pub tools: Vec<ToolInfo>,
-    /// `dream.toml` `[[generators]].options`, decoded in Dream by `ctx.options<T>()`.
+    /// `dream.toml` `[[generators]].options`, read in Dream by `ctx.option_or`.
     pub options: BTreeMap<String, serde_json::Value>,
     pub additional_files: Vec<AdditionalFile>,
     /// Every type declaration in the program (user and stdlib), names and kinds only.

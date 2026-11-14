@@ -95,7 +95,7 @@ public types: List<GenTypeRef>
 Decodes a `GenStmt` from its object in the generation snapshot.
 
 ```dream
-public constructor(borrow v: JsonValue)
+public constructor(borrow v: GenWire)
 ```
 
 ## `children`

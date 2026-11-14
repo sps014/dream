@@ -1,0 +1,381 @@
+module system.codegen;
+
+import system;
+import system.collections;
+
+// Tags shared with `src/driver/generate/wire.rs`. Objects keep the order keys were set.
+/// One value in the generator snapshot and result codec.
+public class GenWire {
+    internal kind: int;
+    internal text: string;
+    internal num: long;
+    internal flag: bool;
+    internal items: List<GenWire>;
+    internal keys: List<string>;
+
+    internal constructor(kind: int) {
+        this.kind = kind;
+        this.text = "";
+        this.num = 0L;
+        this.flag = false;
+        this.items = List<GenWire>();
+        this.keys = List<string>();
+    }
+
+    /// A null value.
+    public static fun null(): GenWire {
+        return GenWire(0);
+    }
+
+    /// An empty object.
+    public static fun dict(): GenWire {
+        return GenWire(6);
+    }
+
+    /// An empty array.
+    public static fun array(): GenWire {
+        return GenWire(5);
+    }
+
+    /// A string value.
+    public static fun from_string(text: string): GenWire {
+        let v = GenWire(4);
+        v.text = text;
+        return v;
+    }
+
+    /// An integer value.
+    public static fun from_int(n: int): GenWire {
+        let v = GenWire(2);
+        v.num = (long)n;
+        return v;
+    }
+
+    /// A boolean value.
+    public static fun from_bool(flag: bool): GenWire {
+        let v = GenWire(1);
+        v.flag = flag;
+        return v;
+    }
+
+    /// Whether this value is null.
+    public fun is_null(): bool {
+        return this.kind == 0;
+    }
+
+    /// This string, when the value is a string.
+    public fun as_string(): Option<string> {
+        if this.kind == 4 {
+            return Option.Some(this.text);
+        }
+        return Option.None;
+    }
+
+    /// This integer, when it is an integer that fits in `int`.
+    public fun as_int(): Option<int> {
+        if this.kind != 2 || this.num > 2147483647L || this.num < -2147483648L {
+            return Option.None;
+        }
+        return Option.Some((int)this.num);
+    }
+
+    /// This boolean, when the value is a boolean.
+    public fun as_bool(): Option<bool> {
+        if this.kind == 1 {
+            return Option.Some(this.flag);
+        }
+        return Option.None;
+    }
+
+    /// This array's elements, when the value is an array.
+    public fun as_array(): Option<List<GenWire>> {
+        if this.kind == 5 {
+            return Option.Some(this.items);
+        }
+        return Option.None;
+    }
+
+    /// The property named `key`, or `None` when this is not an object or `key` is absent.
+    public fun get(borrow key: string): Option<GenWire> {
+        if this.kind != 6 {
+            return Option.None;
+        }
+        let i = 0;
+        while i < this.keys.length {
+            if this.keys[i] == key {
+                return Option.Some(this.items[i]);
+            }
+            i = i + 1;
+        }
+        return Option.None;
+    }
+
+    /// The property named `key`. Absent keys are null.
+    public fun this[borrow key: string]: GenWire {
+        switch (this.get(key)) {
+            Some(v) => {
+                return v;
+            }
+            None => {
+                return GenWire.null();
+            }
+        }
+    }
+
+    /// Sets `key` on an object, appending it when it is new.
+    public fun this[key: string] = value: GenWire {
+        if this.kind != 6 {
+            return;
+        }
+        let i = 0;
+        while i < this.keys.length {
+            if this.keys[i] == key {
+                this.items[i] = value;
+                return;
+            }
+            i = i + 1;
+        }
+        this.keys.push(key);
+        this.items.push(value);
+    }
+
+    /// Appends `value` to an array.
+    public fun push(value: GenWire): void {
+        if this.kind == 5 {
+            this.items.push(value);
+        }
+    }
+
+    /// Text used when an option is not itself a string: decimals, `true`/`false`, and `null`.
+    public fun text(): string {
+        if this.kind == 4 || this.kind == 3 {
+            return this.text;
+        }
+        if this.kind == 2 {
+            return this.num.to_string();
+        }
+        if this.kind == 1 {
+            if this.flag {
+                return "true";
+            }
+            return "false";
+        }
+        if this.kind == 0 {
+            return "null";
+        }
+        return "";
+    }
+
+    /// Reads a `DGEN` payload.
+    public static fun decode(borrow bytes: byte[]): Result<GenWire, string> {
+        if bytes.length < 5
+            || bytes[0] != (byte)68
+            || bytes[1] != (byte)71
+            || bytes[2] != (byte)69
+            || bytes[3] != (byte)78 {
+            return Result.Err("generator value is not a DGEN payload");
+        }
+        if bytes[4] != (byte)1 {
+            return Result.Err("generator wire version does not match system.codegen");
+        }
+        let cursor = List<int>();
+        cursor.push(5);
+        let value = gen_wire_read(bytes, cursor)?;
+        if cursor[0] != bytes.length {
+            return Result.Err("trailing bytes after generator value");
+        }
+        return Result.Ok(value);
+    }
+
+    /// Writes this value as a `DGEN` payload.
+    public fun encode(): byte[] {
+        let out = List<byte>();
+        out.push((byte)68);
+        out.push((byte)71);
+        out.push((byte)69);
+        out.push((byte)78);
+        out.push((byte)1);
+        gen_wire_write(out, this);
+        let bytes = Buffer.alloc<byte>(out.length);
+        let i = 0;
+        while i < out.length {
+            bytes[i] = out[i];
+            i = i + 1;
+        }
+        return bytes;
+    }
+}
+
+fun gen_wire_read(borrow bytes: byte[], cursor: List<int>): Result<GenWire, string> {
+    if cursor[0] >= bytes.length {
+        return Result.Err("truncated generator value");
+    }
+    let tag = (int)bytes[cursor[0]];
+    cursor[0] = cursor[0] + 1;
+    if tag == 0 {
+        return Result.Ok(GenWire.null());
+    }
+    if tag == 1 {
+        if cursor[0] >= bytes.length {
+            return Result.Err("truncated generator value");
+        }
+        let flag = bytes[cursor[0]] != (byte)0;
+        cursor[0] = cursor[0] + 1;
+        return Result.Ok(GenWire.from_bool(flag));
+    }
+    if tag == 2 {
+        let n = gen_wire_i64(bytes, cursor)?;
+        let v = GenWire(2);
+        v.num = n;
+        return Result.Ok(v);
+    }
+    if tag == 3 {
+        let v = GenWire(3);
+        v.text = gen_wire_text(bytes, cursor)?;
+        return Result.Ok(v);
+    }
+    if tag == 4 {
+        return Result.Ok(GenWire.from_string(gen_wire_text(bytes, cursor)?));
+    }
+    if tag == 5 {
+        let n = gen_wire_u32(bytes, cursor)?;
+        let v = GenWire.array();
+        let i = 0;
+        while i < n {
+            v.push(gen_wire_read(bytes, cursor)?);
+            i = i + 1;
+        }
+        return Result.Ok(v);
+    }
+    if tag == 6 {
+        let n = gen_wire_u32(bytes, cursor)?;
+        let v = GenWire.dict();
+        let i = 0;
+        while i < n {
+            let key = gen_wire_text(bytes, cursor)?;
+            v[key] = gen_wire_read(bytes, cursor)?;
+            i = i + 1;
+        }
+        return Result.Ok(v);
+    }
+    return Result.Err("unknown generator wire tag");
+}
+
+fun gen_wire_u32(borrow bytes: byte[], cursor: List<int>): Result<int, string> {
+    if bytes.length - cursor[0] < 4 {
+        return Result.Err("truncated generator value");
+    }
+    let at = cursor[0];
+    let n = (int)bytes[at]
+        + (int)bytes[at + 1] * 256
+        + (int)bytes[at + 2] * 65536
+        + (int)bytes[at + 3] * 16777216;
+    if n < 0 {
+        return Result.Err("generator value is too large");
+    }
+    cursor[0] = at + 4;
+    return Result.Ok(n);
+}
+
+fun gen_wire_i64(borrow bytes: byte[], cursor: List<int>): Result<long, string> {
+    if bytes.length - cursor[0] < 8 {
+        return Result.Err("truncated generator value");
+    }
+    let at = cursor[0];
+    let n = 0L;
+    let shift = 1L;
+    let i = 0;
+    while i < 7 {
+        n = n + (long)bytes[at + i] * shift;
+        shift = shift * 256L;
+        i = i + 1;
+    }
+    let hi = (long)bytes[at + 7];
+    if hi >= 128L {
+        n = n + (hi - 256L) * shift;
+    } else {
+        n = n + hi * shift;
+    }
+    cursor[0] = at + 8;
+    return Result.Ok(n);
+}
+
+fun gen_wire_text(borrow bytes: byte[], cursor: List<int>): Result<string, string> {
+    let n = gen_wire_u32(bytes, cursor)?;
+    if bytes.length - cursor[0] < n {
+        return Result.Err("truncated generator string");
+    }
+    let slice = Buffer.alloc<byte>(n);
+    let i = 0;
+    while i < n {
+        slice[i] = bytes[cursor[0] + i];
+        i = i + 1;
+    }
+    cursor[0] = cursor[0] + n;
+    return Result.Ok(string.from_utf8(slice));
+}
+
+fun gen_wire_write(out: List<byte>, borrow v: GenWire): void {
+    out.push((byte)v.kind);
+    if v.kind == 1 {
+        if v.flag {
+            out.push((byte)1);
+        } else {
+            out.push((byte)0);
+        }
+    } else if v.kind == 2 {
+        gen_wire_put_i64(out, v.num);
+    } else if v.kind == 3 || v.kind == 4 {
+        gen_wire_put_text(out, v.text);
+    } else if v.kind == 5 {
+        gen_wire_put_u32(out, v.items.length);
+        for (let item in v.items) {
+            gen_wire_write(out, item);
+        }
+    } else if v.kind == 6 {
+        gen_wire_put_u32(out, v.keys.length);
+        let i = 0;
+        while i < v.keys.length {
+            gen_wire_put_text(out, v.keys[i]);
+            gen_wire_write(out, v.items[i]);
+            i = i + 1;
+        }
+    }
+}
+
+fun gen_wire_put_u32(out: List<byte>, n: int): void {
+    out.push((byte)(n % 256));
+    out.push((byte)((n / 256) % 256));
+    out.push((byte)((n / 65536) % 256));
+    out.push((byte)((n / 16777216) % 256));
+}
+
+fun gen_wire_put_i64(out: List<byte>, n: long): void {
+    let i = 0;
+    let shift = 1L;
+    while i < 8 {
+        let byte_val = 0L;
+        if n >= 0L {
+            byte_val = (n / shift) % 256L;
+        } else {
+            let moved = n / shift;
+            byte_val = moved % 256L;
+            if byte_val < 0L {
+                byte_val = byte_val + 256L;
+            }
+        }
+        out.push((byte)byte_val);
+        shift = shift * 256L;
+        i = i + 1;
+    }
+}
+
+fun gen_wire_put_text(out: List<byte>, text: string): void {
+    let bytes = text.to_utf8();
+    gen_wire_put_u32(out, bytes.length);
+    let i = 0;
+    while i < bytes.length {
+        out.push(bytes[i]);
+        i = i + 1;
+    }
+}

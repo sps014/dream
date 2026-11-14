@@ -55,5 +55,5 @@ public function: Option<GenFunction>
 Decodes a declaration or function symbol from the compilation snapshot.
 
 ```dream
-public constructor(borrow v: JsonValue)
+public constructor(borrow v: GenWire)
 ```

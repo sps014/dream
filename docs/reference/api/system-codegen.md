@@ -36,6 +36,7 @@ General compile-time source generation. See the [generator guide](../../language
 - [GenToolResult](codegen-gen-tool-result.md)
 - [GenTypeRef](codegen-gen-type-ref.md)
 - [GenVariant](codegen-gen-variant.md)
+- [GenWire](codegen-gen-wire.md)
 - [GeneratorAttribute](codegen-generator-attribute.md)
 - [GeneratorOnlyAttribute](codegen-generator-only-attribute.md)
 - [IncrementalAttribute](codegen-incremental-attribute.md)

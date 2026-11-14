@@ -60,8 +60,8 @@ public opaque: bool
 
 ## `constructor`
 
-Reads a tool-output file description from its JSON representation.
+Reads a tool-output file description from its wire value.
 
 ```dream
-public constructor(borrow v: JsonValue)
+public constructor(borrow v: GenWire)
 ```

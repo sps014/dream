@@ -103,7 +103,7 @@ public target: string
 Options supplied to this generator.
 
 ```dream
-public options: JsonValue
+public options: GenWire
 ```
 
 ## `files`
@@ -164,8 +164,8 @@ public calls: List<GenCallSite>
 
 ## `constructor`
 
-Decodes a complete generation snapshot from its root JSON object.
+Decodes a complete generation snapshot from its root wire object.
 
 ```dream
-public constructor(root: JsonValue)
+public constructor(root: GenWire)
 ```

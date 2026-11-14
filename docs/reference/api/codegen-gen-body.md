@@ -23,5 +23,5 @@ public statements: List<GenStmt>
 Decodes a `GenBody` from its object in the generation snapshot.
 
 ```dream
-public constructor(borrow v: JsonValue)
+public constructor(borrow v: GenWire)
 ```

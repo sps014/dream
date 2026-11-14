@@ -448,7 +448,9 @@ fn launch_files(
     let snapshot_path = dir.join("snapshot.json");
     let result = dir.join("result.json");
     let _ = std::fs::remove_file(&result);
-    std::fs::write(&snapshot_path, snapshot_text)
+    let snapshot_bytes = super::wire::encode_json(snapshot_text)
+        .map_err(|e| format!("encode {}: {e}", snapshot_path.display()))?;
+    std::fs::write(&snapshot_path, snapshot_bytes)
         .map_err(|e| format!("write {}: {e}", snapshot_path.display()))?;
     Ok(DebugLaunch {
         generator: name.to_string(),
@@ -511,9 +513,9 @@ pub fn debug_launch(
 
 /// The result a finished debug session left behind, summarized.
 pub fn debug_summary(launch: &DebugLaunch) -> String {
-    match std::fs::read_to_string(&launch.result)
+    match std::fs::read(&launch.result)
         .ok()
-        .and_then(|t| serde_json::from_str::<GenResult>(&t).ok())
+        .and_then(|bytes| super::wire::decode_typed::<GenResult>(&bytes).ok())
     {
         Some(result) => format!(
             "generator '{}' finished:\n{}",

@@ -2,7 +2,6 @@ module system.codegen;
 
 import system;
 import system.collections;
-import system.json;
 
 /// A resolved type with structured arguments and declaration identity.
 public class GenTypeRef {

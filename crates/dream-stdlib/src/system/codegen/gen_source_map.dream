@@ -2,26 +2,25 @@ module system.codegen;
 
 import system;
 import system.collections;
-import system.json;
 
 /// Associates generated output with the source locations it came from.
 public class GenSourceMap {
     /// Source locations associated with generated output.
-    public mappings: JsonValue;
+    public mappings: GenWire;
 
     /// Creates an empty builder.
     public constructor() {
-        this.mappings = JsonValue.array();
+        this.mappings = GenWire.array();
     }
 
     /// Maps a half-open artifact range to a snapshot node identity.
     public fun add(line: int, column: int, end_line: int, end_column: int, target: string): void {
-        let m = JsonValue.dict();
-        m["line"] = JsonValue.from_int(line);
-        m["column"] = JsonValue.from_int(column);
-        m["end_line"] = JsonValue.from_int(end_line);
-        m["end_column"] = JsonValue.from_int(end_column);
-        m["target"] = JsonValue.from_string(target);
+        let m = GenWire.dict();
+        m["line"] = GenWire.from_int(line);
+        m["column"] = GenWire.from_int(column);
+        m["end_line"] = GenWire.from_int(end_line);
+        m["end_column"] = GenWire.from_int(end_column);
+        m["target"] = GenWire.from_string(target);
         this.mappings.push(m);
     }
 }

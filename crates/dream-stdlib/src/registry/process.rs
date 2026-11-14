@@ -6,7 +6,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.core",
         "system.primitives",
         "system.text",
-        "system.encoding",
         "system.collections",
         "system.io",
         "system",

@@ -4,7 +4,7 @@ import system.testing;
 
 @test
 fun incremental_utf8(): void {
-    let bytes = Encoding.utf8_encode("Aé😀日本語");
+    let bytes = ("Aé😀日本語").to_utf8();
     for (let split = 0; split <= bytes.length; split = split + 1) {
         let first = Array.alloc<byte>(split);
         let second = Array.alloc<byte>(bytes.length - split);
@@ -47,8 +47,8 @@ fun incremental_utf8(): void {
 @test
 @timeout(180000)
 fun encoding_hex(): void {
-    let bytes = Encoding.utf8_encode("hi");
+    let bytes = ("hi").to_utf8();
     Assert.eq(Encoding.hex_encode(bytes), "6869");
-    Assert.eq(Encoding.utf8_decode(Encoding.hex_decode("6869").unwrap()), "hi");
+    Assert.eq(string.from_utf8(Encoding.hex_decode("6869").unwrap()), "hi");
     Assert.eq(Encoding.hex_decode("xyz").unwrap_err().code(), "EPARSE");
 }

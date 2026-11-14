@@ -50,6 +50,6 @@ async fun main(): void {
 | `File.exists` / `size` / `is_dir` / `is_file` / `stat` | sync probes |
 | `FileHandle.open` / `FileHandle.open_async.await` | a `FileHandle` |
 
-`File.stat` returns `FileStats` (`size`, `mtime_millis` / `ctime_millis` / `atime_millis`, `mode`, `kind`) with `is_file` / `is_dir` / `is_symlink`. With `import system;`, `modified()` / `created()` yield `DateTime`.
+`File.stat` returns `FileStats` (`size`, `modified` / `changed` / `accessed` as `SystemTime`, `mode`, `kind`) with `is_file` / `is_dir` / `is_symlink`. With `import system;`, `modified_utc()` / `changed_utc()` yield a UTC `DateTime`.
 
 Async `File` / `FileHandle` methods take an optional last `token: Option<CancellationToken>`; a cancelled token yields `IoError` with code `ECANCELLED`.

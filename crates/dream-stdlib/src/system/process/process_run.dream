@@ -58,7 +58,7 @@ internal class ProcessRun {
             return Result.Err(status.unwrap_err());
         }
         return Result.Ok(
-            ProcessOutput(status.unwrap(), Encoding.utf8_decode(out), Encoding.utf8_decode(err))
+            ProcessOutput(status.unwrap(), string.from_utf8(out), string.from_utf8(err))
         );
     }
 

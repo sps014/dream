@@ -143,26 +143,26 @@ async fun webapi_basic(): void {
     Assert.is_true(events.contains("event: update\nid: 2\nretry: 100\ndata: last"));
     let json_request = HttpRequest(HttpMethod.Post, Url.parse(base + "/json").unwrap());
     json_request.headers.set("Content-Type", "application/json");
-    json_request.body = Encoding.utf8_encode("{\"name\":\"Dream\"}");
+    json_request.body = ("{\"name\":\"Dream\"}").to_utf8();
     let json_response = client.send(json_request).await.unwrap();
     Assert.eq(json_response.read_text().await.unwrap(), "{\"name\":\"Dream\"}");
     json_response.close();
     let multipart = HttpRequest(HttpMethod.Post, Url.parse(base + "/multipart").unwrap());
     multipart.headers.set("Content-Type", "multipart/form-data; boundary=dream");
-    multipart.body = Encoding.utf8_encode(
+    multipart.body = (
         "--dream\r\nContent-Disposition: form-data; name=\"title\"\r\n\r\ntitle\r\n--dream\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nbody\r\n--dream--\r\n"
-    );
+    ).to_utf8();
     let upload = client.send(multipart).await.unwrap();
     Assert.eq(upload.read_text().await.unwrap(), "title:a.txt:body:od");
     upload.close();
     let binary_body = List<byte>();
     binary_body.push_all(
-        Encoding.utf8_encode(
+        (
             "--b\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"x.bin\"\r\n\r\n"
-        )
+        ).to_utf8()
     );
     binary_body.push_all([(byte)0, (byte)13, (byte)10, (byte)128, (byte)255]);
-    binary_body.push_all(Encoding.utf8_encode("\r\n--b--\r\n"));
+    binary_body.push_all(("\r\n--b--\r\n").to_utf8());
     let binary_upload = HttpRequest(HttpMethod.Post, Url.parse(base + "/upload-bytes").unwrap());
     binary_upload.headers.set("Content-Type", "multipart/form-data; boundary=b");
     binary_upload.body = binary_body.take_array();
@@ -170,15 +170,15 @@ async fun webapi_basic(): void {
     Assert.eq(binary_reply.read_text().await.unwrap(), "5,0,13,10,128,255");
     binary_reply.close();
     let streamed = HttpRequest(HttpMethod.Post, Url.parse(base + "/echo-stream").unwrap());
-    streamed.body = Encoding.utf8_encode("streamed!");
+    streamed.body = ("streamed!").to_utf8();
     let streamed_reply = client.send(streamed).await.unwrap();
     Assert.eq(streamed_reply.read_text().await.unwrap(), "streamed!:3:ECLOSED");
     streamed_reply.close();
     let limited = HttpRequest(HttpMethod.Post, Url.parse(base + "/limited-form").unwrap());
     limited.headers.set("Content-Type", "multipart/form-data; boundary=b");
-    limited.body = Encoding.utf8_encode(
+    limited.body = (
         "--b\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\n1\r\n--b\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\n2\r\n--b--\r\n"
-    );
+    ).to_utf8();
     let limited_reply = client.send(limited).await.unwrap();
     Assert.eq(limited_reply.read_text().await.unwrap(), "EINVAL");
     limited_reply.close();
@@ -324,9 +324,9 @@ class WebapiRoutes {
         @form title: string,
         @file upload: UploadedFile
     ): string {
-        let first = Encoding.utf8_decode(upload.read().await.unwrap());
+        let first = string.from_utf8(upload.read().await.unwrap());
         upload.seek(1L).await.unwrap();
-        let again = Encoding.utf8_decode(upload.read(2).await.unwrap());
+        let again = string.from_utf8(upload.read(2).await.unwrap());
         return title + ":" + upload.filename + ":" + first + ":" + again;
     }
 
@@ -351,7 +351,7 @@ class WebapiRoutes {
                 break;
             }
             chunks++;
-            text = text + Encoding.utf8_decode(chunk);
+            text = text + string.from_utf8(chunk);
         }
         let after = req.read_body_text().await;
         return text + ":" + chunks.to_string() + ":" + after.unwrap_err().code();

@@ -1,6 +1,6 @@
 ---
 title: Encoding
-summary: "Convert between text, bytes, UTF-8, hex, and Base64."
+summary: "Convert between bytes, hexadecimal, and Base64."
 icon: material/swap-vertical
 api: reference/api/system-encoding.md
 ---
@@ -8,27 +8,25 @@ api: reference/api/system-encoding.md
 # Encoding
 
 
-Encoding converts text and bytes between representations, including UTF-8, hexadecimal, and Base64. Decoding hexadecimal or Base64 returns a Result so you can handle invalid input.
+Encoding converts bytes to hexadecimal and Base64. Decoding returns a Result so you can handle invalid input. Convert text with `to_utf8` and `string.from_utf8`, which are always available; invalid UTF-8 becomes U+FFFD.
 
 **Import:** `import system.encoding;`
-
-Convert between `string`, `byte[]`, hex, and Base64. Hex and Base64 **decode** return `Result` on bad input.
 
 ```dream
 import system;
 import system.encoding;
 
 fun main() {
-    let bytes = Encoding.utf8_encode("hi");
+    let bytes = "hi".to_utf8();
     System.println(Encoding.hex_encode(bytes)); // 6869
-    System.println(Encoding.utf8_decode(bytes)); // hi
+    System.println(string.from_utf8(bytes)); // hi
 }
 ```
 
 | Call | Meaning |
 | --- | --- |
-| `Encoding.utf8_encode(text)` | string → UTF-8 bytes |
-| `Encoding.utf8_decode(bytes)` | UTF-8 bytes → string |
+| `text.to_utf8()` | string → UTF-8 bytes |
+| `string.from_utf8(bytes)` | UTF-8 bytes → string; invalid sequences become U+FFFD |
 | `Encoding.hex_encode(bytes)` | lowercase hex |
 | `Encoding.hex_decode(text)` | `Result<byte[], ParseError>` |
 | `Encoding.base64_encode(bytes)` | Base64 |

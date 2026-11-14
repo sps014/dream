@@ -20,7 +20,7 @@ import system.crypto;
 import system.encoding;
 
 fun main() {
-    let msg = Encoding.utf8_encode("hello");
+    let msg = ("hello").to_utf8();
     System.println(Encoding.hex_encode(Sha256.hash(msg)));
 }
 ```
@@ -41,11 +41,11 @@ fun main() {
 ```dream
 let key = AesGcmKey.generate().unwrap();
 let nonce = AesGcm.generate_nonce().unwrap();
-let plain = Encoding.utf8_encode("secret");
-let aad = Encoding.utf8_encode("");
+let plain = ("secret").to_utf8();
+let aad = ("").to_utf8();
 let cipher = (AesGcm.encrypt(key, nonce, plain, aad)).unwrap();
 let back = (AesGcm.decrypt(key, nonce, cipher, aad)).unwrap();
-System.println(Encoding.utf8_decode(back));
+System.println(string.from_utf8(back));
 ```
 
 For games and tests, use [Random](../system/random.md) instead of `SecureRandom`.

@@ -50,17 +50,17 @@ async fun application_utilities(): void {
     Assert.eq(fields[3], "こんにちは");
     Assert.eq(fields[4], "");
     Assert.is_true(reader.read_record().unwrap().is_none());
-    let malformed = CsvReader(MemoryStream(Encoding.utf8_encode("\"unterminated")));
+    let malformed = CsvReader(MemoryStream(("\"unterminated").to_utf8()));
     Assert.is_true(malformed.read_record().is_err());
     Assert.is_true(malformed.read_record().is_err());
-    let limited = CsvReader(MemoryStream(Encoding.utf8_encode("abcd")), max_record_bytes: 3);
+    let limited = CsvReader(MemoryStream(("abcd").to_utf8()), max_record_bytes: 3);
     Assert.is_true(limited.read_record().is_err());
-    let final_line = CsvReader(MemoryStream(Encoding.utf8_encode("a,b")));
+    let final_line = CsvReader(MemoryStream(("a,b").to_utf8()));
     Assert.eq(final_line.read_record().unwrap().unwrap()[1], "b");
 
     let temporary = TempFile.create_in(".").unwrap();
     let temporary_path = temporary.path;
-    temporary.file.write_all(Encoding.utf8_encode("{\"port\":9000,\"enabled\":true}")).unwrap();
+    temporary.file.write_all(("{\"port\":9000,\"enabled\":true}").to_utf8()).unwrap();
     temporary.file.flush().unwrap();
     let config = ConfigBuilder()
         .default_value("port", "8080")
@@ -99,10 +99,10 @@ async fun application_utilities(): void {
     let directory = TempDirectory.create_in(".").unwrap();
     let destination = directory.path + "/settings.json";
     let replacement = TempFile.create_in(directory.path).unwrap();
-    replacement.file.write_all(Encoding.utf8_encode("new contents")).unwrap();
+    replacement.file.write_all(("new contents").to_utf8()).unwrap();
     replacement.persist_replace(destination).unwrap();
     let existing = FileHandle.open(destination, FileMode.Read).unwrap();
-    Assert.eq(Encoding.utf8_decode(existing.read(100).unwrap()), "new contents");
+    Assert.eq(string.from_utf8(existing.read(100).unwrap()), "new contents");
     existing.close().unwrap();
     directory.close().unwrap();
 

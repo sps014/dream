@@ -8,7 +8,7 @@ public static class Streams {
         while true {
             let chunk = source.read(8192)?;
             if chunk.length == 0 {
-                return Result.Ok(Encoding.utf8_decode(bytes.take_array()));
+                return Result.Ok(string.from_utf8(bytes.take_array()));
             }
             bytes.push_all(chunk);
         }

@@ -102,7 +102,7 @@ async fun main(): int {
 
     let result = command.parse(System.args);
     if result.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.write_all((result.unwrap_err().message() + "\n").to_utf8()).unwrap();
         System.stderr.flush().unwrap();
         return 2;
     }
@@ -119,7 +119,7 @@ async fun main(): int {
 
     let timeout = parsed.get_int("timeout").unwrap();
     if timeout < 0 {
-        System.stderr.write_all(Encoding.utf8_encode("timeout must be nonnegative" + "\n")).unwrap();
+        System.stderr.write_all(("timeout must be nonnegative" + "\n").to_utf8()).unwrap();
         System.stderr.flush().unwrap();
         return 2;
     }
@@ -127,7 +127,7 @@ async fun main(): int {
     let output = parsed.get_string("output").unwrap();
     let copied = download(parsed.get_string("url").unwrap(), output, timeout).await;
     if copied.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(copied.unwrap_err() + "\n")).unwrap();
+        System.stderr.write_all((copied.unwrap_err() + "\n").to_utf8()).unwrap();
         System.stderr.flush().unwrap();
         return 1;
     }

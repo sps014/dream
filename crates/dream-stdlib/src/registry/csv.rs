@@ -4,7 +4,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     deps: &[
         "system.io",
         "system.text",
-        "system.encoding",
         "system.collections",
     ],
     core_language: false,

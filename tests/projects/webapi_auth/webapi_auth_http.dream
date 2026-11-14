@@ -73,7 +73,7 @@ async fun webapi_auth_http(): void {
     let client = HttpClient();
     let login = HttpRequest(HttpMethod.Post, Url.parse(base + "/auth/login").unwrap());
     login.headers.set("Content-Type", "application/json");
-    login.body = Encoding.utf8_encode("{\"username\":\"dream\",\"password\":\"password\"}");
+    login.body = ("{\"username\":\"dream\",\"password\":\"password\"}").to_utf8();
     login.headers.set("Origin", "https://wrong.example");
     let denied = client.send(login).await.unwrap();
     Assert.eq(denied.status, 403);

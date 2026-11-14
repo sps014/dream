@@ -4,26 +4,10 @@
 
 ## `Encoding`
 
-UTF-8 / hex / Base64 encode and decode helpers.
+Hex and Base64 encode and decode helpers. Convert text with `string.to_utf8` and `string.from_utf8`.
 
 ```dream
 public static class Encoding
-```
-
-## `utf8_encode`
-
-Copies the UTF-8 encoding of `text` into a new `byte[]`.
-
-```dream
-public static fun utf8_encode(text: string): byte[]
-```
-
-## `utf8_decode`
-
-Interprets `bytes` as UTF-8 and builds a Dream string.
-
-```dream
-public static fun utf8_decode(bytes: byte[]): string
 ```
 
 ## `hex_encode`

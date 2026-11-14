@@ -155,7 +155,7 @@ fun main(): int {
 
     let result = command.parse(System.args);
     if result.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.write_all((result.unwrap_err().message() + "\n").to_utf8()).unwrap();
         System.stderr.flush().unwrap();
         return 2;
     }

@@ -145,7 +145,7 @@ public class HttpIncoming {
         token: Option<CancellationToken> = Option.None
     ): Result<string, IoError> {
         let lifetime = [this];
-        return Result.Ok(Encoding.utf8_decode(lifetime[0].read_body_bytes(token).await?));
+        return Result.Ok(string.from_utf8(lifetime[0].read_body_bytes(token).await?));
     }
 
     /// Returns the body as a stream of chunks read as they arrive, for bodies too large to hold

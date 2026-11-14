@@ -73,16 +73,16 @@ async fun main(): void {
     response.close();
     client.close();
     let tcp = TcpStream.connect("127.0.0.1", TCP_PORT, 1000).await.unwrap();
-    tcp.write_all_async(Encoding.utf8_encode("tcp echo")).await.unwrap();
-    System.println(Encoding.utf8_decode(tcp.read_with_timeout(8, 1000).await.unwrap()));
+    tcp.write_all_async(("tcp echo").to_utf8()).await.unwrap();
+    System.println(string.from_utf8(tcp.read_with_timeout(8, 1000).await.unwrap()));
     tcp.close();
     let udp = UdpSocket.bind("127.0.0.1", 0).await.unwrap();
-    let sent = udp.send("127.0.0.1", udp.local_port, Encoding.utf8_encode("udp echo"), 1000).await;
+    let sent = udp.send("127.0.0.1", udp.local_port, ("udp echo").to_utf8(), 1000).await;
     if sent.is_err() {
         System.println(sent.unwrap_err().message());
         return;
     }
-    System.println(Encoding.utf8_decode(udp.receive(8, 1000).await.unwrap().data));
+    System.println(string.from_utf8(udp.receive(8, 1000).await.unwrap().data));
     udp.close();
 }
 '''.replace("TCP_PORT", str(tcp_port)).replace("PORT", str(server.server_port)), encoding="utf-8", newline="\n")

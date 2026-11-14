@@ -41,7 +41,7 @@ internal static class AuthCrypto {
     }
 
     internal static fun digest(token: string): string {
-        return Encoding.hex_encode(Sha256.hash(Encoding.utf8_encode(token)));
+        return Encoding.hex_encode(Sha256.hash((token).to_utf8()));
     }
 
     internal static fun now(): long {

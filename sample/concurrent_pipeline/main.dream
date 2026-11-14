@@ -40,7 +40,7 @@ async fun main(): int {
         }
     ).await;
     if result.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode("pipeline failed" + "\n"));
+        System.stderr.write_all(("pipeline failed" + "\n").to_utf8());
         System.stderr.flush();
         return 1;
     }

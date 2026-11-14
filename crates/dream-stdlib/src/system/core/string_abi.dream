@@ -16,10 +16,6 @@ extend string {
     @intrinsic(Intrinsic.StringSet)
     internal static extern fun set(borrow s: string, i: int, c: char): void;
 
-    // Builds a string from a full `byte[]` UTF-8 payload (transcodes to UTF-16).
-    @intrinsic(Intrinsic.StringFromUtf8)
-    internal static extern fun from_utf8(borrow bytes: byte[]): string;
-
     // Builds a string from the first `len` bytes of `bytes` (clamped to the array length).
     @intrinsic(Intrinsic.StringFromUtf8Prefix)
     internal static extern fun from_utf8_prefix(borrow bytes: byte[], len: int): string;

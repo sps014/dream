@@ -21,7 +21,7 @@ async fun main(): void {
     Promise.start(connecting);
     let server = listener.accept().await.unwrap();
     let client = connecting.await.unwrap();
-    client.write_all_async(Encoding.utf8_encode("hello")).await.unwrap();
+    client.write_all_async(("hello").to_utf8()).await.unwrap();
     client.shutdown_write().unwrap();
     let text = "";
     while true {
@@ -29,7 +29,7 @@ async fun main(): void {
         if bytes.length == 0 {
             break;
         }
-        text = text + Encoding.utf8_decode(bytes);
+        text = text + string.from_utf8(bytes);
     }
     System.println(text);
     server.close().unwrap();
@@ -115,14 +115,14 @@ import system.compress;
 fun main(): void {
     let encoded = MemoryStream();
     let writer = Compression.writer(encoded, CompressionFormat.Gzip).unwrap();
-    writer.write_all(Encoding.utf8_encode("hello compression")).unwrap();
+    writer.write_all(("hello compression").to_utf8()).unwrap();
     writer.finish().unwrap();
     encoded.seek(0L).unwrap();
     let reader = Compression.reader(encoded, CompressionFormat.Gzip).unwrap();
     let decoded = MemoryStream();
     Streams.copy(reader, decoded).unwrap();
     decoded.seek(0L).unwrap();
-    System.println(Encoding.utf8_decode(decoded.read(100).unwrap()));
+    System.println(string.from_utf8(decoded.read(100).unwrap()));
     reader.close();
 }
 ```

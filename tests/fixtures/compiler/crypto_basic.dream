@@ -6,11 +6,11 @@ fun main(): void {
     let empty = Sha256.hash(Array.alloc<byte>(0));
     System.println(Encoding.hex_encode(empty));
 
-    let abc = Encoding.utf8_encode("abc");
+    let abc = ("abc").to_utf8();
     System.println(Encoding.hex_encode(Sha256.hash(abc)));
 
-    let key = Encoding.utf8_encode("key");
-    let msg = Encoding.utf8_encode("The quick brown fox jumps over the lazy dog");
+    let key = ("key").to_utf8();
+    let msg = ("The quick brown fox jumps over the lazy dog").to_utf8();
     System.println(Encoding.hex_encode(HmacSha256.sign(key, msg)));
 
     System.println(Encoding.hex_encode(Sha512.hash(Array.alloc<byte>(0))));

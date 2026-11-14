@@ -44,7 +44,7 @@ fun main(): Result<Unit, IoError> {
 |---|---|---|
 | `read(n)` | `Result<byte[], IoError>` | Reads up to `n` bytes. |
 | `read_line(max_bytes)` | `Result<Option<string>, IoError>` | Reads one line; `None` at EOF. |
-| `write(data)` | `Result<int, IoError>` | Writes bytes; returns the count written. Pass `Encoding.utf8_encode(text)` to write text. |
+| `write(data)` | `Result<int, IoError>` | Writes bytes; returns the count written. Pass `(text).to_utf8()` to write text. |
 | `write_all(data)` | `Result<Unit, IoError>` | Retries until every byte is written. |
 | `read_exact(count)` | `Result<byte[], IoError>` | Reads exactly `count` bytes or fails with `EEOF`. |
 | `seek(pos)` | `Result<Unit, IoError>` | Moves to an absolute byte offset. |
@@ -120,13 +120,13 @@ import system.io;
 import system.encoding;
 
 fun main(): Result<Unit, IoError> {
-    let source = MemoryStream(Encoding.utf8_encode("first\r\nsecond\n"));
+    let source = MemoryStream(("first\r\nsecond\n").to_utf8());
     let reader = BufferedReader(source, buffer_size: 8192);
     let first = reader.read_line()?;
     reader.seek(0L)?;
     let destination = MemoryStream();
     let writer = BufferedWriter(destination, buffer_size: 8192);
-    writer.write_all(Encoding.utf8_encode("hello"))?;
+    writer.write_all(("hello").to_utf8())?;
     writer.finish()?;
     return destination.close();
 }
@@ -198,7 +198,7 @@ import system.io;
 import system.encoding;
 
 async fun main(): Result<Unit, IoError> {
-    let source = MemoryStream(Encoding.utf8_encode("hello"));
+    let source = MemoryStream(("hello").to_utf8());
     let destination = FileHandle.open_async("async-copy.txt", FileMode.WriteRead).await?;
     Streams.copy_async(source, destination).await?;
     destination.seek_async(0L).await?;
@@ -221,7 +221,7 @@ import system.encoding;
 
 fun main(): void {
     let writer = BufferedWriter(System.stdout);
-    writer.write_all(Encoding.utf8_encode("Ready\n")).unwrap();
+    writer.write_all(("Ready\n").to_utf8()).unwrap();
     writer.finish().unwrap();
 
     let reader = BufferedReader(System.stdin);

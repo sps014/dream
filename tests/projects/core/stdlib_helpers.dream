@@ -38,7 +38,7 @@ fun c20a_body(): void {
     }
     j.remove("k");
     c20a_verify_observation((j.contains("k")).to_string());
-    c20a_verify_observation((Encoding.utf8_encode("é").length).to_string());
+    c20a_verify_observation((("é").to_utf8().length).to_string());
     let d = Duration.from_seconds(2L);
     c20a_verify_observation((d.millis).to_string());
     let dt = DateTime.from_epoch_millis(0L);

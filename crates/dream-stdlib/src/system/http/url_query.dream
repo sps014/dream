@@ -12,7 +12,7 @@ public class UrlQuery {
         this.keys = List<string>();
         this.values = List<string>();
         this.dirty = false;
-        let bytes = Encoding.utf8_encode(original);
+        let bytes = (original).to_utf8();
         let start = 1;
         while start < bytes.length {
             let end = start;
@@ -26,9 +26,9 @@ public class UrlQuery {
             if end > start {
                 let split = equals < 0 ? end : equals;
                 let value_start = equals < 0 ? end : equals + 1;
-                this.keys.push(Encoding.utf8_decode(UrlText.percent_decode(bytes, start, split, true)));
+                this.keys.push(string.from_utf8(UrlText.percent_decode(bytes, start, split, true)));
                 this.values.push(
-                    Encoding.utf8_decode(UrlText.percent_decode(bytes, value_start, end, true))
+                    string.from_utf8(UrlText.percent_decode(bytes, value_start, end, true))
                 );
             }
             start = end + 1;

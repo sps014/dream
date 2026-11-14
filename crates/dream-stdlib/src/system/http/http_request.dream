@@ -24,7 +24,7 @@ public class HttpRequest {
 
     /// Replaces the body with UTF-8 bytes; adds no content-type header implicitly.
     public fun set_text(text: string): void {
-        this.body = Encoding.utf8_encode(text);
+        this.body = (text).to_utf8();
     }
 
     internal fun wire(options: HttpOptions): string {

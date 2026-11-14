@@ -13,10 +13,10 @@ internal static class Hs256Jwt {
         }
         claims["iss"] = JsonValue.from_string(options.issuer);
         claims["aud"] = JsonValue.from_string(options.audience);
-        let header = Encoding.utf8_encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
-        let body = Encoding.utf8_encode(Json.serialize(claims));
+        let header = ("{\"alg\":\"HS256\",\"typ\":\"JWT\"}").to_utf8();
+        let body = (Json.serialize(claims)).to_utf8();
         let signing_input = Encoding.base64url_encode(header) + "." + Encoding.base64url_encode(body);
-        let signature = HmacSha256.sign(key, Encoding.utf8_encode(signing_input));
+        let signature = HmacSha256.sign(key, (signing_input).to_utf8());
         return Result.Ok(signing_input + "." + Encoding.base64url_encode(signature));
     }
 
@@ -41,7 +41,7 @@ internal static class Hs256Jwt {
             return Hs256Jwt.rejected();
         }
         let signature = Hs256Jwt.segment_bytes(parts[2]);
-        let expected = HmacSha256.sign(key, Encoding.utf8_encode(parts[0] + "." + parts[1]));
+        let expected = HmacSha256.sign(key, (parts[0] + "." + parts[1]).to_utf8());
         if signature.is_none() || !Hs256Jwt.same(expected, signature.unwrap()) {
             return Hs256Jwt.rejected();
         }
@@ -73,7 +73,7 @@ internal static class Hs256Jwt {
     }
 
     static fun key(secret: string): Result<byte[], AuthError> {
-        let bytes = Encoding.utf8_encode(secret);
+        let bytes = (secret).to_utf8();
         if bytes.length < 32 {
             return Result.Err(AuthError("ECRYPTO", "HS256 requires at least 32 key bytes"));
         }
@@ -127,7 +127,7 @@ internal static class Hs256Jwt {
         if bytes.is_none() {
             return Option.None;
         }
-        let parsed = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes.unwrap()));
+        let parsed = Json.deserialize<JsonValue>(string.from_utf8(bytes.unwrap()));
         if parsed.is_err() || !parsed.unwrap().is_object() {
             return Option.None;
         }

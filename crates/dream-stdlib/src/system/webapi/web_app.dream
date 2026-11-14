@@ -294,7 +294,7 @@ public class WebApp {
         if !response.skip_send {
             let bytes = response.body_bytes;
             if !response.use_bytes {
-                bytes = Encoding.utf8_encode(response.body);
+                bytes = (response.body).to_utf8();
             }
             WebOperation.submit(
                 WebApp.response_request(WebAction.Respond, ctx.incoming.req_id, response),

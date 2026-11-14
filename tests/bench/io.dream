@@ -43,7 +43,7 @@ fun report(name: string, nanos: long, iters: int, checksum: int): void {
 
 @noinline
 fun buffered_lines(iters: int): int {
-    let bytes = Encoding.utf8_encode("alpha\r\nbeta\ngamma\nlast");
+    let bytes = ("alpha\r\nbeta\ngamma\nlast").to_utf8();
     let total = 0;
     for (let i = 0; i < iters; i++) {
         let reader = BufferedReader(MemoryStream(bytes), 8);
@@ -60,7 +60,7 @@ fun buffered_lines(iters: int): int {
 
 @noinline
 fun buffered_writes(iters: int): int {
-    let bytes = Encoding.utf8_encode("alpha beta gamma delta");
+    let bytes = ("alpha beta gamma delta").to_utf8();
     let total = 0;
     for (let i = 0; i < iters; i++) {
         let stream = MemoryStream();

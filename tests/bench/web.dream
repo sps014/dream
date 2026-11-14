@@ -5645,7 +5645,7 @@ async fun get_loop(client: HttpClient, url: string, iters: int): int {
 async fun echo_loop(client: HttpClient, url: string, iters: int): int {
     let total = 0;
     let target = Url.parse(url).unwrap();
-    let body = Encoding.utf8_encode(Json.serialize(BenchPayload("bench", 42)));
+    let body = (Json.serialize(BenchPayload("bench", 42))).to_utf8();
     for (let i = 0; i < iters; i++) {
         let request = HttpRequest(HttpMethod.Post, target);
         request.headers.set("Content-Type", "application/json");

@@ -25,14 +25,14 @@ async fun main(): int {
     if config.get_int("port").unwrap() != 8080 { return 5; }
     let compressed = MemoryStream();
     let encoder = Compression.writer(compressed).unwrap();
-    encoder.write_all(Encoding.utf8_encode("hello browser compression")).unwrap();
+    encoder.write_all(("hello browser compression").to_utf8()).unwrap();
     encoder.finish().unwrap();
     compressed.seek(0L).unwrap();
     let decoder = Compression.reader(compressed).unwrap();
     let decoded = MemoryStream();
     Streams.copy(decoder, decoded).unwrap();
     decoded.seek(0L).unwrap();
-    if Encoding.utf8_decode(decoded.read(100).unwrap()) != "hello browser compression" { return 6; }
+    if string.from_utf8(decoded.read(100).unwrap()) != "hello browser compression" { return 6; }
     decoder.close();
     if TempCapabilities.supported || TempFile.create().unwrap_err().code() != "EUNSUPPORTED" { return 7; }
     return 0;

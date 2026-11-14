@@ -4,18 +4,18 @@
 
 Read the [usage guide](../../library/core/builtins.md) for examples and common tasks. This reference lists the public declarations for this part of the library. See [Reading API signatures](index.md#reading-a-signature) for parameter and result notation.
 
-## `modified`
+## `modified_utc`
 
-`mtime` as a UTC `DateTime`.
+`modified` as a UTC `DateTime`.
 
 ```dream
-public fun modified(): DateTime
+public fun modified_utc(): DateTime
 ```
 
-## `created`
+## `changed_utc`
 
-`ctime` as a UTC `DateTime` (inode change time on Unix, not birth time).
+`changed` as a UTC `DateTime` (inode change time on Unix, not birth time).
 
 ```dream
-public fun created(): DateTime
+public fun changed_utc(): DateTime
 ```

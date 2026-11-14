@@ -229,7 +229,7 @@ import system.webapi;
 class Routes {
     @get("/health")
     public static fun health(): string {
-        return Encoding.hex_encode(Encoding.utf8_encode("ok"));
+        return Encoding.hex_encode(("ok").to_utf8());
     }
 }
 

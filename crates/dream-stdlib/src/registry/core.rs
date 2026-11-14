@@ -114,6 +114,14 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/buffer.dream"),
         ),
         (
+            "<std>/system/core/string_utf8.dream",
+            include_str!("../system/core/string_utf8.dream"),
+        ),
+        (
+            "<std>/system/core/system_time.dream",
+            include_str!("../system/core/system_time.dream"),
+        ),
+        (
             "<std>/system/core/bytes.dream",
             include_str!("../system/core/bytes.dream"),
         ),

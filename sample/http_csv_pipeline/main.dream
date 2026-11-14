@@ -83,7 +83,7 @@ async fun main(): int {
         .string_option("output", letter: "o", default_value: "records.csv");
     let parsed = command.parse(System.args);
     if parsed.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(parsed.unwrap_err().message() + "\n"));
+        System.stderr.write_all((parsed.unwrap_err().message() + "\n").to_utf8());
         System.stderr.flush();
         return 2;
     }
@@ -93,7 +93,7 @@ async fun main(): int {
     }
     let config = ConfigBuilder().default_value("output", "records.csv").cli(parsed.unwrap()).build();
     if config.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(config.unwrap_err().message() + "\n"));
+        System.stderr.write_all((config.unwrap_err().message() + "\n").to_utf8());
         System.stderr.flush();
         return 2;
     }
@@ -102,7 +102,7 @@ async fun main(): int {
         config.unwrap().get_string("output").unwrap()
     ).await;
     if result.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n"));
+        System.stderr.write_all((result.unwrap_err().message() + "\n").to_utf8());
         System.stderr.flush();
         return 1;
     }

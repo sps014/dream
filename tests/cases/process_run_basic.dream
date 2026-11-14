@@ -15,7 +15,7 @@ async fun run_child_mode(args: string[]): bool {
     if args.length == 0 { return false; }
     if args[0] == "echo-hex" {
         for (let i = 1; i < args.length; i = i + 1) {
-            System.println(Encoding.hex_encode(Encoding.utf8_encode(args[i])));
+            System.println(Encoding.hex_encode((args[i]).to_utf8()));
         }
         return true;
     }
@@ -30,7 +30,7 @@ async fun run_child_mode(args: string[]): bool {
     }
     if args[0] == "flood" {
         System.print("a".repeat(200000));
-        System.stderr.write_all(Encoding.utf8_encode("b".repeat(200000))).unwrap();
+        System.stderr.write_all(("b".repeat(200000)).to_utf8()).unwrap();
         System.stderr.flush().unwrap();
         let consumed = 0;
         while consumed < 200000 { consumed = consumed + System.read_line().length; }
@@ -66,7 +66,7 @@ async fun run_basic(): void {
     let expected = StringBuilder();
     for (let i = 0; i < exact.length; i = i + 1) {
         roundtrip_args.push(exact[i]);
-        expected.append(Encoding.hex_encode(Encoding.utf8_encode(exact[i])));
+        expected.append(Encoding.hex_encode((exact[i]).to_utf8()));
         expected.append("\n");
     }
     let roundtrip = Process.run(System.exe_path.unwrap(), roundtrip_args.take_array()).await.unwrap();
@@ -88,8 +88,8 @@ async fun run_spawn(): void {
     let spawned = Process.spawn(System.exe_path.unwrap_or(""), child_args).await;
     switch (spawned) {
         Ok(child) => {
-            child.stdin.write_async(Encoding.utf8_encode("line1\n")).await.unwrap();
-            child.stdin.write_async(Encoding.utf8_encode("line2\n")).await.unwrap();
+            child.stdin.write_async(("line1\n").to_utf8()).await.unwrap();
+            child.stdin.write_async(("line2\n").to_utf8()).await.unwrap();
             let stdout = child.stdout;
             let l1 = stdout.read_line().await.unwrap();
             System.println(l1.unwrap_or("NONE"));
@@ -107,7 +107,7 @@ async fun run_options(): void {
     let options = ProcessOptions();
     options.env["DREAM_PHASE6"] = "custom 日本語";
     options.timeout_ms = 5000;
-    options.input = Encoding.utf8_encode("x".repeat(200000) + "\n");
+    options.input = ("x".repeat(200000) + "\n").to_utf8();
     let flooded = Process.run(executable, process_fixture_args("flood"), options: options).await.unwrap();
     Assert.eq(flooded.stdout.length, 200000);
     Assert.is_true(flooded.stderr.starts_with("b".repeat(200000)));

@@ -76,7 +76,7 @@ fun numbers(iters: int): int {
 
 @noinline
 fun csv_read(iters: int): int {
-    let input = Encoding.utf8_encode("name,value,note\r\nalpha,42,\"a,b\"\r\n");
+    let input = ("name,value,note\r\nalpha,42,\"a,b\"\r\n").to_utf8();
     let total = 0;
     for (let i = 0; i < iters; i++) {
         let reader = CsvReader(MemoryStream(input));

@@ -98,9 +98,9 @@ import system.io;
 
 fun main(): void {
     let temporary = TempFile.create().unwrap();
-    temporary.file.write_all(Encoding.utf8_encode("hello")).unwrap();
+    temporary.file.write_all(("hello").to_utf8()).unwrap();
     temporary.file.seek(0L).unwrap();
-    System.println(Encoding.utf8_decode(temporary.file.read(5).unwrap()));
+    System.println(string.from_utf8(temporary.file.read(5).unwrap()));
     temporary.close().unwrap();
 }
 ```
@@ -288,7 +288,7 @@ async fun main(): int {
         .string_option("output", letter: "o", default_value: "records.csv");
     let parsed = command.parse(System.args);
     if parsed.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(parsed.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.write_all((parsed.unwrap_err().message() + "\n").to_utf8()).unwrap();
         System.stderr.flush().unwrap();
         return 2;
     }
@@ -298,7 +298,7 @@ async fun main(): int {
     }
     let config = ConfigBuilder().default_value("output", "records.csv").cli(parsed.unwrap()).build();
     if config.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(config.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.write_all((config.unwrap_err().message() + "\n").to_utf8()).unwrap();
         System.stderr.flush().unwrap();
         return 2;
     }
@@ -307,7 +307,7 @@ async fun main(): int {
         config.unwrap().get_string("output").unwrap()
     ).await;
     if result.is_err() {
-        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n")).unwrap();
+        System.stderr.write_all((result.unwrap_err().message() + "\n").to_utf8()).unwrap();
         System.stderr.flush().unwrap();
         return 1;
     }

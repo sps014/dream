@@ -11,10 +11,10 @@ async fun socket_echo(listener: TcpListener): void {
         if bytes.length == 0 {
             break;
         }
-        input = input + Encoding.utf8_decode(bytes);
+        input = input + string.from_utf8(bytes);
     }
     Assert.eq(input, "hello");
-    stream.write_all_async(Encoding.utf8_encode("reply")).await.unwrap();
+    stream.write_all_async(("reply").to_utf8()).await.unwrap();
     stream.shutdown_write().unwrap();
     stream.close().unwrap();
 }
@@ -29,7 +29,7 @@ async fun raw_sockets(): void {
         .await
         .unwrap();
     client.set_nodelay(true).unwrap();
-    client.write_all_async(Encoding.utf8_encode("hello")).await.unwrap();
+    client.write_all_async(("hello").to_utf8()).await.unwrap();
     Assert.eq(client.read_with_timeout(1, 5).await.unwrap_err().code(), "ETIMEOUT");
     let source = CancellationSource();
     let pending = client.read_async(1, Option.Some(source.token));
@@ -45,7 +45,7 @@ async fun raw_sockets(): void {
         if bytes.length == 0 {
             break;
         }
-        response = response + Encoding.utf8_decode(bytes);
+        response = response + string.from_utf8(bytes);
     }
     Assert.eq(response, "reply");
     server.await;
@@ -63,9 +63,9 @@ async fun raw_sockets(): void {
     first.set_broadcast(false).unwrap();
     first.set_ttl(64).unwrap();
     Assert.is_true(first.set_ttl(0).is_err());
-    first.send("127.0.0.1", second.local_port, Encoding.utf8_encode("abcdef")).await.unwrap();
+    first.send("127.0.0.1", second.local_port, ("abcdef").to_utf8()).await.unwrap();
     let message = second.receive(3, timeout_ms: 5000).await.unwrap();
-    Assert.eq(Encoding.utf8_decode(message.data), "abc");
+    Assert.eq(string.from_utf8(message.data), "abc");
     Assert.is_true(message.truncated);
     Assert.eq(message.port, first.local_port);
     first.send("127.0.0.1", second.local_port, []).await.unwrap();

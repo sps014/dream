@@ -288,7 +288,7 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
                         let none: Option<string> = Option.None;
                         return Result.Ok(none);
                     }
-                    return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));
+                    return Result.Ok(Option.Some(string.from_utf8(bytes.take_array())));
                 }
             }
             let next = this._buffer[this._offset];
@@ -297,7 +297,7 @@ public class FileHandle: Reader, Writer, AsyncReader, AsyncWriter {
                 if bytes.length > 0 && bytes[bytes.length - 1] == (byte)13 {
                     bytes.pop();
                 }
-                return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));
+                return Result.Ok(Option.Some(string.from_utf8(bytes.take_array())));
             }
             if bytes.length >= max_bytes {
                 return Result.Err(

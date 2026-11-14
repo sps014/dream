@@ -88,7 +88,7 @@ internal static class UrlHost {
         for (let i = 0; i < domain.length; i = i + 1) {
             let b = (int)domain[i];
             if b >= 0x80 {
-                return UrlHost.domain_to_ascii_host(Encoding.utf8_decode(domain));
+                return UrlHost.domain_to_ascii_host(string.from_utf8(domain));
             }
             if label_start
                 && i + 3 < domain.length
@@ -96,7 +96,7 @@ internal static class UrlHost {
                 && UrlText.lower((int)domain[i + 1]) == 0x6E
                 && (int)domain[i + 2] == 0x2D
                 && (int)domain[i + 3] == 0x2D {
-                return UrlHost.domain_to_ascii_host(Encoding.utf8_decode(domain));
+                return UrlHost.domain_to_ascii_host(string.from_utf8(domain));
             }
             label_start = b == 0x2E;
             out.append_char((char)UrlText.lower(b));

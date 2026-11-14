@@ -52,7 +52,7 @@ public class WebSocket {
         return WebSocket.send_owned(
             this,
             WebSocketAction.SendText,
-            Encoding.utf8_encode(text),
+            (text).to_utf8(),
             1000,
             "",
             CancellationToken.resolve(token)

@@ -77,7 +77,7 @@ let child = Process.spawn("example-tool", ["--stream"]).await?;
 let stdout = child.stdout;
 let stderr = child.stderr;
 let stdin = child.stdin;
-let written = stdin.write_async(Encoding.utf8_encode("input\n")).await?;
+let written = stdin.write_async(("input\n").to_utf8()).await?;
 child.close_stdin().await?;
 let line = stdout.read_line().await?;
 let status = child.wait().await?;

@@ -5,10 +5,10 @@ import system.encoding;
 // `System.print` and the `Writer` view of stdout share one stream, so their output interleaves.
 fun write_streams(): void {
     let output: Writer = System.stdout;
-    output.write_all(Encoding.utf8_encode("hello-out\n")).unwrap();
+    output.write_all(("hello-out\n").to_utf8()).unwrap();
     output.flush().unwrap();
     System.print("a");
-    output.write_all(Encoding.utf8_encode("b")).unwrap();
+    output.write_all(("b").to_utf8()).unwrap();
     System.print("c");
     output.flush().unwrap();
     System.stderr.write_all([]).unwrap();

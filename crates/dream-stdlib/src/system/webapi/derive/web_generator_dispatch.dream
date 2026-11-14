@@ -147,9 +147,9 @@ extend WebGenerator {
         out.line(prefix + " (let item in " + call + ") {");
         let chunk = "item";
         if elem.name == "SseEvent" {
-            chunk = "Encoding.utf8_encode(item.wire())";
+            chunk = "(item.wire()).to_utf8()";
         } else if elem.name == "string" {
-            chunk = "Encoding.utf8_encode(item)";
+            chunk = "(item).to_utf8()";
         }
         out.line(
             "let written = WebOperation.submit(WebOperation.request(WebAction.StreamWrite, ctx.incoming.req_id), "

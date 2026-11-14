@@ -12,7 +12,7 @@ async fun file_handle_stream(): void {
     File.write(path, "Dream\nrocks\n").await;
 
     let stream = FileHandle.open(path, FileMode.Read).unwrap();
-    Assert.eq(Encoding.utf8_decode(stream.read(5).unwrap()), "Dream");
+    Assert.eq(string.from_utf8(stream.read(5).unwrap()), "Dream");
     Assert.eq(stream.tell().unwrap(), 5L);
     stream.seek(6L).unwrap();
     Assert.eq(Streams.read_text(stream).unwrap(), "rocks\n");
@@ -41,13 +41,13 @@ async fun file_handle_stream(): void {
 async fun file_modes_preserve_truncate_and_append(): void {
     let path = "dream_file_modes.tmp";
     let file = FileHandle.open(path, FileMode.WriteRead).unwrap();
-    file.write(Encoding.utf8_encode("first")).unwrap();
+    file.write(("first").to_utf8()).unwrap();
     file.seek(0L).unwrap();
     Assert.eq(Streams.read_text(file).unwrap(), "first");
     file.close().unwrap();
     let append = FileHandle.open_async(path, FileMode.AppendRead).await.unwrap();
     append.seek(0L).unwrap();
-    append.write(Encoding.utf8_encode("second")).unwrap();
+    append.write(("second").to_utf8()).unwrap();
     append.seek(0L).unwrap();
     Assert.eq(Streams.read_text(append).unwrap(), "firstsecond");
     append.close().unwrap();
@@ -66,7 +66,7 @@ async fun io_safety(): void {
     let path = "dream_io_safety.tmp";
     let writer = FileHandle.open(path, FileMode.Write).unwrap();
     Assert.is_true(writer.read(1).is_err());
-    writer.write_all(Encoding.utf8_encode("one\r\ntwo\rthree\nlast")).unwrap();
+    writer.write_all(("one\r\ntwo\rthree\nlast").to_utf8()).unwrap();
     writer.close().unwrap();
     writer.close().unwrap();
     Assert.eq(writer.read(0).unwrap_err().code(), "ECLOSED");
@@ -80,7 +80,7 @@ async fun io_safety(): void {
     Assert.eq(reader.tell().unwrap(), 5L);
     Assert.eq(reader.read_line().unwrap().unwrap(), "two\rthree");
     reader.seek(0L).unwrap();
-    Assert.eq(Encoding.utf8_decode(reader.read(3).unwrap()), "one");
+    Assert.eq(string.from_utf8(reader.read(3).unwrap()), "one");
     reader.close().unwrap();
 
     let stream = FileHandle.open(path, FileMode.Read).unwrap();
@@ -95,12 +95,12 @@ async fun io_safety(): void {
 
 async fun copy_one(path: string): Result<Unit, IoError> {
     let file = FileHandle.open_async(path, FileMode.WriteRead).await?;
-    let bytes = Encoding.utf8_encode("hello 日本語");
+    let bytes = ("hello 日本語").to_utf8();
     let count = file.write_async(bytes).await?;
     Assert.eq(count, bytes.length);
     file.seek_async(0L).await?;
     let read = file.read_async(4096).await?;
-    Assert.eq(Encoding.utf8_decode(read), "hello 日本語");
+    Assert.eq(string.from_utf8(read), "hello 日本語");
     Assert.eq(file.read_async(1).await?.length, 0);
     file.flush_async().await?;
     file.close()?;
@@ -141,10 +141,10 @@ async fun async_file_lifecycle(): void {
 
 async fun async_file_copy_and_read_ahead(): void {
     let source = FileHandle.open("async_copy_source.tmp", FileMode.WriteRead).unwrap();
-    source.write_all(Encoding.utf8_encode("first\r\nsecond\nlast")).unwrap();
+    source.write_all(("first\r\nsecond\nlast").to_utf8()).unwrap();
     source.seek(0L).unwrap();
     Assert.eq(source.read_line().unwrap().unwrap(), "first");
-    Assert.eq(Encoding.utf8_decode(source.read_async(6).await.unwrap()), "second");
+    Assert.eq(string.from_utf8(source.read_async(6).await.unwrap()), "second");
     source.seek_async(0L).await.unwrap();
     let destination = FileHandle.open_async("async_copy_destination.tmp", FileMode.WriteRead)
         .await
@@ -152,7 +152,7 @@ async fun async_file_copy_and_read_ahead(): void {
     Assert.eq(Streams.copy_async(source, destination, 3).await.unwrap(), 18L);
     destination.seek_async(0L).await.unwrap();
     Assert.eq(
-        Encoding.utf8_decode(destination.read_async(100).await.unwrap()),
+        string.from_utf8(destination.read_async(100).await.unwrap()),
         "first\r\nsecond\nlast"
     );
     source.close().unwrap();
@@ -188,7 +188,7 @@ class StreamingShortWriter: Writer {
 
 @test
 fun streaming_io(): void {
-    let input = MemoryStream(Encoding.utf8_encode("a\r\nb\rc\nlast"));
+    let input = MemoryStream(("a\r\nb\rc\nlast").to_utf8());
     let reader = BufferedReader(input, 2);
     Assert.eq(reader.read_line().unwrap().unwrap(), "a");
     Assert.eq(reader.read_line().unwrap().unwrap(), "b\rc");
@@ -199,19 +199,19 @@ fun streaming_io(): void {
 
     let destination = StreamingShortWriter();
     let buffered = BufferedWriter(destination, 3);
-    buffered.write_all(Encoding.utf8_encode("abcdefg")).unwrap();
+    buffered.write_all(("abcdefg").to_utf8()).unwrap();
     destination.fail = true;
     Assert.is_true(buffered.finish().is_err());
     destination.fail = false;
     buffered.finish().unwrap();
     buffered.finish().unwrap();
-    Assert.eq(Encoding.utf8_decode(destination.memory.to_bytes().unwrap()), "abcdefg");
+    Assert.eq(string.from_utf8(destination.memory.to_bytes().unwrap()), "abcdefg");
     Assert.is_true(buffered.write([(byte)1]).is_err());
 
     input.seek(0L).unwrap();
     let output = MemoryStream();
     Assert.eq(Streams.copy(input, output, 1).unwrap(), 11L);
-    Assert.eq(Encoding.utf8_decode(output.to_bytes().unwrap()), "a\r\nb\rc\nlast");
+    Assert.eq(string.from_utf8(output.to_bytes().unwrap()), "a\r\nb\rc\nlast");
     output.seek(15L).unwrap();
     output.write([(byte)65]).unwrap();
     let sparse = output.to_bytes().unwrap();
@@ -221,7 +221,7 @@ fun streaming_io(): void {
     Assert.is_true(output.read(1).is_err());
     Assert.is_true(BufferedReader(input, 0).read(1).is_err());
     Assert.is_true(BufferedWriter(destination, 0).finish().is_err());
-    let seek_source = MemoryStream(Encoding.utf8_encode("first\nsecond\n"));
+    let seek_source = MemoryStream(("first\nsecond\n").to_utf8());
     let seek_reader = BufferedReader(seek_source, 8192);
     Assert.eq(seek_reader.read_line().unwrap().unwrap(), "first");
     Assert.is_true(seek_reader.seek(0L - 1L).is_err());

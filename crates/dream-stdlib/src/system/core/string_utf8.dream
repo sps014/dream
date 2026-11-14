@@ -1,0 +1,53 @@
+module system.core;
+
+extend string {
+    /// Interprets `bytes` as UTF-8. Invalid sequences become U+FFFD, and a leading BOM is kept.
+    @intrinsic(Intrinsic.StringFromUtf8)
+    public static extern fun from_utf8(borrow bytes: byte[]): string;
+
+    /// Returns the UTF-8 encoding of this string. A surrogate pair becomes one code point;
+    /// a lone surrogate is encoded as that code unit.
+    public fun to_utf8(): byte[] {
+        let n = this.length;
+        let out = Buffer.alloc<byte>(n * 4);
+        let w = 0;
+        let i = 0;
+        while i < n {
+            let cp = (int)this.char_at(i);
+            i = i + 1;
+            if (cp >= 55296) && (cp <= 56319) && (i < n) {
+                let lo = (int)this.char_at(i);
+                if (lo >= 56320) && (lo <= 57343) {
+                    cp = 65536 + ((cp - 55296) * 1024) + (lo - 56320);
+                    i = i + 1;
+                }
+            }
+            if cp < 128 {
+                out[w] = (byte)cp;
+                w = w + 1;
+            } else if (cp < 2048) {
+                out[w] = (byte)(192 + (cp / 64));
+                out[w + 1] = (byte)(128 + (cp % 64));
+                w = w + 2;
+            } else if (cp < 65536) {
+                out[w] = (byte)(224 + (cp / 4096));
+                out[w + 1] = (byte)(128 + ((cp / 64) % 64));
+                out[w + 2] = (byte)(128 + (cp % 64));
+                w = w + 3;
+            } else {
+                out[w] = (byte)(240 + (cp / 262144));
+                out[w + 1] = (byte)(128 + ((cp / 4096) % 64));
+                out[w + 2] = (byte)(128 + ((cp / 64) % 64));
+                out[w + 3] = (byte)(128 + (cp % 64));
+                w = w + 4;
+            }
+        }
+        let exact = Buffer.alloc<byte>(w);
+        let j = 0;
+        while j < w {
+            exact[j] = out[j];
+            j = j + 1;
+        }
+        return exact;
+    }
+}

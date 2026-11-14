@@ -63,7 +63,7 @@ public class BufferedReader: Reader {
                     let none: Option<string> = Option.None;
                     return Result.Ok(none);
                 }
-                return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));
+                return Result.Ok(Option.Some(string.from_utf8(bytes.take_array())));
             }
             let next = this.buffer[this.offset];
             this.offset = this.offset + 1;
@@ -71,7 +71,7 @@ public class BufferedReader: Reader {
                 if bytes.length > 0 && bytes[bytes.length - 1] == (byte)13 {
                     bytes.pop();
                 }
-                return Result.Ok(Option.Some(Encoding.utf8_decode(bytes.take_array())));
+                return Result.Ok(Option.Some(string.from_utf8(bytes.take_array())));
             }
             if bytes.length >= max_bytes {
                 return Result.Err(IoError("", "ELIMIT", "line exceeds configured byte limit"));

@@ -1,0 +1,36 @@
+module system.core;
+
+/// An instant on the UTC timeline, measured in milliseconds since the Unix epoch.
+/// Negative values are before 1970-01-01. This is a point in time, not a calendar date:
+/// time zones and civil fields live on `DateTime`.
+public struct SystemTime {
+    @runtime("dateNowMillis", "core", RuntimeTrait.Component, RuntimeTrait.Quiet)
+    static extern fun now_millis(): long;
+
+    _millis: long;
+
+    /// The instant `millis` milliseconds after the Unix epoch.
+    public constructor(millis: long) {
+        this._millis = millis;
+    }
+
+    /// 1970-01-01T00:00:00Z.
+    public static fun unix_epoch(): SystemTime {
+        return SystemTime(0L);
+    }
+
+    /// The current UTC time. The clock can jump when the operating system adjusts it.
+    public static fun now(): SystemTime {
+        return SystemTime(SystemTime.now_millis());
+    }
+
+    /// Milliseconds since the Unix epoch.
+    public get epoch_millis(): long {
+        return this._millis;
+    }
+
+    /// This instant shifted by `millis` milliseconds. Negative values move earlier.
+    public fun add_millis(millis: long): SystemTime {
+        return SystemTime(this._millis + millis);
+    }
+}

@@ -16,5 +16,5 @@ fun main(entry_args: string[]): void {
     Assert.eq(args[2], "");
     Assert.eq(args[3], "first\nsecond");
     Assert.eq(args[4], "こんにちは");
-    Assert.eq(Encoding.hex_encode(Encoding.utf8_encode(args[5])), "efbbbf6c656164696e67");
+    Assert.eq(Encoding.hex_encode((args[5]).to_utf8()), "efbbbf6c656164696e67");
 }

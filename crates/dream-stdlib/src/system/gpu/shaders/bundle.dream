@@ -232,7 +232,7 @@ internal class Bundle {
     }
 
     internal static fun text_field(out: List<byte>, borrow text: string): void {
-        let bytes = Encoding.utf8_encode(text);
+        let bytes = (text).to_utf8();
         Bundle.u32(out, bytes.length);
         for (let x in bytes) {
             out.push(x);

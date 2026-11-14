@@ -69,7 +69,7 @@ internal class UrlParser {
 
     // Strips leading and trailing C0 controls and spaces, and removes every tab and newline.
     static fun prepare(borrow input: string): byte[] {
-        let bytes = Encoding.utf8_encode(input);
+        let bytes = (input).to_utf8();
         let start = 0;
         let end = bytes.length;
         while start < end && (int)bytes[start] <= 0x20 {

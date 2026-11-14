@@ -95,7 +95,7 @@ public class HttpClient {
             return Result.Err(completed.unwrap_err());
         }
         let bytes = completed.unwrap();
-        let json = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes));
+        let json = Json.deserialize<JsonValue>(string.from_utf8(bytes));
         if json.is_err() {
             operation.close();
             return Result.Err(HttpError("EIO", "invalid HTTP response metadata"));

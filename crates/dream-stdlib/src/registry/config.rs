@@ -7,7 +7,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.cli",
         "system.json",
         "system.collections",
-        "system.encoding",
+        "system.text",
     ],
     core_language: false,
     web_assets: None,

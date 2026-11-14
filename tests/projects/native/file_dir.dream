@@ -114,7 +114,7 @@ async fun file_stats(): void {
         Ok(st) => {
             Assert.is_true(st.is_file);
             Assert.eq(st.size, 2L);
-            Assert.is_true(st.mtime_millis > 0L);
+            Assert.is_true(st.modified.epoch_millis > 0L);
         },
         Err(e) => Assert.fail(e.message()),
     }

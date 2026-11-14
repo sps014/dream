@@ -24,7 +24,7 @@ async fun main(): void {
     // Buffered, seekable streaming. `open` returns a `Result<FileHandle, IoError>`.
     let stream = FileHandle.open(path, FileMode.Read).unwrap();
     System.print("first 5: ");
-    System.println(Encoding.utf8_decode(stream.read(5).unwrap())); // "Dream"
+    System.println(string.from_utf8(stream.read(5).unwrap())); // "Dream"
     System.print("at pos: ");
     System.println(stream.tell().unwrap()); // 5
     stream.seek(0L).unwrap();

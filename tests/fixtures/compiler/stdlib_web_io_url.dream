@@ -10,9 +10,9 @@ async fun main(): void {
         System.panic("URL mismatch");
     }
     let file = FileHandle.open_async("browser.txt", FileMode.WriteRead).await.unwrap();
-    file.write_async(Encoding.utf8_encode("hello browser")).await.unwrap();
+    file.write_async(("hello browser").to_utf8()).await.unwrap();
     file.seek_async(0L).await.unwrap();
-    if Encoding.utf8_decode(file.read_async(100).await.unwrap()) != "hello browser" {
+    if string.from_utf8(file.read_async(100).await.unwrap()) != "hello browser" {
         System.panic("file mismatch");
     }
     file.close().unwrap();

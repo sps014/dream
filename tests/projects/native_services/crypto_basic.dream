@@ -12,14 +12,14 @@ fun crypto_basic(): void {
         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     );
 
-    let abc = Encoding.utf8_encode("abc");
+    let abc = ("abc").to_utf8();
     Assert.eq(
         (Encoding.hex_encode(Sha256.hash(abc))).to_string(),
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
 
-    let key = Encoding.utf8_encode("key");
-    let msg = Encoding.utf8_encode("The quick brown fox jumps over the lazy dog");
+    let key = ("key").to_utf8();
+    let msg = ("The quick brown fox jumps over the lazy dog").to_utf8();
     Assert.eq(
         (Encoding.hex_encode(HmacSha256.sign(key, msg))).to_string(),
         "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
@@ -63,15 +63,15 @@ fun sha512_prefix(data: byte[]): string {
 @test
 fun sha_padding_boundaries(): void {
     Assert.eq(
-        sha256_hex(Encoding.utf8_encode("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")),
+        sha256_hex(("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq").to_utf8()),
         "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
     );
     Assert.eq(
         Encoding.hex_encode(
             Sha512.hash(
-                Encoding.utf8_encode(
+                (
                     "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
-                )
+                ).to_utf8()
             )
         ).to_string(),
         "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909"
@@ -95,7 +95,7 @@ fun sha_padding_boundaries(): void {
         long_key[i] = (byte)170;
         i = i + 1;
     }
-    let message = Encoding.utf8_encode("Test Using Larger Than Block-Size Key - Hash Key First");
+    let message = ("Test Using Larger Than Block-Size Key - Hash Key First").to_utf8();
     Assert.eq(
         Encoding.hex_encode(HmacSha256.sign(long_key, message)).to_string(),
         "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
@@ -115,28 +115,28 @@ fun aes_gcm_basic(): void {
     let nonce = AesGcm.generate_nonce().unwrap();
     Assert.eq(nonce.length, 12);
 
-    let aad = Encoding.utf8_encode("header");
-    let plaintext = Encoding.utf8_encode("attack at dawn");
+    let aad = ("header").to_utf8();
+    let plaintext = ("attack at dawn").to_utf8();
 
     let ciphertext = AesGcm.encrypt(key, nonce, plaintext, aad).unwrap_or(Array.alloc<byte>(0));
     Assert.eq(ciphertext.length, 30);
 
     switch (AesGcm.decrypt(key, nonce, ciphertext, aad)) {
-        Ok(recovered) => Assert.eq(Encoding.utf8_decode(recovered), "attack at dawn"),
+        Ok(recovered) => Assert.eq(string.from_utf8(recovered), "attack at dawn"),
         Err(e) => Assert.fail("unexpected error: " + e.message()),
     }
 
     // Wrong AAD must fail authentication.
-    let wrong_aad = Encoding.utf8_encode("wrong");
+    let wrong_aad = ("wrong").to_utf8();
     switch (AesGcm.decrypt(key, nonce, ciphertext, wrong_aad)) {
-        Ok(recovered) => Assert.fail("should not decrypt: " + Encoding.utf8_decode(recovered)),
+        Ok(recovered) => Assert.fail("should not decrypt: " + string.from_utf8(recovered)),
         Err(e) => Assert.eq(e.code(), "EDECRYPT"),
     }
 
     // Wrong key must fail authentication.
     let other_key = AesGcmKey.generate().unwrap();
     switch (AesGcm.decrypt(other_key, nonce, ciphertext, aad)) {
-        Ok(recovered) => Assert.fail("should not decrypt: " + Encoding.utf8_decode(recovered)),
+        Ok(recovered) => Assert.fail("should not decrypt: " + string.from_utf8(recovered)),
         Err(e) => Assert.eq(e.code(), "EDECRYPT"),
     }
 

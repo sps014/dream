@@ -377,6 +377,13 @@ public static class File {
         let atime = long.parse(parts[3]).unwrap_or(0L);
         let mode = int.parse(parts[4]).unwrap_or(0);
         let kind = int.parse(parts[5]).unwrap_or(3);
-        return Result.Ok(FileStats(size, mtime, ctime, atime, mode, kind));
+        return Result.Ok(FileStats(
+            size,
+            SystemTime(mtime),
+            SystemTime(ctime),
+            SystemTime(atime),
+            mode,
+            kind
+        ));
     }
 }

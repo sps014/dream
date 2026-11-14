@@ -16,7 +16,7 @@ dream-diagnostics = { path = "../dream-diagnostics" }
 dream-text = { path = "../dream-text" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-target-lexicon = "0.12.16"
+target-lexicon = "0.13.5"
 
 [dev-dependencies]
 bumpalo = "3"

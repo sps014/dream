@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Dream Regex Interop Demo</title>
+    <title>Dream Regex Demo</title>
     <style>
       body {
         font-family: "Inter", system-ui, sans-serif;
@@ -28,12 +28,11 @@
     </style>
   </head>
   <body>
-    <h1>Dream Regex via JS <code>RegExp</code></h1>
+    <h1>Dream Regex</h1>
     <p class="muted">
-      A Dream program using the stdlib <code>Regex</code> class, which is backed by JavaScript's
-      <code>RegExp</code> through the <code>Dream</code> host module. First build the module:
-      <code>cargo run -- sample/interop/regex.dream</code> (writes <code>target/web/regex.wasm</code> +
-      <code>target/web/regex.abi.json</code>, both git-ignored). Then serve the <strong>repository root</strong>
+      A Dream program using the <code>Regex</code> class. First build the module:
+      <code>cargo run -- sample/interop/pattern.dream</code> (writes <code>target/web/pattern.wasm</code> +
+      <code>target/web/pattern.abi.json</code>, both git-ignored). Then serve the <strong>repository root</strong>
       over HTTP (e.g. <code>npx serve .</code>) and open <code>/sample/interop/regex.html</code>.
     </p>
     <div id="log"></div>

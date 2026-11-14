@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `SystemTime`
 
-An instant on the UTC timeline, measured in milliseconds since the Unix epoch. Negative values are before 1970-01-01. This is a point in time, not a calendar date: time zones and civil fields live on `DateTime`.
+An instant on the UTC timeline, measured in milliseconds since the Unix epoch. Negative values are before 1970-01-01. This is a point in time, not a calendar date: time zones and civil fields live in `import datetime`.
 
 ```dream
 public struct SystemTime

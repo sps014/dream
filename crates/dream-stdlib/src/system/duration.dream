@@ -1,7 +1,6 @@
 module system;
 
-/// A signed span of time with millisecond precision. Add one to a `DateTime` with
-/// `DateTime.add`, or combine durations with `add` and `sub`.
+/// A signed span of time with millisecond precision. Combine durations with `add` and `sub`.
 public struct Duration {
     /// Length of the span in milliseconds; negative values point backward in time.
     public millis: long;

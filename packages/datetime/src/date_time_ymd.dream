@@ -1,4 +1,4 @@
-module system;
+module datetime;
 
 internal struct DateTimeYmd {
     public year: int;

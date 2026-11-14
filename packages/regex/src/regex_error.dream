@@ -1,4 +1,4 @@
-module system.regex;
+module regex;
 
 /// Failure to compile a regular expression.
 public class RegexError: Error {

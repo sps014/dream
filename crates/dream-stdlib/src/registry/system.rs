@@ -47,24 +47,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/stopwatch.dream"),
         ),
         (
-            "<std>/system/date_time_ymd.dream",
-            include_str!("../system/date_time_ymd.dream"),
-        ),
-        (
-            "<std>/system/time_zone.dream",
-            include_str!("../system/time_zone.dream"),
-        ),
-        (
-            "<std>/system/file_stats_time.dream",
-            include_str!("../system/file_stats_time.dream"),
-        ),
-        (
             "<std>/system/duration.dream",
             include_str!("../system/duration.dream"),
-        ),
-        (
-            "<std>/system/date_time.dream",
-            include_str!("../system/date_time.dream"),
         ),
         (
             "<std>/system/debug.dream",

@@ -45,7 +45,7 @@ internal static class AuthCrypto {
     }
 
     internal static fun now(): long {
-        return DateTime.utc_now().epoch_millis / 1000L;
+        return SystemTime.now().epoch_millis / 1000L;
     }
 
     @cfg(Target.Native)

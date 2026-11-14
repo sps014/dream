@@ -43,7 +43,6 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.webapi](system-webapi.md)
 - [system.primitives](system-primitives.md)
 - [system.process](system-process.md)
-- [system.regex](system-regex.md)
 - [system.simd](system-simd.md)
 - [system.task](system-task.md)
 - [system.testing](system-testing.md)

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `Duration`
 
-A signed span of time with millisecond precision. Add one to a `DateTime` with `DateTime.add`, or combine durations with `add` and `sub`.
+A signed span of time with millisecond precision. Combine durations with `add` and `sub`.
 
 ```dream
 public struct Duration

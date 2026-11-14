@@ -1,7 +1,7 @@
 import system.testing;
 import system;
 import system.text;
-import system.regex;
+import regex;
 
 @test
 @timeout(180000)

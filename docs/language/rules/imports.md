@@ -35,10 +35,11 @@ Split a program into `.dream` files as it grows. An `import` makes another file'
 Opt-in stdlib APIs live under the reserved `system.*` package tree. A plain import loads that package (and its dependencies) into the program; public names are then usable unqualified:
 
 ```dream
-import system; // System, DateTime, Stopwatch, …
+import system; // System, Duration, Stopwatch, …
+import datetime; // DateTime, TimeZone
 import system.collections; // List, Map, Set, Queue, Stack
 import system.text; // string methods, StringBuilder, formatting
-import system.regex; // Regex
+import regex; // Regex
 import system.json; // Json, JsonValue
 import system.io; // File, FileHandle, Path, IoError
 import system.encoding; // Encoding (UTF-8 / hex / Base64)

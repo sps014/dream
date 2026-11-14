@@ -340,9 +340,20 @@ fn optional_service_binding_works_in_static_and_shared_libraries() {
         &root,
         r#"
         import system;
+        import datetime;
         @export fun zone_name_len(): int { return TimeZone.local.name.length; }
     "#,
     );
+    let packages = root.join("dream_packages/datetime");
+    fs::create_dir_all(packages.join("src")).unwrap();
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/datetime");
+    fs::copy(source.join("dream.toml"), packages.join("dream.toml")).unwrap();
+    for entry in fs::read_dir(source.join("src")).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            fs::copy(entry.path(), packages.join("src").join(entry.file_name())).unwrap();
+        }
+    }
     for kind in [OutputKind::Staticlib, OutputKind::Dylib] {
         let product = build(&root, kind, &["--release"]);
         let manifest = dream_abi::host_capability::HostManifest::parse(

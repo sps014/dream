@@ -1,5 +1,16 @@
 module system.validation;
 
+// Pattern checks stay on the runtime engine. The public Regex API lives in the regex package,
+// which embedded stdlib cannot import.
+@runtime("regex_compile")
+extern fun pattern_compile(borrow pattern: string, flags: int): usize;
+
+@runtime("regex_test")
+extern fun pattern_test(engine: usize, borrow input: string): int;
+
+@runtime("regex_free")
+extern fun pattern_free(engine: usize): void;
+
 /// Strict decoding and validation derived for @json models.
 public static class Validation {
     /// Decodes and validates JSON as `T`, returning the collected validation issues on failure.
@@ -188,13 +199,15 @@ public static class Validation {
             }
             let pattern = schema.get("pattern").unwrap_or(JsonValue.null()).as_string();
             if kind == "string" && pattern.is_some() {
-                switch (Regex.compile(pattern.unwrap())) {
-                    Ok(regex) => {
-                        if !regex.test(value.as_string().unwrap()) {
-                            errors.add(location, "pattern", "value does not match pattern");
-                        }
+                let text = pattern.unwrap();
+                let engine = pattern_compile(text, 0);
+                if engine == 0 {
+                    errors.add(location, "pattern", "invalid regular expression: " + text);
+                } else {
+                    if pattern_test(engine, value.as_string().unwrap()) == 0 {
+                        errors.add(location, "pattern", "value does not match pattern");
                     }
-                    Err(error) => errors.add(location, "pattern", error.message()),
+                    pattern_free(engine);
                 }
             }
         }

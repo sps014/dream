@@ -3,7 +3,7 @@ import system.collections;
 import system.json;
 import system.simd;
 import system.text;
-import system.regex;
+import regex;
 
 // Microbench suite for ARC / string / collection / allocator hot paths.
 // Run: `dream --release run tests/bench/microbenches.dream`

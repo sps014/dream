@@ -1,4 +1,4 @@
-module system.regex;
+module regex;
 
 /// Rich match result returned by `Regex.match_info`. `full` is the overall match text; `groups`
 /// holds each capturing group's text in group-number order (1, 2, 3, ... — `groups[0]` is group 1,

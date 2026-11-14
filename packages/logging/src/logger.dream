@@ -45,7 +45,7 @@ public class Logger {
         if level < this._level {
             return;
         }
-        let record = LogRecord(level, this.name, msg, DateTime.utc_now().epoch_millis);
+        let record = LogRecord(level, this.name, msg, SystemTime.now().epoch_millis);
         let i = 0;
         while i < this.handlers.length {
             let h = this.handlers[i];

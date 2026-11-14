@@ -1,6 +1,7 @@
 import system.testing;
 import system;
 import system.text;
+import datetime;
 
 // Built from fixed instants (never `now()`) so the results are deterministic.
 @test

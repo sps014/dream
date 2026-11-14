@@ -154,7 +154,6 @@ fn run_core_services_e2e() {
         "console_read_line",
         "crypto_basic",
         "process_run_basic",
-        "datetime",
     ]));
 }
 

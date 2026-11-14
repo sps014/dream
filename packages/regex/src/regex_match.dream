@@ -1,4 +1,4 @@
-module system.regex;
+module regex;
 
 // The result of a successful `RegexVM.find`: every capturing group's `[start, end)` offsets, flat
 // pairs indexed `2*i`/`2*i + 1` (group 0 is the overall match). `-1` marks a group that never

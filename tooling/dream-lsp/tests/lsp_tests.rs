@@ -2174,8 +2174,8 @@ fn member_context_skips_unloaded_stdlib_types() {
     use dream_lsp::code_actions::unloaded_stdlib_completions;
     use dream_lsp::index::is_member_completion_context;
 
-    // Only `system` is imported — List/DateTime would normally be offered as unloaded
-    // completions, but never after a member-access `.`.
+    // Only `system` is imported — List would normally be offered as an unloaded
+    // completion, but never after a member-access `.`.
     let harness = TestHarness::new("import system;\nfun main(): void {\n    System.|\n}\n");
     assert!(
         is_member_completion_context(&harness.src, harness.offset),

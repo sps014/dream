@@ -19,7 +19,6 @@ mod json_derive;
 mod net;
 mod primitives;
 mod process;
-mod regex;
 mod simd;
 mod system;
 mod task;
@@ -101,7 +100,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     simd::PACKAGE,
     task::PACKAGE,
     text::PACKAGE,
-    regex::PACKAGE,
     encoding::PACKAGE,
     json::PACKAGE,
     io::PACKAGE,

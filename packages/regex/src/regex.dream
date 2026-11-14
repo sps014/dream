@@ -1,4 +1,12 @@
-module system.regex;
+module regex;
+
+import system;
+import system.collections;
+import system.text;
+import regex_error;
+import regex_flags;
+import regex_match;
+import regex_match_info;
 
 // Compiled regular expressions. Native C uses PCRE2-16 JIT; WASM uses the in-module
 // PCRE2-compatible engine.
@@ -54,8 +62,8 @@ public class Regex {
         this.engine = engine;
         this.ngroup = regex_group_count(this.engine);
         let nc = regex_name_count(this.engine);
-        this.group_names = Buffer.alloc<string>(nc);
-        this.group_name_numbers = Buffer.alloc<int>(nc);
+        this.group_names = Array.alloc<string>(nc);
+        this.group_name_numbers = Array.alloc<int>(nc);
         let i = 0;
         while i < nc {
             this.group_names[i] = regex_name_at(this.engine, i);
@@ -106,7 +114,7 @@ public class Regex {
                             pos = e;
                         } else {
                             if s < n {
-                                sb.append_char(input.char_at(s));
+                                sb.append_char(input[s]);
                                 pos = s + 1;
                             } else {
                                 pos = n + 1;
@@ -139,9 +147,9 @@ public class Regex {
         let i = 0;
         let rn = replacement.length;
         while i < rn {
-            let c = replacement.char_at(i);
+            let c = replacement[i];
             if (c == '$') && (i + 1 < rn) {
-                let next = replacement.char_at(i + 1);
+                let next = replacement[i + 1];
                 if next == '$' {
                     sb.append_char('$');
                     i = i + 2;
@@ -151,8 +159,8 @@ public class Regex {
                 } else if (next == '{') {
                     let j = i + 2;
                     let token = StringBuilder();
-                    while (j < rn) && (replacement.char_at(j) != '}') {
-                        token.append_char(replacement.char_at(j));
+                    while (j < rn) && (replacement[j] != '}') {
+                        token.append_char(replacement[j]);
                         j = j + 1;
                     }
                     if j < rn {
@@ -184,7 +192,7 @@ public class Regex {
         let v = 0;
         let i = 0;
         while i < token.length {
-            let ch = token.char_at(i);
+            let ch = token[i];
             if ch.is_digit() == false {
                 all_digits = false;
             } else {
@@ -210,7 +218,7 @@ public class Regex {
     public fun match(input: string): string[] {
         if this.global {
             let offsets = regex_find_all(this.engine, input);
-            let matches = Buffer.alloc<string>(offsets.length / 2);
+            let matches = Array.alloc<string>(offsets.length / 2);
             let i = 0;
             while i < matches.length {
                 matches[i] = input.substring(offsets[i * 2], offsets[i * 2 + 1]);
@@ -221,7 +229,7 @@ public class Regex {
         let m_opt = this.find_at(input, 0);
         return switch (m_opt) {
             Some(m) => this.groups_array(input, m),
-            None => Buffer.alloc<string>(0),
+            None => Array.alloc<string>(0),
         };
     }
 
@@ -237,7 +245,7 @@ public class Regex {
 
     fun build_match_info(input: string, m: RegexMatch): RegexMatchInfo {
         let full = m.group_text(input, 0);
-        let groups = Buffer.alloc<string>(this.ngroup);
+        let groups = Array.alloc<string>(this.ngroup);
         let i = 0;
         while i < this.ngroup {
             groups[i] = m.group_text(input, i + 1);
@@ -248,7 +256,7 @@ public class Regex {
 
     fun groups_array(input: string, m: RegexMatch): string[] {
         let count = this.ngroup + 1;
-        let arr = Buffer.alloc<string>(count);
+        let arr = Array.alloc<string>(count);
         let i = 0;
         while i < count {
             arr[i] = m.group_text(input, i);
@@ -258,7 +266,7 @@ public class Regex {
     }
 
     fun to_array(list: List<string>): string[] {
-        let arr = Buffer.alloc<string>(list.length);
+        let arr = Array.alloc<string>(list.length);
         let i = 0;
         while i < list.length {
             arr[i] = list[i];

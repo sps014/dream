@@ -7289,7 +7289,7 @@
     "declarations": [
       {
         "signature": "public struct SystemTime",
-        "description": "An instant on the UTC timeline, measured in milliseconds since the Unix epoch. Negative values are before 1970-01-01. This is a point in time, not a calendar date: time zones and civil fields live on `DateTime`.",
+        "description": "An instant on the UTC timeline, measured in milliseconds since the Unix epoch. Negative values are before 1970-01-01. This is a point in time, not a calendar date: time zones and civil fields live in `import datetime`.",
         "line": 6,
         "page": "reference/api/core-system-time.md"
       },
@@ -7559,223 +7559,6 @@
         "description": "Digests `data` and returns its 64-byte SHA-512 hash.",
         "line": 44,
         "page": "reference/api/crypto-sha512.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/date_time.dream",
-    "package": "system",
-    "page": "reference/api/date-time.md",
-    "declarations": [
-      {
-        "signature": "public struct DateTime: Equatable<DateTime>, Comparable<DateTime>",
-        "description": "A calendar date and time of day.",
-        "line": 4,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public constructor(epoch_millis: long, offset_minutes: int)",
-        "description": "Creates a `DateTime` with `epoch_millis`, `offset_minutes`.",
-        "line": 18,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get epoch_millis(): long",
-        "description": "UTC time as milliseconds since the Unix epoch.",
-        "line": 24,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get offset_minutes(): int",
-        "description": "Offset from UTC, in minutes.",
-        "line": 29,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public static fun utc_now(): DateTime",
-        "description": "Returns the current instant with a UTC offset of zero. Unlike `now`, it reads only the clock and does not consult the timezone database, so it works where timezone support is not linked.",
-        "line": 36,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public static fun now(): DateTime",
-        "description": "Returns the current instant in the machine's local timezone.",
-        "line": 41,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public static fun now_in(zone: TimeZone): DateTime",
-        "description": "The current instant in `zone` (an IANA timezone, see `TimeZone`).",
-        "line": 48,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public static fun from_epoch_millis(millis: long): DateTime",
-        "description": "Wraps a raw UTC epoch millisecond instant.",
-        "line": 55,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get epoch_seconds(): long",
-        "description": "UTC time as whole seconds since the Unix epoch.",
-        "line": 60,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public static fun from_epoch_seconds(seconds: long): DateTime",
-        "description": "Creates a UTC date/time from seconds since the Unix epoch.",
-        "line": 65,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public static fun of( year: int, month: int, day: int, hour: int, minute: int, second: int, millisecond: int ): DateTime",
-        "description": "Builds a UTC instant from calendar fields.",
-        "line": 70,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public static fun of_local( year: int, month: int, day: int, hour: int, minute: int, second: int, millisecond: int ): DateTime",
-        "description": "Builds an instant from calendar fields interpreted as local wall-clock time.",
-        "line": 88,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public static fun of_zoned( year: int, month: int, day: int, hour: int, minute: int, second: int, millisecond: int, zone: TimeZone ): DateTime",
-        "description": "Builds an instant from calendar fields interpreted as wall-clock time in `zone`.",
-        "line": 103,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public fun to_utc(): DateTime",
-        "description": "The same instant in UTC.",
-        "line": 119,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public fun to_local(): DateTime",
-        "description": "The same instant in the local system timezone.",
-        "line": 124,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public fun to_zone(zone: TimeZone): DateTime",
-        "description": "The same instant in `zone` (an IANA timezone, see `TimeZone`).",
-        "line": 130,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get year(): int",
-        "description": "The calendar year in this value's UTC offset (proleptic Gregorian; `0` is 1 BC).",
-        "line": 146,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get month(): int",
-        "description": "The month in this value's UTC offset, from `1` (January) to `12` (December).",
-        "line": 151,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get day(): int",
-        "description": "The day of the month in this value's UTC offset, from `1` to `31`.",
-        "line": 156,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get hour(): int",
-        "description": "The hour of the day in this value's UTC offset, from `0` to `23`.",
-        "line": 166,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get minute(): int",
-        "description": "The minute of the hour, from `0` to `59`.",
-        "line": 171,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get second(): int",
-        "description": "The second of the minute, from `0` to `59`; leap seconds are not represented.",
-        "line": 176,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get millisecond(): int",
-        "description": "The millisecond of the second, from `0` to `999`.",
-        "line": 181,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get day_of_week(): int",
-        "description": "The day of the week (0 = Sunday).",
-        "line": 186,
-        "page": "reference/api/date-time-1.md"
-      },
-      {
-        "signature": "public get day_of_year(): int",
-        "description": "The day of the year (1-based).",
-        "line": 191,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public fun add(d: Duration): DateTime",
-        "description": "Returns the instant `d` after this date/time, keeping its UTC offset.",
-        "line": 198,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public fun until(other: DateTime): Duration",
-        "description": "Returns the duration from this instant to `other`.",
-        "line": 203,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public fun start_of_day(): DateTime",
-        "description": "Returns midnight on the same calendar date, keeping this UTC offset.",
-        "line": 208,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public fun compare(borrow other: DateTime): int",
-        "description": "Orders two instants by their UTC epoch milliseconds, ignoring the display offset. Returns -1 when this is earlier, 0 when equal, and 1 when later.",
-        "line": 214,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public fun is_before(other: DateTime): bool",
-        "description": "True if this is before `other`.",
-        "line": 225,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public fun is_after(other: DateTime): bool",
-        "description": "True if this is after `other`.",
-        "line": 230,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public fun equals(other: DateTime): bool",
-        "description": "True if this equals `other`.",
-        "line": 235,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public fun to_iso8601(): string",
-        "description": "Formats as ISO-8601.",
-        "line": 240,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public override fun to_string(): string",
-        "description": "A human-readable formatting.",
-        "line": 265,
-        "page": "reference/api/date-time-2.md"
-      },
-      {
-        "signature": "public static fun parse(text: string): Result<DateTime, ParseError>",
-        "description": "Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).",
-        "line": 289,
-        "page": "reference/api/date-time-2.md"
       }
     ]
   },
@@ -8885,62 +8668,62 @@
     "declarations": [
       {
         "signature": "public struct Duration",
-        "description": "A signed span of time with millisecond precision. Add one to a `DateTime` with `DateTime.add`, or combine durations with `add` and `sub`.",
-        "line": 5,
+        "description": "A signed span of time with millisecond precision. Combine durations with `add` and `sub`.",
+        "line": 4,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public millis: long",
         "description": "Length of the span in milliseconds; negative values point backward in time.",
-        "line": 7,
+        "line": 6,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public constructor(millis: long)",
         "description": "Creates a duration of `millis` milliseconds.",
-        "line": 10,
+        "line": 9,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public static fun from_seconds(seconds: long): Duration",
         "description": "Creates a duration of `seconds` whole seconds.",
-        "line": 15,
+        "line": 14,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public static fun from_minutes(minutes: long): Duration",
         "description": "Creates a duration of `minutes` whole minutes.",
-        "line": 20,
+        "line": 19,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public static fun from_hours(hours: long): Duration",
         "description": "Creates a duration of `hours` whole hours.",
-        "line": 25,
+        "line": 24,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public static fun from_days(days: long): Duration",
         "description": "Creates a duration of `days` 24-hour days. Calendar days that cross a daylight-saving change are not adjusted.",
-        "line": 31,
+        "line": 30,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public fun as_seconds(): long",
         "description": "Returns the duration in whole seconds, truncated toward zero.",
-        "line": 36,
+        "line": 35,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public fun add(other: Duration): Duration",
         "description": "Returns the sum of this duration and `other`.",
-        "line": 41,
+        "line": 40,
         "page": "reference/api/duration.md"
       },
       {
         "signature": "public fun sub(other: Duration): Duration",
         "description": "Returns this duration minus `other`.",
-        "line": 46,
+        "line": 45,
         "page": "reference/api/duration.md"
       }
     ]
@@ -9166,25 +8949,6 @@
         "description": "Copies at most `max` bytes of the UTF-8 C string at `ptr`, stopping at the first NUL. `None` for `NULL`.",
         "line": 212,
         "page": "reference/api/ffi.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/file_stats_time.dream",
-    "package": "system",
-    "page": "reference/api/file-stats-time.md",
-    "declarations": [
-      {
-        "signature": "public fun modified_utc(): DateTime",
-        "description": "`modified` as a UTC `DateTime`.",
-        "line": 5,
-        "page": "reference/api/file-stats-time.md"
-      },
-      {
-        "signature": "public fun changed_utc(): DateTime",
-        "description": "`changed` as a UTC `DateTime` (inode change time on Unix, not birth time).",
-        "line": 10,
-        "page": "reference/api/file-stats-time.md"
       }
     ]
   },
@@ -16820,160 +16584,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/regex/regex.dream",
-    "package": "system.regex",
-    "page": "reference/api/regex-regex.md",
-    "declarations": [
-      {
-        "signature": "public class Regex",
-        "description": "A compiled regular expression. Use `Regex.compile` to report invalid patterns.",
-        "line": 33,
-        "page": "reference/api/regex-regex.md"
-      },
-      {
-        "signature": "public static fun compile( pattern: string, flags: RegexFlags = RegexFlags.None ): Result<Regex, RegexError>",
-        "description": "Compiles a pattern with optional flags, returning an error for invalid patterns.",
-        "line": 41,
-        "page": "reference/api/regex-regex.md"
-      },
-      {
-        "signature": "public fun test(borrow input: string): bool",
-        "description": "Returns whether the regular expression matches anywhere in `input`.",
-        "line": 81,
-        "page": "reference/api/regex-regex.md"
-      },
-      {
-        "signature": "public fun replace(input: string, replacement: string): string",
-        "description": "Replaces matching text. Replaces every match with `Global`; otherwise replaces only the first.",
-        "line": 87,
-        "page": "reference/api/regex-regex.md"
-      },
-      {
-        "signature": "public fun match(input: string): string[]",
-        "description": "Returns complete matches with `Global`, or the first match followed by its capture groups otherwise. Returns an empty array when unmatched.",
-        "line": 210,
-        "page": "reference/api/regex-regex.md"
-      },
-      {
-        "signature": "public fun match_info(input: string): Option<RegexMatchInfo>",
-        "description": "Returns the first match and its named and numbered capture groups, or `None` when unmatched.",
-        "line": 230,
-        "page": "reference/api/regex-regex.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/regex/regex_error.dream",
-    "package": "system.regex",
-    "page": "reference/api/regex-regex-error.md",
-    "declarations": [
-      {
-        "signature": "public class RegexError: Error",
-        "description": "Failure to compile a regular expression.",
-        "line": 4,
-        "page": "reference/api/regex-regex-error.md"
-      },
-      {
-        "signature": "public pattern: string",
-        "description": "Pattern that could not be compiled.",
-        "line": 6,
-        "page": "reference/api/regex-regex-error.md"
-      },
-      {
-        "signature": "public fun message(): string",
-        "description": "A description of the compilation failure.",
-        "line": 13,
-        "page": "reference/api/regex-regex-error.md"
-      },
-      {
-        "signature": "public fun code(): string",
-        "description": "Stable compilation-failure code.",
-        "line": 18,
-        "page": "reference/api/regex-regex-error.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/regex/regex_flags.dream",
-    "package": "system.regex",
-    "page": "reference/api/regex-regex-flags.md",
-    "declarations": [
-      {
-        "signature": "public enum RegexFlags",
-        "description": "Compile-time regex options. Combine with `|` (`RegexFlags.Global | RegexFlags.IgnoreCase`).",
-        "line": 4,
-        "page": "reference/api/regex-regex-flags.md"
-      },
-      {
-        "signature": "None = 0",
-        "description": "No optional matching flags are enabled.",
-        "line": 6,
-        "page": "reference/api/regex-regex-flags.md"
-      },
-      {
-        "signature": "Global = 1",
-        "description": "Match every occurrence rather than only the first.",
-        "line": 8,
-        "page": "reference/api/regex-regex-flags.md"
-      },
-      {
-        "signature": "IgnoreCase = 2",
-        "description": "Ignore case when matching.",
-        "line": 10,
-        "page": "reference/api/regex-regex-flags.md"
-      },
-      {
-        "signature": "Multiline = 4",
-        "description": "Allow line anchors to match individual lines.",
-        "line": 12,
-        "page": "reference/api/regex-regex-flags.md"
-      },
-      {
-        "signature": "DotAll = 8",
-        "description": "Allow a dot to match newline characters.",
-        "line": 14,
-        "page": "reference/api/regex-regex-flags.md"
-      },
-      {
-        "signature": "public fun has(flag: RegexFlags): bool",
-        "description": "Returns whether this flag set contains `flag`.",
-        "line": 17,
-        "page": "reference/api/regex-regex-flags.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/regex/regex_match_info.dream",
-    "package": "system.regex",
-    "page": "reference/api/regex-regex-match-info.md",
-    "declarations": [
-      {
-        "signature": "public class RegexMatchInfo",
-        "description": "Rich match result returned by `Regex.match_info`. `full` is the overall match text; `groups` holds each capturing group's text in group-number order (1, 2, 3, ... — `groups[0]` is group 1, since `full` already covers group 0), with `\"\"` for a group that didn't participate; `named` looks a group up by the name it was given via `(?<name>...)`.",
-        "line": 7,
-        "page": "reference/api/regex-regex-match-info.md"
-      },
-      {
-        "signature": "public full: string",
-        "description": "Text of the complete regular-expression match.",
-        "line": 9,
-        "page": "reference/api/regex-regex-match-info.md"
-      },
-      {
-        "signature": "public groups: string[]",
-        "description": "Text captured by each numbered group.",
-        "line": 12,
-        "page": "reference/api/regex-regex-match-info.md"
-      },
-      {
-        "signature": "public fun named(name: string): Option<string>",
-        "description": "The text captured by the named group `name`, or `None` if no such name exists on this pattern or the group didn't participate in the match.",
-        "line": 26,
-        "page": "reference/api/regex-regex-match-info.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/stopwatch.dream",
     "package": "system",
     "page": "reference/api/stopwatch.md",
@@ -18118,49 +17728,6 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/time_zone.dream",
-    "package": "system",
-    "page": "reference/api/time-zone.md",
-    "declarations": [
-      {
-        "signature": "public struct TimeZone",
-        "description": "An IANA timezone identifier (e.g. `\"America/New_York\"`, `\"Europe/London\"`), resolving UTC offsets from the host's timezone database — including historical DST rules, unlike a plain fixed offset. Use with `DateTime.now_in`/`DateTime.of_zoned`/`DateTime.to_zone`.",
-        "line": 6,
-        "page": "reference/api/time-zone.md"
-      },
-      {
-        "signature": "public get name(): string",
-        "description": "The IANA zone identifier (e.g. `\"America/New_York\"`).",
-        "line": 26,
-        "page": "reference/api/time-zone.md"
-      },
-      {
-        "signature": "public static get utc(): TimeZone",
-        "description": "The UTC zone (offset `0` at every instant).",
-        "line": 31,
-        "page": "reference/api/time-zone.md"
-      },
-      {
-        "signature": "public static get local(): TimeZone",
-        "description": "The host's configured local timezone, or `utc` if it can't be determined.",
-        "line": 36,
-        "page": "reference/api/time-zone.md"
-      },
-      {
-        "signature": "public static fun of(name: string): Result<TimeZone, ParseError>",
-        "description": "Resolves `name` as an IANA zone identifier (e.g. `\"Asia/Kolkata\"`), or an error if the host's timezone database doesn't recognize it.",
-        "line": 46,
-        "page": "reference/api/time-zone.md"
-      },
-      {
-        "signature": "public fun offset_minutes_at(epoch_millis: long): int",
-        "description": "This zone's UTC offset in minutes at `epoch_millis` (accounting for DST rules in effect at that instant). Falls back to `0` if the zone is no longer recognized by the host.",
-        "line": 56,
-        "page": "reference/api/time-zone.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/validation/allow_extra_attribute.dream",
     "package": "system.validation",
     "page": "reference/api/validation-allow-extra-attribute.md",
@@ -18340,25 +17907,25 @@
       {
         "signature": "public static class Validation",
         "description": "Strict decoding and validation derived for @json models.",
-        "line": 4,
+        "line": 15,
         "page": "reference/api/validation-validation.md"
       },
       {
         "signature": "public static fun decode<T>(text: string): Result<T, ValidationErrors>",
         "description": "Decodes and validates JSON as `T`, returning the collected validation issues on failure.",
-        "line": 7,
+        "line": 18,
         "page": "reference/api/validation-validation.md"
       },
       {
         "signature": "public static fun validate<T>(value: T): Result<T, ValidationErrors>",
         "description": "Checks `value` against its validation attributes; returns the value or collected issues.",
-        "line": 13,
+        "line": 24,
         "page": "reference/api/validation-validation.md"
       },
       {
         "signature": "public static fun schema<T>(): JsonValue",
         "description": "Returns the JSON Schema describing `T` and its validation constraints.",
-        "line": 19,
+        "line": 30,
         "page": "reference/api/validation-validation.md"
       }
     ]

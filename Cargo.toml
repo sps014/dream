@@ -46,7 +46,7 @@ rayon = { version = "1", optional = true }
 indexmap = "2"
 logos = "0.16.1"
 # `dream.toml` (`[package]`, `[[generators]]`, `[native.<set>]`) for the compiler's own reads.
-toml = "0.8"
+toml = "1.2"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 # CLI parsing + auto-generated help for the `dream` binary (same crate `dreamer` uses).
@@ -57,21 +57,21 @@ serde_stacker = "0.1"
 # Grows the host stack for semantic analysis so a deep (but accepted) tree cannot abort the
 # compiler. The parser's nesting limit is what rejects hostile input.
 stacker = "0.1"
-base64 = "0.22"
+base64 = "0.23"
 tempfile = { version = "3", optional = true }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"], optional = true }
-oxc_minifier = "0.156"
-oxc_parser = "0.156"
-oxc_ast = "0.156"
-oxc_allocator = "0.156"
-oxc_codegen = "0.156"
-oxc_span = "0.156"
-oxc_semantic = "0.156"
+oxc_minifier = "0.158"
+oxc_parser = "0.158"
+oxc_ast = "0.158"
+oxc_allocator = "0.158"
+oxc_codegen = "0.158"
+oxc_span = "0.158"
+oxc_semantic = "0.158"
 flate2 = "1.1.9"
-brotli = "8.0.4"
+brotli = "9.1.1"
 
-object = { version = "0.37", default-features = false, features = ["read"], optional = true }
-wasmparser = "0.252"
+object = { version = "0.39", default-features = false, features = ["read"], optional = true }
+wasmparser = "0.263"
 # Canonical paths without Windows' `\\?\` verbatim prefix, which clang cannot resolve includes under.
 dunce = "1"
 # Sets modification times on directories too, which `File::set_modified` cannot on Windows.
@@ -91,7 +91,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 [dev-dependencies]
 rcgen = "0.14"
 tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros"] }
-tokio-tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 futures-util = { version = "0.3", features = ["sink"] }
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
@@ -99,11 +99,11 @@ http-body-util = "0.1"
 bytes = "1"
 tempfile = "3"
 proptest = "1"
-libloading = "0.8"
+libloading = "0.9"
 pretty_assertions = "1.4.1"
 # Parses the emitted `.wat` text back into a module in wasm-opt / e2e assertions.
 wat = "1.252.0"
-wasmparser = "0.252"
+wasmparser = "0.263"
 
 [profile.dev]
 debug = "line-tables-only"

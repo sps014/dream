@@ -372,7 +372,7 @@ fn c_sources_json(sets: &[&NativeSet], shims: &BTreeMap<String, WrittenShim>) ->
         .map(|s| {
             let mut sources = s.sources.clone();
             let mut include = s.include.clone();
-            let mut exports: Vec<String> = Vec::new();
+            let mut exports: Vec<String> = s.exports.clone();
             if let Some(shim) = shims.get(&s.name) {
                 sources.push(shim.source.clone());
                 include.push(shim.include.clone());
@@ -669,6 +669,7 @@ mod tests {
                 cflags: vec![],
                 frameworks: vec![],
                 libs: vec!["m".into()],
+                exports: vec![],
                 lto: true,
             },
         );

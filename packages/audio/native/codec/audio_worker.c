@@ -1,6 +1,5 @@
-#ifndef DREAM_COMPONENT
-#include "dream_core.h"
-#include "dream_platform_internal.h"
+#ifdef __wasm__
+#include "audio_host.h"
 #include "dream_audio.h"
 
 /* Entry points for the JS decode worker. It instantiates this module again with private memory

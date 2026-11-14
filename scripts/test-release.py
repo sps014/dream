@@ -86,6 +86,7 @@ fun main(): void {
         print('PASS Node ' + name, flush=True)
     audio_package = work / 'dream_packages' / 'audio'
     shutil.copytree(root / 'packages' / 'audio' / 'src', audio_package / 'src')
+    shutil.copytree(root / 'packages' / 'audio' / 'native', audio_package / 'native')
     shutil.copyfile(root / 'packages' / 'audio' / 'dream.toml', audio_package / 'dream.toml')
     audio = work / 'audio_probe.dream'
     audio.write_text('''import audio;

@@ -60,36 +60,36 @@ read index and raises a starved flag that `synchronize()` turns into
 
 ## Off-thread decoding
 
-Codec code never runs on the guest scheduler. The raw codec API in
-`core/include/dream_audio.h` (`dream_audio_decode_words` and the
-`dream_audio_stream_*` decoder) touches only its inputs and the platform
-allocator, so any thread may call it. Dream reaches it through `@runtime`
-`audioDecode*` hosts that the `audio_decode` catalog module implements per
-environment:
+Codec code never runs on the guest scheduler. The audio package owns the codecs
+in its `audio_decode` native set (`native/codec`, including dr_wav, dr_mp3, Opus,
+and Nestegg). That set is separate from playback and from `audio_fft`, so a
+program links a codec only when a decode or an analysis call reaches it. The raw
+API (`dream_audio_decode_words` and `dream_audio_stream_*`) touches only its
+inputs and `dream_platform_current`, so any thread may call it.
 
-- Native, `sys/native/audio_jobs.c` (a `native_runtime_c` unit, so it is
-  optimized with the runtime bitcode): a one-shot decode copies its input and runs
-  on the blocking pool, following the `FileOperation` shape of start, wait,
-  result, and release with a reference held by the pool. Each stream owns one
-  serial job. Encoded input queues beside it, and space, duration, and the WAV
-  seek layout are snapshots that every job refreshes, so `push`, `space`,
-  `duration`, and `seek_offset` stay synchronous. After a chunk is claimed, the
-  next one is decoded ahead. A read that returns "need input" is re-run before
-  publishing when input or end of input arrived meanwhile. A reposition discards
-  the in-flight result and queued input. Dream arrays are built only on the
-  scheduler thread.
-- Browser and Node, `runtime/src/hosts/audio_decoder.js` (the `audio_decoder`
-  chunk, wired in `load.js`): two lazily started workers, one for one-shot
-  decodes and one for all streams, so a long file decode never delays a playing
-  stream. Each worker instantiates the program's compiled module again with a
-  private memory of the same shape, stub imports that throw, and only
+- Native Dream calls the set through `@c`. `native/codec/audio_jobs.c` copies the
+  input and runs the decode on a detached thread. Each stream owns one serial
+  job. Encoded input queues beside it, and space, duration, and the WAV seek
+  layout are snapshots that every job refreshes, so `push`, `space`, `duration`,
+  and `seek_offset` stay synchronous. After a chunk is claimed, the next one is
+  decoded ahead. A read that returns "need input" is re-run before publishing
+  when input or end of input arrived meanwhile. A reposition discards the
+  in-flight result and queued input. The job completes the Dream future with
+  `dream_future_complete_u64` and builds result arrays with
+  `dream_scalar_array_new`.
+- Browser and Node keep `@runtime` `audioDecode*` hosts in
+  `runtime/src/hosts/audio_decoder.js`: two lazily started workers, one for
+  one-shot decodes and one for all streams, so a long file decode never delays a
+  playing stream. Each worker instantiates the program's compiled module again
+  with a private memory of the same shape, stub imports that throw, and only
   `dream_heap_init` plus TLS setup. It never runs `__runtime_init` or the program.
-  It calls the `dream_audio_worker_*` exports from `sys/wasi/audio_worker.c`,
-  which `link_wasm` keeps exported through the module's `worker_exports`. Input
-  and PCM cross as transferred buffers, so no `SharedArrayBuffer` or COOP/COEP is
-  needed. The main thread mirrors the native stream state machine.
-- WASI components, `sys/wasi/component/audio_jobs.c`: components have no
-  threads, so the same hosts decode inline and complete the wait immediately.
+  A wasm decode calls `dream_audio_codec_anchor` so the decode set is linked, and
+  the set's `exports` list keeps `dream_audio_worker_*` (`native/codec/audio_worker.c`)
+  on the wasm export list. Input and PCM cross as transferred buffers, so no
+  `SharedArrayBuffer` or COOP/COEP is needed. The main thread mirrors the native
+  stream state machine.
+- FFT is `@c` into the `audio_fft` set on every target. KissFFT is not part of
+  the decode set, so a decode-only program does not carry the analyzer.
 
 The stdlib side is `AudioDecodeJob` (one-shot) and `AudioStreamDecoder`
 (streams). `AudioBuffer.decode`, `AudioStreamDecoder.read`, and

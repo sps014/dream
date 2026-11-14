@@ -1,7 +1,7 @@
 /* Dream's portable scalar build; no target-specific SIMD or hosted allocator state. */
 #ifndef DREAM_OPUS_CONFIG_H
 #define DREAM_OPUS_CONFIG_H
-#include "dream_platform_internal.h"
+#include "audio_host.h"
 #define OPUS_BUILD 1
 #define VAR_ARRAYS 1
 #define HAVE_LRINT 1

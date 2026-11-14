@@ -1,15 +1,14 @@
 /* Vendor assertions guard programmer contracts, not a guest-visible failure path. */
 #define NDEBUG 1
-#include "dream_core.h"
-#include "dream_platform_internal.h"
+#include "audio_host.h"
 #include "dream_audio.h"
 #include <math.h>
 #define DR_WAV_IMPLEMENTATION
 #define DR_WAV_NO_STDIO
 #define DR_MP3_IMPLEMENTATION
 #define DR_MP3_NO_STDIO
-#include "vendor/dr_libs/dr_wav.h"
-#include "vendor/dr_libs/dr_mp3.h"
+#include "dr_libs/dr_wav.h"
+#include "dr_libs/dr_mp3.h"
 
 static void *audio_alloc(size_t size, void *user) {
     (void)user; return dream_platform_current->allocate(size);

@@ -1,5 +1,7 @@
 module audio;
 
+import system.interop;
+
 /// Computes waveform levels and FFT data without opening an output device.
 public class AudioAnalyzer {
     size: int;
@@ -11,8 +13,8 @@ public class AudioAnalyzer {
         this.window = AudioWindow.Hann;
     }
 
-    @runtime("dream_audio_fft")
-    static extern fun fft_host(borrow samples: float[], size: int): float[];
+    @c("audio_fft", "dream_audio_fft")
+    static extern fun fft_host(samples: float[], count: int, size: int): float[];
 
     /// Selects a power-of-two FFT size from 32 through 32768; failure preserves the size.
     public fun set_fft_size(size: int): Result<Unit, AudioError> {
@@ -81,7 +83,7 @@ public class AudioAnalyzer {
             weight_sum = weight_sum + weight;
             weighted[i] = (float)(value * weight);
         }
-        let complex = AudioAnalyzer.fft_host(weighted, this.size);
+        let complex = AudioAnalyzer.fft_host(weighted, weighted.length, this.size);
         if complex.length != this.size + 2 {
             return Result.Err(AudioError("ENOMEM", "FFT workspace allocation failed"));
         }

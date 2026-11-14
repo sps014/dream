@@ -11,6 +11,57 @@ audio = { path = "." }
 [native.audio]
 include = ["native/vendor"]
 cflags = ["-w"]
+exclude = ["native/codec/**", "native/fft/**"]
+
+# Codecs stay out of playback. A program links this set only when it decodes.
+[native.audio_decode]
+sources = ["native/codec"]
+include = [
+    "native/codec",
+    "native/codec/include",
+    "native/codec/opus",
+    "native/codec/opus/include",
+    "native/codec/opus/celt",
+    "native/codec/opus/silk",
+    "native/codec/opus/silk/float",
+    "native/codec/nestegg/include",
+]
+defines = ["HAVE_CONFIG_H", "NDEBUG"]
+cflags = ["-w"]
+exclude = [
+    "native/codec/opus/**/tests/**",
+    "native/codec/opus/**/*demo*",
+    "native/codec/opus/**/arm/**",
+    "native/codec/opus/**/x86/**",
+    "native/codec/opus/**/fixed/**",
+    "native/codec/opus/**/dump_modes/**",
+    "native/codec/opus/src/opus_compare.c",
+    "native/codec/nestegg/src/nestegg.c",
+]
+
+[native.audio_decode.macos]
+cflags = ["-pthread"]
+
+[native.audio_decode.linux]
+cflags = ["-pthread"]
+libs = ["pthread", "m"]
+
+[native.audio_decode.wasm]
+exports = [
+    "dream_audio_worker_alloc",
+    "dream_audio_worker_free",
+    "dream_audio_worker_decode",
+    "dream_audio_worker_stream_open",
+    "dream_audio_worker_stream_read",
+    "dream_audio_worker_stream_reposition",
+    "dream_audio_worker_stream_close",
+]
+
+[native.audio_fft]
+sources = ["native/fft/audio_fft.c"]
+include = ["native/codec", "native/fft"]
+defines = ["NDEBUG"]
+cflags = ["-w"]
 
 [native.audio.macos]
 frameworks = ["CoreAudio", "AudioToolbox", "CoreFoundation", "AVFoundation"]

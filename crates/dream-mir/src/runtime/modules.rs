@@ -74,85 +74,7 @@ pub struct RuntimeModule {
     pub header: &'static str,
 }
 
-const AUDIO_DECODE_HOSTS: &[&str] = &[
-    "audioDecodeStart",
-    "audioDecodeWait",
-    "audioDecodeResult",
-    "audioDecodeRelease",
-    "audioDecodeStreamOpen",
-    "audioDecodeStreamSpace",
-    "audioDecodeStreamPush",
-    "audioDecodeStreamFinish",
-    "audioDecodeStreamRead",
-    "audioDecodeStreamReposition",
-    "audioDecodeStreamWait",
-    "audioDecodeStreamResult",
-    "audioDecodeStreamDuration",
-    "audioDecodeStreamSeekOffset",
-    "audioDecodeStreamClose",
-];
-
 pub const RUNTIME_MODULES: &[RuntimeModule] = &[
-    RuntimeModule {
-        id: "audio_fft",
-        need: RuntimeNeed::module(2),
-        shared_c: &["core/audio_fft.c"],
-        native_runtime_c: &[],
-        native_extra_c: &[],
-        wasm_extra_c: &[],
-        vendor_sources: None,
-        vendor_runtime_exports: &[],
-        wasm_defines: &["DREAM_WASM32"],
-        native_defines: &["DREAM_NATIVE"],
-        include_dirs: &["core/include"],
-        exports: &["dream_audio_fft"],
-        intrinsic_keys: &[],
-        host_fields: &["dream_audio_fft"],
-        quiet: true,
-        wasi_libc: true,
-        worker_exports: &[],
-        header: "",
-    },
-    RuntimeModule {
-        id: "audio_decode",
-        need: RuntimeNeed::module(3),
-        shared_c: &[
-            "core/audio_decode.c",
-            "core/audio_webm.c",
-            "core/audio_stream.c",
-        ],
-        native_runtime_c: &["sys/native/audio_jobs.c"],
-        native_extra_c: &[],
-        wasm_extra_c: &["sys/wasi/audio_worker.c", "sys/wasi/component/audio_jobs.c"],
-        vendor_sources: Some("core/vendor/opus/SOURCES"),
-        vendor_runtime_exports: &["dream_platform_current"],
-        wasm_defines: &["DREAM_WASM32", "HAVE_CONFIG_H", "NDEBUG"],
-        native_defines: &["DREAM_NATIVE", "HAVE_CONFIG_H", "NDEBUG"],
-        include_dirs: &[
-            "core/include",
-            "core/vendor/opus",
-            "core/vendor/opus/include",
-            "core/vendor/opus/celt",
-            "core/vendor/opus/silk",
-            "core/vendor/opus/silk/float",
-            "core/vendor/nestegg/include",
-        ],
-        exports: AUDIO_DECODE_HOSTS,
-        intrinsic_keys: &[],
-        host_fields: AUDIO_DECODE_HOSTS,
-        quiet: false,
-        wasi_libc: true,
-        worker_exports: &[
-            "dream_audio_worker_alloc",
-            "dream_audio_worker_free",
-            "dream_audio_worker_decode",
-            "dream_audio_worker_stream_open",
-            "dream_audio_worker_stream_read",
-            "dream_audio_worker_stream_reposition",
-            "dream_audio_worker_stream_close",
-        ],
-        header: "",
-    },
     RuntimeModule {
         id: "regex",
         need: RuntimeNeed::module(1),
@@ -426,11 +348,6 @@ pub fn wasm32_linked_units(root: &Path, need: RuntimeNeed) -> Vec<Wasm32LinkedUn
 
 fn vendor_c_names_static(list_path: &str) -> Vec<&'static str> {
     match list_path {
-        "core/vendor/opus/SOURCES" => include_str!("c/core/vendor/opus/SOURCES")
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .collect(),
         "pcre2/SOURCES" => include_str!("c/pcre2/SOURCES")
             .lines()
             .map(str::trim)
@@ -645,15 +562,6 @@ mod tests {
         let core = runtime_need_from_keys(["print"]);
         assert!(core.contains(RuntimeNeed::CORE));
         assert!(!core.contains(need_of("regex")));
-    }
-
-    #[test]
-    fn audio_decode_need_from_host_fields() {
-        let need = runtime_need_from_keys(["audioDecodeStart"]);
-        assert!(need.contains(need_of("audio_decode")));
-        assert!(!runtime_need_from_keys(["audioOutputStart"]).contains(need_of("audio_decode")));
-        assert!(worker_exports(need).any(|name| name == "dream_audio_worker_decode"));
-        assert_eq!(worker_exports(RuntimeNeed::CORE).count(), 0);
     }
 
     fn native_runtime_c_files(need: RuntimeNeed) -> Vec<PathBuf> {

@@ -159,7 +159,6 @@ const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "wea
 // `@runtime` services compiled into the guest from runtime C on every target, so no JS host.
 const RUNTIME_C_SERVICES: &[&str] = &[
     include_str!("../../dream-mir/src/runtime/c/regex.c"),
-    include_str!("../../dream-mir/src/runtime/c/core/audio_fft.c"),
     include_str!("../../dream-mir/src/runtime/c/core/string_view.c"),
 ];
 // Shared scheduling imports these bridges directly rather than through a stdlib extern.

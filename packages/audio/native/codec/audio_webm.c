@@ -1,17 +1,16 @@
 #define NDEBUG 1
-#include "dream_core.h"
-#include "dream_platform_internal.h"
+#include "audio_host.h"
 #include "dream_audio.h"
 #include <stdlib.h>
 #include <math.h>
-#include "vendor/opus/include/opus.h"
+#include "opus.h"
 
 /* Nestegg's temporary allocations use the instance's platform, like the other codecs. */
 #define malloc(n) dream_platform_current->allocate(n)
 #define calloc(n, s) dream_raw_calloc(n, s)
 #define realloc(p, n) dream_platform_current->resize(p, n)
 #define free(p) dream_platform_current->deallocate(p)
-#include "vendor/nestegg/src/nestegg.c"
+#include "nestegg/src/nestegg.c"
 #undef malloc
 #undef calloc
 #undef realloc

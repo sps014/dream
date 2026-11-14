@@ -1,5 +1,7 @@
 module audio;
 
+import system.interop;
+
 // Detects the format from the first bytes and decodes as encoded input arrives. Decoding runs
 // on a background thread or decode worker, which decodes the next chunk ahead after each read.
 // Input, space, duration and seek positions stay synchronous: the host queues encoded bytes
@@ -10,44 +12,117 @@ internal class AudioStreamDecoder {
     handle: usize;
 
     internal constructor(capacity: int) {
-        this.handle = AudioStreamDecoder.open_host(capacity);
+        this.handle = AudioStreamDecoder.open_configured(capacity);
     }
 
     del() {
         this.close();
     }
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamOpen")
+    static extern fun open_native(capacity: int): usize;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamOpen")
     static extern fun open_host(capacity: int): usize;
 
+    @cfg(Target.Wasm)
+    @c("audio_decode", "dream_audio_codec_anchor")
+    static extern fun codec_anchor(): int;
+
+    @cfg(Target.Native)
+    static fun open_configured(capacity: int): usize {
+        return AudioStreamDecoder.open_native(capacity);
+    }
+
+    @cfg(Target.Wasm)
+    static fun open_configured(capacity: int): usize {
+        let linked = AudioStreamDecoder.codec_anchor();
+        if linked == 0 {
+            return 0;
+        }
+        return AudioStreamDecoder.open_host(capacity);
+    }
+
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamSpace")
+    static extern fun space_host(handle: usize): int;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamSpace")
     static extern fun space_host(handle: usize): int;
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamPush")
+    static extern fun push_native(handle: usize, bytes: byte[], length: int): int;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamPush")
     static extern fun push_host(handle: usize, borrow bytes: byte[]): int;
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamFinish")
+    static extern fun finish_host(handle: usize): void;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamFinish")
     static extern fun finish_host(handle: usize): void;
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamRead")
+    static extern fun read_host(handle: usize, max_frames: int): int;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamRead")
     static extern fun read_host(handle: usize, max_frames: int): int;
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamReposition")
+    static extern fun reposition_host(handle: usize, frame: long): int;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamReposition")
     static extern fun reposition_host(handle: usize, frame: long): int;
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamWaitAsync")
+    static extern async fun wait_host(handle: usize): int;
+
+    @cfg(Target.Wasm)
     @async_host
     @runtime("audioDecodeStreamWait")
     static extern async fun wait_host(handle: usize): int;
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamResult")
+    static extern fun result_host(handle: usize): float[];
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamResult")
     static extern fun result_host(handle: usize): float[];
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamDuration")
+    static extern fun duration_host(handle: usize): double;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamDuration")
     static extern fun duration_host(handle: usize): double;
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamSeekOffset")
+    static extern fun seek_offset_host(handle: usize, frame: long): long;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamSeekOffset")
     static extern fun seek_offset_host(handle: usize, frame: long): long;
 
+    @cfg(Target.Native)
+    @c("audio_decode", "audioDecodeStreamClose")
+    static extern fun close_host(handle: usize): void;
+
+    @cfg(Target.Wasm)
     @runtime("audioDecodeStreamClose")
     static extern fun close_host(handle: usize): void;
 
@@ -59,6 +134,12 @@ internal class AudioStreamDecoder {
         return AudioStreamDecoder.space_host(this.handle);
     }
 
+    @cfg(Target.Native)
+    internal fun push(borrow bytes: byte[]): bool {
+        return AudioStreamDecoder.push_native(this.handle, bytes, bytes.length) != 0;
+    }
+
+    @cfg(Target.Wasm)
     internal fun push(borrow bytes: byte[]): bool {
         return AudioStreamDecoder.push_host(this.handle, bytes) != 0;
     }

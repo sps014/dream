@@ -1,13 +1,81 @@
-#include "dream_core.h"
-#include "dream_platform_internal.h"
+#ifndef __wasm__
+#include "audio_host.h"
 #include "dream_audio.h"
-#include "include/dream_blocking.h"
-#include "include/dream_thread.h"
 #include <stdlib.h>
 #include <string.h>
 
-/* Codecs run on the blocking pool so a long decode never stalls the scheduler. Only host-owned
- * copies cross into the pool, and Dream arrays are built back on the scheduler thread. The pool
+typedef void *dream_ptr;
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+typedef CRITICAL_SECTION dream_mutex;
+static void dream_mutex_init(dream_mutex *mutex) { InitializeCriticalSection(mutex); }
+static void dream_mutex_lock(dream_mutex *mutex) { EnterCriticalSection(mutex); }
+static void dream_mutex_unlock(dream_mutex *mutex) { LeaveCriticalSection(mutex); }
+static void dream_mutex_destroy(dream_mutex *mutex) { DeleteCriticalSection(mutex); }
+typedef struct {
+    void (*fn)(void *);
+    void *ctx;
+} AudioTask;
+static DWORD WINAPI audio_task_main(LPVOID arg) {
+    AudioTask task = *(AudioTask *)arg;
+    free(arg);
+    task.fn(task.ctx);
+    return 0;
+}
+static int dream_blocking_submit(void (*fn)(void *), void *ctx) {
+    AudioTask *task = malloc(sizeof(*task));
+    if (!task) return 0;
+    task->fn = fn;
+    task->ctx = ctx;
+    HANDLE thread = CreateThread(NULL, 0, audio_task_main, task, 0, NULL);
+    if (!thread) {
+        free(task);
+        return 0;
+    }
+    CloseHandle(thread);
+    return 1;
+}
+#else
+#include <pthread.h>
+typedef pthread_mutex_t dream_mutex;
+static void dream_mutex_init(dream_mutex *mutex) { pthread_mutex_init(mutex, NULL); }
+static void dream_mutex_lock(dream_mutex *mutex) { pthread_mutex_lock(mutex); }
+static void dream_mutex_unlock(dream_mutex *mutex) { pthread_mutex_unlock(mutex); }
+static void dream_mutex_destroy(dream_mutex *mutex) { pthread_mutex_destroy(mutex); }
+typedef struct {
+    void (*fn)(void *);
+    void *ctx;
+} AudioTask;
+static void *audio_task_main(void *arg) {
+    AudioTask task = *(AudioTask *)arg;
+    free(arg);
+    task.fn(task.ctx);
+    return NULL;
+}
+static int dream_blocking_submit(void (*fn)(void *), void *ctx) {
+    AudioTask *task = malloc(sizeof(*task));
+    if (!task) return 0;
+    task->fn = fn;
+    task->ctx = ctx;
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, audio_task_main, task) != 0) {
+        free(task);
+        return 0;
+    }
+    pthread_detach(thread);
+    return 1;
+}
+#endif
+
+#define dream_complete_foreign(future, value) dream_future_complete_u64((future), (uint64_t)(value))
+#define dream_async_complete(future, value) dream_future_complete_u64((future), (uint64_t)(value))
+#define dream_array_new(count, esize) dream_scalar_array_new((esize), (int32_t)(count))
+#define dream_array_bytes(array) dream_array_data(array)
+
+/* Codecs run on a detached thread so a long decode never stalls the scheduler. Only host-owned
+ * copies cross that thread, and Dream arrays are built back on the scheduler thread. The job
  * holds its own reference, so an abandoned future never frees memory a decode still uses. */
 
 typedef struct {
@@ -50,8 +118,8 @@ static void decode_job_run(void *context) {
     decode_job_drop(job);
 }
 
-uintptr_t audioDecodeStart(dream_ptr bytes, int32_t max_bytes) {
-    size_t length = bytes ? (size_t)dream_i32(bytes)[0] : 0;
+uintptr_t audioDecodeStart(const unsigned char *bytes, int32_t byte_length, int32_t max_bytes) {
+    size_t length = byte_length > 0 ? (size_t)byte_length : 0;
     AudioDecodeJob *job = calloc(1, sizeof(*job));
     if (!job) return 0;
     dream_mutex_init(&job->mu);
@@ -59,7 +127,7 @@ uintptr_t audioDecodeStart(dream_ptr bytes, int32_t max_bytes) {
     job->max_bytes = max_bytes;
     job->length = length;
     job->bytes = malloc(length ? length : 1);
-    if (job->bytes && length) memcpy(job->bytes, dream_array_bytes(bytes), length);
+    if (job->bytes && length && bytes) memcpy(job->bytes, bytes, length);
     if (!job->bytes || !dream_blocking_submit(decode_job_run, job)) {
         job->references = 1;
         decode_job_drop(job);
@@ -264,9 +332,9 @@ int32_t audioDecodeStreamSpace(uintptr_t handle) {
     return space > 0 ? (int32_t)space : 0;
 }
 
-int32_t audioDecodeStreamPush(uintptr_t handle, dream_ptr bytes) {
+int32_t audioDecodeStreamPush(uintptr_t handle, const unsigned char *bytes, int32_t byte_length) {
     AudioDecodeStream *s = (AudioDecodeStream *)handle;
-    size_t length = bytes ? (size_t)dream_i32(bytes)[0] : 0;
+    size_t length = byte_length > 0 ? (size_t)byte_length : 0;
     if (!s) return 0;
     dream_mutex_lock(&s->mu);
     int accepted = !s->finished && (int64_t)length <= (int64_t)s->space - (int64_t)s->input_length;
@@ -281,8 +349,8 @@ int32_t audioDecodeStreamPush(uintptr_t handle, dream_ptr bytes) {
             accepted = 0;
         }
     }
-    if (accepted && length) {
-        memcpy(s->input + s->input_length, dream_array_bytes(bytes), length);
+    if (accepted && length && bytes) {
+        memcpy(s->input + s->input_length, bytes, length);
         s->input_length += length;
     }
     dream_mutex_unlock(&s->mu);
@@ -407,3 +475,4 @@ void audioDecodeStreamClose(uintptr_t handle) {
     dream_mutex_unlock(&s->mu);
     stream_drop(s);
 }
+#endif

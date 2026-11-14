@@ -60,8 +60,10 @@ def main():
             assert "audioDecode" not in runtime, f"{label} retained the decode worker"
         else:
             assert "dream_audio_worker_decode" in wat, "decode lost its worker entry point"
-        if label != "analysis":
-            assert "kiss_fft" not in wat, f"{label} retained FFT"
+        if label == "analysis":
+            assert "dream_audio_fft" in wat, "analysis lost its FFT"
+        else:
+            assert "dream_audio_fft" not in wat, f"{label} retained FFT"
         if label != "capture":
             assert "dream-audio-capture" not in runtime, f"{label} retained capture"
         if label not in ("PCM playback", "capture"):

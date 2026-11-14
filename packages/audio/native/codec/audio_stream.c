@@ -1,14 +1,13 @@
 /* Vendor assertions guard programmer contracts, not a guest-visible failure path. */
 #define NDEBUG 1
-#include "dream_core.h"
-#include "dream_platform_internal.h"
+#include "audio_host.h"
 #include "dream_audio.h"
 #include <math.h>
 #include <string.h>
-#include "vendor/dr_libs/dr_wav.h"
-#include "vendor/dr_libs/dr_mp3.h"
+#include "dr_libs/dr_wav.h"
+#include "dr_libs/dr_mp3.h"
 #include "nestegg/nestegg.h"
-#include "vendor/opus/include/opus.h"
+#include "opus.h"
 
 /*
  * Incremental decoding over a bounded compressed queue. The vendored decoders pull

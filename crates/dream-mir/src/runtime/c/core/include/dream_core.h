@@ -1406,7 +1406,6 @@ static inline void dream_status_finish(dream_ptr result, int64_t filled) {
     dream_array_bytes(result)[0] = filled < 0 ? 1 : 0;
     dream_i32(result)[0] = filled < 0 ? 1 : (int32_t)filled + 1;
 }
-dream_ptr dream_audio_fft(dream_ptr source, int32_t size);
 dream_ptr dream_array_new_shared(int32_t len, int32_t esize);
 uint32_t dream_guest_abi_version(void);
 uint32_t dream_guest_length(dream_ptr reference);

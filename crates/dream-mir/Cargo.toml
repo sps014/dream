@@ -18,7 +18,7 @@ half = "2"
 indexmap = "2"
 tracing = "0.1"
 rayon = "1"
-wasmprinter = "0.252"
+wasmprinter = "0.263"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

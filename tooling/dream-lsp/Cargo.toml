@@ -27,7 +27,7 @@ serde_json = "1"
 tower-lsp = "0.20"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "time"] }
 stacker = "0.1"
-dashmap = "5.5"
+dashmap = "6.2"
 
 [dev-dependencies]
 tempfile = "3"

@@ -9,7 +9,7 @@ api: reference/api/system-net.md
 
 ## TCP and UDP
 
-`TcpListener`, `TcpStream`, and `UdpSocket` work on native and Node. Browsers report `SocketCapabilities.supported == false` and return `EUNSUPPORTED`; use the HTTP client there.
+`TcpListener`, `TcpStream`, and `UdpSocket` work on native, Node, and WASI builds. They do not exist in a browser build, so code that uses them fails to compile there; use the HTTP client from `system.http` instead.
 
 ```dream
 import system;
@@ -49,7 +49,8 @@ TCP streams implement `AsyncReader` and `AsyncWriter`. Reads and writes may retu
 
 `connect`, `accept`, and `read_with_timeout` take a millisecond deadline. Zero means no deadline.
 
-- Async methods use the current task's cancellation unless you pass a token. Bytes already transferred stay transferred.
+- Async methods use the current task's cancellation unless you pass a token. Bytes already transferred stay transferred, and bytes a cancelled or timed-out read already received are returned by the next read.
+- A deadline covers connecting to each resolved address. A name lookup that the system resolver is still running finishes before the deadline is checked.
 - `close()` wakes pending operations and is safe to call again. An accepted stream stays valid after its listener closes.
 - Node queues at most 64 accepted sockets and rejects more. The native listener uses the operating system's backlog.
 

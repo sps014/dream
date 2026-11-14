@@ -5,7 +5,6 @@ import system.uuid;
 import system.config;
 import system.cli;
 import system.compress;
-import system.net;
 
 async fun main(): int {
     if sizeof(Uuid) != 16 { return 1; }
@@ -36,7 +35,5 @@ async fun main(): int {
     if Encoding.utf8_decode(decoded.read(100).unwrap()) != "hello browser compression" { return 6; }
     decoder.close();
     if TempCapabilities.supported || TempFile.create().unwrap_err().code() != "EUNSUPPORTED" { return 7; }
-    if SocketCapabilities.supported || TcpStream.connect("127.0.0.1", 9000).await.unwrap_err().code() != "EUNSUPPORTED" { return 8; }
-    if UdpSocket.bind("127.0.0.1", 0).await.unwrap_err().code() != "EUNSUPPORTED" { return 9; }
     return 0;
 }

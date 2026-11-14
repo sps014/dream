@@ -1,4 +1,4 @@
-import system.net;
+import system.http;
 import system.testing;
 
 @test

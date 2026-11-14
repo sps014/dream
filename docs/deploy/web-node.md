@@ -24,7 +24,7 @@ dreamer build --release
 | Folder | Files | Used by |
 |---|---|---|
 | `target/web/` | `<stem>.wasm`, `<stem>.wat`, `<stem>.abi.json`, `<stem>.web.runtime.js` | The browser page (`index.html`) |
-| `target/node/` | `<stem>.wasm`, `<stem>.abi.json`, `<stem>.node.runtime.js`, your assets | `run.mjs` under Node |
+| `target/node/` | `<stem>.wasm`, `<stem>.abi.json`, `<stem>.node.runtime.mjs`, your assets | `run.mjs` under Node |
 
 `<stem>` is the entry file's name without `.dream`, such as `main`, and debug and release builds share these folders. Optimized builds also write `.gz` and `.br` copies of the `.wasm` and runtime files in `target/web/` for servers that serve pre-compressed files.
 

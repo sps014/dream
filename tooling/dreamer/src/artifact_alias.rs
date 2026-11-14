@@ -1,7 +1,7 @@
 //! Stable host artifact dirs under `target/web/` and `target/node/`.
 //!
 //! The compiler writes wasm to `target/web/` (debug and `--release` share that path). After a
-//! build that emitted a Node runtime, dreamer copies the wasm + `*.node.runtime.js` into
+//! build that emitted a Node runtime, dreamer copies the wasm + `*.node.runtime.mjs` into
 //! `target/node/` so `run.mjs` can use a host-specific folder.
 
 use anyhow::{Context, Result, bail};
@@ -47,7 +47,7 @@ fn refresh_node(src_dir: &Path, dest_dir: &Path, stem: &str) -> Result<()> {
     fs::create_dir_all(dest_dir)
         .with_context(|| format!("creating alias dir {}", dest_dir.display()))?;
     copy_required(src_dir, dest_dir, &format!("{stem}.wasm"))?;
-    copy_required(src_dir, dest_dir, &format!("{stem}.node.runtime.js"))?;
+    copy_required(src_dir, dest_dir, &format!("{stem}.node.runtime.mjs"))?;
     let _ = copy_if_present(src_dir, dest_dir, &format!("{stem}.abi.json"));
     Ok(())
 }
@@ -88,7 +88,7 @@ fn copy_if_present(src_dir: &Path, dest_dir: &Path, name: &str) -> Result<bool> 
 pub fn node_runner_source(stem: &str) -> String {
     format!(
         "import {{ fileURLToPath }} from \"node:url\";\n\
-         import {{ run }} from \"./target/node/{stem}.node.runtime.js\";\n\
+         import {{ run }} from \"./target/node/{stem}.node.runtime.mjs\";\n\
          await run(fileURLToPath(new URL(\"./target/node/{stem}.wasm\", import.meta.url)));\n"
     )
 }
@@ -126,7 +126,7 @@ mod tests {
         fs::create_dir_all(&web).unwrap();
         fs::write(web.join("main.wasm"), b"wasm").unwrap();
         fs::write(web.join("main.web.runtime.js"), b"web").unwrap();
-        fs::write(web.join("main.node.runtime.js"), b"node").unwrap();
+        fs::write(web.join("main.node.runtime.mjs"), b"node").unwrap();
         fs::write(web.join("main.abi.json"), b"{}").unwrap();
 
         fs::write(root.join("fixture.txt"), b"f").unwrap();
@@ -141,7 +141,7 @@ mod tests {
             b"wasm"
         );
         assert_eq!(
-            fs::read(root.join("target/node/main.node.runtime.js")).unwrap(),
+            fs::read(root.join("target/node/main.node.runtime.mjs")).unwrap(),
             b"node"
         );
         assert_eq!(
@@ -170,7 +170,7 @@ mod tests {
         let root = tmp.path();
         ensure_node_runner(root, "app").unwrap();
         let body = fs::read_to_string(root.join("run.mjs")).unwrap();
-        assert!(body.contains("target/node/app.node.runtime.js"));
+        assert!(body.contains("target/node/app.node.runtime.mjs"));
         assert!(body.contains("target/node/app.wasm"));
         ensure_node_runner(root, "other").unwrap();
         let again = fs::read_to_string(root.join("run.mjs")).unwrap();

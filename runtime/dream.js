@@ -1018,15 +1018,18 @@ let _nodeFs = null;
 let _nodeCrypto = null;
 let _nodeChildProcess = null;
 let _nodeNet = null;
+let _nodeDgram = null;
 
 function setNodeFs(fs) { _nodeFs = fs; }
 function setNodeCrypto(crypto) { _nodeCrypto = crypto; }
 function setNodeChildProcess(childProcess) { _nodeChildProcess = childProcess; }
 function setNodeNet(net) { _nodeNet = net; }
+function setNodeDgram(dgram) { _nodeDgram = dgram; }
 function getNodeFs() { return _nodeFs; }
 function getNodeCrypto() { return _nodeCrypto; }
 function getNodeChildProcess() { return _nodeChildProcess; }
 function getNodeNet() { return _nodeNet; }
+function getNodeDgram() { return _nodeDgram; }
 
 // ----- hosts/env.js -----
 /** Default `env` builtins every Dream module imports (mirrors the WASM guest ABI). */
@@ -1409,7 +1412,7 @@ function httpRestricted(name) {
 }
 function makeHttpHost() {
   return {
-    netCapabilities: () => isNode ? 14 : 0,
+    netCapabilities: () => isNode ? 6 : 0,
     netCookieJarCreate: () => 0,
     netCookieJarClose: () => {},
     netCookieJarControl: () => JSON.stringify({ code: "ENOTSUP", message: "managed cookie jars are unavailable on this host" }),
@@ -1580,6 +1583,295 @@ function makeHttpHost() {
   };
 }
 
+// ----- hosts/sockets.js -----
+function makeSocketHost() {
+  // Mirrors runtime/c/sys/native/socket.c: every open, accept, read, write, datagram send or
+  // receive, and option change is a call the guest waits on, cancels, and releases by id.
+  const sockets = new Map();
+  const calls = new Map();
+  let nextSocket = 1;
+  let nextCall = 1;
+  const READ_CHUNK = 1024 * 1024;
+  const OPTION_NODELAY = 0, OPTION_BROADCAST = 1, OPTION_TTL = 2;
+  const READ_SIDE = new Set(["accept", "read", "receive"]);
+
+  function failure(code, message) { return { code, message }; }
+  const cancelled = () => failure("ECANCELLED", "socket operation cancelled");
+  const closed = () => failure("ECLOSED", "socket is closed");
+  const io = error => failure("EIO", error?.message || String(error));
+
+  function newCall(kind, state) {
+    if (calls.size >= 4096 || nextCall >= 2147483647) return null;
+    const call = { id: nextCall++, kind, state, done: false, value: -1n, bytes: [], peer: null, code: "", message: "", waiters: [], claimed: false, released: false, cancel: null, timer: null };
+    calls.set(call.id, call);
+    state?.calls.add(call);
+    return call;
+  }
+
+  function settle(call, value, bytes, error, peer) {
+    if (call.done) return;
+    call.done = true;
+    call.cancel = null;
+    clearTimeout(call.timer);
+    call.state?.calls.delete(call);
+    if (error) { call.code = error.code; call.message = error.message; }
+    else { call.value = BigInt(value); if (bytes) call.bytes = bytes; if (peer) call.peer = peer; }
+    if (call.released) dispose(call);
+    for (const resolve of call.waiters.splice(0)) resolve(0);
+  }
+
+  // Unclaimed results: read bytes and datagrams go back to their socket, an opened socket closes.
+  function dispose(call) {
+    if (call.claimed || call.code) return;
+    const { state } = call;
+    if (call.kind === "read" && call.bytes.length) state.leftover = Buffer.concat([Buffer.from(call.bytes), state.leftover]);
+    if (call.kind === "receive" && !state.held) state.held = { bytes: Buffer.from(call.bytes), length: Number(call.value), peer: call.peer };
+    if (["connect", "listen", "bind", "accept"].includes(call.kind)) close(Number(call.value));
+  }
+
+  function deadline(call, timeout) {
+    if (timeout > 0) call.timer = setTimeout(() => call.cancel?.(failure("ETIMEOUT", "socket operation deadline exceeded")), timeout);
+  }
+
+  function register(kind, handle) {
+    if (sockets.size >= 1048576 || nextSocket >= 2147483647) return 0;
+    const local = handle.address();
+    const state = {
+      id: nextSocket++, kind, handle, calls: new Set(), closed: false, ended: false, error: null, writeShut: false,
+      leftover: Buffer.alloc(0), held: null, pending: [],
+      local: { host: local?.address ?? "", port: local?.port ?? 0 },
+      peer: { host: handle.remoteAddress ?? "", port: handle.remotePort ?? 0 },
+    };
+    const wake = () => handle.emit("dream-ready");
+    handle.on("error", error => { state.error ??= error; wake(); });
+    handle.on("close", () => { state.closed = true; wake(); });
+    if (kind === "tcp") handle.on("end", () => { state.ended = true; wake(); });
+    sockets.set(state.id, state);
+    return state.id;
+  }
+
+  function close(id) {
+    const state = sockets.get(id);
+    if (!state) return;
+    sockets.delete(id);
+    state.closed = true;
+    for (const call of [...state.calls]) call.cancel?.(closed());
+    for (const pending of state.pending.splice(0)) pending.destroy?.();
+    state.queue = [];
+    try { state.kind === "tcp" ? state.handle.destroy() : state.handle.close(); } catch (_) { /* already closed */ }
+  }
+
+  // Retries `attempt` whenever the handle reports progress until it settles the call.
+  function poll(call, events, attempt) {
+    const { handle } = call.state;
+    const detach = () => { for (const name of events) handle.off(name, ready); };
+    const ready = () => { detach(); if (!call.done) attempt(); };
+    for (const name of events) handle.once(name, ready);
+    call.cancel = error => { detach(); settle(call, -1, null, error); };
+  }
+
+  function open(call, kind, host, port, timeout) {
+    const net = getNodeNet();
+    if (!net) return settle(call, -1, null, failure("EIO", "raw sockets need Node.js"));
+    let handle, owner = 0;
+    const fail = error => { try { kind === "connect" ? handle.destroy() : handle.close(); } catch (_) { /* never opened */ } settle(call, -1, null, error); };
+    const opened = (type) => {
+      handle.off("error", errored);
+      const id = register(type, handle);
+      owner = id;
+      if (!id) return fail(failure("ELIMIT", "socket capacity exhausted"));
+      if (type === "udp") handle.on("message", (bytes, peer) => {
+        const state = sockets.get(id);
+        if (state && state.pending.length < 64) { state.pending.push({ bytes: Buffer.from(bytes), peer }); handle.emit("dream-ready"); }
+      });
+      settle(call, id);
+    };
+    const errored = error => fail(io(error));
+    try {
+      if (kind === "bind") {
+        handle = getNodeDgram().createSocket(host.includes(":") ? "udp6" : "udp4");
+        handle.once("error", errored);
+        handle.bind(port, host, () => opened("udp"));
+      } else if (kind === "connect") {
+        handle = new net.Socket({ allowHalfOpen: true });
+        handle.once("error", errored);
+        handle.connect(port, host, () => { handle.pause(); opened("tcp"); });
+      } else {
+        handle = net.createServer({ pauseOnConnect: true, allowHalfOpen: true });
+        handle.once("error", errored);
+        handle.listen({ host, port }, () => opened("listener"));
+        handle.on("connection", socket => {
+          const state = sockets.get(owner);
+          if (!state || state.closed || state.pending.length >= 64) { socket.destroy(); return; }
+          state.pending.push(socket);
+          handle.emit("dream-ready");
+        });
+      }
+    } catch (error) { return fail(io(error)); }
+    call.cancel = fail;
+    deadline(call, timeout);
+  }
+
+  function accept(call) {
+    const { state } = call;
+    while (state.pending.length) {
+      const socket = state.pending.shift();
+      if (socket.destroyed) continue;
+      const id = register("tcp", socket);
+      if (!id) { socket.destroy(); return settle(call, -1, null, failure("ELIMIT", "socket capacity exhausted")); }
+      socket.on("error", () => {});
+      return settle(call, id);
+    }
+    if (state.closed) return settle(call, -1, null, closed());
+    if (state.error) return settle(call, -1, null, io(state.error));
+    poll(call, ["dream-ready"], () => accept(call));
+  }
+
+  function read(call, max) {
+    const { state } = call;
+    const { handle } = state;
+    if (state.leftover.length) {
+      const size = Math.min(max, state.leftover.length);
+      const bytes = Array.from(state.leftover.subarray(0, size));
+      state.leftover = state.leftover.subarray(size);
+      return settle(call, size, bytes);
+    }
+    if (handle.readableLength) {
+      const chunk = handle.read(Math.min(max, handle.readableLength));
+      return settle(call, chunk.length, Array.from(chunk));
+    }
+    if (state.error) return settle(call, -1, null, io(state.error));
+    if (state.ended || handle.readableEnded) return settle(call, 0, []);
+    if (state.closed) return settle(call, -1, null, closed());
+    poll(call, ["readable", "dream-ready"], () => read(call, max));
+  }
+
+  function receive(call, max) {
+    const { state } = call;
+    const take = (bytes, length, peer) => settle(call, length, Array.from(bytes.subarray(0, max)), null, { host: peer.address ?? peer.host, port: peer.port });
+    if (state.held) { const { bytes, length, peer } = state.held; state.held = null; return take(bytes, length, peer); }
+    if (state.pending.length) { const { bytes, peer } = state.pending.shift(); return take(bytes, bytes.length, peer); }
+    if (state.closed) return settle(call, -1, null, closed());
+    if (state.error) return settle(call, -1, null, io(state.error));
+    poll(call, ["dream-ready"], () => receive(call, max));
+  }
+
+  function textValid(text) { return typeof text === "string" && text.length > 0 && !text.includes("\0"); }
+
+  const start = (kind, id, expected, timeout, run) => {
+    const state = sockets.get(id);
+    const call = newCall(kind, null);
+    if (!call) return 0;
+    if (!Number.isInteger(timeout) || timeout < 0) settle(call, -1, null, failure("EINVAL", "invalid socket timeout"));
+    else if (!state) settle(call, -1, null, closed());
+    else if (state.kind !== expected) settle(call, -1, null, failure("EINVAL", "operation does not match socket kind"));
+    else if ([...state.calls].some(other => kind === "write" ? other.kind === "write" : READ_SIDE.has(kind) && READ_SIDE.has(other.kind))) {
+      settle(call, -1, null, failure("EBUSY", kind === "write" ? "socket already has a pending write" : "socket already has a pending read"));
+    } else {
+      call.state = state;
+      state.calls.add(call);
+      run(call, state);
+      if (!call.done) deadline(call, timeout);
+    }
+    return call.id;
+  };
+  const opening = kind => (host, port, timeout = 0) => {
+    const call = newCall(kind, null);
+    if (!call) return 0;
+    if (!textValid(host) || !Number.isInteger(port) || port < 0 || port > 65535 || timeout < 0) settle(call, -1, null, failure("EINVAL", "invalid socket endpoint"));
+    else if (kind === "bind" && !getNodeDgram()) settle(call, -1, null, failure("EIO", "raw sockets need Node.js"));
+    else open(call, kind, host, port, timeout);
+    return call.id;
+  };
+  const control = (id, expected, apply) => {
+    const state = sockets.get(id);
+    const call = newCall("control", null);
+    if (!call) return 0;
+    try {
+      if (!state) settle(call, -1, null, closed());
+      else if (state.kind !== expected) settle(call, -1, null, failure("EINVAL", "unsupported socket option"));
+      else { const error = apply(state); settle(call, error ? -1 : 0, null, error); }
+    } catch (error) { settle(call, -1, null, io(error)); }
+    return call.id;
+  };
+  return {
+    netSocketConnect: opening("connect"),
+    netSocketListen: opening("listen"),
+    netSocketBind: opening("bind"),
+    netSocketAccept: (id, timeout) => start("accept", id, "listener", timeout, call => accept(call)),
+    netSocketRead: (id, max, timeout) => start("read", id, "tcp", timeout, call => {
+      if (max < 0) return settle(call, -1, null, failure("EINVAL", "invalid socket read size"));
+      if (max === 0) return settle(call, 0, []);
+      read(call, Math.min(max, READ_CHUNK));
+    }),
+    netSocketWrite: (id, data) => start("write", id, "tcp", 0, (call, state) => {
+      if (state.writeShut || state.handle.writableEnded) return settle(call, -1, null, failure("ECLOSED", "socket write side is shut down"));
+      if (!data.length) return settle(call, 0, []);
+      call.cancel = error => settle(call, -1, null, error);
+      state.handle.write(Buffer.from(data), error => error ? settle(call, -1, null, io(error)) : settle(call, data.length));
+    }),
+    netSocketSend: (id, host, port, data, timeout) => start("send", id, "udp", timeout, (call, state) => {
+      if (!textValid(host) || port < 0 || port > 65535 || data.length > 65507) return settle(call, -1, null, failure("EINVAL", "invalid datagram endpoint or size"));
+      call.cancel = error => settle(call, -1, null, error);
+      state.handle.send(Buffer.from(data), port, host, error => error ? settle(call, -1, null, io(error)) : settle(call, data.length));
+    }),
+    netSocketReceive: (id, max, timeout) => start("receive", id, "udp", timeout, call => {
+      if (max < 0 || max > 65535) return settle(call, -1, null, failure("EINVAL", "invalid datagram read size"));
+      receive(call, max);
+    }),
+    netSocketShutdown: id => control(id, "tcp", state => {
+      if ([...state.calls].some(call => call.kind === "write")) return failure("EBUSY", "write is pending");
+      state.writeShut = true;
+      if (!state.handle.writableEnded) state.handle.end();
+      return null;
+    }),
+    netSocketOption: (id, option, value) => control(id, option === OPTION_NODELAY ? "tcp" : "udp", state => {
+      if (option === OPTION_NODELAY) state.handle.setNoDelay(value !== 0);
+      else if (option === OPTION_BROADCAST) state.handle.setBroadcast(value !== 0);
+      else if (option === OPTION_TTL && value >= 1 && value <= 255) state.handle.setTTL(value);
+      else return failure("EINVAL", "unsupported socket option");
+      return null;
+    }),
+    netSocketCallWait: id => {
+      const call = calls.get(id);
+      if (!call || call.done) return Promise.resolve(0);
+      return new Promise(resolve => call.waiters.push(resolve));
+    },
+    netSocketCallValue: id => {
+      const call = calls.get(id);
+      if (!call?.done) return -1n;
+      call.claimed = true;
+      return call.code ? -1n : call.value;
+    },
+    netSocketCallBytes: id => {
+      const call = calls.get(id);
+      if (!call?.done) return [];
+      call.claimed = true;
+      return call.code ? [] : call.bytes;
+    },
+    netSocketCallHost: id => calls.get(id)?.peer?.host ?? "",
+    netSocketCallPort: id => calls.get(id)?.peer?.port ?? 0,
+    netSocketCallCode: id => {
+      const call = calls.get(id);
+      if (!call) return "ELIMIT";
+      return call.done ? call.code : "";
+    },
+    netSocketCallMessage: id => calls.get(id)?.message ?? "socket call capacity exhausted",
+    netSocketCallCancel: id => { const call = calls.get(id); if (call && !call.done) call.cancel?.(cancelled()); },
+    netSocketCallRelease: id => {
+      const call = calls.get(id);
+      if (!call) return;
+      calls.delete(id);
+      call.released = true;
+      if (!call.done) call.cancel?.(cancelled());
+      else dispose(call);
+    },
+    netSocketAddress: (id, peer) => { const state = sockets.get(id); return state ? (peer ? state.peer : state.local).host : ""; },
+    netSocketPort: (id, peer) => { const state = sockets.get(id); return state ? (peer ? state.peer : state.local).port : 0; },
+    netSocketClose: close,
+  };
+}
+
 // ----- hosts/websocket.js -----
 // Operation codes from the guest's `WebSocketAction`.
 const WS_CONNECT = 1, WS_RECEIVE = 2, WS_SEND_TEXT = 3, WS_SEND_BINARY = 4, WS_CLOSE = 5;
@@ -1681,211 +1973,47 @@ function makeWebSocketService() {
   return {execute, close, parse};
 }
 
-// ----- hosts/sockets.js -----
-function makeSocketHost() {
+// WebSocket operations the guest waits on, cancels, claims, and releases by id.
+function makeWebSocketHost() {
   const websocket = makeWebSocketService();
-  const resources = new Map();
   const operations = new Map();
-  let nextResource = 0, nextOperation = 0;
-  const encoder = new TextEncoder();
-  const fail = (code, message) => Object.assign(new Error(message), {code});
-  const cancelled = () => fail("ECANCELLED", "socket operation cancelled");
-  const check = signal => { if (signal.aborted) throw signal.reason || cancelled(); };
-  function endpoint(request) {
-    if (typeof request.host !== "string" || !request.host || request.host.includes("\0") || !Number.isInteger(request.port) || request.port < 0 || request.port > 65535) throw fail("EINVAL", "invalid socket endpoint");
-    return {host:request.host,port:request.port};
-  }
-  function wait(emitter, names, signal) {
-    check(signal);
-    return new Promise((resolve,reject) => {
-      const cleanup = () => { for (const name of names) emitter.off(name, done); emitter.off("error",error); signal.removeEventListener("abort",abort); };
-      const done = () => { cleanup(); resolve(); };
-      const error = value => { cleanup(); reject(value); };
-      const abort = () => error(signal.reason || cancelled());
-      for (const name of names) emitter.once(name,done);
-      emitter.once("error",error); signal.addEventListener("abort",abort,{once:true});
-    });
-  }
-  function close(id) {
-    const state = resources.get(id);
-    if (!state) return;
-    resources.delete(id); state.closed = true;
-    if (state.kind === "listener") {
-      for (const pending of state.pending.splice(0)) close(pending);
-      state.socket.emit("dream-ready");
-      try { state.socket.close(); } catch (_) {}
-    } else if (state.kind === "udp") {
-      state.pending.length = 0; state.socket.emit("dream-ready");
-      try { state.socket.close(); } catch (_) {}
-    } else state.socket.destroy();
-  }
-  function track(socket, kind) {
-    if (resources.size >= 1024 || nextResource === 2147483647) throw fail("ELIMIT", "socket capacity exhausted");
-    const state = {id:++nextResource,socket,kind,closed:false,ended:false,error:null,reading:false,writing:false,pending:[]};
-    socket.on("error",error => { state.error = error; socket.emit("dream-ready"); });
-    socket.on("end",() => { state.ended = true; });
-    socket.on("close",() => { state.closed = true; socket.emit("dream-ready"); });
-    const local = socket.address();
-    state.metadata = {id:state.id,local_host:local.address,local_port:local.port,peer_host:socket.remoteAddress || null,peer_port:socket.remotePort || null};
-    resources.set(state.id,state);
-    return state;
-  }
-  const metadata = state => ({bytes:encoder.encode(JSON.stringify(state.metadata)),owned:state.id});
-  function get(id) { const state = resources.get(id); if (!state) throw fail("ECLOSED","socket is closed"); return state; }
-  async function create(request, signal) {
-    const address = endpoint(request);
-    if (request.action === "udp_bind") {
-      const dgram = await import("node:dgram"); check(signal);
-      const socket = dgram.createSocket(address.host.includes(":") ? "udp6" : "udp4");
-      socket.on("error",() => {});
+  let nextOperation = 0;
+  const cancelled = () => Object.assign(new Error("WebSocket operation cancelled"), {code:"ECANCELLED"});
+  function start(raw, input) {
+    if (nextOperation === 2147483647 || operations.size >= 4096) return 0;
+    const bytes = Uint8Array.from(input || []);
+    const id = ++nextOperation, abort = new AbortController();
+    let done;
+    const state = {abort,result:null,owned:0,released:false,done:new Promise(resolve=>{done=resolve;})};
+    operations.set(id,state);
+    Promise.resolve().then(async () => {
+      let timer;
       try {
-        const ready = wait(socket,["listening"],signal); socket.bind(address.port,address.host); await ready; check(signal);
-        const state = track(socket,"udp");
-        socket.on("message",(bytes,peer) => { if (state.pending.length < 64) { state.pending.push({bytes:Uint8Array.from(bytes),peer}); socket.emit("dream-ready"); } });
-        return metadata(state);
-      } catch (error) { try { socket.close(); } catch (_) {} throw error; }
-    }
-    const net = getNodeNet(); if (!net) throw fail("EUNSUPPORTED","TCP host unavailable");
-    if (request.action === "connect") {
-      const socket = new net.Socket({allowHalfOpen:true}); socket.on("error",() => {});
-      try { const ready = wait(socket,["connect"],signal); socket.connect(address.port,address.host); await ready; check(signal); socket.pause(); return metadata(track(socket,"tcp")); }
-      catch (error) { socket.destroy(); throw error; }
-    }
-    const server = net.createServer({pauseOnConnect:true,allowHalfOpen:true}); server.on("error",() => {});
-    try {
-      const ready = wait(server,["listening"],signal); server.listen({host:address.host,port:address.port}); await ready; check(signal);
-      const state = track(server,"listener");
-      server.on("connection",socket => {
-        if (state.closed || state.pending.length >= 64) { socket.destroy(); return; }
-        try { const child = track(socket,"tcp"); state.pending.push(child.id); server.emit("dream-ready"); } catch (_) { socket.destroy(); }
-      });
-      return metadata(state);
-    } catch (error) { try { server.close(); } catch (_) {} throw error; }
-  }
-  async function execute(request, bytes, signal) {
-    if (!isNode) throw fail("EUNSUPPORTED","raw sockets are unavailable in browsers");
-    check(signal);
-    if (["connect","listen","udp_bind"].includes(request.action)) return create(request,signal);
-    const state = get(request.id);
-    if (request.action === "accept" && state.kind === "listener") {
-      while (true) {
-        check(signal); if (state.closed) throw fail("ECLOSED","listener is closed");
-        if (state.error) throw state.error;
-        if (state.pending.length) { const id = state.pending.shift(); const child = resources.get(id); if (child && !child.closed) return metadata(child); close(id); continue; }
-        await wait(state.socket,["dream-ready"],signal);
+        const request = websocket.parse(Uint8Array.from(raw || []));
+        if (!Number.isInteger(request.timeout_ms) || request.timeout_ms < 0 || request.timeout_ms > 2147483647) throw Object.assign(new Error("invalid WebSocket timeout"), {code:"EINVAL"});
+        if (request.timeout_ms) timer = setTimeout(()=>abort.abort(Object.assign(new Error("WebSocket operation deadline exceeded"), {code:"ETIMEOUT"})),request.timeout_ms);
+        const result = await websocket.execute(request,bytes,abort.signal);
+        state.owned = result.owned || 0;
+        if (abort.signal.aborted) throw abort.signal.reason || cancelled();
+        state.result = [1,...result.bytes];
+      } catch (error) {
+        state.result = wireFailure(["EINVAL","ECLOSED","ECANCELLED","ETIMEOUT","EUNSUPPORTED","EBUSY","ELIMIT"].includes(error.code)?error.code:"EIO",error.message||"WebSocket operation failed");
+      } finally {
+        clearTimeout(timer);
+        if (state.released && state.owned) websocket.close(state.owned);
+        done();
       }
-    }
-    if (request.action === "read" && state.kind === "tcp") {
-      const count = request.count;
-      if (!Number.isInteger(count) || count < 0) throw fail("EINVAL","invalid TCP read size");
-      if (!count) return {bytes:new Uint8Array()};
-      if (state.reading) throw fail("EBUSY","socket already has a pending read");
-      state.reading = true;
-      try {
-        while (true) {
-          check(signal);
-          if (state.socket.readableLength) return {bytes:Uint8Array.from(state.socket.read(Math.min(count,state.socket.readableLength)))};
-          if (state.error) throw state.error;
-          if (state.ended) return {bytes:new Uint8Array()};
-          if (state.closed) throw fail("ECLOSED","socket is closed");
-          await wait(state.socket,["readable","end","close"],signal);
-        }
-      } finally { state.reading = false; }
-    }
-    if (request.action === "write" && state.kind === "tcp") {
-      if (state.writing) throw fail("EBUSY","socket already has a pending write");
-      if (state.socket.writableEnded) throw fail("ECLOSED","socket write side is shut down");
-      if (!bytes.length) return {bytes:encoder.encode("0")};
-      state.writing = true;
-      try {
-        await new Promise((resolve,reject) => {
-          const abort = () => { signal.removeEventListener("abort",abort); reject(signal.reason || cancelled()); };
-          signal.addEventListener("abort",abort,{once:true});
-          state.socket.write(bytes,error => { signal.removeEventListener("abort",abort); error ? reject(error) : resolve(); });
-        });
-        return {bytes:encoder.encode(String(bytes.length))};
-      } finally { state.writing = false; }
-    }
-    if (request.action === "udp_send" && state.kind === "udp") {
-      const address = endpoint(request);
-      if (bytes.length > 65507) throw fail("EINVAL","datagram exceeds portable UDP size limit");
-      await new Promise((resolve,reject) => {
-        const abort = () => { signal.removeEventListener("abort",abort); reject(signal.reason || cancelled()); };
-        signal.addEventListener("abort",abort,{once:true});
-        state.socket.send(bytes,address.port,address.host,error => { signal.removeEventListener("abort",abort); error ? reject(error) : resolve(); });
-      });
-      check(signal); return {bytes:encoder.encode(String(bytes.length))};
-    }
-    if (request.action === "udp_receive" && state.kind === "udp") {
-      const count = request.count;
-      if (!Number.isInteger(count) || count < 0 || count > 65535) throw fail("EINVAL","invalid datagram read size");
-      if (state.reading) throw fail("EBUSY","datagram receive is already pending");
-      state.reading = true;
-      try {
-        while (true) {
-          check(signal); if (state.closed) throw fail("ECLOSED","socket is closed"); if (state.error) throw state.error;
-          if (state.pending.length) {
-            const {bytes,peer} = state.pending.shift();
-            return {bytes:encoder.encode(JSON.stringify({host:peer.address,port:peer.port,bytes:Array.from(bytes.subarray(0,count),b=>b.toString(16).padStart(2,"0")).join(""),truncated:bytes.length>count}))};
-          }
-          await wait(state.socket,["dream-ready"],signal);
-        }
-      } finally { state.reading = false; }
-    }
-    throw fail("EINVAL","operation does not match socket kind");
-  }
-  function start(text, input, run = execute, dispose = close, parse = JSON.parse) {
-      if (nextOperation === 2147483647 || operations.size >= 4096) return 0;
-      const bytes = Uint8Array.from(input || []);
-      const raw = typeof text === "string" ? text : Uint8Array.from(text || []);
-      const id = ++nextOperation, abort = new AbortController();
-      let done;
-      const state = {abort,result:null,owned:0,dispose,released:false,done:new Promise(resolve=>{done=resolve;})};
-      operations.set(id,state);
-      Promise.resolve().then(async () => {
-        let timer;
-        try {
-          const request = parse(raw);
-          if (!Number.isInteger(request.timeout_ms) || request.timeout_ms < 0 || request.timeout_ms > 2147483647) throw fail("EINVAL","invalid socket timeout");
-          if (request.timeout_ms) timer = setTimeout(()=>abort.abort(fail("ETIMEOUT","socket operation deadline exceeded")),request.timeout_ms);
-          const result = await run(request,bytes,abort.signal);
-          state.owned = result.owned || 0;
-          if (abort.signal.aborted) throw abort.signal.reason || cancelled();
-          state.result = [1,...result.bytes];
-        } catch (error) {
-          state.result = wireFailure(["EINVAL","ECLOSED","ECANCELLED","ETIMEOUT","EUNSUPPORTED","EBUSY","ELIMIT"].includes(error.code)?error.code:"EIO",error.message||"socket operation failed");
-        } finally {
-          clearTimeout(timer);
-          if (state.released && state.owned) dispose(state.owned);
-          done();
-        }
-      });
-      return id;
+    });
+    return id;
   }
   return {
-    netSocketStart: (text, input) => start(text, input),
-    netWsStart: (request, input) => start(request, input, websocket.execute, websocket.close, websocket.parse),
+    netWsStart: start,
     netWsClose: id => websocket.close(id),
-    async netSocketWait(id) { const state = operations.get(id); if (state) await state.done; return 0; },
-    netSocketResult: id => operations.get(id)?.result || [0],
-    netSocketCancel: id => operations.get(id)?.abort.abort(cancelled()),
-    netSocketRelease: id => { const state = operations.get(id); if (state) { state.released=true; state.abort.abort(cancelled()); if (state.owned) state.dispose(state.owned); operations.delete(id); } },
-    netSocketClaim: id => { const state = operations.get(id); if (state) state.owned=0; },
-    netSocketClose: id => close(id),
-    netSocketControl: (id,text) => {
-      try {
-        if (!isNode) throw fail("EUNSUPPORTED","raw sockets are unavailable in browsers");
-        const state = get(id), request = JSON.parse(text);
-        if (request.action === "shutdown_write" && state.kind === "tcp") {
-          if (state.writing) throw fail("EBUSY","write is pending");
-          if (!state.socket.writableEnded) state.socket.end();
-        } else if (request.action === "nodelay" && state.kind === "tcp" && typeof request.value === "boolean") { if (state.reading) throw fail("EBUSY","read is pending"); state.socket.setNoDelay(request.value); }
-        else if (request.action === "broadcast" && state.kind === "udp" && typeof request.value === "boolean") state.socket.setBroadcast(request.value);
-        else if (request.action === "ttl" && state.kind === "udp" && Number.isInteger(request.value) && request.value>0 && request.value<=255) state.socket.setTTL(request.value);
-        else throw fail("EINVAL","unsupported socket option");
-        return "{}";
-      } catch (error) { return JSON.stringify({code:error.code||"EIO",message:error.message}); }
-    },
+    async netWsWait(id) { const state = operations.get(id); if (state) await state.done; return 0; },
+    netWsResult: id => operations.get(id)?.result || [0],
+    netWsCancel: id => operations.get(id)?.abort.abort(cancelled()),
+    netWsRelease: id => { const state = operations.get(id); if (state) { state.released=true; state.abort.abort(cancelled()); if (state.owned) websocket.close(state.owned); operations.delete(id); } },
+    netWsClaim: id => { const state = operations.get(id); if (state) state.owned=0; },
   };
 }
 
@@ -1894,6 +2022,7 @@ function makeNetHost() {
   return {
     ...makeHttpHost(),
     ...makeSocketHost(),
+    ...makeWebSocketHost(),
     // The URL Standard's host parser applies UTS #46 and rejects invalid domains.
     netDomainToAscii: (domain) => {
       try {
@@ -6614,6 +6743,7 @@ const NODE_PRELOADS = [
   [["crypto"], "node:crypto", setNodeCrypto],
   [["process"], "node:child_process", setNodeChildProcess],
   [["netSocket"], "node:net", setNodeNet],
+  [["netSocket"], "node:dgram", setNodeDgram],
 ];
 
 // Host calls are synchronous, so the modules a program imports must be loaded before

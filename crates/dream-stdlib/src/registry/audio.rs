@@ -9,7 +9,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.collections",
         "system.json",
         "system.io",
-        "system.net",
+        "system.http",
     ],
     core_language: false,
     web_assets: None,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeSocketHost } from "../runtime/src/hosts/sockets.js";
+import { makeWebSocketHost } from "../runtime/src/hosts/websocket.js";
 import { WIRE_VERSION, WireReader, WireWriter } from "../runtime/src/wire.js";
 
 class EchoWebSocket extends EventTarget {
@@ -27,15 +27,15 @@ test("WebSocket hosts share operation ownership, close messages and cancellation
   const original = globalThis.WebSocket;
   globalThis.WebSocket = EchoWebSocket;
   try {
-    const host = makeSocketHost();
+    const host = makeWebSocketHost();
     const CONNECT = 1, RECEIVE = 2, SEND_TEXT = 3, SEND_BINARY = 4, CLOSE = 5;
     const start = (action, id = 0, bytes = [], args = writer => writer) =>
       host.netWsStart(args(new WireWriter().u8(WIRE_VERSION).u8(action).i32(id).i32(0)).finish(), bytes);
     const connect = url => start(CONNECT, 0, [], writer => writer.text(url));
     const result = async op => {
-      await host.netSocketWait(op);
-      const wire = host.netSocketResult(op);
-      host.netSocketClaim(op); host.netSocketRelease(op);
+      await host.netWsWait(op);
+      const wire = host.netWsResult(op);
+      host.netWsClaim(op); host.netWsRelease(op);
       return {status:wire[0], reader:new WireReader(wire.slice(1))};
     };
     const code = async op => {
@@ -66,12 +66,12 @@ test("WebSocket hosts share operation ownership, close messages and cancellation
     const second = await id(connect("ws://localhost/echo"));
     const pending = start(RECEIVE, second);
     await new Promise(resolve => setImmediate(resolve));
-    host.netSocketCancel(pending);
+    host.netWsCancel(pending);
     assert.equal(await code(pending), "ECANCELLED");
     assert.equal(await code(start(SEND_TEXT, second, [1])), "ECLOSED");
     const third = await id(connect("ws://localhost/echo"));
     const early = start(RECEIVE, third);
-    host.netSocketCancel(early);
+    host.netWsCancel(early);
     assert.equal(await code(early), "ECANCELLED");
     assert.equal(await code(start(SEND_TEXT, third, [1])), "ECLOSED");
     assert.equal(await code(connect("http://localhost")), "EINVAL");

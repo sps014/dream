@@ -148,7 +148,7 @@ package rather than conflicting.
     them when switching debug ↔ release.
   - Existing projects that hardcode `target/debug/…` should retarget once to `target/web/` /
     `target/node/`.
-- `[package].targets` lists hosts: `native` (`dream run`), `web` (browser + `*.web.runtime.js`), and `node` (Node ≥ 18 + `*.node.runtime.js`). Canvas projects with `[app]` can also declare `android` and `ios` ([Mobile apps](../deploy/mobile.md)).
+- `[package].targets` lists hosts: `native` (`dream run`), `web` (browser + `*.web.runtime.js`), and `node` (Node ≥ 18 + `*.node.runtime.mjs`). Canvas projects with `[app]` can also declare `android` and `ios` ([Mobile apps](../deploy/mobile.md)).
   - Omit the field, or leave it empty, and `dreamer run` defaults to native.
   - Canvas projects that list `native` select it by default. Other combinations need an explicit run target ([Build and run](build-run.md)).
 - `[package].icon` is an optional path to a PNG (relative to the `dream.toml` directory). It is

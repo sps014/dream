@@ -182,7 +182,7 @@ def prepare_dream(arm: str, exe: str, out: Path, args) -> list[str]:
     run([exe, *flags, str(path)], cwd=work, env=compile_env)
     artifacts = work / ("target/web" if args.target == "wasm" else "target/release")
     if args.target == "wasm":
-        runtime = artifacts / "microbenches.node.runtime.js"
+        runtime = artifacts / "microbenches.node.runtime.mjs"
         shutil.copy2(runtime, runtime.with_suffix(".mjs"))
         runner = artifacts / "microbenches.mjs"
         runner.write_text('import { run } from "./microbenches.node.runtime.mjs";\n'

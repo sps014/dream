@@ -34,7 +34,7 @@ export function add(left: number, right: number): number;
 dream --runtime --node main.dream
 ```
 
-Load `main.node.runtime.js` together with `main.node.jsimports.mjs`. A browser build uses `--web` and `main.web.runtime.js`.
+Load `main.node.runtime.mjs` together with `main.node.jsimports.mjs`. A browser build uses `--web` and `main.web.runtime.js`.
 
 ## Packages
 

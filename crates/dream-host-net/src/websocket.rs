@@ -1,4 +1,4 @@
-use crate::socket_operations::{self as operations, Failure, Output, OwnedResource};
+use crate::operations::{self, Failure, Output, OwnedResource};
 use dream_host_abi::{
     handles::HandleTable,
     wire::{Header, Reader, Writer},

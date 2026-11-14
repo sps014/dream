@@ -42,7 +42,7 @@ import system.js; fun main(): void { System.println(42); }",
     let text = std::fs::read_to_string(output.with_extension("wat")).unwrap();
     wat::parse_str(text).unwrap();
     assert_eq!(
-        run_with_runtime(&output, &output.with_extension("node.runtime.js")),
+        run_with_runtime(&output, &output.with_extension("node.runtime.mjs")),
         "42\n"
     );
 }
@@ -94,7 +94,7 @@ assert.equal(output, '14\n14\n');
 assert.equal(previous(9), 18);
 "#,
             runtime =
-                serde_json::to_string(&output.with_extension("node.runtime.js").to_string_lossy())
+                serde_json::to_string(&output.with_extension("node.runtime.mjs").to_string_lossy())
                     .unwrap(),
             wasm = serde_json::to_string(&output.with_extension("wasm").to_string_lossy()).unwrap(),
         ),
@@ -198,7 +198,7 @@ await instance.run();
 assert.equal(output, '2\n日本語😀\n1234567890123\n');
 "#,
             runtime =
-                serde_json::to_string(&out.with_extension("node.runtime.js").to_string_lossy())
+                serde_json::to_string(&out.with_extension("node.runtime.mjs").to_string_lossy())
                     .unwrap(),
             wasm = serde_json::to_string(&out.with_extension("wasm").to_string_lossy()).unwrap(),
         ),
@@ -485,7 +485,7 @@ async fun main(): void {
     compile(&root.join("main.dream"), &out, Some(OptLevel::O3)).unwrap();
     assert_eq!(run(&out), "constructed\n101\n42\n102\ndestroyed\n");
     assert_eq!(
-        run_with_runtime(&out, &out.with_extension("node.runtime.js")),
+        run_with_runtime(&out, &out.with_extension("node.runtime.mjs")),
         "constructed\n101\n42\n102\ndestroyed\n"
     );
 }

@@ -87,7 +87,7 @@ fn imports_preserve_live_handles_callbacks_promises_and_cache_inputs() {
     std::fs::write(
         &runner,
         r#"
-        import {run} from './main.node.runtime.js';
+        import {run} from './main.node.runtime.mjs';
         await run(new URL('./main.wasm',import.meta.url), {stdout: value => process.stdout.write(value)});
         "#,
     )
@@ -178,7 +178,7 @@ fn npm_file_dependency_is_installed_and_called() {
     std::fs::write(
         &runner,
         r#"
-        import { run } from './main.node.runtime.js';
+        import { run } from './main.node.runtime.mjs';
         await run(new URL('./main.wasm', import.meta.url), { stdout: value => process.stdout.write(value) });
         "#,
     )
@@ -217,7 +217,7 @@ fn published_npm_package_is_installed_and_called() {
     std::fs::write(
         &runner,
         r#"
-        import { run } from './main.node.runtime.js';
+        import { run } from './main.node.runtime.mjs';
         await run(new URL('./main.wasm', import.meta.url), { stdout: value => process.stdout.write(value) });
         "#,
     )

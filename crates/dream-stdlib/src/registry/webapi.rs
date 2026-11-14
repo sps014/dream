@@ -6,7 +6,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system",
         "system.app",
         "system.validation",
-        "system.net",
+        "system.http",
         "system.task",
         "system.json",
         "system.encoding",

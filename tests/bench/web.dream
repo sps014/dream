@@ -1,6 +1,6 @@
 import system;
 import system.webapi;
-import system.net;
+import system.http;
 import system.json;
 
 let sink: int = 0;

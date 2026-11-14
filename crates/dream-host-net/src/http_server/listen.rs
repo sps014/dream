@@ -5,7 +5,7 @@ use super::{
     state::{self, Config, Server, error, lock, tables},
     stream, tls, websocket,
 };
-use crate::socket_operations::{self as operations, Failure, Output, OwnedResource};
+use crate::operations::{self as operations, Failure, Output, OwnedResource};
 use dream_host_abi::wire::{Header, Malformed, Reader, Writer};
 use hyper::service::service_fn;
 use hyper_util::{

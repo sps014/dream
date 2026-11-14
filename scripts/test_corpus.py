@@ -43,6 +43,11 @@ def main():
     parser.add_argument("filter", nargs="?", help="case-name substring")
     args = parser.parse_args()
     env = os.environ.copy()
+    # The corpus tests the workspace it just built; an installed toolchain from use-toolchain.sh
+    # would otherwise supply stale capability libraries.
+    build_dir = ROOT / "target" / "debug"
+    env["DREAM_HOME"] = env["DREAMER_HOME"] = str(build_dir)
+    env["DREAM_BIN"] = str(build_dir / ("dream.exe" if os.name == "nt" else "dream"))
     env["DREAM_CORPUS_HOSTS"] = "native,node" if args.both else "node" if args.node else "native"
     for key, value in [("DREAM_CORPUS_FILTER", args.filter),
                        ("DREAM_CORPUS_CONCURRENCY", "1" if args.concurrency else None),

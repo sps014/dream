@@ -1,5 +1,5 @@
 import system;
-import system.net;
+import system.http;
 
 async fun main(): void {
     let client = HttpClient();

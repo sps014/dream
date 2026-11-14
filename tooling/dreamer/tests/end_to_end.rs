@@ -251,7 +251,7 @@ fn init_runtime_scaffolds_web_and_node_hosts() {
     let html = std::fs::read_to_string(project_dir.join("index.html")).unwrap();
     assert!(html.contains("target/web/main.web.runtime.js"));
     let mjs = std::fs::read_to_string(project_dir.join("run.mjs")).unwrap();
-    assert!(mjs.contains("target/node/main.node.runtime.js"));
+    assert!(mjs.contains("target/node/main.node.runtime.mjs"));
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn node_runner_is_written_when_missing() {
     assert!(!project_dir.join("run.mjs").exists());
     dreamer::artifact_alias::ensure_node_runner(&project_dir, "main").unwrap();
     let mjs = std::fs::read_to_string(project_dir.join("run.mjs")).unwrap();
-    assert!(mjs.contains("target/node/main.node.runtime.js"));
+    assert!(mjs.contains("target/node/main.node.runtime.mjs"));
 }
 
 #[test]
@@ -330,7 +330,7 @@ fn build_refreshes_web_and_node_aliases() {
     assert!(project_dir.join("target/web/main.web.runtime.js").is_file());
     assert!(
         project_dir
-            .join("target/node/main.node.runtime.js")
+            .join("target/node/main.node.runtime.mjs")
             .is_file()
     );
     assert!(project_dir.join("target/node/main.wasm").is_file());

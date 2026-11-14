@@ -1,0 +1,79 @@
+module system.http;
+
+internal class HttpOperation {
+    id: int;
+
+    internal constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        this.close();
+    }
+
+    internal fun close(): void {
+        if this.id > 0 {
+            HttpOperation.release_host(this.id);
+            this.id = 0;
+        }
+    }
+
+    @runtime("netOperationPoll", "net", RuntimeTrait.Component)
+    static extern fun poll_host(id: int): byte[];
+
+    internal fun claim(): void {
+        HttpOperation.claim_host(this.id);
+    }
+
+    @runtime("netOperationClaim", "net", RuntimeTrait.Component)
+    static extern fun claim_host(id: int): void;
+
+    @runtime("netOperationRelease", "net", RuntimeTrait.Component)
+    static extern fun release_host(id: int): void;
+
+    @async_host
+    @runtime("netOperationWait", "net", RuntimeTrait.Component)
+    static extern async fun wait_host(id: int): int;
+
+    static fun payload(wire: byte[]): byte[] {
+        let bytes = Buffer.alloc<byte>(wire.length - 1);
+        for (let i = 0; i < bytes.length; i = i + 1) {
+            bytes[i] = wire[i + 1];
+        }
+        return bytes;
+    }
+
+    internal async fun wait(token: Option<CancellationToken>): Result<byte[], HttpError> {
+        let effective_token = CancellationToken.resolve(token);
+        let lifetime = [this];
+        if lifetime[0].id <= 0 {
+            return Result.Err(HttpError("EBUSY", "HTTP operation capacity exhausted"));
+        }
+        let pending = HttpOperation.wait_host(lifetime[0].id);
+        if effective_token.is_some() {
+            let result = effective_token.unwrap().wait(pending).await;
+            if result.is_err() {
+                return Result.Err(HttpError("ECANCELLED", "HTTP operation cancelled"));
+            }
+        } else {
+            pending.await;
+        }
+        let wire = HttpOperation.poll_host(lifetime[0].id);
+        if wire.length == 0 {
+            return Result.Err(HttpError("EIO", "invalid HTTP completion"));
+        }
+        if wire[0] == (byte)1 {
+            return Result.Ok(HttpOperation.payload(wire));
+        }
+        if wire[0] == (byte)2 {
+            let error = WireReader(wire, 1);
+            let code = error.text();
+            let message = error.text();
+            if !error.at_end() {
+                return Result.Err(HttpError("EIO", "invalid HTTP error completion"));
+            }
+            return Result.Err(HttpError(code, message));
+        }
+        return Result.Err(HttpError("EIO", "HTTP operation woke before completion"));
+    }
+}

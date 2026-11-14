@@ -861,7 +861,7 @@ async function pickRuntimeTarget(): Promise<void> {
             {
                 label: 'Node',
                 description: current === 'node' ? '(current)' : undefined,
-                detail: 'Emit Node ≥ 18 *.node.runtime.js (--runtime --node)',
+                detail: 'Emit Node ≥ 18 *.node.runtime.mjs (--runtime --node)',
                 value: 'node' as RuntimeTarget
             }
         ],

@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `TcpStream`
 
-An owned TCP byte stream supporting one simultaneous read and one simultaneous write.
+An owned TCP byte stream supporting one simultaneous read and one simultaneous write. Available on native, Node, and WASI builds.
 
 ```dream
 public class TcpStream: AsyncReader, AsyncWriter
@@ -14,7 +14,7 @@ public class TcpStream: AsyncReader, AsyncWriter
 
 ## `connect`
 
-Connects with a deadline in milliseconds; zero disables the deadline.
+Resolves `host` and connects to `port` (0 to 65535), trying each resolved address in turn. `timeout_ms` bounds connecting; zero disables the deadline. Fails with ETIMEOUT when the deadline passes, ECANCELLED when `token` fires, and EIO when the name does not resolve or no address accepts the connection.
 
 ```dream
 public static async fun connect(
@@ -70,7 +70,7 @@ public async unique fun read_async(
 
 ## `read_with_timeout`
 
-Reads with a per-operation deadline; a concurrent read returns EBUSY.
+Reads like `read_async` with a deadline in milliseconds; zero disables it. A read that times out or is cancelled keeps the bytes it already took for the next read. A concurrent read returns EBUSY.
 
 ```dream
 public fun read_with_timeout(
@@ -82,7 +82,7 @@ public fun read_with_timeout(
 
 ## `write_async`
 
-Writes a partial byte count; cancellation preserves completed side effects.
+Writes some of `bytes` and returns how many the connection accepted, which can be fewer than requested. Cancellation keeps bytes already sent. A concurrent write returns EBUSY, a write after `shutdown_write` returns ECLOSED, and a broken connection returns EIO.
 
 ```dream
 public async unique fun write_async(
@@ -114,7 +114,7 @@ public async unique fun flush_async(
 
 ## `shutdown_write`
 
-Sends FIN after accepted writes while retaining the read side; pending writes return EBUSY.
+Sends FIN after accepted writes while retaining the read side; a pending write returns EBUSY.
 
 ```dream
 public fun shutdown_write(): Result<Unit, IoError>
@@ -122,7 +122,7 @@ public fun shutdown_write(): Result<Unit, IoError>
 
 ## `set_nodelay`
 
-Enables or disables TCP_NODELAY; pending native reads may return EBUSY.
+Enables or disables TCP_NODELAY, which sends small writes immediately instead of coalescing them.
 
 ```dream
 public fun set_nodelay(enabled: bool): Result<Unit, IoError>
@@ -130,7 +130,7 @@ public fun set_nodelay(enabled: bool): Result<Unit, IoError>
 
 ## `close`
 
-Closes the owned socket and wakes pending operations; repeated closure succeeds.
+Closes the owned socket and wakes pending operations with ECLOSED; repeated closure succeeds.
 
 ```dream
 public fun close(): Result<Unit, IoError>

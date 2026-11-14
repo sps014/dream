@@ -44,7 +44,7 @@ int32_t netClientCreate(int32_t cookie_jar) {
     int id = next_client++; clients[id] = 1; return id;
 }
 void netClientClose(int32_t id) { if (id > 0 && id < COMPONENT_LIMIT) { clients[id] = 0; } }
-int32_t netCapabilities(void) { return 13; }
+int32_t netCapabilities(void) { return 5; }
 int32_t netCookieJarCreate(void) { return 0; }
 void netCookieJarClose(int32_t id) { (void)id; }
 dream_ptr netCookieJarControl(int32_t id, dream_ptr request) {

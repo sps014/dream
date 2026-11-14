@@ -4,4 +4,4 @@ version = "1.0.0"
 type = "bin"
 entry = "main.dream"
 targets = ["native"]
-description = "Streaming HTTP download CLI using system.cli, system.net, and system.io"
+description = "Streaming HTTP download CLI using system.cli, system.http, and system.io"

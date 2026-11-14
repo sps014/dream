@@ -113,7 +113,7 @@ def main():
                        for path, offset, validator in ranges), ranges
             checked([compiler, "--node", fixture, "-o", str(directory / "main.wasm")], cwd=ROOT)
             runner = directory / "runner.mjs"
-            runner.write_text("import {run} from './main.node.runtime.js';\n"
+            runner.write_text("import {run} from './main.node.runtime.mjs';\n"
                               "await run(new URL('./main.wasm', import.meta.url), {leakReport: true});\n",
                               encoding="utf-8")
             output = checked(["node", str(runner), base, str(disguised)], cwd=ROOT)

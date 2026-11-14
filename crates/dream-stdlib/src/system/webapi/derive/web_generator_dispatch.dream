@@ -7,7 +7,7 @@ import system.json;
 extend WebGenerator {
     internal fun emit_routes(): void {
         this.imports.line("import system.webapi;");
-        this.imports.line("import system.net;");
+        this.imports.line("import system.http;");
         this.imports.line("import system.json;");
         this.imports.line("import system.validation;");
         this.imports.line("import system.encoding;");

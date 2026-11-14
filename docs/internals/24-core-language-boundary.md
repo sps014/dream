@@ -19,7 +19,7 @@ User programs still import `system.json`, `system.gpu`, and the rest the same wa
 | `system.simd` | `Vector<T>` |
 | `system` | `CPtr`, `OwnedCPtr`, `NativeCallback`, `System.print`, `System.args` |
 
-Everything else is a library package. That includes `system.json`, `system.validation`, `system.io`, `system.process`, `system.net`, `system.crypto`, `system.gpu`, `system.drawing`, `system.window`, `system.audio`, `system.app`, and the text, time, and web packages.
+Everything else is a library package. That includes `system.json`, `system.validation`, `system.io`, `system.process`, `system.net`, `system.http`, `system.crypto`, `system.gpu`, `system.drawing`, `system.window`, `system.audio`, `system.app`, and the text, time, and web packages.
 
 `system.io` and `system.process` are library packages. Their host capability field lists may still live next to the core host tables until every field is declared with `@runtime`.
 

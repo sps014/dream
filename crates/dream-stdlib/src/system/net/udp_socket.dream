@@ -1,6 +1,8 @@
 module system.net;
 
-/// An owned UDP socket with explicit message boundaries and bounded receive buffers.
+/// An owned UDP socket with explicit message boundaries and bounded receive buffers. Available
+/// on native, Node, and WASI builds.
+@cfg(Target.Native || Target.Node || Target.Wasi)
 public class UdpSocket {
     state: SocketState;
 
@@ -14,20 +16,25 @@ public class UdpSocket {
         port: int,
         token: Option<CancellationToken> = Option.None
     ): Result<UdpSocket, IoError> {
-        return Result.Ok(UdpSocket(SocketState.open("udp_bind", host, port, 0, token).await?));
+        let effective_token = CancellationToken.resolve(token);
+        CancellationToken.rejected(effective_token, IoError.cancelled())?;
+        SocketState.endpoint(port, 0)?;
+        let call = SocketCall.bind(host, port);
+        return Result.Ok(UdpSocket(SocketState.open(call, effective_token).await?));
     }
 
     /// Numeric bound interface address.
     public get local_host(): string {
-        return this.state.metadata["local_host"].as_string().unwrap_or("");
+        return this.state.local_host;
     }
 
     /// Actual bound UDP port.
     public get local_port(): int {
-        return this.state.metadata["local_port"].as_int().unwrap_or(0);
+        return this.state.local_port;
     }
 
-    /// Sends one datagram of at most 65507 bytes with optional deadline and cancellation.
+    /// Sends one datagram of at most 65507 bytes to `host` and `port` and returns the bytes
+    /// sent. `timeout_ms` bounds waiting to send; zero disables it.
     public async fun send(
         host: string,
         port: int,
@@ -35,48 +42,84 @@ public class UdpSocket {
         timeout_ms: int = 0,
         token: Option<CancellationToken> = Option.None
     ): Result<int, IoError> {
-        let request = SocketState.request("udp_send", this.state.id, timeout_ms);
-        request["host"] = JsonValue.from_string(host);
-        request["port"] = JsonValue.from_int(port);
-        let bytes = this.state.submit(request, data, token).await?;
-        let count = int.parse(Encoding.utf8_decode(bytes));
-        if count.is_err() {
-            return Result.Err(IoError.other("", "invalid datagram send progress"));
-        }
-        return Result.Ok(count.unwrap());
+        return UdpSocket.send_owned(
+            this.state,
+            host,
+            port,
+            data,
+            timeout_ms,
+            CancellationToken.resolve(token)
+        ).await;
     }
 
-    /// Receives one message, reporting truncation explicitly; a concurrent receive returns EBUSY.
+    static async fun send_owned(
+        state: SocketState,
+        host: string,
+        port: int,
+        data: byte[],
+        timeout_ms: int,
+        token: Option<CancellationToken>
+    ): Result<int, IoError> {
+        state.ready(timeout_ms, token)?;
+        SocketState.endpoint(port, timeout_ms)?;
+        if data.length > 65507 {
+            return Result.Err(IoError.invalid("", "datagram exceeds portable UDP size limit"));
+        }
+        let call = SocketCall.send(state.id, host, port, data, timeout_ms);
+        call.finish(token).await?;
+        return Result.Ok((int)call.value());
+    }
+
+    /// Receives one message of at most `max_bytes` (0 to 65535), reporting truncation explicitly.
+    /// `timeout_ms` is a deadline in milliseconds; zero waits forever. A concurrent receive
+    /// returns EBUSY.
     public async fun receive(
         max_bytes: int = 65535,
         timeout_ms: int = 0,
         token: Option<CancellationToken> = Option.None
     ): Result<UdpDatagram, IoError> {
-        let request = SocketState.request("udp_receive", this.state.id, timeout_ms);
-        request["count"] = JsonValue.from_int(max_bytes);
-        let metadata = SocketState.parse(this.state.submit(request, [], token).await?)?;
-        let data = Encoding.hex_decode(metadata["bytes"].as_string().unwrap_or("!"));
-        if data.is_err() {
-            return Result.Err(IoError.other("", "invalid datagram payload"));
+        return UdpSocket.receive_owned(
+            this.state,
+            max_bytes,
+            timeout_ms,
+            CancellationToken.resolve(token)
+        ).await;
+    }
+
+    static async fun receive_owned(
+        state: SocketState,
+        max_bytes: int,
+        timeout_ms: int,
+        token: Option<CancellationToken>
+    ): Result<UdpDatagram, IoError> {
+        state.ready(timeout_ms, token)?;
+        if max_bytes < 0 || max_bytes > 65535 {
+            return Result.Err(IoError.invalid("", "invalid datagram read size"));
         }
+        let call = SocketCall.receive(state.id, max_bytes, timeout_ms);
+        call.finish(token).await?;
+        let length = call.value();
+        let data = call.bytes();
         return Result.Ok(
-            UdpDatagram(
-                data.unwrap(),
-                metadata["host"].as_string().unwrap_or(""),
-                metadata["port"].as_int().unwrap_or(0),
-                metadata["truncated"].as_bool().unwrap_or(false)
-            )
+            UdpDatagram(data, call.peer(), call.peer_port(), length > (long)data.length)
         );
     }
 
     /// Enables or disables sending to broadcast endpoints.
     public fun set_broadcast(enabled: bool): Result<Unit, IoError> {
-        return this.state.control("broadcast", JsonValue.from_bool(enabled));
+        let value = 0;
+        if enabled {
+            value = 1;
+        }
+        return this.state.control(SocketCall.option(this.state.id, SocketCall.BROADCAST, value));
     }
 
     /// Sets outgoing IP time-to-live to a value between 1 and 255.
     public fun set_ttl(ttl: int): Result<Unit, IoError> {
-        return this.state.control("ttl", JsonValue.from_int(ttl));
+        if ttl < 1 || ttl > 255 {
+            return Result.Err(IoError.invalid("", "TTL must be between 1 and 255"));
+        }
+        return this.state.control(SocketCall.option(this.state.id, SocketCall.TTL, ttl));
     }
 
     /// Closes the owned socket and wakes pending receives; repeated closure succeeds.

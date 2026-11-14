@@ -138,7 +138,7 @@ fn wasm_dependency_uses_its_javascript_module() {
     let runner = dir.path().join("run.mjs");
     std::fs::write(
         &runner,
-        "import {run} from './main.node.runtime.js';\n\
+        "import {run} from './main.node.runtime.mjs';\n\
          await run(new URL('./main.wasm', import.meta.url), {stdout: value => process.stdout.write(value)});\n",
     )
     .unwrap();

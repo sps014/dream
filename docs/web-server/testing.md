@@ -11,7 +11,7 @@ Bind to port zero and test through the public HTTP client. Each test creates an 
 ```dream
 import system;
 import system.webapi;
-import system.net;
+import system.http;
 import system.testing;
 
 @router("")

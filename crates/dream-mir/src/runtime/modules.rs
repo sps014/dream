@@ -275,6 +275,8 @@ const NATIVE_SYS_C: &[&str] = &[
     "process.c",
     "process_spawn.c",
     "process_child.c",
+    "socket_os.c",
+    "socket.c",
     "env.c",
     "time.c",
     "stdio.c",
@@ -322,6 +324,8 @@ pub fn component_runtime_c_files(root: &Path) -> Vec<PathBuf> {
                 "dirs.c",
                 "env.c",
                 "file_handle.c",
+                "socket_os.c",
+                "socket.c",
             ]
             .into_iter()
             .map(|name| root.join("sys/native").join(name)),

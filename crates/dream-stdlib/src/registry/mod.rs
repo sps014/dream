@@ -15,6 +15,7 @@ mod drawing_gpu;
 mod encoding;
 mod gpu;
 mod gpu_shaders;
+mod http;
 mod interop;
 mod io;
 mod js;
@@ -112,6 +113,7 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     io::PACKAGE,
     interop::PACKAGE,
     net::PACKAGE,
+    http::PACKAGE,
     cli::PACKAGE,
     config::PACKAGE,
     csv::PACKAGE,

@@ -81,7 +81,7 @@ fn tool_feedback_assets_consumption_and_cached_replay() {
             "{}",
             String::from_utf8_lossy(&compiled.stderr)
         );
-        std::fs::write(dir.path().join("run.mjs"), "import {run, embeddedAssets} from './asset.node.runtime.js';\nif (embeddedAssets.payload[0] !== 65) throw new Error('missing JS asset');\nawait run('./asset.wasm', {stdout: s => process.stdout.write(s)});\n").unwrap();
+        std::fs::write(dir.path().join("run.mjs"), "import {run, embeddedAssets} from './asset.node.runtime.mjs';\nif (embeddedAssets.payload[0] !== 65) throw new Error('missing JS asset');\nawait run('./asset.wasm', {stdout: s => process.stdout.write(s)});\n").unwrap();
         let node = Command::new("node")
             .arg("run.mjs")
             .current_dir(dir.path())

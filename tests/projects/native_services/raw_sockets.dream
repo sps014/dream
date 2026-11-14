@@ -21,7 +21,6 @@ async fun socket_echo(listener: TcpListener): void {
 
 @test
 async fun raw_sockets(): void {
-    Assert.is_true(SocketCapabilities.supported);
     let listener = TcpListener.bind("127.0.0.1", 0).await.unwrap();
     Assert.is_true(listener.local_port > 0);
     let server = socket_echo(listener);

@@ -316,7 +316,7 @@ impl Compiler {
             "lib",
             "so",
             "dylib",
-            "node.runtime.js",
+            "node.runtime.mjs",
             "web.runtime.js",
         ]
         .iter()

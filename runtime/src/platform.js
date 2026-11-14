@@ -5,12 +5,15 @@ let _nodeFs = null;
 let _nodeCrypto = null;
 let _nodeChildProcess = null;
 let _nodeNet = null;
+let _nodeDgram = null;
 
 export function setNodeFs(fs) { _nodeFs = fs; }
 export function setNodeCrypto(crypto) { _nodeCrypto = crypto; }
 export function setNodeChildProcess(childProcess) { _nodeChildProcess = childProcess; }
 export function setNodeNet(net) { _nodeNet = net; }
+export function setNodeDgram(dgram) { _nodeDgram = dgram; }
 export function getNodeFs() { return _nodeFs; }
 export function getNodeCrypto() { return _nodeCrypto; }
 export function getNodeChildProcess() { return _nodeChildProcess; }
 export function getNodeNet() { return _nodeNet; }
+export function getNodeDgram() { return _nodeDgram; }

@@ -1518,7 +1518,6 @@ dependencies = [
  "dream-host-abi",
  "dream-host-core",
  "futures-util",
- "hex",
  "http-body-util",
  "hyper",
  "hyper-util",

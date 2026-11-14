@@ -1,5 +1,5 @@
 //! Selective JS runtime emission: assemble a tree-shaken `<stem>.web.runtime.js` /
-//! `<stem>.node.runtime.js` next to each `.wasm` from the modular sources under `runtime/src/`,
+//! `<stem>.node.runtime.mjs` next to each `.wasm` from the modular sources under `runtime/src/`,
 //! including only the host chunks required by live WASM imports. Opt-in via CLI
 //! `--runtime --web` / `--runtime --node` (both hosts may be requested in one compile).
 //!
@@ -38,9 +38,13 @@ impl JsRuntimeTarget {
         }
     }
 
-    /// Sibling filename extension for this host (`web.runtime.js` / `node.runtime.js`).
-    pub fn runtime_extension(self) -> String {
-        format!("{}.runtime.js", self.as_str())
+    /// Sibling filename extension for this host (`web.runtime.js` / `node.runtime.mjs`). Node
+    /// loads `.mjs` as an ES module even when an enclosing `package.json` declares CommonJS.
+    pub fn runtime_extension(self) -> &'static str {
+        match self {
+            JsRuntimeTarget::Web => "web.runtime.js",
+            JsRuntimeTarget::Node => "node.runtime.mjs",
+        }
     }
 }
 

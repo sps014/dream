@@ -17,20 +17,18 @@ test('deferred socket writes snapshot borrowed input before returning', async ()
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let socket;
   try {
-    const opening = host.netSocketStart(JSON.stringify({action: 'connect', host: '127.0.0.1', port: server.address().port, timeout_ms: 1000}), []);
-    await host.netSocketWait(opening);
-    const metadata = host.netSocketResult(opening);
-    assert.equal(metadata[0], 1);
-    socket = JSON.parse(new TextDecoder().decode(Uint8Array.from(metadata.slice(1)))).id;
-    host.netSocketClaim(opening);
-    host.netSocketRelease(opening);
+    const opening = host.netSocketConnect('127.0.0.1', server.address().port, 1000);
+    await host.netSocketCallWait(opening);
+    assert.equal(host.netSocketCallCode(opening), '');
+    socket = Number(host.netSocketCallValue(opening));
+    host.netSocketCallRelease(opening);
     const input = new TextEncoder().encode('abc');
-    const writing = host.netSocketStart(JSON.stringify({action: 'write', id: socket, timeout_ms: 1000}), input);
+    const writing = host.netSocketWrite(socket, input);
     input.fill(0);
-    await host.netSocketWait(writing);
-    assert.equal(host.netSocketResult(writing)[0], 1);
+    await host.netSocketCallWait(writing);
+    assert.equal(host.netSocketCallCode(writing), '');
     assert.equal(await data, 'abc');
-    host.netSocketRelease(writing);
+    host.netSocketCallRelease(writing);
   } finally {
     if (socket) host.netSocketClose(socket);
     peer?.destroy();

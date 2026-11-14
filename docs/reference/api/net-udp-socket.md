@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `UdpSocket`
 
-An owned UDP socket with explicit message boundaries and bounded receive buffers.
+An owned UDP socket with explicit message boundaries and bounded receive buffers. Available on native, Node, and WASI builds.
 
 ```dream
 public class UdpSocket
@@ -42,7 +42,7 @@ public get local_port(): int
 
 ## `send`
 
-Sends one datagram of at most 65507 bytes with optional deadline and cancellation.
+Sends one datagram of at most 65507 bytes to `host` and `port` and returns the bytes sent. `timeout_ms` bounds waiting to send; zero disables it.
 
 ```dream
 public async fun send(
@@ -56,7 +56,7 @@ public async fun send(
 
 ## `receive`
 
-Receives one message, reporting truncation explicitly; a concurrent receive returns EBUSY.
+Receives one message of at most `max_bytes` (0 to 65535), reporting truncation explicitly. `timeout_ms` is a deadline in milliseconds; zero waits forever. A concurrent receive returns EBUSY.
 
 ```dream
 public async fun receive(

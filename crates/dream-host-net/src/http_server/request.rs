@@ -2,7 +2,7 @@ use super::{
     forwarded, response,
     state::{self, Body, BodyState, Request, Server, error, lock, tables},
 };
-use crate::socket_operations::{Failure, Output, OwnedResource};
+use crate::operations::{Failure, Output, OwnedResource};
 use bytes::Bytes;
 use dream_host_abi::wire::{VERSION, Writer};
 use http_body_util::BodyExt;

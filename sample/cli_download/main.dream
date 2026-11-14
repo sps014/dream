@@ -2,7 +2,7 @@ import system.text;
 import system;
 import system.cli;
 import system.io;
-import system.net;
+import system.http;
 
 async fun download(url: string, path: string, timeout: int): Result<long, string> {
     let parsed = Url.parse(url);

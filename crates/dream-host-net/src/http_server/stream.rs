@@ -2,7 +2,7 @@ use super::{
     response,
     state::{self, Body, Request, error, lock},
 };
-use crate::socket_operations::{Failure, Output};
+use crate::operations::{Failure, Output};
 use bytes::Bytes;
 use futures_util::StreamExt;
 use http_body_util::{BodyExt, StreamBody};

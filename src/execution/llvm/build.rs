@@ -77,12 +77,12 @@ fn sanitizer_passes(
 }
 
 /// System libraries every native link needs. MSVC keeps POSIX names such as `strdup` in
-/// `oldnames`, which only `cl` links by default.
+/// `oldnames`, which only `cl` links by default; Windows sockets live in `ws2_32`.
 fn system_libs(spec: &dream_abi::target::TargetSpec) -> &'static [&'static str] {
     if spec.is_msvc() {
-        &["-loldnames"]
+        &["-loldnames", "-lws2_32"]
     } else if spec.is_windows() {
-        &[]
+        &["-lws2_32"]
     } else if spec.is_android() {
         // Bionic's libc provides pthreads; the NDK has no separate libpthread.
         &["-lm"]

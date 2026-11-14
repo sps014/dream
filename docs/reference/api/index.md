@@ -37,6 +37,7 @@ These declaration snippets show the interface; they are not complete programs. T
 - [system.crypto](system-crypto.md)
 - [system.encoding](system-encoding.md)
 - [system.gpu](system-gpu.md)
+- [system.http](system-http.md)
 - [system.io](system-io.md)
 - [system.js](system-js.md)
 - [system.json](system-json.md)

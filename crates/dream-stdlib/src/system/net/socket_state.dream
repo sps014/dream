@@ -1,19 +1,31 @@
 module system.net;
 
+// An owned host socket and its endpoints, read once when it opens. Closing wakes every pending
+// call on the socket with ECLOSED.
+@cfg(Target.Native || Target.Node || Target.Wasi)
 internal class SocketState {
     internal id: int;
-    internal metadata: JsonValue;
+    internal local_host: string;
+    internal local_port: int;
+    internal peer_host: string;
+    internal peer_port: int;
 
-    internal constructor(metadata: JsonValue) {
-        this.id = metadata["id"].as_int().unwrap_or(0);
-        this.metadata = metadata;
+    internal constructor(id: int) {
+        this.id = id;
+        this.local_host = SocketState.address_host(id, false);
+        this.local_port = SocketState.port_host(id, false);
+        this.peer_host = SocketState.address_host(id, true);
+        this.peer_port = SocketState.port_host(id, true);
     }
 
-    @runtime("netSocketClose", "net", RuntimeTrait.Component)
-    static extern fun close_host(id: int): void;
+    @runtime("netSocketAddress", "core", RuntimeTrait.Component)
+    static extern fun address_host(socket: int, peer: bool): string;
 
-    @runtime("netSocketControl", "net", RuntimeTrait.Component)
-    static extern fun control_host(id: int, request: string): string;
+    @runtime("netSocketPort", "core", RuntimeTrait.Component)
+    static extern fun port_host(socket: int, peer: bool): int;
+
+    @runtime("netSocketClose", "core", RuntimeTrait.Component)
+    static extern fun close_host(socket: int): void;
 
     internal fun close(): void {
         if this.id > 0 {
@@ -26,96 +38,42 @@ internal class SocketState {
         this.close();
     }
 
-    internal static fun request(action: string, id: int, timeout: int): JsonValue {
-        let request = JsonValue.dict();
-        request["action"] = JsonValue.from_string(action);
-        request["id"] = JsonValue.from_int(id);
-        request["timeout_ms"] = JsonValue.from_int(timeout);
-        return request;
-    }
-
-    internal static fun parse(bytes: byte[]): Result<JsonValue, IoError> {
-        let result = Json.deserialize<JsonValue>(Encoding.utf8_decode(bytes));
-        if result.is_err() {
-            return Result.Err(IoError.other("", "invalid socket metadata"));
-        }
-        return Result.Ok(result.unwrap());
-    }
-
-    internal static async fun open(
-        action: string,
-        host: string,
-        port: int,
-        timeout: int,
-        token: Option<CancellationToken>
-    ): Result<SocketState, IoError> {
-        let effective_token = CancellationToken.resolve(token);
-        CancellationToken.rejected(effective_token, IoError.cancelled())?;
-        if port < 0 || port > 65535 || timeout < 0 {
+    internal static fun endpoint(port: int, timeout_ms: int): Result<Unit, IoError> {
+        if port < 0 || port > 65535 || timeout_ms < 0 {
             return Result.Err(IoError.invalid("", "invalid socket port or timeout"));
         }
-        let request = SocketState.request(action, 0, timeout);
-        request["host"] = JsonValue.from_string(host);
-        request["port"] = JsonValue.from_int(port);
-        let operation = SocketOperation.start(request, []);
-        let metadata = SocketState.parse(operation.wait(effective_token).await?)?;
-        if metadata["id"].as_int().unwrap_or(0) <= 0 {
-            return Result.Err(IoError.other("", "invalid socket handle"));
-        }
-        let state = SocketState(metadata);
-        operation.claim();
-        operation.close();
-        return Result.Ok(state);
+        return Result.Ok(Unit());
     }
 
-    internal fun submit(
-        request: JsonValue,
-        bytes: byte[],
-        token: Option<CancellationToken>
-    ): Future<Result<byte[], IoError>> {
-        return SocketState.submit_owned(this, request, bytes, CancellationToken.resolve(token));
-    }
-
-    static async fun submit_owned(
-        state: SocketState,
-        request: JsonValue,
-        bytes: byte[],
-        token: Option<CancellationToken>
-    ): Result<byte[], IoError> {
-        if state.id <= 0 {
-            return Result.Err(IoError.closed("socket"));
-        }
-        CancellationToken.rejected(token, IoError.cancelled())?;
-        request["id"] = JsonValue.from_int(state.id);
-        let operation = SocketOperation.start(request, bytes);
-        let result = operation.wait(token).await;
-        operation.close();
-        return result;
-    }
-
-    internal fun control(action: string, value: JsonValue): Result<Unit, IoError> {
+    // Checks a call can start: the socket is open, the deadline is valid, and nobody cancelled.
+    internal fun ready(timeout_ms: int, token: Option<CancellationToken>): Result<Unit, IoError> {
         if this.id <= 0 {
             return Result.Err(IoError.closed("socket"));
         }
-        let request = JsonValue.dict();
-        request["action"] = JsonValue.from_string(action);
-        request["value"] = value;
-        let parsed = Json.deserialize<JsonValue>(
-            SocketState.control_host(this.id, Json.serialize(request))
-        );
-        if parsed.is_err() {
-            return Result.Err(IoError.other("", "invalid socket control response"));
+        if timeout_ms < 0 {
+            return Result.Err(IoError.invalid("", "invalid socket timeout"));
         }
-        let result = parsed.unwrap();
-        if result.contains("code") {
-            return Result.Err(
-                IoError(
-                    "",
-                    result["code"].as_string().unwrap_or("EIO"),
-                    result["message"].as_string().unwrap_or("socket option failed")
-                )
-            );
+        return CancellationToken.rejected(token, IoError.cancelled());
+    }
+
+    // Finishes an open or accept call and takes ownership of the socket it produced.
+    internal static async fun open(
+        call: SocketCall,
+        token: Option<CancellationToken>
+    ): Result<SocketState, IoError> {
+        call.finish(token).await?;
+        let id = call.value();
+        if id <= 0 {
+            return Result.Err(IoError.other("", "invalid socket handle"));
         }
-        return Result.Ok(Unit());
+        return Result.Ok(SocketState((int)id));
+    }
+
+    // Applies a control call such as an option change or a write shutdown.
+    internal fun control(call: SocketCall): Result<Unit, IoError> {
+        if this.id <= 0 {
+            return Result.Err(IoError.closed("socket"));
+        }
+        return call.settled();
     }
 }

@@ -1,0 +1,75 @@
+module system.http;
+
+// One WebSocket connect, send, or receive running on the network host.
+internal class WebSocketOperation {
+    id: int;
+
+    internal constructor(id: int) {
+        this.id = id;
+    }
+
+    @async_host
+    @runtime("netWsWait", "net")
+    static extern async fun wait_host(id: int): int;
+
+    @runtime("netWsResult", "net")
+    static extern fun result_host(id: int): byte[];
+
+    @runtime("netWsCancel", "net")
+    static extern fun cancel_host(id: int): void;
+
+    @runtime("netWsRelease", "net")
+    static extern fun release_host(id: int): void;
+
+    @runtime("netWsClaim", "net")
+    static extern fun claim_host(id: int): void;
+
+    internal fun claim(): void {
+        WebSocketOperation.claim_host(this.id);
+    }
+
+    internal fun close(): void {
+        if this.id > 0 {
+            WebSocketOperation.release_host(this.id);
+            this.id = 0;
+        }
+    }
+
+    del() {
+        this.close();
+    }
+
+    internal async fun wait(token: Option<CancellationToken>): Result<byte[], IoError> {
+        let lifetime = [this];
+        if lifetime[0].id <= 0 {
+            return Result.Err(IoError("", "ELIMIT", "WebSocket operation capacity exhausted"));
+        }
+        let pending = WebSocketOperation.wait_host(lifetime[0].id);
+        if token.is_some() {
+            if token.unwrap().wait(pending).await.is_err() {
+                WebSocketOperation.cancel_host(lifetime[0].id);
+                WebSocketOperation.wait_host(lifetime[0].id).await;
+            }
+        } else {
+            pending.await;
+        }
+        let wire = WebSocketOperation.result_host(lifetime[0].id);
+        if wire.length == 0 {
+            return Result.Err(IoError.other("", "invalid WebSocket completion"));
+        }
+        let payload = Buffer.alloc<byte>(wire.length - 1);
+        for (let i = 0; i < payload.length; i = i + 1) {
+            payload[i] = wire[i + 1];
+        }
+        if wire[0] == (byte)1 {
+            return Result.Ok(payload);
+        }
+        let error = WireReader(payload, 0);
+        let code = error.text();
+        let message = error.text();
+        if !error.at_end() {
+            return Result.Err(IoError.other("", "invalid WebSocket error"));
+        }
+        return Result.Err(IoError("", code, message));
+    }
+}

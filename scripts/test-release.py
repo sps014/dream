@@ -65,7 +65,7 @@ fun main(): void {
         command([compiler, '--runtime', '--node', '-o', wasm, source], work)
         assert wasm.read_bytes().startswith(b'\0asm'), name
         assert wasm.with_suffix('.wat').is_file(), name
-        runtime = wasm.with_suffix('.node.runtime.js')
+        runtime = wasm.with_suffix('.node.runtime.mjs')
         runner.write_text("import {pathToFileURL} from 'node:url';\nconst {run} = await import(pathToFileURL(" + json.dumps(str(runtime)) + "));\nawait run(pathToFileURL(" + json.dumps(str(wasm)) + "), {imports: {sum: values => Array.from(values).reduce((a,b) => a+b,0), invoke: callback => callback(7)}, stdout: text => process.stdout.write(text)});\n", encoding='utf-8')
         actual = command(['node', runner], work)
         assert actual == expected, (name, actual, expected)

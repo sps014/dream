@@ -18,7 +18,7 @@ none. Build the one you want before running it:
 cargo run -- --wasm sample/interop/interop.dream      # writes target/web/interop.{wasm,wat,abi.json}
 ```
 
-Optionally emit a generated sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host chunks
+Optionally emit a generated sibling `*.web.runtime.js` / `*.node.runtime.mjs` (only the host chunks
 this program needs):
 
 ```sh

@@ -182,7 +182,7 @@ Save this as `service_tests.dream` in the same directory:
 
 ```dream
 import system;
-import system.net;
+import system.http;
 import system.testing;
 import application;
 

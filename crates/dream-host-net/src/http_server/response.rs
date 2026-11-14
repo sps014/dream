@@ -1,5 +1,5 @@
 use super::state::{self, Body, error, lock};
-use crate::socket_operations::{Failure, Output};
+use crate::operations::{Failure, Output};
 use bytes::Bytes;
 use dream_host_abi::wire::Reader;
 use http_body_util::{BodyExt, Full};

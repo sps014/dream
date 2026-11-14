@@ -14101,6 +14101,626 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/http/cookie_jar.dream",
+    "package": "system.http",
+    "page": "reference/api/http-cookie-jar.md",
+    "declarations": [
+      {
+        "signature": "public class CookieJar",
+        "description": "In-memory HTTP cookies shared by one or more native clients. Cookies are never saved to disk. Node, browsers, and WASI components do not expose managed jars; operations return ENOTSUP there.",
+        "line": 5,
+        "page": "reference/api/http-cookie-jar.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty jar. Resource exhaustion is reported by its operations and client sends.",
+        "line": 9,
+        "page": "reference/api/http-cookie-jar.md"
+      },
+      {
+        "signature": "public fun store(url: Url, set_cookie: string): Result<Unit, HttpError>",
+        "description": "Processes one Set-Cookie value as received from `url`, including replacement and expiry. Invalid cookies, unrelated/public-suffix domains, and invalid secure prefixes are ignored. Invalid header bytes or URLs return EINVAL.",
+        "line": 29,
+        "page": "reference/api/http-cookie-jar.md"
+      },
+      {
+        "signature": "public fun header(url: Url): Result<string, HttpError>",
+        "description": "Returns the Cookie header for `url`, or an empty string when no unexpired cookies match. Selection respects host/domain, path, and Secure; HTTP URLs containing credentials return EINVAL. Longer paths come first; equal paths retain creation order when cookies are replaced.",
+        "line": 40,
+        "page": "reference/api/http-cookie-jar.md"
+      },
+      {
+        "signature": "public fun clear(): Result<Unit, HttpError>",
+        "description": "Removes all cookies, including session cookies, for every client sharing this jar. Responses arriving after this call can store new cookies.",
+        "line": 46,
+        "page": "reference/api/http-cookie-jar.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_body.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-body.md",
+    "declarations": [
+      {
+        "signature": "public class HttpBody: AsyncReader",
+        "description": "An HTTP response byte stream. One read may be pending; cancellation can consume bytes.",
+        "line": 4,
+        "page": "reference/api/http-http-body.md"
+      },
+      {
+        "signature": "public async unique fun read_async( max_bytes: int, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
+        "description": "Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing. Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.",
+        "line": 23,
+        "page": "reference/api/http-http-body.md"
+      },
+      {
+        "signature": "public fun close(): Result<Unit, HttpError>",
+        "description": "Releases the response transport and cancels a pending read; safe to call repeatedly.",
+        "line": 53,
+        "page": "reference/api/http-http-body.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_capabilities.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-capabilities.md",
+    "declarations": [
+      {
+        "signature": "public static class HttpCapabilities",
+        "description": "Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send time.",
+        "line": 4,
+        "page": "reference/api/http-http-capabilities.md"
+      },
+      {
+        "signature": "public static get cookie_jars(): bool",
+        "description": "Whether clients can automatically store and send cookies using a managed CookieJar (native hosts).",
+        "line": 9,
+        "page": "reference/api/http-http-capabilities.md"
+      },
+      {
+        "signature": "public static get connection_timeouts(): bool",
+        "description": "Whether a separate connection-establishment timeout can be configured (native hosts).",
+        "line": 14,
+        "page": "reference/api/http-http-capabilities.md"
+      },
+      {
+        "signature": "public static get redirect_limits(): bool",
+        "description": "Whether explicit redirect limits and redirect responses are observable (native and Node).",
+        "line": 19,
+        "page": "reference/api/http-http-capabilities.md"
+      },
+      {
+        "signature": "public static get unrestricted_headers(): bool",
+        "description": "Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.",
+        "line": 24,
+        "page": "reference/api/http-http-capabilities.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_client.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-client.md",
+    "declarations": [
+      {
+        "signature": "public class HttpClient",
+        "description": "Owns reusable HTTP connection pools. Close explicitly to cancel pending sends and release pools. Received responses own their bodies independently and must also be closed.",
+        "line": 5,
+        "page": "reference/api/http-http-client.md"
+      },
+      {
+        "signature": "public constructor(use_cookies: bool = true, cookies: Option<CookieJar> = Option.None)",
+        "description": "Creates a client with automatic cookies on native hosts by default; pass false to disable them. `cookies` seeds or shares a jar. Without a supplied jar, Node/browser/WASI clients remain stateless. Supplying a jar on an unsupported host makes send return ENOTSUP. Allocation failures surface from send.",
+        "line": 13,
+        "page": "reference/api/http-http-client.md"
+      },
+      {
+        "signature": "public get cookies(): Option<CookieJar>",
+        "description": "The client jar, or None when automatic cookies are disabled or unavailable and no jar was supplied. A supplied jar remains accessible when use_cookies is false, but is not used for requests or responses.",
+        "line": 28,
+        "page": "reference/api/http-http-client.md"
+      },
+      {
+        "signature": "public async fun send( request: HttpRequest, token: Option<CancellationToken> = Option.None ): Result<HttpResponse, HttpError>",
+        "description": "Sends with default options: a 30-second total deadline and the host redirect policy.",
+        "line": 46,
+        "page": "reference/api/http-http-client.md"
+      },
+      {
+        "signature": "public async fun send( request: HttpRequest, options: HttpOptions, token: Option<CancellationToken> = Option.None ): Result<HttpResponse, HttpError>",
+        "description": "Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`. Cancellation aborts pending transport work; response ownership transfers to the caller on success.",
+        "line": 57,
+        "page": "reference/api/http-http-client.md"
+      },
+      {
+        "signature": "public fun close(): Result<Unit, HttpError>",
+        "description": "Closes idempotently, cancelling pending sends. Previously received bodies remain usable.",
+        "line": 115,
+        "page": "reference/api/http-http-client.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_error.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-error.md",
+    "declarations": [
+      {
+        "signature": "public class HttpError: Error",
+        "description": "A transport, validation, cancellation, deadline, or capability failure; HTTP statuses are not errors.",
+        "line": 4,
+        "page": "reference/api/http-http-error.md"
+      },
+      {
+        "signature": "public constructor(code: string, message: string)",
+        "description": "Creates a failure with a stable machine code and a human-readable description.",
+        "line": 9,
+        "page": "reference/api/http-http-error.md"
+      },
+      {
+        "signature": "public fun code(): string",
+        "description": "Stable category such as `EINVAL`, `ETIMEOUT`, `ECANCELLED`, `ECLOSED`, or `ENOTSUP`.",
+        "line": 15,
+        "page": "reference/api/http-http-error.md"
+      },
+      {
+        "signature": "public fun message(): string",
+        "description": "Human-readable failure detail; transport adapters omit request URLs from error messages.",
+        "line": 20,
+        "page": "reference/api/http-http-error.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_headers.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-headers.md",
+    "declarations": [
+      {
+        "signature": "public class HttpHeaders",
+        "description": "Case-insensitive header names with ordered repeated values. Validation occurs when sending.",
+        "line": 4,
+        "page": "reference/api/http-http-headers.md"
+      },
+      {
+        "signature": "public constructor()",
+        "description": "Creates an empty header collection.",
+        "line": 9,
+        "page": "reference/api/http-http-headers.md"
+      },
+      {
+        "signature": "public get length(): int",
+        "description": "Number of stored header pairs, including repeated names.",
+        "line": 15,
+        "page": "reference/api/http-http-headers.md"
+      },
+      {
+        "signature": "public fun append(name: string, value: string): void",
+        "description": "Appends a value without replacing existing values for the same name.",
+        "line": 20,
+        "page": "reference/api/http-http-headers.md"
+      },
+      {
+        "signature": "public fun set(name: string, value: string): void",
+        "description": "Replaces all existing values for `name` with one value at the end of the collection.",
+        "line": 26,
+        "page": "reference/api/http-http-headers.md"
+      },
+      {
+        "signature": "public fun get(name: string): Option<string>",
+        "description": "Returns the first matching value, or `None` when absent.",
+        "line": 32,
+        "page": "reference/api/http-http-headers.md"
+      },
+      {
+        "signature": "public fun get_all(name: string): string[]",
+        "description": "Copies every matching value in stored order; JS Fetch may already have combined repeated headers.",
+        "line": 43,
+        "page": "reference/api/http-http-headers.md"
+      },
+      {
+        "signature": "public fun remove(name: string): void",
+        "description": "Removes all values with the given case-insensitive name.",
+        "line": 55,
+        "page": "reference/api/http-http-headers.md"
+      },
+      {
+        "signature": "public fun to_json(): JsonValue",
+        "description": "Serializes header pairs in order, preserving repeated names.",
+        "line": 69,
+        "page": "reference/api/http-http-headers.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_method.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-method.md",
+    "declarations": [
+      {
+        "signature": "public enum HttpMethod",
+        "description": "An HTTP request method supported by the HTTP client.",
+        "line": 4,
+        "page": "reference/api/http-http-method.md"
+      },
+      {
+        "signature": "Get",
+        "description": "Get request.",
+        "line": 6,
+        "page": "reference/api/http-http-method.md"
+      },
+      {
+        "signature": "Post",
+        "description": "Post request.",
+        "line": 8,
+        "page": "reference/api/http-http-method.md"
+      },
+      {
+        "signature": "Put",
+        "description": "Put request.",
+        "line": 10,
+        "page": "reference/api/http-http-method.md"
+      },
+      {
+        "signature": "Patch",
+        "description": "Patch request.",
+        "line": 12,
+        "page": "reference/api/http-http-method.md"
+      },
+      {
+        "signature": "Delete",
+        "description": "Delete request.",
+        "line": 14,
+        "page": "reference/api/http-http-method.md"
+      },
+      {
+        "signature": "Head",
+        "description": "Head request.",
+        "line": 16,
+        "page": "reference/api/http-http-method.md"
+      },
+      {
+        "signature": "Options",
+        "description": "Options request.",
+        "line": 18,
+        "page": "reference/api/http-http-method.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_options.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-options.md",
+    "declarations": [
+      {
+        "signature": "public class HttpOptions",
+        "description": "Request deadline and connection/redirect controls; unsupported host controls return `ENOTSUP`.",
+        "line": 4,
+        "page": "reference/api/http-http-options.md"
+      },
+      {
+        "signature": "public timeout_ms: int",
+        "description": "Total request deadline including response-body consumption; zero disables the deadline.",
+        "line": 6,
+        "page": "reference/api/http-http-options.md"
+      },
+      {
+        "signature": "public connect_timeout_ms: int",
+        "description": "Native connection establishment timeout; zero uses the host default. Fetch requires zero.",
+        "line": 9,
+        "page": "reference/api/http-http-options.md"
+      },
+      {
+        "signature": "public max_redirects: int",
+        "description": "Maximum redirects; -1 uses the host default, zero exposes redirect responses on native/Node. Browsers require -1 because redirect counts and responses are not reliably observable.",
+        "line": 13,
+        "page": "reference/api/http-http-options.md"
+      },
+      {
+        "signature": "public constructor( timeout_ms: int = 30000, max_redirects: int = -1, connect_timeout_ms: int = 0 )",
+        "description": "Creates options; negative deadlines or redirect limits below -1 are invalid at send time.",
+        "line": 16,
+        "page": "reference/api/http-http-options.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_request.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-request.md",
+    "declarations": [
+      {
+        "signature": "public class HttpRequest",
+        "description": "Mutable request description; sending snapshots URL, headers, options, and body bytes.",
+        "line": 4,
+        "page": "reference/api/http-http-request.md"
+      },
+      {
+        "signature": "public method: HttpMethod",
+        "description": "HTTP method, restricted to GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS on all hosts.",
+        "line": 6,
+        "page": "reference/api/http-http-request.md"
+      },
+      {
+        "signature": "public url: Url",
+        "description": "Absolute http/https destination; credentials in URLs are rejected.",
+        "line": 9,
+        "page": "reference/api/http-http-request.md"
+      },
+      {
+        "signature": "public headers: HttpHeaders",
+        "description": "Request headers; browsers reject forbidden names instead of silently ignoring them.",
+        "line": 12,
+        "page": "reference/api/http-http-request.md"
+      },
+      {
+        "signature": "public body: byte[]",
+        "description": "Byte body copied for each send; GET and HEAD require an empty body.",
+        "line": 15,
+        "page": "reference/api/http-http-request.md"
+      },
+      {
+        "signature": "public constructor(method: HttpMethod, url: Url)",
+        "description": "Creates a request with empty headers and body.",
+        "line": 18,
+        "page": "reference/api/http-http-request.md"
+      },
+      {
+        "signature": "public fun set_text(text: string): void",
+        "description": "Replaces the body with UTF-8 bytes; adds no content-type header implicitly.",
+        "line": 26,
+        "page": "reference/api/http-http-request.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/http_response.dream",
+    "package": "system.http",
+    "page": "reference/api/http-http-response.md",
+    "declarations": [
+      {
+        "signature": "public class HttpResponse",
+        "description": "Response metadata and a streamed body. Explicit closure releases unfinished bodies.",
+        "line": 4,
+        "page": "reference/api/http-http-response.md"
+      },
+      {
+        "signature": "public get status(): int",
+        "description": "Numeric HTTP status; non-2xx responses are successful transport results.",
+        "line": 35,
+        "page": "reference/api/http-http-response.md"
+      },
+      {
+        "signature": "public get url(): Url",
+        "description": "Final URL after any redirects visible to the host.",
+        "line": 40,
+        "page": "reference/api/http-http-response.md"
+      },
+      {
+        "signature": "public get headers(): HttpHeaders",
+        "description": "Response headers visible to the host; browser CORS rules can hide some headers.",
+        "line": 45,
+        "page": "reference/api/http-http-response.md"
+      },
+      {
+        "signature": "public get body(): HttpBody",
+        "description": "Byte stream owned by this response; a retained body can be read independently.",
+        "line": 50,
+        "page": "reference/api/http-http-response.md"
+      },
+      {
+        "signature": "public async fun read_text( max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None ): Result<string, HttpError>",
+        "description": "Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding. Limit or decoding failures consume input already read; close the response after any failure.",
+        "line": 56,
+        "page": "reference/api/http-http-response.md"
+      },
+      {
+        "signature": "public fun close(): Result<Unit, HttpError>",
+        "description": "Closes the body idempotently; subsequent reads return `ECLOSED`.",
+        "line": 102,
+        "page": "reference/api/http-http-response.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/url.dream",
+    "package": "system.http",
+    "page": "reference/api/http-url.md",
+    "declarations": [
+      {
+        "signature": "public class Url",
+        "description": "An absolute URL parsed and normalized as the WHATWG URL Standard describes: the scheme and host are lowercased, default ports and `.`/`..` path segments are removed, internationalized hostnames become Punycode, IPv4 and IPv6 hosts are canonicalized, and characters outside each component's allowed set are percent-encoded. Query parameters keep their original encoding until modified.",
+        "line": 8,
+        "page": "reference/api/http-url.md"
+      },
+      {
+        "signature": "public static fun parse(input: string): Result<Url, ParseError>",
+        "description": "Parses and normalizes an absolute URL. Relative references and malformed input, such as an invalid host or a port above 65535, return `ParseError`.",
+        "line": 43,
+        "page": "reference/api/http-url.md"
+      },
+      {
+        "signature": "public fun resolve(reference: string): Result<Url, ParseError>",
+        "description": "Resolves a reference against this URL; an absolute reference replaces it entirely. A trailing slash in this URL's path determines whether its last segment is a directory. URLs with an opaque path, such as `mailto:`, only resolve fragment-only references.",
+        "line": 50,
+        "page": "reference/api/http-url.md"
+      },
+      {
+        "signature": "public get scheme(): string",
+        "description": "Lowercase scheme without the colon delimiter.",
+        "line": 62,
+        "page": "reference/api/http-url.md"
+      },
+      {
+        "signature": "public get host(): string",
+        "description": "Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.",
+        "line": 67,
+        "page": "reference/api/http-url.md"
+      },
+      {
+        "signature": "public get path(): string",
+        "description": "Encoded path component; percent escapes remain encoded.",
+        "line": 72,
+        "page": "reference/api/http-url.md"
+      },
+      {
+        "signature": "public get query(): UrlQuery",
+        "description": "Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.",
+        "line": 85,
+        "page": "reference/api/http-url.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Serializes the normalized URL, including query edits and any fragment delimiter.",
+        "line": 90,
+        "page": "reference/api/http-url.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/url_query.dream",
+    "package": "system.http",
+    "page": "reference/api/http-url-query.md",
+    "declarations": [
+      {
+        "signature": "public class UrlQuery",
+        "description": "Ordered form-decoded URL query parameters. Mutations use form encoding (`+` for space).",
+        "line": 4,
+        "page": "reference/api/http-url-query.md"
+      },
+      {
+        "signature": "public get length(): int",
+        "description": "Number of key/value pairs, including repeated keys and empty values.",
+        "line": 40,
+        "page": "reference/api/http-url-query.md"
+      },
+      {
+        "signature": "public fun append(key: string, value: string): void",
+        "description": "Appends a decoded key/value pair after existing parameters.",
+        "line": 45,
+        "page": "reference/api/http-url-query.md"
+      },
+      {
+        "signature": "public fun get(key: string): Option<string>",
+        "description": "Returns the first decoded value for `key`, or `None` if the key is absent.",
+        "line": 52,
+        "page": "reference/api/http-url-query.md"
+      },
+      {
+        "signature": "public fun get_all(key: string): string[]",
+        "description": "Copies all decoded values for `key` in their original order.",
+        "line": 62,
+        "page": "reference/api/http-url-query.md"
+      },
+      {
+        "signature": "public fun set(key: string, value: string): void",
+        "description": "Replaces the first occurrence in place and removes later duplicates; appends if absent.",
+        "line": 73,
+        "page": "reference/api/http-url-query.md"
+      },
+      {
+        "signature": "public fun remove(key: string): void",
+        "description": "Removes every occurrence of `key`, preserving the order of remaining pairs.",
+        "line": 95,
+        "page": "reference/api/http-url-query.md"
+      },
+      {
+        "signature": "public fun clear(): void",
+        "description": "Removes all parameters and the query delimiter from the URL.",
+        "line": 109,
+        "page": "reference/api/http-url-query.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/web_socket.dream",
+    "package": "system.http",
+    "page": "reference/api/http-web-socket.md",
+    "declarations": [
+      {
+        "signature": "public class WebSocket",
+        "description": "An owned RFC 6455 WebSocket, available on native, Node and browser hosts.",
+        "line": 4,
+        "page": "reference/api/http-web-socket.md"
+      },
+      {
+        "signature": "public static async fun connect( url: string, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None ): Result<WebSocket, IoError>",
+        "description": "Opens ws:// or wss:// with an optional deadline and inherited cancellation.",
+        "line": 24,
+        "page": "reference/api/http-web-socket.md"
+      },
+      {
+        "signature": "public fun send_text( text: string, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
+        "description": "Sends one UTF-8 text message.",
+        "line": 48,
+        "page": "reference/api/http-web-socket.md"
+      },
+      {
+        "signature": "public fun send_binary( bytes: byte[], token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
+        "description": "Sends one binary message.",
+        "line": 63,
+        "page": "reference/api/http-web-socket.md"
+      },
+      {
+        "signature": "public fun close( token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
+        "description": "Sends a normal closing handshake.",
+        "line": 78,
+        "page": "reference/api/http-web-socket.md"
+      },
+      {
+        "signature": "public fun close_with( code: int, reason: string, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
+        "description": "Sends a validated close code and UTF-8 reason.",
+        "line": 85,
+        "page": "reference/api/http-web-socket.md"
+      },
+      {
+        "signature": "public fun receive( token: Option<CancellationToken> = Option.None ): Future<Result<WebSocketMessage, IoError>>",
+        "description": "Receives one complete message. Only one receive may be pending at a time.",
+        "line": 140,
+        "page": "reference/api/http-web-socket.md"
+      },
+      {
+        "signature": "public fun messages( token: Option<CancellationToken> = Option.None ): AsyncIterable<WebSocketMessage>",
+        "description": "Iterates until Close, including the final closing message. Transport errors end iteration.",
+        "line": 196,
+        "page": "reference/api/http-web-socket.md"
+      }
+    ]
+  },
+  {
+    "source": "crates/dream-stdlib/src/system/http/web_socket_message.dream",
+    "package": "system.http",
+    "page": "reference/api/http-web-socket-message.md",
+    "declarations": [
+      {
+        "signature": "public enum WebSocketMessage",
+        "description": "A complete WebSocket data message or the peer's closing handshake.",
+        "line": 4,
+        "page": "reference/api/http-web-socket-message.md"
+      },
+      {
+        "signature": "Text(text: string)",
+        "description": "A text message with its payload.",
+        "line": 6,
+        "page": "reference/api/http-web-socket-message.md"
+      },
+      {
+        "signature": "Binary(bytes: byte[])",
+        "description": "A binary message with its payload.",
+        "line": 8,
+        "page": "reference/api/http-web-socket-message.md"
+      },
+      {
+        "signature": "Close(code: int, reason: string)",
+        "description": "A close message with its status code and reason.",
+        "line": 10,
+        "page": "reference/api/http-web-socket-message.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/interop/c_attribute.dream",
     "package": "system.interop",
     "page": "reference/api/interop-c-attribute.md",
@@ -16204,487 +16824,44 @@
     ]
   },
   {
-    "source": "crates/dream-stdlib/src/system/net/cookie_jar.dream",
-    "package": "system.net",
-    "page": "reference/api/net-cookie-jar.md",
-    "declarations": [
-      {
-        "signature": "public class CookieJar",
-        "description": "In-memory HTTP cookies shared by one or more native clients. Cookies are never saved to disk. Node, browsers, and WASI components do not expose managed jars; operations return ENOTSUP there.",
-        "line": 5,
-        "page": "reference/api/net-cookie-jar.md"
-      },
-      {
-        "signature": "public constructor()",
-        "description": "Creates an empty jar. Resource exhaustion is reported by its operations and client sends.",
-        "line": 9,
-        "page": "reference/api/net-cookie-jar.md"
-      },
-      {
-        "signature": "public fun store(url: Url, set_cookie: string): Result<Unit, HttpError>",
-        "description": "Processes one Set-Cookie value as received from `url`, including replacement and expiry. Invalid cookies, unrelated/public-suffix domains, and invalid secure prefixes are ignored. Invalid header bytes or URLs return EINVAL.",
-        "line": 29,
-        "page": "reference/api/net-cookie-jar.md"
-      },
-      {
-        "signature": "public fun header(url: Url): Result<string, HttpError>",
-        "description": "Returns the Cookie header for `url`, or an empty string when no unexpired cookies match. Selection respects host/domain, path, and Secure; HTTP URLs containing credentials return EINVAL. Longer paths come first; equal paths retain creation order when cookies are replaced.",
-        "line": 40,
-        "page": "reference/api/net-cookie-jar.md"
-      },
-      {
-        "signature": "public fun clear(): Result<Unit, HttpError>",
-        "description": "Removes all cookies, including session cookies, for every client sharing this jar. Responses arriving after this call can store new cookies.",
-        "line": 46,
-        "page": "reference/api/net-cookie-jar.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_body.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-body.md",
-    "declarations": [
-      {
-        "signature": "public class HttpBody: AsyncReader",
-        "description": "An HTTP response byte stream. One read may be pending; cancellation can consume bytes.",
-        "line": 4,
-        "page": "reference/api/net-http-body.md"
-      },
-      {
-        "signature": "public async unique fun read_async( max_bytes: int, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
-        "description": "Reads up to `max_bytes`; empty success for a positive request is EOF. Zero consumes nothing. Errors use `IoError` for compatibility with async streams; concurrent reads return `EBUSY`.",
-        "line": 23,
-        "page": "reference/api/net-http-body.md"
-      },
-      {
-        "signature": "public fun close(): Result<Unit, HttpError>",
-        "description": "Releases the response transport and cancels a pending read; safe to call repeatedly.",
-        "line": 53,
-        "page": "reference/api/net-http-body.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_capabilities.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-capabilities.md",
-    "declarations": [
-      {
-        "signature": "public static class HttpCapabilities",
-        "description": "Host-enforced HTTP controls; unsupported options still return `ENOTSUP` at send time.",
-        "line": 4,
-        "page": "reference/api/net-http-capabilities.md"
-      },
-      {
-        "signature": "public static get cookie_jars(): bool",
-        "description": "Whether clients can automatically store and send cookies using a managed CookieJar (native hosts).",
-        "line": 9,
-        "page": "reference/api/net-http-capabilities.md"
-      },
-      {
-        "signature": "public static get connection_timeouts(): bool",
-        "description": "Whether a separate connection-establishment timeout can be configured (native hosts).",
-        "line": 14,
-        "page": "reference/api/net-http-capabilities.md"
-      },
-      {
-        "signature": "public static get redirect_limits(): bool",
-        "description": "Whether explicit redirect limits and redirect responses are observable (native and Node).",
-        "line": 19,
-        "page": "reference/api/net-http-capabilities.md"
-      },
-      {
-        "signature": "public static get unrestricted_headers(): bool",
-        "description": "Whether browser forbidden-header restrictions do not apply; HTTP syntax is always validated.",
-        "line": 24,
-        "page": "reference/api/net-http-capabilities.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_client.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-client.md",
-    "declarations": [
-      {
-        "signature": "public class HttpClient",
-        "description": "Owns reusable HTTP connection pools. Close explicitly to cancel pending sends and release pools. Received responses own their bodies independently and must also be closed.",
-        "line": 5,
-        "page": "reference/api/net-http-client.md"
-      },
-      {
-        "signature": "public constructor(use_cookies: bool = true, cookies: Option<CookieJar> = Option.None)",
-        "description": "Creates a client with automatic cookies on native hosts by default; pass false to disable them. `cookies` seeds or shares a jar. Without a supplied jar, Node/browser/WASI clients remain stateless. Supplying a jar on an unsupported host makes send return ENOTSUP. Allocation failures surface from send.",
-        "line": 13,
-        "page": "reference/api/net-http-client.md"
-      },
-      {
-        "signature": "public get cookies(): Option<CookieJar>",
-        "description": "The client jar, or None when automatic cookies are disabled or unavailable and no jar was supplied. A supplied jar remains accessible when use_cookies is false, but is not used for requests or responses.",
-        "line": 28,
-        "page": "reference/api/net-http-client.md"
-      },
-      {
-        "signature": "public async fun send( request: HttpRequest, token: Option<CancellationToken> = Option.None ): Result<HttpResponse, HttpError>",
-        "description": "Sends with default options: a 30-second total deadline and the host redirect policy.",
-        "line": 46,
-        "page": "reference/api/net-http-client.md"
-      },
-      {
-        "signature": "public async fun send( request: HttpRequest, options: HttpOptions, token: Option<CancellationToken> = Option.None ): Result<HttpResponse, HttpError>",
-        "description": "Sends a snapshot and returns after response headers arrive. Statuses such as 404 remain `Ok`. Cancellation aborts pending transport work; response ownership transfers to the caller on success.",
-        "line": 57,
-        "page": "reference/api/net-http-client.md"
-      },
-      {
-        "signature": "public fun close(): Result<Unit, HttpError>",
-        "description": "Closes idempotently, cancelling pending sends. Previously received bodies remain usable.",
-        "line": 115,
-        "page": "reference/api/net-http-client.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_error.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-error.md",
-    "declarations": [
-      {
-        "signature": "public class HttpError: Error",
-        "description": "A transport, validation, cancellation, deadline, or capability failure; HTTP statuses are not errors.",
-        "line": 4,
-        "page": "reference/api/net-http-error.md"
-      },
-      {
-        "signature": "public constructor(code: string, message: string)",
-        "description": "Creates a failure with a stable machine code and a human-readable description.",
-        "line": 9,
-        "page": "reference/api/net-http-error.md"
-      },
-      {
-        "signature": "public fun code(): string",
-        "description": "Stable category such as `EINVAL`, `ETIMEOUT`, `ECANCELLED`, `ECLOSED`, or `ENOTSUP`.",
-        "line": 15,
-        "page": "reference/api/net-http-error.md"
-      },
-      {
-        "signature": "public fun message(): string",
-        "description": "Human-readable failure detail; transport adapters omit request URLs from error messages.",
-        "line": 20,
-        "page": "reference/api/net-http-error.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_headers.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-headers.md",
-    "declarations": [
-      {
-        "signature": "public class HttpHeaders",
-        "description": "Case-insensitive header names with ordered repeated values. Validation occurs when sending.",
-        "line": 4,
-        "page": "reference/api/net-http-headers.md"
-      },
-      {
-        "signature": "public constructor()",
-        "description": "Creates an empty header collection.",
-        "line": 9,
-        "page": "reference/api/net-http-headers.md"
-      },
-      {
-        "signature": "public get length(): int",
-        "description": "Number of stored header pairs, including repeated names.",
-        "line": 15,
-        "page": "reference/api/net-http-headers.md"
-      },
-      {
-        "signature": "public fun append(name: string, value: string): void",
-        "description": "Appends a value without replacing existing values for the same name.",
-        "line": 20,
-        "page": "reference/api/net-http-headers.md"
-      },
-      {
-        "signature": "public fun set(name: string, value: string): void",
-        "description": "Replaces all existing values for `name` with one value at the end of the collection.",
-        "line": 26,
-        "page": "reference/api/net-http-headers.md"
-      },
-      {
-        "signature": "public fun get(name: string): Option<string>",
-        "description": "Returns the first matching value, or `None` when absent.",
-        "line": 32,
-        "page": "reference/api/net-http-headers.md"
-      },
-      {
-        "signature": "public fun get_all(name: string): string[]",
-        "description": "Copies every matching value in stored order; JS Fetch may already have combined repeated headers.",
-        "line": 43,
-        "page": "reference/api/net-http-headers.md"
-      },
-      {
-        "signature": "public fun remove(name: string): void",
-        "description": "Removes all values with the given case-insensitive name.",
-        "line": 55,
-        "page": "reference/api/net-http-headers.md"
-      },
-      {
-        "signature": "public fun to_json(): JsonValue",
-        "description": "Serializes header pairs in order, preserving repeated names.",
-        "line": 69,
-        "page": "reference/api/net-http-headers.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_method.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-method.md",
-    "declarations": [
-      {
-        "signature": "public enum HttpMethod",
-        "description": "An HTTP request method supported by the HTTP client.",
-        "line": 4,
-        "page": "reference/api/net-http-method.md"
-      },
-      {
-        "signature": "Get",
-        "description": "Get request.",
-        "line": 6,
-        "page": "reference/api/net-http-method.md"
-      },
-      {
-        "signature": "Post",
-        "description": "Post request.",
-        "line": 8,
-        "page": "reference/api/net-http-method.md"
-      },
-      {
-        "signature": "Put",
-        "description": "Put request.",
-        "line": 10,
-        "page": "reference/api/net-http-method.md"
-      },
-      {
-        "signature": "Patch",
-        "description": "Patch request.",
-        "line": 12,
-        "page": "reference/api/net-http-method.md"
-      },
-      {
-        "signature": "Delete",
-        "description": "Delete request.",
-        "line": 14,
-        "page": "reference/api/net-http-method.md"
-      },
-      {
-        "signature": "Head",
-        "description": "Head request.",
-        "line": 16,
-        "page": "reference/api/net-http-method.md"
-      },
-      {
-        "signature": "Options",
-        "description": "Options request.",
-        "line": 18,
-        "page": "reference/api/net-http-method.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_options.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-options.md",
-    "declarations": [
-      {
-        "signature": "public class HttpOptions",
-        "description": "Request deadline and connection/redirect controls; unsupported host controls return `ENOTSUP`.",
-        "line": 4,
-        "page": "reference/api/net-http-options.md"
-      },
-      {
-        "signature": "public timeout_ms: int",
-        "description": "Total request deadline including response-body consumption; zero disables the deadline.",
-        "line": 6,
-        "page": "reference/api/net-http-options.md"
-      },
-      {
-        "signature": "public connect_timeout_ms: int",
-        "description": "Native connection establishment timeout; zero uses the host default. Fetch requires zero.",
-        "line": 9,
-        "page": "reference/api/net-http-options.md"
-      },
-      {
-        "signature": "public max_redirects: int",
-        "description": "Maximum redirects; -1 uses the host default, zero exposes redirect responses on native/Node. Browsers require -1 because redirect counts and responses are not reliably observable.",
-        "line": 13,
-        "page": "reference/api/net-http-options.md"
-      },
-      {
-        "signature": "public constructor( timeout_ms: int = 30000, max_redirects: int = -1, connect_timeout_ms: int = 0 )",
-        "description": "Creates options; negative deadlines or redirect limits below -1 are invalid at send time.",
-        "line": 16,
-        "page": "reference/api/net-http-options.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_request.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-request.md",
-    "declarations": [
-      {
-        "signature": "public class HttpRequest",
-        "description": "Mutable request description; sending snapshots URL, headers, options, and body bytes.",
-        "line": 4,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public method: HttpMethod",
-        "description": "HTTP method, restricted to GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS on all hosts.",
-        "line": 6,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public url: Url",
-        "description": "Absolute http/https destination; credentials in URLs are rejected.",
-        "line": 9,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public headers: HttpHeaders",
-        "description": "Request headers; browsers reject forbidden names instead of silently ignoring them.",
-        "line": 12,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public body: byte[]",
-        "description": "Byte body copied for each send; GET and HEAD require an empty body.",
-        "line": 15,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public constructor(method: HttpMethod, url: Url)",
-        "description": "Creates a request with empty headers and body.",
-        "line": 18,
-        "page": "reference/api/net-http-request.md"
-      },
-      {
-        "signature": "public fun set_text(text: string): void",
-        "description": "Replaces the body with UTF-8 bytes; adds no content-type header implicitly.",
-        "line": 26,
-        "page": "reference/api/net-http-request.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/http_response.dream",
-    "package": "system.net",
-    "page": "reference/api/net-http-response.md",
-    "declarations": [
-      {
-        "signature": "public class HttpResponse",
-        "description": "Response metadata and a streamed body. Explicit closure releases unfinished bodies.",
-        "line": 4,
-        "page": "reference/api/net-http-response.md"
-      },
-      {
-        "signature": "public get status(): int",
-        "description": "Numeric HTTP status; non-2xx responses are successful transport results.",
-        "line": 35,
-        "page": "reference/api/net-http-response.md"
-      },
-      {
-        "signature": "public get url(): Url",
-        "description": "Final URL after any redirects visible to the host.",
-        "line": 40,
-        "page": "reference/api/net-http-response.md"
-      },
-      {
-        "signature": "public get headers(): HttpHeaders",
-        "description": "Response headers visible to the host; browser CORS rules can hide some headers.",
-        "line": 45,
-        "page": "reference/api/net-http-response.md"
-      },
-      {
-        "signature": "public get body(): HttpBody",
-        "description": "Byte stream owned by this response; a retained body can be read independently.",
-        "line": 50,
-        "page": "reference/api/net-http-response.md"
-      },
-      {
-        "signature": "public async fun read_text( max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None ): Result<string, HttpError>",
-        "description": "Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding. Limit or decoding failures consume input already read; close the response after any failure.",
-        "line": 56,
-        "page": "reference/api/net-http-response.md"
-      },
-      {
-        "signature": "public fun close(): Result<Unit, HttpError>",
-        "description": "Closes the body idempotently; subsequent reads return `ECLOSED`.",
-        "line": 102,
-        "page": "reference/api/net-http-response.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/socket_capabilities.dream",
-    "package": "system.net",
-    "page": "reference/api/net-socket-capabilities.md",
-    "declarations": [
-      {
-        "signature": "public static class SocketCapabilities",
-        "description": "Availability of raw sockets independently of the host's HTTP support.",
-        "line": 4,
-        "page": "reference/api/net-socket-capabilities.md"
-      },
-      {
-        "signature": "public static get supported(): bool",
-        "description": "True on native and Node; browsers return EUNSUPPORTED for raw socket requests.",
-        "line": 9,
-        "page": "reference/api/net-socket-capabilities.md"
-      }
-    ]
-  },
-  {
     "source": "crates/dream-stdlib/src/system/net/tcp_listener.dream",
     "package": "system.net",
     "page": "reference/api/net-tcp-listener.md",
     "declarations": [
       {
         "signature": "public class TcpListener",
-        "description": "An owned TCP listener; accepted connections retain independent ownership.",
-        "line": 4,
+        "description": "An owned TCP listener; accepted connections retain independent ownership. Available on native, Node, and WASI builds.",
+        "line": 6,
         "page": "reference/api/net-tcp-listener.md"
       },
       {
         "signature": "public static async fun bind( host: string, port: int, token: Option<CancellationToken> = Option.None ): Result<TcpListener, IoError>",
         "description": "Binds a listener; port zero selects an ephemeral port reported by local_port.",
-        "line": 12,
+        "line": 14,
         "page": "reference/api/net-tcp-listener.md"
       },
       {
         "signature": "public get local_host(): string",
         "description": "Numeric interface address selected by the host.",
-        "line": 21,
+        "line": 27,
         "page": "reference/api/net-tcp-listener.md"
       },
       {
         "signature": "public get local_port(): int",
         "description": "Actual bound port, including an automatically selected ephemeral port.",
-        "line": 26,
+        "line": 32,
         "page": "reference/api/net-tcp-listener.md"
       },
       {
         "signature": "public async fun accept( timeout_ms: int = 0, token: Option<CancellationToken> = Option.None ): Result<TcpStream, IoError>",
-        "description": "Accepts a connection with optional deadline and inherited cancellation.",
-        "line": 31,
+        "description": "Accepts the next connection. `timeout_ms` is a deadline in milliseconds (zero waits forever); it fails with ETIMEOUT when it passes, ECANCELLED when `token` fires, and ECLOSED when the listener closes.",
+        "line": 39,
         "page": "reference/api/net-tcp-listener.md"
       },
       {
         "signature": "public fun close(): Result<Unit, IoError>",
         "description": "Closes this listener and cancels pending accepts, preserving accepted streams.",
-        "line": 53,
+        "line": 58,
         "page": "reference/api/net-tcp-listener.md"
       }
     ]
@@ -16696,86 +16873,86 @@
     "declarations": [
       {
         "signature": "public class TcpStream: AsyncReader, AsyncWriter",
-        "description": "An owned TCP byte stream supporting one simultaneous read and one simultaneous write.",
-        "line": 4,
+        "description": "An owned TCP byte stream supporting one simultaneous read and one simultaneous write. Available on native, Node, and WASI builds.",
+        "line": 6,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public static async fun connect( host: string, port: int, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None ): Result<TcpStream, IoError>",
-        "description": "Connects with a deadline in milliseconds; zero disables the deadline.",
-        "line": 12,
+        "description": "Resolves `host` and connects to `port` (0 to 65535), trying each resolved address in turn. `timeout_ms` bounds connecting; zero disables the deadline. Fails with ETIMEOUT when the deadline passes, ECANCELLED when `token` fires, and EIO when the name does not resolve or no address accepts the connection.",
+        "line": 17,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public get local_host(): string",
         "description": "Numeric local interface address selected for this connection.",
-        "line": 24,
+        "line": 31,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public get local_port(): int",
         "description": "Actual bound local port.",
-        "line": 29,
+        "line": 36,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public get peer_host(): string",
         "description": "Numeric remote address of the peer.",
-        "line": 34,
+        "line": 41,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public get peer_port(): int",
         "description": "Remote TCP port of the peer.",
-        "line": 39,
+        "line": 46,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async unique fun read_async( max_bytes: int, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
         "description": "Reads at least one and at most `max_bytes` bytes, returning whatever has arrived. A request above 1 MiB returns at most 1 MiB per call. A positive-size empty success denotes peer EOF.",
-        "line": 45,
+        "line": 52,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun read_with_timeout( max_bytes: int, timeout_ms: int, token: Option<CancellationToken> = Option.None ): Future<Result<byte[], IoError>>",
-        "description": "Reads with a per-operation deadline; a concurrent read returns EBUSY.",
-        "line": 53,
+        "description": "Reads like `read_async` with a deadline in milliseconds; zero disables it. A read that times out or is cancelled keeps the bytes it already took for the next read. A concurrent read returns EBUSY.",
+        "line": 62,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async unique fun write_async( bytes: byte[], token: Option<CancellationToken> = Option.None ): Result<int, IoError>",
-        "description": "Writes a partial byte count; cancellation preserves completed side effects.",
-        "line": 64,
+        "description": "Writes some of `bytes` and returns how many the connection accepted, which can be fewer than requested. Cancellation keeps bytes already sent. A concurrent write returns EBUSY, a write after `shutdown_write` returns ECLOSED, and a broken connection returns EIO.",
+        "line": 90,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async fun write_all_async( bytes: byte[], token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Retries partial writes until every byte has been accepted; does not roll back failures.",
-        "line": 78,
+        "line": 109,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public async unique fun flush_async( token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "TCP writes are unbuffered by this wrapper; validates openness and cancellation.",
-        "line": 102,
+        "line": 133,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun shutdown_write(): Result<Unit, IoError>",
-        "description": "Sends FIN after accepted writes while retaining the read side; pending writes return EBUSY.",
-        "line": 113,
+        "description": "Sends FIN after accepted writes while retaining the read side; a pending write returns EBUSY.",
+        "line": 141,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun set_nodelay(enabled: bool): Result<Unit, IoError>",
-        "description": "Enables or disables TCP_NODELAY; pending native reads may return EBUSY.",
-        "line": 118,
+        "description": "Enables or disables TCP_NODELAY, which sends small writes immediately instead of coalescing them.",
+        "line": 147,
         "page": "reference/api/net-tcp-stream.md"
       },
       {
         "signature": "public fun close(): Result<Unit, IoError>",
-        "description": "Closes the owned socket and wakes pending operations; repeated closure succeeds.",
-        "line": 123,
+        "description": "Closes the owned socket and wakes pending operations with ECLOSED; repeated closure succeeds.",
+        "line": 157,
         "page": "reference/api/net-tcp-stream.md"
       }
     ]
@@ -16788,31 +16965,31 @@
       {
         "signature": "public class UdpDatagram",
         "description": "One UDP datagram; empty data is a valid message and never denotes EOF.",
-        "line": 4,
+        "line": 5,
         "page": "reference/api/net-udp-datagram.md"
       },
       {
         "signature": "public data: byte[]",
         "description": "Received bytes, limited to the requested receive size.",
-        "line": 6,
+        "line": 7,
         "page": "reference/api/net-udp-datagram.md"
       },
       {
         "signature": "public host: string",
         "description": "Numeric address of the sender.",
-        "line": 9,
+        "line": 10,
         "page": "reference/api/net-udp-datagram.md"
       },
       {
         "signature": "public port: int",
         "description": "UDP port of the sender.",
-        "line": 12,
+        "line": 13,
         "page": "reference/api/net-udp-datagram.md"
       },
       {
         "signature": "public truncated: bool",
         "description": "True when the message contained more bytes than the receive buffer could retain.",
-        "line": 15,
+        "line": 16,
         "page": "reference/api/net-udp-datagram.md"
       }
     ]
@@ -16824,253 +17001,57 @@
     "declarations": [
       {
         "signature": "public class UdpSocket",
-        "description": "An owned UDP socket with explicit message boundaries and bounded receive buffers.",
-        "line": 4,
+        "description": "An owned UDP socket with explicit message boundaries and bounded receive buffers. Available on native, Node, and WASI builds.",
+        "line": 6,
         "page": "reference/api/net-udp-socket.md"
       },
       {
         "signature": "public static async fun bind( host: string, port: int, token: Option<CancellationToken> = Option.None ): Result<UdpSocket, IoError>",
         "description": "Binds an endpoint; port zero selects an ephemeral port.",
-        "line": 12,
+        "line": 14,
         "page": "reference/api/net-udp-socket.md"
       },
       {
         "signature": "public get local_host(): string",
         "description": "Numeric bound interface address.",
-        "line": 21,
+        "line": 27,
         "page": "reference/api/net-udp-socket.md"
       },
       {
         "signature": "public get local_port(): int",
         "description": "Actual bound UDP port.",
-        "line": 26,
+        "line": 32,
         "page": "reference/api/net-udp-socket.md"
       },
       {
         "signature": "public async fun send( host: string, port: int, data: byte[], timeout_ms: int = 0, token: Option<CancellationToken> = Option.None ): Result<int, IoError>",
-        "description": "Sends one datagram of at most 65507 bytes with optional deadline and cancellation.",
-        "line": 31,
+        "description": "Sends one datagram of at most 65507 bytes to `host` and `port` and returns the bytes sent. `timeout_ms` bounds waiting to send; zero disables it.",
+        "line": 38,
         "page": "reference/api/net-udp-socket.md"
       },
       {
         "signature": "public async fun receive( max_bytes: int = 65535, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None ): Result<UdpDatagram, IoError>",
-        "description": "Receives one message, reporting truncation explicitly; a concurrent receive returns EBUSY.",
-        "line": 50,
+        "description": "Receives one message of at most `max_bytes` (0 to 65535), reporting truncation explicitly. `timeout_ms` is a deadline in milliseconds; zero waits forever. A concurrent receive returns EBUSY.",
+        "line": 76,
         "page": "reference/api/net-udp-socket.md"
       },
       {
         "signature": "public fun set_broadcast(enabled: bool): Result<Unit, IoError>",
         "description": "Enables or disables sending to broadcast endpoints.",
-        "line": 73,
+        "line": 109,
         "page": "reference/api/net-udp-socket.md"
       },
       {
         "signature": "public fun set_ttl(ttl: int): Result<Unit, IoError>",
         "description": "Sets outgoing IP time-to-live to a value between 1 and 255.",
-        "line": 78,
+        "line": 118,
         "page": "reference/api/net-udp-socket.md"
       },
       {
         "signature": "public fun close(): Result<Unit, IoError>",
         "description": "Closes the owned socket and wakes pending receives; repeated closure succeeds.",
-        "line": 83,
+        "line": 126,
         "page": "reference/api/net-udp-socket.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/url.dream",
-    "package": "system.net",
-    "page": "reference/api/net-url.md",
-    "declarations": [
-      {
-        "signature": "public class Url",
-        "description": "An absolute URL parsed and normalized as the WHATWG URL Standard describes: the scheme and host are lowercased, default ports and `.`/`..` path segments are removed, internationalized hostnames become Punycode, IPv4 and IPv6 hosts are canonicalized, and characters outside each component's allowed set are percent-encoded. Query parameters keep their original encoding until modified.",
-        "line": 8,
-        "page": "reference/api/net-url.md"
-      },
-      {
-        "signature": "public static fun parse(input: string): Result<Url, ParseError>",
-        "description": "Parses and normalizes an absolute URL. Relative references and malformed input, such as an invalid host or a port above 65535, return `ParseError`.",
-        "line": 43,
-        "page": "reference/api/net-url.md"
-      },
-      {
-        "signature": "public fun resolve(reference: string): Result<Url, ParseError>",
-        "description": "Resolves a reference against this URL; an absolute reference replaces it entirely. A trailing slash in this URL's path determines whether its last segment is a directory. URLs with an opaque path, such as `mailto:`, only resolve fragment-only references.",
-        "line": 50,
-        "page": "reference/api/net-url.md"
-      },
-      {
-        "signature": "public get scheme(): string",
-        "description": "Lowercase scheme without the colon delimiter.",
-        "line": 62,
-        "page": "reference/api/net-url.md"
-      },
-      {
-        "signature": "public get host(): string",
-        "description": "Canonical hostname, with IPv6 brackets when present; empty for URLs without a host.",
-        "line": 67,
-        "page": "reference/api/net-url.md"
-      },
-      {
-        "signature": "public get path(): string",
-        "description": "Encoded path component; percent escapes remain encoded.",
-        "line": 72,
-        "page": "reference/api/net-url.md"
-      },
-      {
-        "signature": "public get query(): UrlQuery",
-        "description": "Ordered, mutable query parameters shared with this URL; repeated keys remain distinct.",
-        "line": 85,
-        "page": "reference/api/net-url.md"
-      },
-      {
-        "signature": "public override fun to_string(): string",
-        "description": "Serializes the normalized URL, including query edits and any fragment delimiter.",
-        "line": 90,
-        "page": "reference/api/net-url.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/url_query.dream",
-    "package": "system.net",
-    "page": "reference/api/net-url-query.md",
-    "declarations": [
-      {
-        "signature": "public class UrlQuery",
-        "description": "Ordered form-decoded URL query parameters. Mutations use form encoding (`+` for space).",
-        "line": 4,
-        "page": "reference/api/net-url-query.md"
-      },
-      {
-        "signature": "public get length(): int",
-        "description": "Number of key/value pairs, including repeated keys and empty values.",
-        "line": 40,
-        "page": "reference/api/net-url-query.md"
-      },
-      {
-        "signature": "public fun append(key: string, value: string): void",
-        "description": "Appends a decoded key/value pair after existing parameters.",
-        "line": 45,
-        "page": "reference/api/net-url-query.md"
-      },
-      {
-        "signature": "public fun get(key: string): Option<string>",
-        "description": "Returns the first decoded value for `key`, or `None` if the key is absent.",
-        "line": 52,
-        "page": "reference/api/net-url-query.md"
-      },
-      {
-        "signature": "public fun get_all(key: string): string[]",
-        "description": "Copies all decoded values for `key` in their original order.",
-        "line": 62,
-        "page": "reference/api/net-url-query.md"
-      },
-      {
-        "signature": "public fun set(key: string, value: string): void",
-        "description": "Replaces the first occurrence in place and removes later duplicates; appends if absent.",
-        "line": 73,
-        "page": "reference/api/net-url-query.md"
-      },
-      {
-        "signature": "public fun remove(key: string): void",
-        "description": "Removes every occurrence of `key`, preserving the order of remaining pairs.",
-        "line": 95,
-        "page": "reference/api/net-url-query.md"
-      },
-      {
-        "signature": "public fun clear(): void",
-        "description": "Removes all parameters and the query delimiter from the URL.",
-        "line": 109,
-        "page": "reference/api/net-url-query.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/web_socket.dream",
-    "package": "system.net",
-    "page": "reference/api/net-web-socket.md",
-    "declarations": [
-      {
-        "signature": "public class WebSocket",
-        "description": "An owned RFC 6455 WebSocket, available on native, Node and browser hosts.",
-        "line": 4,
-        "page": "reference/api/net-web-socket.md"
-      },
-      {
-        "signature": "public static async fun connect( url: string, timeout_ms: int = 0, token: Option<CancellationToken> = Option.None ): Result<WebSocket, IoError>",
-        "description": "Opens ws:// or wss:// with an optional deadline and inherited cancellation.",
-        "line": 24,
-        "page": "reference/api/net-web-socket.md"
-      },
-      {
-        "signature": "public fun send_text( text: string, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Sends one UTF-8 text message.",
-        "line": 48,
-        "page": "reference/api/net-web-socket.md"
-      },
-      {
-        "signature": "public fun send_binary( bytes: byte[], token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Sends one binary message.",
-        "line": 63,
-        "page": "reference/api/net-web-socket.md"
-      },
-      {
-        "signature": "public fun close( token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Sends a normal closing handshake.",
-        "line": 78,
-        "page": "reference/api/net-web-socket.md"
-      },
-      {
-        "signature": "public fun close_with( code: int, reason: string, token: Option<CancellationToken> = Option.None ): Future<Result<Unit, IoError>>",
-        "description": "Sends a validated close code and UTF-8 reason.",
-        "line": 85,
-        "page": "reference/api/net-web-socket.md"
-      },
-      {
-        "signature": "public fun receive( token: Option<CancellationToken> = Option.None ): Future<Result<WebSocketMessage, IoError>>",
-        "description": "Receives one complete message. Only one receive may be pending at a time.",
-        "line": 140,
-        "page": "reference/api/net-web-socket.md"
-      },
-      {
-        "signature": "public fun messages( token: Option<CancellationToken> = Option.None ): AsyncIterable<WebSocketMessage>",
-        "description": "Iterates until Close, including the final closing message. Transport errors end iteration.",
-        "line": 196,
-        "page": "reference/api/net-web-socket.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/net/web_socket_message.dream",
-    "package": "system.net",
-    "page": "reference/api/net-web-socket-message.md",
-    "declarations": [
-      {
-        "signature": "public enum WebSocketMessage",
-        "description": "A complete WebSocket data message or the peer's closing handshake.",
-        "line": 4,
-        "page": "reference/api/net-web-socket-message.md"
-      },
-      {
-        "signature": "Text(text: string)",
-        "description": "A text message with its payload.",
-        "line": 6,
-        "page": "reference/api/net-web-socket-message.md"
-      },
-      {
-        "signature": "Binary(bytes: byte[])",
-        "description": "A binary message with its payload.",
-        "line": 8,
-        "page": "reference/api/net-web-socket-message.md"
-      },
-      {
-        "signature": "Close(code: int, reason: string)",
-        "description": "A close message with its status code and reason.",
-        "line": 10,
-        "page": "reference/api/net-web-socket-message.md"
       }
     ]
   },

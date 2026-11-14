@@ -151,7 +151,7 @@ struct Cli {
     #[arg(long, global = true)]
     web: bool,
 
-    /// Node-targeted *.node.runtime.js (implies --runtime and wasm32 output)
+    /// Node-targeted *.node.runtime.mjs (implies --runtime and wasm32 output)
     #[arg(long, global = true)]
     node: bool,
 

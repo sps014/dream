@@ -209,7 +209,7 @@ import system.cli;
 import system.config;
 import system.csv;
 import system.io;
-import system.net;
+import system.http;
 import system.uuid;
 
 fun http_failure(error: HttpError): IoError {

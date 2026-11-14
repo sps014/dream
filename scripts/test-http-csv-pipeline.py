@@ -53,7 +53,7 @@ def main():
             runner = directory / "run.mjs"
             runner.write_text(
                 "import {readFile} from 'node:fs/promises';\n"
-                + "const {run}=await import(" + json.dumps((target / "web/main.node.runtime.js").as_uri()) + ");\n"
+                + "const {run}=await import(" + json.dumps((target / "web/main.node.runtime.mjs").as_uri()) + ");\n"
                 + "const instance=await run(await readFile(" + json.dumps(str(target / "web/main.wasm")) + "));\n"
                 + "if(instance.exports.__dream_leak_live?.()) throw new Error('guest resources leaked');\n"
                 + "process.exitCode=instance.exitCode;\n", encoding="utf-8")

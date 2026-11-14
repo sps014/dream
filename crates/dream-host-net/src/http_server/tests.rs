@@ -1,6 +1,6 @@
 use super::{close, listen::Action, start};
 use crate::{
-    socket_operations as operations,
+    operations,
     websocket::{self, Action as Ws},
 };
 use dream_host_abi::wire::{Reader, VERSION, Writer};

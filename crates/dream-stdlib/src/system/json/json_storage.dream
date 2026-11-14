@@ -1,7 +1,7 @@
 module system.json;
 
 // Index just past the JSON value that starts at `start` in `text`.
-@runtime("string_json_boundary", "core", RuntimeTrait.Quiet)
+@runtime("string_json_boundary", "core", RuntimeTrait.Component, RuntimeTrait.Quiet)
 static extern fun string_json_boundary(borrow text: string, start: int): int;
 
 internal static class JsonStorage {

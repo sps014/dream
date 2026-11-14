@@ -1,4 +1,4 @@
-import { WireReader, WireWriter } from "../wire.js";
+import { WireReader, WireWriter, wireFailure } from "../wire.js";
 
 // Operation codes from the guest's `WebSocketAction`.
 const WS_CONNECT = 1, WS_RECEIVE = 2, WS_SEND_TEXT = 3, WS_SEND_BINARY = 4, WS_CLOSE = 5;
@@ -98,4 +98,48 @@ export function makeWebSocketService() {
     } finally { signal.removeEventListener("abort", abort); }
   }
   return {execute, close, parse};
+}
+
+// WebSocket operations the guest waits on, cancels, claims, and releases by id.
+export function makeWebSocketHost() {
+  const websocket = makeWebSocketService();
+  const operations = new Map();
+  let nextOperation = 0;
+  const cancelled = () => Object.assign(new Error("WebSocket operation cancelled"), {code:"ECANCELLED"});
+  function start(raw, input) {
+    if (nextOperation === 2147483647 || operations.size >= 4096) return 0;
+    const bytes = Uint8Array.from(input || []);
+    const id = ++nextOperation, abort = new AbortController();
+    let done;
+    const state = {abort,result:null,owned:0,released:false,done:new Promise(resolve=>{done=resolve;})};
+    operations.set(id,state);
+    Promise.resolve().then(async () => {
+      let timer;
+      try {
+        const request = websocket.parse(Uint8Array.from(raw || []));
+        if (!Number.isInteger(request.timeout_ms) || request.timeout_ms < 0 || request.timeout_ms > 2147483647) throw Object.assign(new Error("invalid WebSocket timeout"), {code:"EINVAL"});
+        if (request.timeout_ms) timer = setTimeout(()=>abort.abort(Object.assign(new Error("WebSocket operation deadline exceeded"), {code:"ETIMEOUT"})),request.timeout_ms);
+        const result = await websocket.execute(request,bytes,abort.signal);
+        state.owned = result.owned || 0;
+        if (abort.signal.aborted) throw abort.signal.reason || cancelled();
+        state.result = [1,...result.bytes];
+      } catch (error) {
+        state.result = wireFailure(["EINVAL","ECLOSED","ECANCELLED","ETIMEOUT","EUNSUPPORTED","EBUSY","ELIMIT"].includes(error.code)?error.code:"EIO",error.message||"WebSocket operation failed");
+      } finally {
+        clearTimeout(timer);
+        if (state.released && state.owned) websocket.close(state.owned);
+        done();
+      }
+    });
+    return id;
+  }
+  return {
+    netWsStart: start,
+    netWsClose: id => websocket.close(id),
+    async netWsWait(id) { const state = operations.get(id); if (state) await state.done; return 0; },
+    netWsResult: id => operations.get(id)?.result || [0],
+    netWsCancel: id => operations.get(id)?.abort.abort(cancelled()),
+    netWsRelease: id => { const state = operations.get(id); if (state) { state.released=true; state.abort.abort(cancelled()); if (state.owned) websocket.close(state.owned); operations.delete(id); } },
+    netWsClaim: id => { const state = operations.get(id); if (state) state.owned=0; },
+  };
 }

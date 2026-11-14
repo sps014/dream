@@ -1,0 +1,192 @@
+module system.net;
+
+// One host socket call: an open, accept, read, write, datagram send or receive, or an option
+// change. The host keeps its own reference while blocked I/O runs, so releasing a call never frees
+// a buffer still in use. Releasing an unfinished call cancels it; bytes a cancelled read took stay
+// readable, and a socket an unclaimed open or accept produced is closed.
+@cfg(Target.Native || Target.Node || Target.Wasi)
+internal class SocketCall {
+    id: usize;
+
+    internal constructor(id: usize) {
+        this.id = id;
+    }
+
+    del() {
+        SocketCall.release_host(this.id);
+    }
+
+    @runtime("netSocketConnect", "core", RuntimeTrait.Component)
+    static extern fun connect_host(borrow host: string, port: int, timeout_ms: int): usize;
+
+    @runtime("netSocketListen", "core", RuntimeTrait.Component)
+    static extern fun listen_host(borrow host: string, port: int): usize;
+
+    @runtime("netSocketBind", "core", RuntimeTrait.Component)
+    static extern fun bind_host(borrow host: string, port: int): usize;
+
+    @runtime("netSocketAccept", "core", RuntimeTrait.Component)
+    static extern fun accept_host(socket: int, timeout_ms: int): usize;
+
+    @runtime("netSocketRead", "core", RuntimeTrait.Component)
+    static extern fun read_host(socket: int, max_bytes: int, timeout_ms: int): usize;
+
+    @runtime("netSocketWrite", "core", RuntimeTrait.Component)
+    static extern fun write_host(socket: int, borrow data: byte[]): usize;
+
+    @runtime("netSocketSend", "core", RuntimeTrait.Component)
+    static extern fun send_host(
+        socket: int,
+        borrow host: string,
+        port: int,
+        borrow data: byte[],
+        timeout_ms: int
+    ): usize;
+
+    @runtime("netSocketReceive", "core", RuntimeTrait.Component)
+    static extern fun receive_host(socket: int, max_bytes: int, timeout_ms: int): usize;
+
+    @runtime("netSocketShutdown", "core", RuntimeTrait.Component)
+    static extern fun shutdown_host(socket: int): usize;
+
+    @runtime("netSocketOption", "core", RuntimeTrait.Component)
+    static extern fun option_host(socket: int, option: int, value: int): usize;
+
+    @async_host
+    @runtime("netSocketCallWait", "core", RuntimeTrait.Component)
+    static extern async fun wait_host(id: usize): int;
+
+    @runtime("netSocketCallValue", "core", RuntimeTrait.Component)
+    static extern fun value_host(id: usize): long;
+
+    @runtime("netSocketCallBytes", "core", RuntimeTrait.Component)
+    static extern fun bytes_host(id: usize): byte[];
+
+    @runtime("netSocketCallHost", "core", RuntimeTrait.Component)
+    static extern fun peer_host(id: usize): string;
+
+    @runtime("netSocketCallPort", "core", RuntimeTrait.Component)
+    static extern fun peer_port_host(id: usize): int;
+
+    @runtime("netSocketCallCode", "core", RuntimeTrait.Component)
+    static extern fun code_host(id: usize): string;
+
+    @runtime("netSocketCallMessage", "core", RuntimeTrait.Component)
+    static extern fun message_host(id: usize): string;
+
+    @runtime("netSocketCallCancel", "core", RuntimeTrait.Component)
+    static extern fun cancel_host(id: usize): void;
+
+    @runtime("netSocketCallRelease", "core", RuntimeTrait.Component)
+    static extern fun release_host(id: usize): void;
+
+    // Option numbers shared with every socket host.
+    internal static get NODELAY(): int {
+        return 0;
+    }
+
+    internal static get BROADCAST(): int {
+        return 1;
+    }
+
+    internal static get TTL(): int {
+        return 2;
+    }
+
+    internal static fun connect(host: string, port: int, timeout_ms: int): SocketCall {
+        return SocketCall(SocketCall.connect_host(host, port, timeout_ms));
+    }
+
+    internal static fun listen(host: string, port: int): SocketCall {
+        return SocketCall(SocketCall.listen_host(host, port));
+    }
+
+    internal static fun bind(host: string, port: int): SocketCall {
+        return SocketCall(SocketCall.bind_host(host, port));
+    }
+
+    internal static fun accept(socket: int, timeout_ms: int): SocketCall {
+        return SocketCall(SocketCall.accept_host(socket, timeout_ms));
+    }
+
+    internal static fun read(socket: int, max_bytes: int, timeout_ms: int): SocketCall {
+        return SocketCall(SocketCall.read_host(socket, max_bytes, timeout_ms));
+    }
+
+    internal static fun write(socket: int, data: byte[]): SocketCall {
+        return SocketCall(SocketCall.write_host(socket, data));
+    }
+
+    internal static fun send(
+        socket: int,
+        host: string,
+        port: int,
+        data: byte[],
+        timeout_ms: int
+    ): SocketCall {
+        return SocketCall(SocketCall.send_host(socket, host, port, data, timeout_ms));
+    }
+
+    internal static fun receive(socket: int, max_bytes: int, timeout_ms: int): SocketCall {
+        return SocketCall(SocketCall.receive_host(socket, max_bytes, timeout_ms));
+    }
+
+    internal static fun shutdown(socket: int): SocketCall {
+        return SocketCall(SocketCall.shutdown_host(socket));
+    }
+
+    internal static fun option(socket: int, option: int, value: int): SocketCall {
+        return SocketCall(SocketCall.option_host(socket, option, value));
+    }
+
+    // Waits for the host result. Cancellation stops the host work, waits for it to let go of the
+    // socket so an immediate retry is not refused as busy, and reports ECANCELLED.
+    internal async fun finish(token: Option<CancellationToken>): Result<Unit, IoError> {
+        let effective_token = CancellationToken.resolve(token);
+        let lifetime = [this];
+        if lifetime[0].id == (usize)0 {
+            return Result.Err(IoError("", "ELIMIT", "socket call capacity exhausted"));
+        }
+        let pending = SocketCall.wait_host(lifetime[0].id);
+        if effective_token.is_some() {
+            if effective_token.unwrap().wait(pending).await.is_err() {
+                SocketCall.cancel_host(lifetime[0].id);
+                SocketCall.wait_host(lifetime[0].id).await;
+                return Result.Err(IoError.cancelled());
+            }
+        } else {
+            pending.await;
+        }
+        return lifetime[0].settled();
+    }
+
+    // The result of a call the host has settled, such as an option change, which settles before
+    // its start function returns.
+    internal fun settled(): Result<Unit, IoError> {
+        if this.id == (usize)0 {
+            return Result.Err(IoError("", "ELIMIT", "socket call capacity exhausted"));
+        }
+        let code = SocketCall.code_host(this.id);
+        if !code.is_empty() {
+            return Result.Err(IoError("", code, SocketCall.message_host(this.id)));
+        }
+        return Result.Ok(Unit());
+    }
+
+    // The opened socket id, a byte count, or a datagram's full length; claims an opened socket.
+    internal fun value(): long {
+        return SocketCall.value_host(this.id);
+    }
+
+    internal fun bytes(): byte[] {
+        return SocketCall.bytes_host(this.id);
+    }
+
+    internal fun peer(): string {
+        return SocketCall.peer_host(this.id);
+    }
+
+    internal fun peer_port(): int {
+        return SocketCall.peer_port_host(this.id);
+    }
+}

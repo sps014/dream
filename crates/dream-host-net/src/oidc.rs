@@ -1,4 +1,4 @@
-use crate::socket_operations::{Failure, Output};
+use crate::operations::{Failure, Output};
 use dream_host_abi::wire::Reader;
 use openidconnect::{
     AccessTokenHash, AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken,

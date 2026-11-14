@@ -90,11 +90,11 @@ import { run } from "./runtime/dream.js";
 await run("hello.wasm");   // binds externs, calls main
 ```
 
-Optionally emit a smaller sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host pieces that program needs) with `--runtime` plus one or both host flags. Without these flags, compile does **not** write a selective runtime — use the full shared host instead.
+Optionally emit a smaller sibling `*.web.runtime.js` / `*.node.runtime.mjs` (only the host pieces that program needs) with `--runtime` plus one or both host flags. Without these flags, compile does **not** write a selective runtime — use the full shared host instead.
 
 ```bash
 dream --runtime --web hello.dream           # hello.web.runtime.js
-dream --runtime --node hello.dream          # hello.node.runtime.js
+dream --runtime --node hello.dream          # hello.node.runtime.mjs
 dream --runtime --web --node hello.dream    # both in one compile
 ```
 

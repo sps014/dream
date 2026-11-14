@@ -2,7 +2,7 @@ use super::{
     response,
     state::{self, error, lock},
 };
-use crate::socket_operations::{Failure, Output};
+use crate::operations::{Failure, Output};
 use base64::Engine as _;
 use hyper::header::{CONNECTION, SEC_WEBSOCKET_ACCEPT, UPGRADE};
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;

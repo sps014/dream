@@ -1,5 +1,5 @@
 use super::state::{Config, error};
-use crate::socket_operations::Failure;
+use crate::operations::Failure;
 use hyper::http::request::Parts;
 use ipnet::IpNet;
 use std::net::{IpAddr, SocketAddr};

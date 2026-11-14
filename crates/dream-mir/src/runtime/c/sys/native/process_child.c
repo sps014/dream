@@ -643,8 +643,12 @@ int32_t processCallWaitAsync(dream_ptr future, uintptr_t handle) {
         dream_async_complete(future, 0);
         return 0;
     }
+    /* A cancelled wait may be awaited again; the scheduler still counts the first future, so it
+     * must complete rather than be forgotten. */
+    dream_ptr superseded = call->waiter;
     call->waiter = future;
     dream_mutex_unlock(&process_mu);
+    if (superseded) { dream_complete_foreign(superseded, 0); }
     return 1;
 }
 

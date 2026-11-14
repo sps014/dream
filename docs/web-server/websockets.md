@@ -116,6 +116,6 @@ The server pings every `ws_ping_interval_ms` (20 seconds by default) and answers
 
 A route may use dependencies and middleware before the upgrade. After the upgrade, you cannot change the HTTP status.
 
-WebSocket operations do not appear as ordinary OpenAPI paths. The client `WebSocket` type is in `system.net` and works on its documented native, Node, and browser targets.
+WebSocket operations do not appear as ordinary OpenAPI paths. The client `WebSocket` type is in `system.http` and works on its documented native, Node, and browser targets.
 
 See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

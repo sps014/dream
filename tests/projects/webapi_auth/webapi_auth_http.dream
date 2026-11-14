@@ -2,7 +2,7 @@ import system;
 import system.webapi;
 import system.webapi.auth;
 import system.testing;
-import system.net;
+import system.http;
 import system.json;
 import system.text;
 

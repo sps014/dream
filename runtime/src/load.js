@@ -8,7 +8,7 @@ import {
   wrapImport,
   resolveGlobal,
 } from "./marshal.js";
-import { isNode, setNodeFs, setNodeCrypto, setNodeChildProcess, setNodeNet } from "./platform.js";
+import { isNode, setNodeFs, setNodeCrypto, setNodeChildProcess, setNodeNet, setNodeDgram } from "./platform.js";
 import { defaultEnv } from "./hosts/env.js";
 import { defaultDreamModule } from "./hosts.js";
 import { makeWorkerModule } from "./workers.js";
@@ -154,6 +154,7 @@ const NODE_PRELOADS = [
   [["crypto"], "node:crypto", setNodeCrypto],
   [["process"], "node:child_process", setNodeChildProcess],
   [["netSocket"], "node:net", setNodeNet],
+  [["netSocket"], "node:dgram", setNodeDgram],
 ];
 
 // Host calls are synchronous, so the modules a program imports must be loaded before

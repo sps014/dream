@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `TcpListener`
 
-An owned TCP listener; accepted connections retain independent ownership.
+An owned TCP listener; accepted connections retain independent ownership. Available on native, Node, and WASI builds.
 
 ```dream
 public class TcpListener
@@ -42,7 +42,7 @@ public get local_port(): int
 
 ## `accept`
 
-Accepts a connection with optional deadline and inherited cancellation.
+Accepts the next connection. `timeout_ms` is a deadline in milliseconds (zero waits forever); it fails with ETIMEOUT when it passes, ECANCELLED when `token` fires, and ECLOSED when the listener closes.
 
 ```dream
 public async fun accept(

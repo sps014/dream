@@ -2,7 +2,7 @@ use super::{
     request::{self, BodySource},
     state::{self, Upload, error, lock, tables},
 };
-use crate::socket_operations::{Failure, Output};
+use crate::operations::{Failure, Output};
 use bytes::Bytes;
 use dream_host_abi::wire::Reader;
 use futures_util::{StreamExt, stream};

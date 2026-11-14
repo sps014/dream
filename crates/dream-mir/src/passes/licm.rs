@@ -227,13 +227,12 @@ fn build_preheader_and_hoist(
     });
 
     // Redirect every out-of-loop edge that targeted the header to go through the preheader.
-    let n = func.blocks.len();
-    for i in 0..n {
+    for (i, block) in func.blocks.iter_mut().enumerate() {
         let bid = BlockId(i as u32);
         if bid == ph || body.contains(&bid) {
             continue;
         }
-        redirect(&mut func.blocks[i].terminator, header, ph);
+        redirect(&mut block.terminator, header, ph);
     }
     if func.entry == header {
         func.entry = ph;

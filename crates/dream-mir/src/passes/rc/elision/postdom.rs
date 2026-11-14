@@ -38,14 +38,13 @@ pub(super) fn elide_postdom_by(
 ) -> bool {
     let dom = analyses.dominators(func);
     let pdom = analyses.postdominators(func);
-    let n = func.blocks.len();
 
     // Collect retain/release sites as (block, stmt_idx, key).
     let mut retains: Vec<(BlockId, usize, RcKey)> = Vec::new();
     let mut releases: Vec<(BlockId, usize, RcKey)> = Vec::new();
-    for bi in 0..n {
+    for (bi, block) in func.blocks.iter().enumerate() {
         let b = BlockId(bi as u32);
-        for (si, stmt) in func.blocks[bi].stmts.iter().enumerate() {
+        for (si, stmt) in block.stmts.iter().enumerate() {
             match stmt {
                 Statement::Retain(op) => {
                     if let Some(k) = RcKey::of(op) {
@@ -107,10 +106,10 @@ pub(super) fn elide_postdom_by(
     if drop_retain.is_empty() {
         return false;
     }
-    for bi in 0..n {
+    for (bi, block) in func.blocks.iter_mut().enumerate() {
         let b = BlockId(bi as u32);
         let mut idx = 0;
-        func.blocks[bi].stmts.retain(|_| {
+        block.stmts.retain(|_| {
             let keep = !drop_retain.contains(&(b, idx)) && !drop_release.contains(&(b, idx));
             idx += 1;
             keep
@@ -134,16 +133,15 @@ pub(super) fn region_all(
     (rb, rs, eb, es): (BlockId, usize, BlockId, usize),
     mut safe: impl FnMut(usize, usize, &Statement) -> bool,
 ) -> bool {
-    let n = func.blocks.len();
-    for bi in 0..n {
+    for (bi, block) in func.blocks.iter().enumerate() {
         let b = BlockId(bi as u32);
         if !dom.dominates(rb, b) || !pdom.postdominates(eb, b) {
             continue;
         }
-        if matches!(func.blocks[bi].terminator, Terminator::Await { .. }) {
+        if matches!(block.terminator, Terminator::Await { .. }) {
             return false;
         }
-        let stmts = &func.blocks[bi].stmts;
+        let stmts = &block.stmts;
         if b == rb && b == eb {
             return stmts[rs + 1..es]
                 .iter()

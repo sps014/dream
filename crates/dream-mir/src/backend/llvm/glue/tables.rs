@@ -295,8 +295,8 @@ fn emit_tag_names(l: &mut Lcx<'_>) {
 fn dispatch_sigs(l: &Lcx<'_>) -> BTreeMap<String, (Ty, Vec<Ty>)> {
     let mut out = BTreeMap::new();
     for iface in &l.mir.interfaces.interfaces {
-        for slot in 0..iface.method_count {
-            let (td, ret, params) = fn_sig(l.interner, iface.sigs[slot]);
+        for &sig in &iface.sigs[..iface.method_count] {
+            let (td, ret, params) = fn_sig(l.interner, sig);
             out.entry(td).or_insert_with(|| {
                 let h = l.h();
                 (

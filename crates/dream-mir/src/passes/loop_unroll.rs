@@ -93,13 +93,12 @@ fn unroll_one(func: &mut MirFunction, analyses: &mut crate::passes::FunctionAnal
     });
 
     // Route every edge that entered the loop header (from outside the loop) into the unrolled block.
-    let n = func.blocks.len();
-    for i in 0..n {
+    for (i, block) in func.blocks.iter_mut().enumerate() {
         let bid = BlockId(i as u32);
         if bid == unrolled || c.body.contains(&bid) {
             continue;
         }
-        redirect(&mut func.blocks[i].terminator, c.header, unrolled);
+        redirect(&mut block.terminator, c.header, unrolled);
     }
     if func.entry == c.header {
         func.entry = unrolled;

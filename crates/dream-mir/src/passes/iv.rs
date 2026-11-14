@@ -179,13 +179,12 @@ fn redirect_header_entries(
     header: BlockId,
     ph: BlockId,
 ) {
-    let n = func.blocks.len();
-    for i in 0..n {
+    for (i, block) in func.blocks.iter_mut().enumerate() {
         let bid = BlockId(i as u32);
         if body.contains(&bid) || bid == ph {
             continue;
         }
-        retarget(&mut func.blocks[i].terminator, header, ph);
+        retarget(&mut block.terminator, header, ph);
     }
 }
 

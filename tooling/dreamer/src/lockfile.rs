@@ -27,6 +27,9 @@ pub struct LockedPackage {
     pub checksum: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub git_selector: Option<String>,
+    /// Package directory inside the Git repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_subdir: Option<String>,
     /// Resolved dependency names of this locked package, as `"name version"` strings.
     #[serde(default)]
     pub dependencies: Vec<String>,
@@ -98,6 +101,7 @@ mod tests {
                 .to_string(),
             checksum: Some("sha256:abc".to_string()),
             git_selector: None,
+            git_subdir: None,
             dependencies: Vec::new(),
         }
     }

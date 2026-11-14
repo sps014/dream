@@ -32,6 +32,7 @@ http-utils = "1.2"                                    # semver requirement, reso
 json-tools = { version = "0.3", registry = "default" }
 local-lib  = { path = "../local-lib" }                 # local path dependency
 vendored   = { git = "https://github.com/user/vendored-dream", tag = "v1.0.0" }
+charts     = { git = "https://github.com/user/dream-libs", branch = "main", subdir = "charts" }
 
 [dev-dependencies]
 test-utils = "0.4"
@@ -111,8 +112,14 @@ A dependency is a bare version requirement string, or a table with these keys:
 | `path` | Local folder; may be combined with `version` so the package can still be published |
 | `git` | Git repository URL |
 | `tag`, `branch`, `rev` | Which Git revision to use; at most one, and only with `git` |
+| `subdir` | Folder inside the `git` repository that contains the package's `dream.toml`, for a repository that holds several packages; relative, without `..` |
 
 `path` cannot be combined with `git` or `registry`, and `git` cannot be combined with `registry`.
+
+Packages from one repository that holds several packages resolve against the same commit. Inside
+such a repository, a package can name a sibling with a relative `path` (`json = { path = "../json" }`).
+When the program also depends on that sibling through `git` and `subdir`, both refer to the same
+package rather than conflicting.
 
 ## Details
 

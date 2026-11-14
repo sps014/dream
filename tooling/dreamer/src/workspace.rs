@@ -232,9 +232,14 @@ impl Workspace {
                     ResolvedSource::Git { selector, .. } => Some(selector.clone()),
                     _ => None,
                 },
+                git_subdir: match &pkg.source {
+                    ResolvedSource::Git { subdir, .. } => subdir.clone(),
+                    _ => None,
+                },
                 dependencies,
             });
         }
+        prune_stale_packages(&packages_dir, resolved)?;
 
         if let Some(ws_root) = &self.workspace_root {
             symlink_member_packages_dirs(ws_root, &packages_dir)?;
@@ -393,6 +398,26 @@ fn pathdiff_from(from_dir: &Path, to: &Path) -> Option<PathBuf> {
 /// Replaces `dest` with a fresh view of `src`'s contents: a symlink where the platform/filesystem
 /// allows it (so edits to a local `path` dependency show up immediately), falling back to a
 /// recursive copy (used for registry/git sources, and anywhere symlinks aren't permitted).
+/// Removes installed packages that the current resolution no longer contains, so the compiler
+/// cannot keep importing a dependency that was dropped from `dream.toml`.
+fn prune_stale_packages(packages_dir: &Path, resolved: &[ResolvedPackage]) -> Result<()> {
+    let keep: std::collections::BTreeSet<String> =
+        resolved.iter().map(|p| import_segment(&p.name)).collect();
+    for entry in std::fs::read_dir(packages_dir)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if name.starts_with('.') || keep.contains(name) {
+            continue;
+        }
+        crate::package_fs::remove_entry(&entry.path())
+            .with_context(|| format!("removing stale package {}", entry.path().display()))?;
+    }
+    Ok(())
+}
+
 fn link_or_copy_dir(src: &Path, dest: &Path) -> Result<()> {
     crate::package_fs::remove_entry(dest)?;
 

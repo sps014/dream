@@ -3,43 +3,27 @@ use crate::workspace::Workspace;
 use anyhow::{Result, bail};
 use std::path::Path;
 
-#[allow(clippy::too_many_arguments)]
+/// Adds `name` with the source in `spec`; a spec that only names a version (or nothing) becomes a
+/// plain registry requirement.
 pub fn run(
     start_dir: &Path,
     name: String,
-    version: Option<String>,
-    path: Option<String>,
-    git: Option<String>,
-    tag: Option<String>,
-    branch: Option<String>,
-    rev: Option<String>,
+    spec: DetailedDependency,
     dev: bool,
     package: Option<&str>,
 ) -> Result<()> {
-    if path.is_some() && git.is_some() {
+    if spec.path.is_some() && spec.git.is_some() {
         bail!("a dependency cannot have both --path and --git");
     }
 
     let mut workspace = Workspace::discover_package(start_dir, package)?;
 
-    let dependency = if let Some(path) = path {
-        Dependency::Detailed(DetailedDependency {
-            path: Some(path),
-            version,
-            ..Default::default()
-        })
-    } else if let Some(git) = git {
-        Dependency::Detailed(DetailedDependency {
-            git: Some(git),
-            tag,
-            branch,
-            rev,
-            version,
-            ..Default::default()
-        })
+    let dependency = if spec.path.is_some() || spec.git.is_some() {
+        Dependency::Detailed(spec)
     } else {
-        Dependency::Version(version.unwrap_or_else(|| "*".to_string()))
+        Dependency::Version(spec.version.unwrap_or_else(|| "*".to_string()))
     };
+    dependency.validate()?;
 
     let table = if dev {
         &mut workspace.manifest.dev_dependencies

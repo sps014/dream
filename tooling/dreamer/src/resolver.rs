@@ -17,7 +17,7 @@ use crate::registry::{IndexEntry, open_registry};
 use anyhow::{Context, Result, anyhow, bail};
 use dream_abi::project::MANIFEST_FILE_NAME;
 use semver::{Version, VersionReq};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -35,6 +35,7 @@ pub enum ResolvedSource {
         checkout_dir: PathBuf,
         commit: String,
         selector: String,
+        subdir: Option<String>,
     },
 }
 
@@ -102,9 +103,21 @@ struct Resolver {
     resolved: BTreeMap<String, ResolvedPackage>,
     requirements: BTreeMap<String, Vec<(VersionReq, String)>>,
     index_cache: HashMap<(String, String), Vec<IndexEntry>>,
-    visited_dirs: HashSet<PathBuf>,
+    visited_dirs: HashMap<PathBuf, String>,
     preferred: BTreeMap<String, crate::lockfile::LockedPackage>,
     sources: BTreeMap<String, String>,
+    /// Commit chosen for each `(url, selector)`, so packages from one multi-package repository
+    /// resolve against the same snapshot even when the branch moves mid-resolve.
+    git_commits: BTreeMap<(String, String), String>,
+    checkouts: Vec<CheckoutRoot>,
+}
+
+#[derive(Clone)]
+struct CheckoutRoot {
+    root: PathBuf,
+    url: String,
+    selector: String,
+    commit: String,
 }
 
 impl Resolver {
@@ -141,6 +154,30 @@ impl Resolver {
             let dep_dir = base_dir.join(rel_path).canonicalize().with_context(|| {
                 format!("resolving path dependency '{}' at '{}'", name, rel_path)
             })?;
+            // A sibling inside a fetched repository is the same Git package a consumer would
+            // name with `subdir`, so both spellings must claim one source.
+            if let Some(checkout) = self
+                .checkouts
+                .iter()
+                .find(|c| dep_dir.starts_with(&c.root))
+                .cloned()
+            {
+                let subdir = relative_subdir(&checkout.root, &dep_dir);
+                self.claim_source(
+                    name,
+                    &git_identity(&checkout.url, &checkout.selector, &subdir),
+                )?;
+                return self.queue_local_project(
+                    name,
+                    dep_dir,
+                    ResolvedKind::Git {
+                        url: checkout.url,
+                        commit: checkout.commit,
+                        selector: checkout.selector,
+                        subdir,
+                    },
+                );
+            }
             self.claim_source(name, &format!("path+{}", dep_dir.display()))?;
             self.queue_local_project(name, dep_dir, ResolvedKind::Path)?;
             return Ok(());
@@ -148,14 +185,6 @@ impl Resolver {
 
         if let Some(git_url) = dep.git() {
             let d = dep.detailed();
-            self.claim_source(
-                name,
-                &format!(
-                    "git+{}#{:?}",
-                    git_url,
-                    (d.tag.as_deref(), d.branch.as_deref(), d.rev.as_deref())
-                ),
-            )?;
             let selector = d
                 .tag
                 .as_ref()
@@ -163,20 +192,46 @@ impl Resolver {
                 .or_else(|| d.branch.as_ref().map(|v| format!("refs/heads/{v}")))
                 .or_else(|| d.rev.clone())
                 .unwrap_or_else(|| "HEAD".to_string());
+            let subdir = d
+                .subdir
+                .as_deref()
+                .map(normalize_subdir)
+                .filter(|s| !s.is_empty());
+            self.claim_source(name, &git_identity(git_url, &selector, &subdir))?;
             let locked = self
                 .preferred
                 .get(name)
                 .filter(|p| p.git_selector.as_deref() == Some(&selector));
             let prefix = format!("git+{git_url}#");
-            let pinned = locked.and_then(|p| p.source.strip_prefix(&prefix));
-            let checkout = crate::git::fetch_git_dependency(git_url, &selector, pinned)?;
+            let key = (git_url.to_string(), selector.clone());
+            let pinned =
+                self.git_commits.get(&key).cloned().or_else(|| {
+                    locked.and_then(|p| p.source.strip_prefix(&prefix).map(String::from))
+                });
+            let checkout = crate::git::fetch_git_dependency(git_url, &selector, pinned.as_deref())?;
+            self.git_commits.insert(key, checkout.commit.clone());
+            let root = checkout.path.canonicalize()?;
+            if !self.checkouts.iter().any(|c| c.root == root) {
+                self.checkouts.push(CheckoutRoot {
+                    root: root.clone(),
+                    url: git_url.to_string(),
+                    selector: selector.clone(),
+                    commit: checkout.commit.clone(),
+                });
+            }
+            let dir = match &subdir {
+                Some(subdir) => package_subdir(&root, subdir)
+                    .with_context(|| format!("resolving subdir '{subdir}' of '{name}'"))?,
+                None => root,
+            };
             self.queue_local_project(
                 name,
-                checkout.path,
+                dir,
                 ResolvedKind::Git {
                     url: git_url.to_string(),
                     commit: checkout.commit,
                     selector,
+                    subdir,
                 },
             )?;
             return Ok(());
@@ -202,9 +257,16 @@ impl Resolver {
         dir: PathBuf,
         kind: ResolvedKind,
     ) -> Result<()> {
-        if !self.visited_dirs.insert(dir.clone()) {
+        if let Some(previous) = self.visited_dirs.get(&dir) {
+            if previous != expected_name {
+                bail!(
+                    "dependencies '{previous}' and '{expected_name}' name the same package directory"
+                );
+            }
             return Ok(());
         }
+        self.visited_dirs
+            .insert(dir.clone(), expected_name.to_string());
         let manifest_path = dir.join(MANIFEST_FILE_NAME);
         let dep_manifest = Manifest::load(&manifest_path).with_context(|| {
             format!("loading manifest for local dependency at {}", dir.display())
@@ -216,11 +278,13 @@ impl Resolver {
                 url,
                 commit,
                 selector,
+                subdir,
             } => ResolvedSource::Git {
                 url,
                 checkout_dir: dir.clone(),
                 commit,
                 selector,
+                subdir,
             },
         };
 
@@ -399,7 +463,38 @@ enum ResolvedKind {
         url: String,
         commit: String,
         selector: String,
+        subdir: Option<String>,
     },
+}
+
+/// The package directory inside a canonical checkout root; symlinks may not lead outside it.
+fn package_subdir(root: &Path, subdir: &str) -> Result<PathBuf> {
+    let dir = root.join(subdir).canonicalize()?;
+    if !dir.starts_with(root) || !dir.is_dir() {
+        bail!("subdir must name a directory inside the repository");
+    }
+    Ok(dir)
+}
+
+fn normalize_subdir(subdir: &str) -> String {
+    subdir
+        .split(['/', '\\'])
+        .filter(|part| !part.is_empty() && *part != ".")
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn relative_subdir(root: &Path, dir: &Path) -> Option<String> {
+    let rel = dir.strip_prefix(root).ok()?;
+    let parts: Vec<String> = rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
+fn git_identity(url: &str, selector: &str, subdir: &Option<String>) -> String {
+    format!("git+{url}#{selector}:{}", subdir.as_deref().unwrap_or(""))
 }
 
 #[cfg(test)]
@@ -504,6 +599,7 @@ mod tests {
                     b"unused in resolver tests",
                 )),
                 git_selector: None,
+                git_subdir: None,
                 dependencies: Vec::new(),
             },
         );
@@ -533,6 +629,7 @@ mod tests {
                         .to_string(),
                 ),
                 git_selector: None,
+                git_subdir: None,
                 dependencies: Vec::new(),
             },
         );

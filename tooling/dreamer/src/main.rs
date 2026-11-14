@@ -86,6 +86,9 @@ enum Cmd {
         branch: Option<String>,
         #[arg(long)]
         rev: Option<String>,
+        /// Package directory inside a --git repository that holds several packages.
+        #[arg(long, requires = "git")]
+        subdir: Option<String>,
         /// Add under [dev-dependencies] instead of [dependencies].
         #[arg(long)]
         dev: bool,
@@ -243,17 +246,22 @@ fn main() -> ExitCode {
             tag,
             branch,
             rev,
+            subdir,
             dev,
             package,
         } => commands::add::run(
             &cwd,
             name,
-            version,
-            path,
-            git,
-            tag,
-            branch,
-            rev,
+            dreamer::manifest::DetailedDependency {
+                version,
+                path,
+                git,
+                tag,
+                branch,
+                rev,
+                subdir,
+                registry: None,
+            },
             dev,
             package.as_deref(),
         ),

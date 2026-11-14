@@ -14,7 +14,7 @@ Look up a command here. For a walkthrough, use the guides linked from the [Dream
 |---|---|
 | `dreamer init [console\|desktop\|mobile\|app\|web\|node\|lib\|test\|workspace] [name] [--dir <path>] [--output staticlib\|cdylib]` | Create a project from a template. Omit the template for a console project in the current directory; a name creates a new folder. `desktop` creates a GPU canvas, `mobile` declares Android/iOS, and `app` declares desktop plus mobile. Mobile canvas execution is pending. `--output` only applies to `lib`. See [Create a project](create-project.md). |
 | `dreamer devices [--target android\|ios] [--json]` | List connected Android devices and available iOS simulators without booting them. |
-| `dreamer add <name> [--version <req>] [--path <dir>] [--git <url> [--tag/--branch/--rev <ref>]] [--dev] [-p <name>]` | Add (or update) a dependency in `dream.toml`, then resolve and install. |
+| `dreamer add <name> [--version <req>] [--path <dir>] [--git <url> [--tag/--branch/--rev <ref>] [--subdir <dir>]] [--dev] [-p <name>]` | Add (or update) a dependency in `dream.toml`, then resolve and install. |
 | `dreamer remove <name> [-p <name>]` | Remove a dependency from `dream.toml` and `dream_packages/`, then re-resolve. |
 | `dreamer install` | Resolve `dream.toml` (respecting `dream.lock` where still compatible) and materialize `dream_packages/`. In a `[workspace]`, installs all members into the root lock/`dream_packages/`. |
 | `dreamer update [<name>]` | Re-resolve to the latest compatible version(s); with a name, only that package is allowed to move. |

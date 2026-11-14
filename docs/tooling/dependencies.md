@@ -27,6 +27,7 @@ A package is reusable Dream code. Add a package to your project, then import the
 | `--path <dir>` | Local folder dependency (can be combined with `--version`) |
 | `--git <url>` | Git dependency; cannot be combined with `--path` |
 | `--tag`, `--branch`, `--rev` | Git revision to use; at most one, with `--git` (default: the repository's `HEAD`) |
+| `--subdir <dir>` | Folder inside the `--git` repository that contains the package, for a repository that holds several packages |
 | `--dev` | Add to `[dev-dependencies]` instead of `[dependencies]` |
 | `-p <name>` / `--package <name>` | Workspace member to edit |
 
@@ -57,6 +58,7 @@ dependencies = []
 | `source` | Where the package came from (see below) |
 | `checksum` | `sha256:` checksum of a registry package |
 | `git_selector` | The tag, branch or revision a Git dependency asked for (`HEAD` when none) |
+| `git_subdir` | The folder inside the repository that holds the package, when the dependency set `subdir` |
 | `dependencies` | Resolved dependencies, each as a `"name version"` string |
 
 `source` is one of `registry+<url>`, `git+<url>#<rev>`, or `path+<path>`. Packages are always
@@ -73,7 +75,8 @@ Every dependency is materialized under `dream_packages/<import_segment>/` next t
 `dream.toml` — a local path dependency is symlinked (so edits show up immediately), while registry
 and git dependencies are copied from a shared, checksum-verified download cache at
 `~/.dream/registry/`. `dream_packages/` is never committed (`dreamer init` adds it to
-`.gitignore`); it's fully reproducible from `dream.toml` + `dream.lock`.
+`.gitignore`); it's fully reproducible from `dream.toml` + `dream.lock`. Each install removes
+entries for packages that are no longer dependencies, so a removed package cannot still be imported.
 
 When a plain `import` doesn't resolve to a local file, Dream looks under `dream_packages/`:
 

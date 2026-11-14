@@ -5,7 +5,7 @@
 
 use dreamer::commands;
 use dreamer::commands::init::Scaffold;
-use dreamer::manifest::{Manifest, PackageType, import_segment};
+use dreamer::manifest::{DetailedDependency, Manifest, PackageType, import_segment};
 
 const STATICLIB: Scaffold = Scaffold::Lib(dream_abi::library::LibraryKind::Staticlib);
 use dreamer::registry::{IndexEntry, checksum, open_registry};
@@ -104,12 +104,10 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
     commands::add::run(
         &project_dir,
         "greeter".to_string(),
-        Some("^1.0".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        DetailedDependency {
+            version: Some("^1.0".to_string()),
+            ..Default::default()
+        },
         false,
         None,
     )
@@ -118,12 +116,10 @@ fn init_add_install_materializes_registry_and_path_dependencies() {
     commands::add::run(
         &project_dir,
         "local-lib".to_string(),
-        None,
-        Some(local_lib_dir.to_str().unwrap().to_string()),
-        None,
-        None,
-        None,
-        None,
+        DetailedDependency {
+            path: Some(local_lib_dir.to_str().unwrap().to_string()),
+            ..Default::default()
+        },
         false,
         None,
     )
@@ -204,12 +200,10 @@ fn build_compiles_a_project_using_an_installed_dependency() {
     commands::add::run(
         &project_dir,
         "greeter2".to_string(),
-        Some("^1.0".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        DetailedDependency {
+            version: Some("^1.0".to_string()),
+            ..Default::default()
+        },
         false,
         None,
     )

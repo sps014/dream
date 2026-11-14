@@ -278,6 +278,9 @@ pub struct DetailedDependency {
     pub branch: Option<String>,
     #[serde(default)]
     pub rev: Option<String>,
+    /// Package directory inside a Git repository that holds several packages.
+    #[serde(default)]
+    pub subdir: Option<String>,
 }
 
 impl Dependency {
@@ -295,8 +298,21 @@ impl Dependency {
             if refs > 1 || refs > 0 && d.git.is_none() {
                 bail!("invalid Git dependency selectors");
             }
+            if let Some(subdir) = &d.subdir {
+                if d.git.is_none() {
+                    bail!("subdir requires a Git dependency");
+                }
+                validate_relative_asset_path(subdir, "dependency subdir")?;
+            }
         }
         Ok(())
+    }
+
+    pub fn subdir(&self) -> Option<&str> {
+        match self {
+            Dependency::Version(_) => None,
+            Dependency::Detailed(d) => d.subdir.as_deref(),
+        }
     }
 
     pub fn version_req(&self) -> Option<&str> {
@@ -367,6 +383,9 @@ impl Dependency {
                 }
                 if let Some(v) = &d.rev {
                     table.insert("rev".into(), toml::Value::String(v.clone()));
+                }
+                if let Some(v) = &d.subdir {
+                    table.insert("subdir".into(), toml::Value::String(v.clone()));
                 }
                 toml::Value::Table(table)
             }
@@ -875,6 +894,10 @@ mod tests {
             "git = 'https://example.com/repo', registry = 'private'",
             "git = 'https://example.com/repo', branch = 'main', rev = 'abc'",
             "branch = 'main'",
+            "path = 'local', subdir = 'gpu'",
+            "git = 'https://example.com/repo', subdir = '../escape'",
+            "git = 'https://example.com/repo', subdir = '/abs'",
+            "git = 'https://example.com/repo', subdir = ''",
         ] {
             let dependency: Dependency =
                 toml::from_str::<toml::Value>(&format!("dep = {{ {source} }}"))

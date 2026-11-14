@@ -21,6 +21,7 @@ use dream_syntax::parser::Parser;
 use dream_syntax::token::syntax_token::SyntaxToken;
 
 mod graph;
+mod parse_cache;
 
 /// Collects every top-level declaration from all parsed files (user code + imports + prelude +
 /// `@json` derives), tagged with its originating file so semantic diagnostics attribute errors
@@ -68,6 +69,33 @@ pub struct ProgramAccumulator<'a> {
     pub untracked_generator_inputs: bool,
     /// Symbols every file's `@cfg` conditions are evaluated against.
     pub cfg: dream_syntax::conditional::CfgSymbols,
+    /// Resolved directory of every package an import reached through `dream_packages/`. Package
+    /// entries are symlinks and loaded paths are canonical, so the path alone cannot say whether
+    /// a file belongs to a dependency.
+    pub library_roots: IndexSet<std::path::PathBuf>,
+}
+
+impl ProgramAccumulator<'_> {
+    /// True for a loaded file that belongs to an installed dependency package. Compiler-made
+    /// files (generator harnesses sit beside a dependency's generator) and the entry are the
+    /// program being built.
+    pub fn is_library_file(&self, path: &str) -> bool {
+        !self.generated_files.contains(path)
+            && self.parsed_files.first().is_none_or(|(entry, _)| entry != path)
+            && self
+                .library_roots
+                .iter()
+                .any(|root| Path::new(path).starts_with(root))
+    }
+
+    /// Every loaded dependency-package file, in load order.
+    pub fn library_files(&self) -> IndexSet<String> {
+        self.parsed_files
+            .keys()
+            .filter(|path| self.is_library_file(path))
+            .cloned()
+            .collect()
+    }
 }
 
 /// Resolves an `import a.b.c;` reference (passed here as the slash-joined path `a/b/c`) relative to
@@ -80,36 +108,43 @@ pub struct ProgramAccumulator<'a> {
 /// resolution independent of the package manager's manifest format.
 pub fn resolve_import_path(base_dir: &Path, module_name: &str) -> std::path::PathBuf {
     let packages_dir = find_dream_packages_dir(base_dir);
-    resolve_import(base_dir, module_name, packages_dir.as_deref())
+    resolve_import(base_dir, module_name, packages_dir.as_deref()).0
 }
 
+/// The import's path, plus the package directory it came from when it resolved through
+/// `dream_packages/`.
 fn resolve_import(
     base_dir: &Path,
     module_name: &str,
     packages_dir: Option<&Path>,
-) -> std::path::PathBuf {
+) -> (std::path::PathBuf, Option<std::path::PathBuf>) {
     let mut import_path = base_dir.join(module_name);
     if import_path.extension().is_none() {
         import_path.set_extension("dream");
     }
     if import_path.exists() {
-        return import_path;
+        return (import_path, None);
     }
-    packages_dir
-        .and_then(|dir| resolve_package_import(dir, module_name))
-        .unwrap_or(import_path)
+    match packages_dir.and_then(|dir| resolve_package_import(dir, module_name)) {
+        Some(found) => found,
+        None => (import_path, None),
+    }
 }
 
 /// Resolves `module_name` (`<pkg>` or `<pkg>/<rest>`) against the entry's installed
 /// packages directory. A bare `import pkg;` looks for `dream_packages/pkg/src/pkg.dream`
 /// (a package's self-named entry file, mirroring the top-level convention of a file's logical
 /// entry sharing its own name); `import pkg.rest;` looks for `dream_packages/pkg/src/rest.dream`.
-fn resolve_package_import(packages_dir: &Path, module_name: &str) -> Option<std::path::PathBuf> {
+fn resolve_package_import(
+    packages_dir: &Path,
+    module_name: &str,
+) -> Option<(std::path::PathBuf, Option<std::path::PathBuf>)> {
     let mut parts = module_name.splitn(2, '/');
     let package_name = parts.next().filter(|s| !s.is_empty())?;
     let rest = parts.next();
 
-    let package_src = packages_dir.join(package_name).join("src");
+    let package_root = packages_dir.join(package_name);
+    let package_src = package_root.join("src");
 
     let mut candidate = match rest {
         Some(rest) => package_src.join(rest),
@@ -118,7 +153,9 @@ fn resolve_package_import(packages_dir: &Path, module_name: &str) -> Option<std:
     if candidate.extension().is_none() {
         candidate.set_extension("dream");
     }
-    candidate.exists().then_some(candidate)
+    candidate
+        .exists()
+        .then_some((candidate, Some(package_root)))
 }
 
 /// Walks upward from `start_dir` looking for a `dream_packages/` directory, stopping (without a
@@ -261,22 +298,16 @@ pub fn parse_source_recursive<'a>(
 
     acc.file_contents.insert(path_str.clone(), text.clone());
 
-    let mut file_diagnostics = DiagnosticBag::new(Some(path_str.clone()));
-
-    let lexer = Lexer::new(text);
-    let mut parser = Parser::new(lexer, arena, &mut file_diagnostics).with_cfg(acc.cfg);
-
-    let ast = match parser.parse() {
-        Ok(ast) => ast,
-        Err(e) => {
-            diagnostics.extend(&file_diagnostics);
-            return Err(e);
-        }
+    let program = if acc.is_library_file(&path_str) {
+        parse_cache::parse_library_file(&path_str, &text, acc.cfg, diagnostics)?
+    } else {
+        let mut file_diagnostics = DiagnosticBag::new(Some(path_str.clone()));
+        let lexer = Lexer::new(text);
+        let mut parser = Parser::new(lexer, arena, &mut file_diagnostics).with_cfg(acc.cfg);
+        let parsed = parser.parse();
+        diagnostics.extend(&file_diagnostics);
+        parsed?.get_root().clone()
     };
-
-    diagnostics.extend(&file_diagnostics);
-
-    let program = ast.get_root();
     acc.parsed_files.insert(path_str.clone(), program.clone());
     if let Some(module_decl) = &program.module {
         acc.file_modules
@@ -342,7 +373,11 @@ pub fn parse_source_recursive<'a>(
             .package_base
             .as_deref()
             .and_then(find_dream_packages_dir);
-        let import_path = resolve_import(parent_dir, module_name, packages_dir.as_deref());
+        let (import_path, package_root) =
+            resolve_import(parent_dir, module_name, packages_dir.as_deref());
+        if let Some(root) = package_root.and_then(|root| dunce::canonicalize(root).ok()) {
+            acc.library_roots.insert(root);
+        }
         acc.resolution_inputs.insert(import_path.clone());
 
         let import_path_str = match import_path.to_str() {
@@ -376,7 +411,7 @@ pub fn parse_source_recursive<'a>(
     // Tag every declaration with its source file so semantic diagnostics (which run on the
     // merged program) can report the correct file name.
     collect_declarations(
-        program,
+        &program,
         &path_str,
         &mut acc.all_functions,
         &mut acc.all_structs,

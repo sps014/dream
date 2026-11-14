@@ -37,6 +37,9 @@ pub struct Hir {
     /// `(import module, symbol)` of the program's `@main_loop` extern, which the generated `main`
     /// calls on targets whose operating system owns the main thread.
     pub main_loop: Option<(String, String)>,
+    /// Source files of installed dependency packages. With `<std>/` paths they are the library
+    /// code whose panics report the calling program's line.
+    pub library_files: std::collections::BTreeSet<String>,
     /// `@intrinsic("key")` externs: each maps a callee `DefId` to its intrinsic key. These have no
     /// emitted body — call sites resolve directly to the runtime helper `$<key>` (e.g. `string_alloc`)
     /// or, for async intrinsics like `sleep`, are recognized by the backend and lowered to the

@@ -33,3 +33,8 @@ public fun demo_sum(a: int, b: int): int {
 public fun demo_apply_plus_one(callback: fun(int): int, value: int): int {
     return demo_apply(callback, value);
 }
+
+/// Returns `values[index]`. An index outside the list panics at the caller's line.
+public fun demo_pick(values: int[], index: int): int {
+    return values[index];
+}

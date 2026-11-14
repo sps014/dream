@@ -125,6 +125,7 @@ impl<'a> Analyzer<'a> {
                 instances: vec![],
                 layouts,
                 imports,
+                library_files: self.library_files.clone(),
                 main_loop: node
                     .functions
                     .iter()

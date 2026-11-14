@@ -19,9 +19,9 @@ pub(super) fn tracks_caller(l: &Lcx<'_>, f: &MirFunction, name: &str) -> bool {
     !f.is_async
         && name != "main"
         && !l.sigs.has_function(name)
-        && f.file
-            .as_deref()
-            .is_some_and(dream_stdlib::is_library_source)
+        && f.file.as_deref().is_some_and(|file| {
+            dream_stdlib::is_std_source(file) || l.mir.library_files.contains(file)
+        })
 }
 
 /// The line in effect on entry to each block: the exit line of its lowest-numbered predecessor

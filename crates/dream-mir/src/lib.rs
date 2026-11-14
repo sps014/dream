@@ -87,6 +87,8 @@ pub struct Mir {
     pub imports: Vec<dream_hir::HImport>,
     /// See [`dream_hir::Hir::main_loop`].
     pub main_loop: Option<(String, String)>,
+    /// See [`dream_hir::Hir::library_files`].
+    pub library_files: std::collections::BTreeSet<String>,
     /// `@intrinsic` externs: `(callee DefId, intrinsic key)`. Carried from HIR so the backend's
     /// symbol table resolves intrinsic call targets (to the runtime helper `$<key>`, or the async
     /// scheduler for `sleep`) instead of the `$def{N}` fallback.

@@ -296,6 +296,9 @@ pub struct Analyzer<'a> {
     struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
     /// Skip library bodies until reachable HIR names them; see `declarations::functions::reach`.
     lazy_library_bodies: bool,
+    /// Loaded files that belong to installed dependency packages; with the `<std>/` sources they
+    /// are the library code that lazy analysis and caller-line tracking apply to.
+    library_files: std::collections::BTreeSet<String>,
     /// Library bodies whose analysis waits for a reachable reference, keyed by their def.
     deferred_bodies: IndexMap<dream_types::DefId, (&'a FunctionNode<'a>, GenericBindings)>,
     /// Registered enums: name -> (member -> value). Enum values are plain `i32`s at runtime.
@@ -491,6 +494,7 @@ impl<'a> Analyzer<'a> {
             generic_method_bindings: indexmap::IndexMap::new(),
             struct_methods: Vec::new(),
             lazy_library_bodies: false,
+            library_files: std::collections::BTreeSet::new(),
             deferred_bodies: IndexMap::new(),
             enum_table: IndexMap::new(),
             union_table: IndexMap::new(),
@@ -599,6 +603,17 @@ impl<'a> Analyzer<'a> {
     pub fn with_lazy_library_bodies(mut self) -> Self {
         self.lazy_library_bodies = true;
         self
+    }
+
+    /// Marks dependency-package files as library code. Call before [`Self::analyze`].
+    pub fn with_library_files(mut self, files: impl IntoIterator<Item = String>) -> Self {
+        self.library_files = files.into_iter().collect();
+        self
+    }
+
+    /// True for stdlib and dependency-package sources.
+    pub(in crate::analyzer) fn is_library_file(&self, path: Option<&str>) -> bool {
+        path.is_some_and(|p| dream_stdlib::is_std_source(p) || self.library_files.contains(p))
     }
 
     pub fn with_target_layout(mut self, target: dream_hir::TargetLayout) -> Self {

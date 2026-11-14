@@ -255,7 +255,11 @@ once a minute across processes; a `.budget-checked` marker records the last chec
 A third round stopped analyzing standard-library bodies that the program cannot reach. The
 driver enables `Analyzer::with_lazy_library_bodies`. Std free functions and std struct and
 extension methods are then deferred, and the instantiation fixpoint analyzes only those that
-already emitted HIR reaches. The edges match MIR dead-code pruning:
+already emitted HIR reaches. Installed dependency packages get the same treatment: the source
+loader records the resolved directory of each package an import reaches through
+`dream_packages/`, and files under those directories (other than the entry and compiler-made
+files) are passed as `Analyzer::with_library_files`. They also share a per-thread parse cache
+keyed by path, `@cfg` symbols and text. The edges match MIR dead-code pruning:
 
 - direct callees and function references;
 - the destructor, `to_string` and `hash_code` of every type a reachable body or global

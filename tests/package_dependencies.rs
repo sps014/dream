@@ -95,6 +95,34 @@ fn native_dependency_brings_c_sources_and_a_generator() {
 }
 
 #[test]
+fn dependency_panics_report_the_calling_line() {
+    let dir = app();
+    let entry = dir.path().join("pick.dream");
+    std::fs::write(
+        &entry,
+        "import native_demo;\n\nfun main(): void {\n    let values = [1, 2, 3];\n    demo_pick(values, 5);\n}\n",
+    )
+    .unwrap();
+    let ll = dir.path().join("pick.ll");
+    compile(Compiler::new(Target::native()), &entry, &ll);
+    let error = compile_and_capture_ex(
+        &std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default()),
+        ll.to_str().unwrap(),
+        OptLevel::O0,
+        &[],
+        &[],
+        None,
+        60,
+    )
+    .expect_err("an out-of-range pick panics")
+    .to_string();
+    assert!(
+        error.contains("index out of bounds") && error.contains("pick.dream:5"),
+        "{error}"
+    );
+}
+
+#[test]
 fn wasm_dependency_uses_its_javascript_module() {
     let dir = app();
     let wasm = dir.path().join("main.wasm");

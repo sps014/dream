@@ -499,6 +499,7 @@ mod tests {
             layouts: LayoutTable::default(),
             imports: vec![],
             main_loop: None,
+            library_files: Default::default(),
             intrinsics: vec![],
             interfaces: InterfaceTable::default(),
             enums: indexmap::IndexMap::new(),

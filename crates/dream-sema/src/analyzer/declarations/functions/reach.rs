@@ -40,10 +40,7 @@ impl<'a> Analyzer<'a> {
         bindings: &GenericBindings,
     ) -> bool {
         if !self.lazy_library_bodies
-            || !function
-                .file_path
-                .as_deref()
-                .is_some_and(dream_stdlib::is_std_source)
+            || !self.is_library_file(function.file_path.as_deref())
             || dream_abi::attributes::has_export_attr(&function.attributes)
         {
             return false;

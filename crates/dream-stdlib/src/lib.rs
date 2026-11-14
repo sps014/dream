@@ -10,7 +10,7 @@ pub use packages::{
     runtime_host_fields, std_package_from_slash_path,
 };
 pub use registry::{BOOTSTRAP_PACKAGES, GuestExport, STD_PACKAGES, StdPackage, WebAssets};
-pub use source_paths::{PACKAGES_DIR, STD_PATH_PREFIX, is_library_source, is_std_source};
+pub use source_paths::{PACKAGES_DIR, STD_PATH_PREFIX, is_std_source};
 
 #[cfg(test)]
 mod layout_tests;

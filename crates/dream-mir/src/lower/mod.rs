@@ -187,6 +187,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         layouts: hir.layouts.clone(),
         imports: hir.imports.clone(),
         main_loop: hir.main_loop.clone(),
+        library_files: hir.library_files.clone(),
         intrinsics: hir.intrinsics.clone(),
         uses_defer: hir.functions.iter().any(|f| stmts_have_defer(&f.body)),
         uses_type_name,

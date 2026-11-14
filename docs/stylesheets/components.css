@@ -159,12 +159,32 @@
   .md-typeset a.dream-index__link {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .md-typeset ul.dream-index > li.dream-index__item {
+    flex-wrap: wrap;
+  }
+
+  .md-typeset ul.dream-index > li.dream-index__item > a.dream-index__link {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .md-typeset ul.dream-index > li.dream-index__item > .dream-index__meta {
+    flex-wrap: wrap;
+    padding-bottom: 0.45rem;
+  }
+
+  /* The theme pins this just under the header, where it covers the first title. */
+  .md-top {
+    top: auto;
+    bottom: 1.2rem;
+  }
 }
 
 /* Grouped directory: one column per child section, each a compact list of its pages. */
 .md-typeset .dream-directory {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
   gap: 2rem 2.4rem;
   margin: 1.6rem 0 2rem;
 }
@@ -200,10 +220,19 @@
 }
 
 .md-typeset .dream-directory ul.dream-index > li.dream-index__item {
+  flex-wrap: wrap;
   border-bottom: none;
 }
 
+.md-typeset .dream-directory .dream-index__meta {
+  flex-wrap: wrap;
+  max-width: 100%;
+  margin: -0.1rem 0 0.15rem 0.7rem;
+}
+
 .md-typeset .dream-directory a.dream-index__link {
+  flex: 1 1 100%;
+  min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   gap: 0.05rem;
   padding: 0.35rem 0 0.35rem 0.7rem;

@@ -1574,8 +1574,9 @@ fn mobile_async_entry_returns_to_the_platform_loop() {
     let code = format!(
         "module system.core;
         {ASYNC_STUB}
+        @main_loop
         @runtime(\"dream_window_app_main\", \"window\")
-        extern fun platform_main(argc: int, argv: isize, entry: isize, pump: isize): int;
+        extern fun window_main_loop(argc: int, argv: isize, entry: isize, pump: isize): int;
         async fun delay(): void {{ Time.sleep(0).await; }}
         async fun main(): void {{ delay().await; }}"
     );
@@ -1596,6 +1597,42 @@ fn mobile_async_entry_returns_to_the_platform_loop() {
             "{triple}:\n{main}"
         );
     }
+}
+
+#[test]
+fn mobile_entry_uses_a_c_main_loop_or_runs_main_directly() {
+    let hooked = format!(
+        "module system.core;
+        import system.interop;
+        {ASYNC_STUB}
+        @main_loop
+        @c(\"app\", \"app_main_loop\")
+        extern fun app_loop(argc: int, argv: isize, entry: isize, pump: isize): int;
+        async fun delay(): void {{ Time.sleep(0).await; }}
+        async fun main(): void {{ delay().await; }}"
+    );
+    let plain = format!(
+        "module system.core;
+        {ASYNC_STUB}
+        async fun delay(): void {{ Time.sleep(0).await; }}
+        async fun main(): void {{ delay().await; }}"
+    );
+    let emit_ios = |code: &str| {
+        compile_test_pipeline(code, |hir, interner| {
+            let mir = dream_mir::lower::lower_program(hir, interner);
+            let spec = dream_abi::target::TargetSpec::parse("arm64-apple-ios").unwrap();
+            emit_ll_for(&mir, interner, dream_mir::backend::Target::Llvm(spec))
+        })
+    };
+    let ir = emit_ios(&hooked);
+    let main = ir_func_body(&ir, "main");
+    assert!(main.contains("@app_main_loop("), "{main}");
+    assert!(!ir_func_body(&ir, "dream_guest_entry").contains("dream_run_loop"));
+
+    let ir = emit_ios(&plain);
+    let main = ir_func_body(&ir, "main");
+    assert!(main.contains("@dream_guest_entry("), "{main}");
+    assert!(ir_func_body(&ir, "dream_guest_entry").contains("dream_run_loop"));
 }
 
 #[test]

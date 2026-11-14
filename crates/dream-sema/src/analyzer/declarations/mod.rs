@@ -15,6 +15,7 @@
 //! - [`ownership_fields`]: `weak`/`unowned` field validation.
 //! - [`ref_struct_rules`]: the `ref struct` escape rules (fields, generic arguments, array
 //!   elements, `async` parameters).
+//! - [`main_loop`]: `@main_loop` signature and uniqueness checks.
 //! - [`imports`]: resolves every aliased `import a.b.c as x;` against the function table once
 //!   registration completes.
 //!
@@ -28,6 +29,7 @@ mod enums;
 pub(in crate::analyzer) mod functions;
 mod globals;
 mod imports;
+mod main_loop;
 pub(in crate::analyzer) mod operator_overloads;
 mod ownership_fields;
 pub(in crate::analyzer) mod protocol_hooks;

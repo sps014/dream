@@ -32,6 +32,7 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [Iterable](core-iterable.md)
 - [Iterator](core-iterator.md)
 - [Lock](core-lock.md)
+- [MainLoopAttribute](core-main-loop-attribute.md)
 - [Math](core-math.md)
 - [NativeAttribute](core-native-attribute.md)
 - [NodeAttribute](core-node-attribute.md)

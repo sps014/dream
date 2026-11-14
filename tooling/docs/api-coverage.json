@@ -6851,6 +6851,19 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/core/main_loop_attribute.dream",
+    "package": "system.core",
+    "page": "reference/api/core-main-loop-attribute.md",
+    "declarations": [
+      {
+        "signature": "public struct MainLoopAttribute",
+        "description": "Hands the main thread to a library's event loop on Android and iOS, where the operating system owns that thread and a program cannot block in its own loop.  Put it on an `extern` function declared as `(argc: int, argv: isize, entry: isize, pump: isize): int`. On those targets the program's generated `main` calls this function instead of running `main` directly. The function must call `entry` (a C `int (*)(void)`) once to start the program, then call `pump` (the same shape) on every iteration of its loop to run ready `async` work, and return the process exit code. `argv` is the platform's `char**`.  A program may link at most one main-loop function. Other targets ignore the attribute, and programs that link none run `main` directly.",
+        "line": 16,
+        "page": "reference/api/core-main-loop-attribute.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/core/math.dream",
     "package": "system.core",
     "page": "reference/api/core-math.md",

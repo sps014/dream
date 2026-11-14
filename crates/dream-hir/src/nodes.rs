@@ -498,7 +498,7 @@ mod tests {
             instances: vec![],
             layouts: LayoutTable::default(),
             imports: vec![],
-            platform_main: None,
+            main_loop: None,
             intrinsics: vec![],
             interfaces: InterfaceTable::default(),
             enums: indexmap::IndexMap::new(),

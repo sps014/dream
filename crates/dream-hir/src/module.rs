@@ -34,9 +34,9 @@ pub struct Hir {
     /// Host/extern functions the module imports. The backend emits one `(import ...)` per entry;
     /// call sites resolve to `$name` (which the import declares).
     pub imports: Vec<HImport>,
-    /// Host symbol of the `@platform_main` extern, which the generated `main` calls on targets
-    /// whose operating system owns the main thread.
-    pub platform_main: Option<String>,
+    /// `(import module, symbol)` of the program's `@main_loop` extern, which the generated `main`
+    /// calls on targets whose operating system owns the main thread.
+    pub main_loop: Option<(String, String)>,
     /// `@intrinsic("key")` externs: each maps a callee `DefId` to its intrinsic key. These have no
     /// emitted body — call sites resolve directly to the runtime helper `$<key>` (e.g. `string_alloc`)
     /// or, for async intrinsics like `sleep`, are recognized by the backend and lowered to the

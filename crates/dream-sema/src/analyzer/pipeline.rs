@@ -125,17 +125,15 @@ impl<'a> Analyzer<'a> {
                 instances: vec![],
                 layouts,
                 imports,
-                platform_main: node
+                main_loop: node
                     .functions
                     .iter()
                     .find(|f| {
-                        let module = self.graph.module_for_file(f.file_path.as_deref());
-                        self.type_ctx.module_path(module).is_some_and(|path| {
-                            dream_abi::attributes::decl_identity(path, &f.name.text)
-                                == dream_abi::core_items::PLATFORM_MAIN
-                        })
+                        f.is_extern && dream_abi::attributes::has_main_loop_attr(&f.attributes)
                     })
-                    .and_then(|f| dream_abi::attributes::runtime_import_field(&f.attributes)),
+                    .map(|f| {
+                        dream_abi::attributes::extern_import_target(&f.attributes, &f.name.text)
+                    }),
                 intrinsics,
                 interfaces,
                 enums: hir_enums,

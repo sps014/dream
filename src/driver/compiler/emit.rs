@@ -7,7 +7,7 @@ pub(super) struct EmittedModule {
     export_functions: Vec<dream_abi::exports::ExportFunction>,
     c_shim: Option<String>,
     live_imports: Vec<(String, String)>,
-    platform_main: Option<String>,
+    main_loop: Option<(String, String)>,
     threads: bool,
     need: dream_mir::runtime::RuntimeNeed,
 }
@@ -111,9 +111,9 @@ impl Compiler {
                 .functions
                 .iter()
                 .any(|f| f.name == dream_mir::abi::ENTRY_FN)
-            && let Some(host) = &mir.platform_main
+            && let Some(main_loop) = &mir.main_loop
         {
-            live_imports.push((dream_abi::js_abi::HOST_MODULE.to_string(), host.clone()));
+            live_imports.push(main_loop.clone());
         }
         Ok(EmittedModule {
             bytes: module.ir.into_bytes(),
@@ -142,7 +142,7 @@ impl Compiler {
                 .collect(),
             c_shim,
             live_imports,
-            platform_main: mir.platform_main.clone(),
+            main_loop: mir.main_loop.clone(),
             threads,
             need,
         })
@@ -176,7 +176,7 @@ impl Compiler {
                 export_functions: &emitted.export_functions,
                 target_triple: &self.target.spec().llvm_triple(),
                 execution_environment: self.target.spec().execution_environment,
-                platform_main: emitted.platform_main.as_deref(),
+                main_loop: emitted.main_loop.as_ref(),
             },
         )?;
         if !self.target.spec().capabilities.linear_memory {

@@ -50,7 +50,7 @@ A library package does not get a match arm in the compiler. Host wiring is data 
 - `guest_exports` lists extra symbols the guest module must export when one of the package's host imports is used (the GPU bundle version and index).
 - `web_assets` and `tools` list files the package ships next to the program.
 
-`platform_main` is a core identity (`core_items::PLATFORM_MAIN`), not an attribute. On targets where the operating system owns the main thread, the generated `main` calls the host loop it names.
+`@main_loop` marks the extern that owns the main thread on targets where the operating system keeps it (Android, iOS). Any package may declare one, through `@runtime` or `@c`; the generated `main` calls it with the guest entry and scheduler pump. A program links at most one, and without one the generated `main` runs the program directly.
 
 ## Generic library code
 

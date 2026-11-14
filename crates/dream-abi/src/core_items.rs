@@ -26,8 +26,6 @@ pub const SPAN: &str = "system.core::Span";
 pub const BYTES: &str = "system.core::Bytes";
 pub const ARRAY: &str = "system.core::Array";
 pub const SYSTEM: &str = "system.core::System";
-/// Host loop the generated `main` calls on targets whose operating system owns the main thread.
-pub const PLATFORM_MAIN: &str = "system.core::platform_main";
 
 pub const ITERABLE: &str = "system.core::Iterable";
 pub const ITERATOR: &str = "system.core::Iterator";

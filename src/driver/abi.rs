@@ -20,8 +20,8 @@ pub(crate) struct ModuleAbi<'a> {
     pub execution_environment: dream_abi::target::ExecutionEnvironment,
     pub exports: &'a [String],
     pub export_functions: &'a [dream_abi::exports::ExportFunction],
-    /// Host field of the platform main loop, which the generated `main` calls itself.
-    pub platform_main: Option<&'a str>,
+    /// `(module, field)` of the `@main_loop` extern, which the generated `main` calls itself.
+    pub main_loop: Option<&'a (String, String)>,
 }
 
 /// WASM custom-section name the JS loader reads with `WebAssembly.Module.customSections`.
@@ -158,7 +158,7 @@ pub(crate) fn build_abi_json(
     module: &ModuleAbi<'_>,
 ) -> String {
     let layouts = module.layouts;
-    let platform_main = module.platform_main;
+    let main_loop = module.main_loop;
     let live: BTreeSet<(&str, &str)> = live_imports
         .iter()
         .map(|(m, f)| (m.as_str(), f.as_str()))
@@ -273,11 +273,11 @@ pub(crate) fn build_abi_json(
             }
             declared_capabilities
                 .extend(dream_abi::attributes::runtime_host_capability(&func.attributes));
-            if platform_main.is_some_and(|host| host == field) {
-                continue;
-            }
             if let Some(lib) = c_lib {
                 c_lib_set.insert(lib);
+            }
+            if main_loop.is_some_and(|(m, f)| *m == module && *f == field) {
+                continue;
             }
             if !seen_fields.insert((module, field)) {
                 continue;
@@ -614,7 +614,7 @@ mod tests {
                 export_functions: &[],
                 target_triple: "",
                 execution_environment: dream_abi::target::ExecutionEnvironment::Native,
-                platform_main: None,
+                main_loop: None,
             },
         )
     }
@@ -690,7 +690,7 @@ mod tests {
                 export_functions: &[],
                 target_triple: "",
                 execution_environment: dream_abi::target::ExecutionEnvironment::Native,
-                platform_main: None,
+                main_loop: None,
             },
         );
         assert!(json.contains("\"c_libs\": [\"z\"]"), "{}", json);
@@ -857,7 +857,7 @@ mod tests {
                     export_functions: &[],
                     target_triple: "",
                     execution_environment: dream_abi::target::ExecutionEnvironment::Native,
-                    platform_main: None,
+                    main_loop: None,
                 },
             );
             assert!(

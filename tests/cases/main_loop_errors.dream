@@ -1,0 +1,11 @@
+// `@main_loop` externs take the platform entry signature, and a program links at most one.
+@main_loop
+extern fun first_loop(argc: int, argv: isize, entry: isize, pump: isize): int;
+
+@main_loop
+extern fun second_loop(argc: int, argv: isize, entry: isize, pump: isize): int;
+
+@main_loop
+extern fun wrong_shape(argc: int): void;
+
+fun main(): void {}

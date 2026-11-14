@@ -184,6 +184,13 @@ pub fn has_runtime_attr(attributes: &[AttributeNode]) -> bool {
         .any(|a| is_compiler_attribute(a, "runtime"))
 }
 
+pub const MAIN_LOOP_ATTR: &str = "main_loop";
+
+/// True when the extern carries `@main_loop` (it owns the main thread on Android and iOS).
+pub fn has_main_loop_attr(attributes: &[AttributeNode]) -> bool {
+    has_named_attr(attributes, MAIN_LOOP_ATTR)
+}
+
 /// True when more than one of `@c`, `@js`, `@runtime`, `@intrinsic`, or `@llvm` is on the same
 /// extern.
 pub fn extern_binding_conflict(attributes: &[AttributeNode]) -> bool {

@@ -63,8 +63,7 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
         }
     } else {
         register(l, "main", Ty::I32, vec![Ty::I32, Ty::Ptr]);
-        if l.cx.target.spec().hosts_event_loop() {
-            let host = platform_main_symbol(l);
+        if let Some(host) = main_loop_symbol(l) {
             l.host(
                 &host,
                 FnSig::plain(FnTy::new(Ty::I32, vec![Ty::I32, Ty::Ptr, Ty::Ptr, Ty::Ptr])),
@@ -117,8 +116,8 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
         if l.cx.leak_checks {
             leak_live(l);
         }
-    } else if l.cx.target.spec().hosts_event_loop() {
-        platform_main(l);
+    } else if main_loop_symbol(l).is_some() {
+        main_loop_main(l);
     } else {
         native_main(l);
     }
@@ -179,10 +178,11 @@ fn guest_entry(l: &mut Lcx<'_>, main: &MirFunction, exit: EntryExit) {
     }
     // Android and iOS own this thread's event loop. Blocking in dream_run_loop would take it
     // from the operating system; the platform loop calls dream_scheduler_pump between frames.
-    if async_n > 0 && !fx.l.cx.target.spec().hosts_event_loop() {
+    let loop_owned = main_loop_symbol(fx.l).is_some();
+    if async_n > 0 && !loop_owned {
         fx.call("dream_run_loop", &[]);
     }
-    if fx.l.cx.target.spec().hosts_event_loop() {
+    if loop_owned {
         fx.w.ret(Some(&Value::i32(0)));
         fx.finish();
         return;
@@ -288,8 +288,9 @@ fn leak_live(l: &mut Lcx<'_>) {
 }
 
 /// Android loads this from the app's shared library and iOS starts the executable here; the
-/// window host runs the platform loop, calling the guest entry once and the pump every frame.
-fn platform_main(l: &mut Lcx<'_>) {
+/// `@main_loop` function runs the platform loop, calling the guest entry once and the pump every
+/// frame.
+fn main_loop_main(l: &mut Lcx<'_>) {
     let mut fx = glue(l, "main");
     let (argc, argv) = (fx.arg(0), fx.arg(1));
     if fx.l.requirements.process_arguments {
@@ -297,17 +298,19 @@ fn platform_main(l: &mut Lcx<'_>) {
     }
     let entry = V::s(fx.l.fn_ref(crate::abi::GUEST_ENTRY_FN));
     let pump = V::s(fx.l.fn_ref("dream_scheduler_pump"));
-    let host = platform_main_symbol(fx.l);
+    let host = main_loop_symbol(fx.l).expect("checked by emit_all");
     let rc = fx.call_v(&host, &[argc, argv, entry, pump]);
     fx.w.ret(Some(&rc.v));
     fx.finish();
 }
 
-fn platform_main_symbol(l: &Lcx<'_>) -> String {
-    l.mir
-        .platform_main
-        .clone()
-        .expect("system.core declares the platform_main host loop")
+/// The `@main_loop` symbol when this target's operating system owns the main thread. Without one
+/// the program runs `main` and its scheduler loop directly.
+fn main_loop_symbol(l: &Lcx<'_>) -> Option<String> {
+    if !l.cx.target.spec().hosts_event_loop() {
+        return None;
+    }
+    l.mir.main_loop.as_ref().map(|(_, symbol)| symbol.clone())
 }
 
 fn native_main(l: &mut Lcx<'_>) {

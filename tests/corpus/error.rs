@@ -153,6 +153,11 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error(
+        "main_loop_errors",
+        "only one '@main_loop' function may be linked; 'first_loop' already owns the main loop\n'@main_loop' externs must be declared `(argc: int, argv: isize, entry: isize, pump: isize): int`",
+        true,
+    ),
+    Case::error(
         "module_errors",
         "'private_only' in module 'priv.mod' is private; only 'public'/'internal' items can be imported with 'as'\nFunction 'h' is not 'public'; it is private to its file\n'x' is private to 'Vector'\nDuplicate overload: 'add' with the same parameter types is already defined",
         true,

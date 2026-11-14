@@ -102,8 +102,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/requires_member_attribute.dream"),
         ),
         (
-            "<std>/system/core/platform_main.dream",
-            include_str!("../system/core/platform_main.dream"),
+            "<std>/system/core/main_loop_attribute.dream",
+            include_str!("../system/core/main_loop_attribute.dream"),
         ),
         (
             "<std>/system/core/async_host_attribute.dream",

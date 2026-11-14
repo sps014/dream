@@ -1,7 +1,0 @@
-module system.core;
-
-// Programs never call this; the generated `main` does, with the platform entry signature
-// `int(int argc, char** argv, void* entry, void* pump)`. The parameters here only name the slots.
-@runtime("dream_window_app_main", "window")
-@native
-internal extern fun platform_main(argc: int, argv: isize, entry: isize, pump: isize): int;

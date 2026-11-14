@@ -146,6 +146,7 @@ impl<'a> Analyzer<'a> {
         node: &'a ProgramView<'a>,
         diagnostics: &mut DiagnosticBag,
     ) {
+        self.check_main_loop_declarations(&node.functions, diagnostics);
         let mut exported = indexmap::IndexSet::new();
         for function in node.functions.iter() {
             diagnostics.file_path = file_path_string(&function.file_path);

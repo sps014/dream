@@ -45,9 +45,8 @@ thread_local! {
 
 fn flatten_backdrops() -> bool {
     #[cfg(test)]
-    if UNBATCHED.get() {
-        return false;
-    }
+    return !UNBATCHED.get();
+    #[cfg(not(test))]
     true
 }
 

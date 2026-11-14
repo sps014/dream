@@ -147,10 +147,7 @@ pub(super) fn region_safe_body(cx: &mut SafeCx<'_>, f: &MirFunction) -> bool {
     // function allocated it. A getter hands back an occupant the container still owns — and for a
     // niche union (`JsonValue.get` returning `Option.Some(child)`) the wrapper *is* that child's
     // pointer, so the leave's alias nulls would drop the caller's reference to a live object.
-    if cx.interner.is_rc_tracked(f.ret) && !returns_fresh(cx.interner, f) {
-        return false;
-    }
-    true
+    !cx.interner.is_rc_tracked(f.ret) || returns_fresh(cx.interner, f)
 }
 
 /// Every `Return` hands back memory this function allocated, directly or through copies of such a

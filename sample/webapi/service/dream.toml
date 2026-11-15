@@ -7,3 +7,4 @@ entry = "app.dream"
 webapi = { path = "../../../packages/webapi" }
 http = { path = "../../../packages/http" }
 encoding = { path = "../../../packages/encoding" }
+validation = { path = "../../../packages/validation" }

@@ -27,7 +27,7 @@ it accepts only the `demo` account and does not link external identities.
 ```dream
 module service.models;
 import system.json;
-import system.validation;
+import validation;
 
 @json
 public class CreateMessage {

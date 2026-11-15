@@ -258,7 +258,7 @@ fn program_cache_hit_keeps_access_to_private_referenced_functions() {
         packages.join("encoding"),
     )
     .unwrap();
-    crate::common::link_packages(&dir, &["http", "webapi"]);
+    crate::common::link_packages(&dir, &["http", "webapi", "validation"]);
     let (_, first_ir) = compile(&dir);
     let (hit_log, hit_ir) = compile(&dir);
     assert!(has(&hit_log, "gen program: cache hit"), "{hit_log:?}");

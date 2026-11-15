@@ -1,8 +1,0 @@
-module system.validation;
-
-/// Inclusive upper numeric bound.
-@attribute(AttributeTarget.Field, AttributeTarget.Parameter)
-public struct MaximumAttribute {
-    /// Inclusive maximum numeric value.
-    public value: double;
-}

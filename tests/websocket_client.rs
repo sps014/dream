@@ -80,7 +80,7 @@ type = "test"
 "#,
     )
     .unwrap();
-    crate::common::link_packages(root.path(), &["http", "webapi"]);
+    crate::common::link_packages(root.path(), &["http", "webapi", "validation"]);
     let source = format!(
         r#"
 import webapi;

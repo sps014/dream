@@ -1,6 +1,6 @@
 import system;
 import system.json;
-import system.validation;
+import validation;
 import system.testing;
 
 fun valid_name(value: string): Option<string> {

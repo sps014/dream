@@ -1,0 +1,8 @@
+module validation;
+
+/// Inclusive lower numeric bound.
+@attribute(AttributeTarget.Field, AttributeTarget.Parameter)
+public struct MinimumAttribute {
+    /// Inclusive minimum numeric value.
+    public value: double;
+}

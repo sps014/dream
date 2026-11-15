@@ -6,12 +6,12 @@ icon: material/check-all
 
 # Models and validation
 
-Import `system.validation` for strict, reusable model decoding. These same rules describe web request models in OpenAPI.
+Import `validation` for strict, reusable model decoding. These same rules describe web request models in OpenAPI.
 
 ```dream
 import system;
 import system.json;
-import system.validation;
+import validation;
 
 @json
 class Person {

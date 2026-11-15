@@ -6622,6 +6622,37 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/core/requires_member_attribute.dream",
+    "package": "system.core",
+    "page": "reference/api/core-requires-member-attribute.md",
+    "declarations": [
+      {
+        "signature": "public struct RequiresMemberAttribute",
+        "description": "Requires the type bound to the generic parameter `parameter` to provide `member` at every call of the function. A call whose type lacks it reports `message`, with `{type}` replaced by the bound type. A method on a generic extension uses a requirement without a message to state what its own type parameters need, and the caller's requirement checks those transitively.",
+        "line": 9,
+        "page": "reference/api/core-requires-member-attribute.md"
+      },
+      {
+        "signature": "public parameter: string",
+        "description": "Generic parameter whose bound type must provide the member.",
+        "line": 11,
+        "page": "reference/api/core-requires-member-attribute.md"
+      },
+      {
+        "signature": "public member: string",
+        "description": "Method name the bound type must declare, directly or through an extension.",
+        "line": 13,
+        "page": "reference/api/core-requires-member-attribute.md"
+      },
+      {
+        "signature": "public message: Option<string>",
+        "description": "Error reported at the call when the requirement fails.",
+        "line": 15,
+        "page": "reference/api/core-requires-member-attribute.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/core/result.dream",
     "package": "system.core",
     "page": "reference/api/core-result.md",
@@ -17141,332 +17172,6 @@
         "description": "Suspends the calling task for at least `ms` milliseconds of real time. In a browser or Node module this waits on a JavaScript timer, so the host event loop (I/O callbacks, rendering) runs meanwhile; natively it behaves like `sleep`. Returns `Err(CancelledError)` when `token` is cancelled first.",
         "line": 28,
         "page": "reference/api/time.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/allow_extra_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-allow-extra-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct AllowExtraAttribute",
-        "description": "Permits additional input properties on a model; the default is to reject them.",
-        "line": 5,
-        "page": "reference/api/validation-allow-extra-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/default_json_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-default-json-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct DefaultJsonAttribute",
-        "description": "JSON encoded field default, applied only when the property is absent.",
-        "line": 5,
-        "page": "reference/api/validation-default-json-attribute.md"
-      },
-      {
-        "signature": "public value: string",
-        "description": "JSON text decoded as the field default when the property is absent.",
-        "line": 7,
-        "page": "reference/api/validation-default-json-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/derive/validation_derive.dream",
-    "package": "system.validation.derive",
-    "page": "reference/api/validation-derive-validation-derive.md",
-    "declarations": [
-      {
-        "signature": "public fun validation_derive(ctx: GenContext): void",
-        "description": "Generates validation and schema support for annotated declarations.",
-        "line": 22,
-        "page": "reference/api/validation-derive-validation-derive.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/derive/validation_generator.dream",
-    "package": "system.validation.derive",
-    "page": "reference/api/validation-derive-validation-generator.md",
-    "declarations": [
-      {
-        "signature": "public static class ValidationGenerator",
-        "description": "Schema generation shared by standalone validation and the web API generator.",
-        "line": 8,
-        "page": "reference/api/validation-derive-validation-generator.md"
-      },
-      {
-        "signature": "public static fun constraints(attributes: List<GenAttribute>, schema: JsonValue): void",
-        "description": "Adds the constraints described by `attributes` to the JSON schema.",
-        "line": 10,
-        "page": "reference/api/validation-derive-validation-generator.md"
-      },
-      {
-        "signature": "public static fun model(d: GenDecl, ctx: GenContext, definitions: JsonValue): JsonValue",
-        "description": "Builds a JSON schema for declaration `d`, recording reusable definitions.",
-        "line": 51,
-        "page": "reference/api/validation-derive-validation-generator.md"
-      },
-      {
-        "signature": "public static fun type_schema( ty: GenTypeRef, ctx: GenContext, definitions: JsonValue ): JsonValue",
-        "description": "Builds a JSON schema for `ty`, recording reusable definitions.",
-        "line": 82,
-        "page": "reference/api/validation-derive-validation-generator.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/max_length_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-max-length-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct MaxLengthAttribute",
-        "description": "Maximum string or collection length.",
-        "line": 5,
-        "page": "reference/api/validation-max-length-attribute.md"
-      },
-      {
-        "signature": "public value: int",
-        "description": "Maximum number of characters or collection elements.",
-        "line": 7,
-        "page": "reference/api/validation-max-length-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/maximum_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-maximum-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct MaximumAttribute",
-        "description": "Inclusive upper numeric bound.",
-        "line": 5,
-        "page": "reference/api/validation-maximum-attribute.md"
-      },
-      {
-        "signature": "public value: double",
-        "description": "Inclusive maximum numeric value.",
-        "line": 7,
-        "page": "reference/api/validation-maximum-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/min_length_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-min-length-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct MinLengthAttribute",
-        "description": "Minimum string or collection length.",
-        "line": 5,
-        "page": "reference/api/validation-min-length-attribute.md"
-      },
-      {
-        "signature": "public value: int",
-        "description": "Minimum number of characters or collection elements.",
-        "line": 7,
-        "page": "reference/api/validation-min-length-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/minimum_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-minimum-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct MinimumAttribute",
-        "description": "Inclusive lower numeric bound.",
-        "line": 5,
-        "page": "reference/api/validation-minimum-attribute.md"
-      },
-      {
-        "signature": "public value: double",
-        "description": "Inclusive minimum numeric value.",
-        "line": 7,
-        "page": "reference/api/validation-minimum-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/model_validator_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-model-validator-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct ModelValidatorAttribute",
-        "description": "A static model validator returning structured issues after fields pass validation.",
-        "line": 5,
-        "page": "reference/api/validation-model-validator-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/pattern_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-pattern-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct PatternAttribute",
-        "description": "Regular expression required for a string.",
-        "line": 5,
-        "page": "reference/api/validation-pattern-attribute.md"
-      },
-      {
-        "signature": "public value: string",
-        "description": "Regular expression that the input string must match.",
-        "line": 7,
-        "page": "reference/api/validation-pattern-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/validate_with_attribute.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-validate-with-attribute.md",
-    "declarations": [
-      {
-        "signature": "public struct ValidateWithAttribute",
-        "description": "A synchronous field validator returning an optional error message.",
-        "line": 5,
-        "page": "reference/api/validation-validate-with-attribute.md"
-      },
-      {
-        "signature": "public validator: DeclarationPath",
-        "description": "Synchronous validation function; returns `None` on success or an error message on failure.",
-        "line": 8,
-        "page": "reference/api/validation-validate-with-attribute.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/validation.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-validation.md",
-    "declarations": [
-      {
-        "signature": "public static class Validation",
-        "description": "Strict decoding and validation derived for @json models.",
-        "line": 15,
-        "page": "reference/api/validation-validation.md"
-      },
-      {
-        "signature": "public static fun decode<T>(text: string): Result<T, ValidationErrors>",
-        "description": "Decodes and validates JSON as `T`, returning the collected validation issues on failure.",
-        "line": 18,
-        "page": "reference/api/validation-validation.md"
-      },
-      {
-        "signature": "public static fun validate<T>(value: T): Result<T, ValidationErrors>",
-        "description": "Checks `value` against its validation attributes; returns the value or collected issues.",
-        "line": 24,
-        "page": "reference/api/validation-validation.md"
-      },
-      {
-        "signature": "public static fun schema<T>(): JsonValue",
-        "description": "Returns the JSON Schema describing `T` and its validation constraints.",
-        "line": 30,
-        "page": "reference/api/validation-validation.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/validation_errors.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-validation-errors.md",
-    "declarations": [
-      {
-        "signature": "public class ValidationErrors: Error",
-        "description": "Deterministically ordered input errors without echoing sensitive submitted values.",
-        "line": 4,
-        "page": "reference/api/validation-validation-errors.md"
-      },
-      {
-        "signature": "public issues: List<ValidationIssue>",
-        "description": "Validation failures, in discovery order.",
-        "line": 6,
-        "page": "reference/api/validation-validation-errors.md"
-      },
-      {
-        "signature": "public constructor()",
-        "description": "Creates a `ValidationErrors` with default settings.",
-        "line": 9,
-        "page": "reference/api/validation-validation-errors.md"
-      },
-      {
-        "signature": "public fun add(location: List<string>, code: string, message: string): void",
-        "description": "Appends an issue with the supplied location, code, and message.",
-        "line": 14,
-        "page": "reference/api/validation-validation-errors.md"
-      },
-      {
-        "signature": "public fun is_empty(): bool",
-        "description": "Returns whether there are no elements.",
-        "line": 19,
-        "page": "reference/api/validation-validation-errors.md"
-      },
-      {
-        "signature": "public fun code(): string",
-        "description": "Returns `EVALIDATION`, the code shared by every input validation failure.",
-        "line": 24,
-        "page": "reference/api/validation-validation-errors.md"
-      },
-      {
-        "signature": "public fun message(): string",
-        "description": "Returns each issue as `location: message`, joined with `; `, with location parts joined by `.`. An empty collection returns `validation failed`.",
-        "line": 30,
-        "page": "reference/api/validation-validation-errors.md"
-      },
-      {
-        "signature": "public fun to_json(): JsonValue",
-        "description": "Returns validation issues as JSON, including their location, code, and message.",
-        "line": 42,
-        "page": "reference/api/validation-validation-errors.md"
-      }
-    ]
-  },
-  {
-    "source": "crates/dream-stdlib/src/system/validation/validation_issue.dream",
-    "package": "system.validation",
-    "page": "reference/api/validation-validation-issue.md",
-    "declarations": [
-      {
-        "signature": "public class ValidationIssue",
-        "description": "One input failure; locations use JSON property names and decimal collection indices.",
-        "line": 5,
-        "page": "reference/api/validation-validation-issue.md"
-      },
-      {
-        "signature": "public location: List<string>",
-        "description": "Path to the invalid value, from the outermost field to the failing item.",
-        "line": 7,
-        "page": "reference/api/validation-validation-issue.md"
-      },
-      {
-        "signature": "public code: string",
-        "description": "Error code identifying the failure.",
-        "line": 10,
-        "page": "reference/api/validation-validation-issue.md"
-      },
-      {
-        "signature": "public message: string",
-        "description": "Human-readable explanation of the result or failure.",
-        "line": 13,
-        "page": "reference/api/validation-validation-issue.md"
-      },
-      {
-        "signature": "public constructor(location: List<string>, code: string, message: string)",
-        "description": "Creates a `ValidationIssue` with `location`, `code`, `message`.",
-        "line": 16,
-        "page": "reference/api/validation-validation-issue.md"
       }
     ]
   },

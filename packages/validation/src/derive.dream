@@ -1,0 +1,8 @@
+module validation.derive;
+
+import system;
+import system.codegen;
+import system.json;
+import validation;
+
+import derive.validation_generator;

@@ -43,6 +43,7 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [RawPtr](core-raw-ptr.md)
 - [ReadOnlySpan](core-read-only-span.md)
 - [RepeatableAttribute](core-repeatable-attribute.md)
+- [RequiresMemberAttribute](core-requires-member-attribute.md)
 - [Result](core-result.md)
 - [RuntimeAttribute](core-runtime-attribute.md)
 - [RuntimeTrait](core-runtime-trait.md)

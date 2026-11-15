@@ -6,8 +6,9 @@ type = "lib"
 description = "HTTP server, routes, and request handlers."
 
 [dependencies]
-http = { path = "../http" }
-encoding = { path = "../encoding" }
+http = { version = "0.1.0", path = "../http" }
+encoding = { version = "0.1.0", path = "../encoding" }
+validation = { version = "0.1.0", path = "../validation" }
 
 [dev-dependencies]
 webapi = { path = "." }

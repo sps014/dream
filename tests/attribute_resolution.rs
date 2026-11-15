@@ -256,7 +256,7 @@ fn webapi_generated_native_ir_is_deterministic() {
     use dream::{driver::compiler::Compiler, driver::toolchain::ToolchainConfig};
     use dream_mir::backend::Target;
     let root = tempfile::tempdir().unwrap();
-    crate::common::link_packages(root.path(), &["http", "webapi"]);
+    crate::common::link_packages(root.path(), &["http", "webapi", "validation"]);
     let source = root.path().join("main.dream");
     let output = root.path().join("main.ll");
     std::fs::write(
@@ -293,7 +293,7 @@ async fun main(): void {
 #[test]
 fn webapi_router_imports_model_types_from_loaded_modules() {
     let root = tempfile::tempdir().unwrap();
-    crate::common::link_packages(root.path(), &["http", "webapi"]);
+    crate::common::link_packages(root.path(), &["http", "webapi", "validation"]);
     std::fs::write(
         root.path().join("models.dream"),
         r#"

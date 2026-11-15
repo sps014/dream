@@ -22,8 +22,6 @@ mod system;
 mod task;
 mod testing;
 mod text;
-mod validation;
-mod validation_derive;
 mod window;
 
 /// One embedded stdlib package: dotted import name, ordered source files, and package deps.
@@ -102,8 +100,6 @@ pub const STD_PACKAGES: &[StdPackage] = &[
     crypto::PACKAGE,
     drawing::PACKAGE,
     drawing_gpu::PACKAGE,
-    validation::PACKAGE,
-    validation_derive::PACKAGE,
     process::PACKAGE,
     system::PACKAGE,
     app::PACKAGE,

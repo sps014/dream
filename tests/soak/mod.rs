@@ -90,7 +90,7 @@ fn web_task_and_websocket_soak() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("service.dream");
     std::fs::write(&source, include_str!("service.dream")).unwrap();
-    crate::common::link_packages(dir.path(), &["http", "webapi"]);
+    crate::common::link_packages(dir.path(), &["http", "webapi", "validation"]);
     let binary = dir.path().join("service.bin");
     let built = Command::new(env!("CARGO_BIN_EXE_dream"))
         .args(["build", "--release", "-o"])

@@ -2,8 +2,8 @@ module webapi.derive;
 import system;
 import system.codegen;
 import webapi;
-import system.validation;
-import system.validation.derive;
+import validation;
+import validation.derive;
 import system.json;
 
 extend WebGenerator {

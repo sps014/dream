@@ -6,7 +6,7 @@ type = "lib"
 description = "16-byte UUID values."
 
 [dependencies]
-encoding = { path = "../encoding" }
+encoding = { version = "0.1.0", path = "../encoding" }
 
 [dev-dependencies]
 uuid = { path = "." }

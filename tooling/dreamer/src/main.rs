@@ -156,7 +156,8 @@ enum Cmd {
         #[arg(long)]
         node: bool,
     },
-    /// Package the current project and publish it to a registry.
+    /// Package the current project and publish it to a registry. At a workspace root, publishes
+    /// every member, dependencies before the packages that require them.
     Publish {
         /// Registry base URL; defaults to [registries] default in dream.toml.
         #[arg(long)]

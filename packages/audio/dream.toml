@@ -6,7 +6,7 @@ type = "lib"
 description = "Audio playback, capture, and frequency analysis."
 
 [dependencies]
-http = { path = "../http" }
+http = { version = "0.1.0", path = "../http" }
 
 [dev-dependencies]
 audio = { path = "." }

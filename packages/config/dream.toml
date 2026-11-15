@@ -6,7 +6,7 @@ type = "lib"
 description = "Layered configuration from defaults, files, environment, and arguments."
 
 [dependencies]
-cli = { path = "../cli" }
+cli = { version = "0.1.0", path = "../cli" }
 
 [dev-dependencies]
 config = { path = "." }

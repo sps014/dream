@@ -25,7 +25,7 @@ harness = false
 dream-host-core = { path = "../dream-host-core" }
 dream-host-abi = { path = "../dream-host-abi" }
 # Cargo.lock pins the bindings and vendored SDL sources; CMake fetches no binaries.
-sdl3 = { version = "=0.22.0", default-features = false, features = ["build-from-source-static"] }
+sdl3 = { version = "=0.22.1", default-features = false, features = ["build-from-source-static"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

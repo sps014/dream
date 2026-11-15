@@ -20,7 +20,7 @@ harness = false
 dream-abi = { path = "../dream-abi" }
 dream-host-core = { path = "../dream-host-core" }
 dream-host-abi = { path = "../dream-host-abi" }
-sha2 = "0.10"
+sha2 = "0.11"
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
@@ -31,14 +31,14 @@ proptest = "1"
 dream-host-window = { path = "../dream-host-window" }
 tempfile = "3"
 tiny_http = "0.12"
-toml = "0.8"
-ureq = "2"
+toml = "1.2"
+ureq = "3"
 
 [build-dependencies]
 cmake = "0.1"
-sha2 = "0.10"
-toml = "0.8"
-ureq = "2"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.11"
+toml = "1.2"
+ureq = "3"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"

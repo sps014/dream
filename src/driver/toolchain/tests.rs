@@ -86,6 +86,15 @@ fn hosts_never_search_the_working_directory() {
 }
 
 #[test]
+fn hosts_are_found_from_a_cargo_build_unit() {
+    let root = tempfile::tempdir().unwrap();
+    let profile = root.path().join("target/debug");
+    let out = profile.join("build/dream/0123abcd/out");
+    let c = config(&[], Some(out.join("integration")), root.path().join("project"));
+    assert_eq!(c.host_library_dirs(), vec![out, profile]);
+}
+
+#[test]
 fn captured_path_is_used_for_program_resolution() {
     let root = tempfile::tempdir().unwrap();
     let name = if cfg!(windows) {

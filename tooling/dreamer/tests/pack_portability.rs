@@ -18,13 +18,11 @@ fn checked_text(command: &mut Command) -> String {
 
 fn compiler() -> PathBuf {
     let executable = std::env::current_exe().unwrap();
-    let binary = executable.parent().unwrap().parent().unwrap().join("dream");
-    assert!(
-        binary.is_file(),
-        "build the workspace before running pack portability: {}",
-        binary.display()
-    );
-    binary
+    executable
+        .ancestors()
+        .map(|dir| dir.join("dream"))
+        .find(|path| path.is_file())
+        .expect("build the workspace before running pack portability")
 }
 
 fn clean_output(executable: &Path, empty_home: &Path, working: &Path) -> Output {

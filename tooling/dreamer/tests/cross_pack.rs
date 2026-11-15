@@ -43,13 +43,13 @@ fn packages_foreign_elf_and_its_target_libraries() {
     let clang = llvm.join(if cfg!(windows) { "clang.exe" } else { "clang" });
     let sysroot =
         std::env::var_os("DREAM_SYSROOT").expect("set DREAM_SYSROOT to a foreign Linux sysroot");
-    let dream = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join(if cfg!(windows) { "dream.exe" } else { "dream" });
+    let name = if cfg!(windows) { "dream.exe" } else { "dream" };
+    let executable = std::env::current_exe().unwrap();
+    let dream = executable
+        .ancestors()
+        .map(|dir| dir.join(name))
+        .find(|path| path.is_file())
+        .expect("build the workspace before running the cross pack test");
     let (target, triple, arch) = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         ("linux-arm64", "aarch64-unknown-linux-gnu", "aarch64")
     } else {

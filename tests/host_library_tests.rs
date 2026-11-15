@@ -69,12 +69,14 @@ unsafe extern "C" fn set_park(
 
 #[test]
 fn capabilities_share_core_binding_and_allocation() {
-    let directory = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
+    let core = HostCapability::Core.library_name(&dream_abi::target::TargetSpec::host());
+    let executable = std::env::current_exe().unwrap();
+    let directory = executable
+        .ancestors()
+        .find(|dir| dir.join(&core).is_file())
+        .unwrap_or_else(|| {
+            panic!("{core} not found; `cargo test` does not build the host libraries, run `cargo build --workspace` first")
+        })
         .to_path_buf();
     unsafe {
         let libraries: Vec<_> = HostCapability::ALL

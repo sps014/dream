@@ -15,7 +15,6 @@ fn http_client_streams_and_cancels_on_native_and_node() {
         "[package]\nname = \"http_client\"\nversion = \"0.1.0\"\ntype = \"test\"\n",
     )
     .unwrap();
-    crate::common::link_packages(root.path(), &["http"]);
     std::fs::write(
         root.path().join("main.dream"),
         include_str!("fixtures/compiler/http_client.dream").replace("__BASE__", &server.url),

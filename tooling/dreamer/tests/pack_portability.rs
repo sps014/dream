@@ -176,23 +176,9 @@ fn packed_application_has_no_builder_runtime_dependency() {
     .unwrap();
     std::fs::write(
         project.join("src/main.dream"),
-        format!("import system;\nimport datetime;\nfun main(): void {{ let zone = TimeZone.local; System.println(\"{MESSAGE}\"); }}\n"),
+        format!("import system;\nfun main(): void {{ let zone = TimeZone.local; System.println(\"{MESSAGE}\"); }}\n"),
     )
     .unwrap();
-    let datetime = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../packages/datetime")
-        .canonicalize()
-        .unwrap();
-    let manifest_path = project.join("dream.toml");
-    let mut manifest = dreamer::manifest::Manifest::load(&manifest_path).unwrap();
-    manifest.dependencies.insert(
-        "datetime".into(),
-        dreamer::manifest::Dependency::Detailed(dreamer::manifest::DetailedDependency {
-            path: Some(datetime.display().to_string()),
-            ..Default::default()
-        }),
-    );
-    manifest.save(&manifest_path).unwrap();
     checked_text(
         Command::new(env!("CARGO_BIN_EXE_dreamer"))
             .arg("pack")

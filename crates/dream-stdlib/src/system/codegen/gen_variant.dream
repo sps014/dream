@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// A choice declared by an enum or discriminated union.
 public class GenVariant {

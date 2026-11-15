@@ -2,15 +2,16 @@
 title: HTTP
 summary: Send HTTP requests and stream responses.
 icon: material/web
+api: reference/api/system-net.md
 ---
 
 # HTTP clients and streamed responses
 
-Import `http` for HTTP clients, and `system.io` when copying a response to a file.
+Import `system.net` for HTTP clients, and `system.io` when copying a response to a file.
 
 ```dream
 import system;
-import http;
+import system.net;
 
 async fun main(): Result<Unit, HttpError> {
     let parsed = Url.parse("https://example.com/");
@@ -52,7 +53,7 @@ Supply a `CookieJar` to seed cookies or share a session between clients:
 
 ```dream
 import system;
-import http;
+import system.net;
 
 async fun main(): Result<Unit, HttpError> {
     let url = Url.parse("https://example.com/").unwrap();
@@ -222,7 +223,7 @@ This example runs without network access:
 
 ```dream
 import system;
-import http;
+import system.net;
 
 async fun main(): Result<Unit, HttpError> {
     let client = HttpClient();

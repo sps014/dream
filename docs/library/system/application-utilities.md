@@ -6,7 +6,7 @@ icon: material/toolbox-outline
 
 # Application utilities
 
-`csv`, `uuid`, `config`, and the temporary-resource helpers in `system.io` cover common application work. Every fallible operation returns `Result`.
+`system.csv`, `system.uuid`, `system.config`, and the temporary-resource helpers in `system.io` cover common application work. Every fallible operation returns `Result`.
 
 ## UUID values
 
@@ -17,7 +17,7 @@ icon: material/toolbox-outline
 
 ```dream
 import system;
-import uuid;
+import system.uuid;
 
 fun main(): void {
     let id = Uuid.parse("550E8400-E29B-41D4-A716-446655440000").unwrap();
@@ -53,7 +53,7 @@ Failures return `UuidError`, whose `code()` is `EUUID`.
 ```dream
 import system;
 import system.io;
-import csv;
+import system.csv;
 
 fun main(): void {
     let memory = MemoryStream();
@@ -98,9 +98,9 @@ import system.io;
 
 fun main(): void {
     let temporary = TempFile.create().unwrap();
-    temporary.file.write_all(("hello").to_utf8()).unwrap();
+    temporary.file.write_all(Encoding.utf8_encode("hello")).unwrap();
     temporary.file.seek(0L).unwrap();
-    System.println(string.from_utf8(temporary.file.read(5).unwrap()));
+    System.println(Encoding.utf8_decode(temporary.file.read(5).unwrap()));
     temporary.close().unwrap();
 }
 ```
@@ -140,8 +140,8 @@ when the operating system refuses to create them.
 
 ```dream
 import system;
-import config;
-import cli;
+import system.config;
+import system.cli;
 
 fun main(): void {
     let command = Command("server").int_option("port", default_value: 80);
@@ -203,14 +203,14 @@ setting, and `message()` combines them with the reason.
 Save this as `convert.dream`. It downloads CSV into a temporary file, adds a UUID column, and replaces the destination only after the write succeeds.
 
 ```dream
-import encoding;
+import system.encoding;
 import system;
-import cli;
-import config;
-import csv;
+import system.cli;
+import system.config;
+import system.csv;
 import system.io;
-import http;
-import uuid;
+import system.net;
+import system.uuid;
 
 fun http_failure(error: HttpError): IoError {
     return IoError.other("", error.message());
@@ -288,7 +288,7 @@ async fun main(): int {
         .string_option("output", letter: "o", default_value: "records.csv");
     let parsed = command.parse(System.args);
     if parsed.is_err() {
-        System.stderr.write_all((parsed.unwrap_err().message() + "\n").to_utf8()).unwrap();
+        System.stderr.write_all(Encoding.utf8_encode(parsed.unwrap_err().message() + "\n")).unwrap();
         System.stderr.flush().unwrap();
         return 2;
     }
@@ -298,7 +298,7 @@ async fun main(): int {
     }
     let config = ConfigBuilder().default_value("output", "records.csv").cli(parsed.unwrap()).build();
     if config.is_err() {
-        System.stderr.write_all((config.unwrap_err().message() + "\n").to_utf8()).unwrap();
+        System.stderr.write_all(Encoding.utf8_encode(config.unwrap_err().message() + "\n")).unwrap();
         System.stderr.flush().unwrap();
         return 2;
     }
@@ -307,7 +307,7 @@ async fun main(): int {
         config.unwrap().get_string("output").unwrap()
     ).await;
     if result.is_err() {
-        System.stderr.write_all((result.unwrap_err().message() + "\n").to_utf8()).unwrap();
+        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n")).unwrap();
         System.stderr.flush().unwrap();
         return 1;
     }

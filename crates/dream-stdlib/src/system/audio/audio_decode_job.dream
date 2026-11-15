@@ -1,0 +1,59 @@
+module system.audio;
+
+// One encoded buffer decoding on a background thread or decode worker. The host copies the
+// input and keeps its own reference until decoding ends, so dropping this object while a decode
+// is running never frees memory the codec still reads.
+internal class AudioDecodeJob {
+    id: usize;
+
+    constructor(id: usize) {
+        this.id = id;
+    }
+
+    del() {
+        AudioDecodeJob.release_host(this.id);
+    }
+
+    @runtime("audioDecodeStart")
+    static extern fun start_host(borrow bytes: byte[], max_bytes: int): usize;
+
+    @async_host
+    @runtime("audioDecodeWait")
+    static extern async fun wait_host(id: usize): int;
+
+    @runtime("audioDecodeResult")
+    static extern fun result_host(id: usize): float[];
+
+    @runtime("audioDecodeRelease")
+    static extern fun release_host(id: usize): void;
+
+    internal static fun start(bytes: byte[], max_bytes: int): Result<AudioDecodeJob, AudioError> {
+        let id = AudioDecodeJob.start_host(bytes, max_bytes);
+        if id == (usize)0 {
+            return Result.Err(AudioError("EBUSY", "audio decoder is unavailable or saturated"));
+        }
+        return Result.Ok(AudioDecodeJob(id));
+    }
+
+    /// Waits for the decode; a cancelled wait leaves the decode to finish unobserved.
+    internal async fun wait(token: Option<CancellationToken>): Result<Unit, AudioError> {
+        let effective_token = CancellationToken.resolve(token);
+        // A started child can outlive its awaiting parent; pin its receiver across suspension.
+        let lifetime = [this];
+        let pending = AudioDecodeJob.wait_host(lifetime[0].id);
+        if effective_token.is_some() {
+            let result = effective_token.unwrap().wait(pending).await;
+            if result.is_err() {
+                return Result.Err(AudioError("ECANCELLED", "audio decoding was cancelled"));
+            }
+        } else {
+            pending.await;
+        }
+        return Result.Ok(Unit());
+    }
+
+    /// Empty for unsupported input, one negative status word, or rate, channels and PCM.
+    internal fun result(): float[] {
+        return AudioDecodeJob.result_host(this.id);
+    }
+}

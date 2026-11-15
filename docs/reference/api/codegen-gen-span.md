@@ -47,5 +47,5 @@ public length: int
 Decodes a `GenSpan` from its object in the generation snapshot.
 
 ```dream
-public constructor(borrow v: GenWire)
+public constructor(borrow v: JsonValue)
 ```

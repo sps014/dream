@@ -10,7 +10,7 @@ Set both PEM paths in `ServerConfig` to terminate TLS in the native listener, or
 
 ```dream
 import system;
-import webapi;
+import system.webapi;
 
 @router("")
 class Routes {
@@ -73,4 +73,4 @@ Run the service inside `App.run` so a supervisor `SIGTERM` stops it: the server 
 
 Set `timeout_graceful_shutdown_ms` below the supervisor's kill timeout so slow requests end before the process is killed.
 
-See the [complete example](../web-server/example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](../web-server/example.md).

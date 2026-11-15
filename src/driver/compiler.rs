@@ -13,7 +13,7 @@ use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{ProgramAccumulator, parse_file_recursive};
 use crate::driver::ui::{BuildReporter, SilentReporter};
 use crate::driver::wasm_opt::OptLevel;
-use dream_abi::compile_targets::CompileTargets;
+use dream_abi::attributes::CompileTargets;
 use dream_diagnostics::{DiagnosticBag, format_diagnostics, render_with};
 use dream_mir::backend::Target;
 use dream_sema::analyzer::Analyzer;
@@ -81,9 +81,6 @@ pub struct Compiler {
     /// Source of the entry file when it is compiler-made (generator harnesses) rather than read
     /// from disk; imports still resolve relative to the entry path's directory.
     virtual_entry: Option<String>,
-    /// Directory whose `dream_packages/` resolves package imports, when it is not the entry's own
-    /// project (a dependency's generator harness sits inside that dependency).
-    package_base: Option<std::path::PathBuf>,
     /// Print diagnostics to stderr when a compile fails. Off for nested generator builds, whose
     /// diagnostics the outer compile reports itself.
     render_diagnostics: bool,
@@ -146,7 +143,6 @@ impl Compiler {
             optimize: None,
             generator_stage: crate::driver::generate::GeneratorStage::All,
             virtual_entry: None,
-            package_base: None,
             render_diagnostics: true,
             runtimes: Vec::new(),
             compile_targets,
@@ -235,12 +231,6 @@ impl Compiler {
     /// Builder: compile `source` as the entry file instead of reading the entry path from disk.
     pub fn with_virtual_entry(mut self, source: String) -> Self {
         self.virtual_entry = Some(source);
-        self
-    }
-
-    /// Builder: resolve package imports against `dir`'s `dream_packages/` instead of the entry's.
-    pub fn with_package_base(mut self, dir: std::path::PathBuf) -> Self {
-        self.package_base = Some(dir);
         self
     }
 
@@ -445,7 +435,7 @@ fn report_wasm_c_imports(
             format!(
                 "'{what}' has no package C/C++ source set for wasm32; \
                  provide portable sources in `native/`, bind the browser/Node equivalent with `@js`, \
-                 or guard the declaration with `@cfg(Target.Native)`"
+                 or guard the call with `@native`"
             ),
             Some(at),
             file,

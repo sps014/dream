@@ -1,5 +1,5 @@
 import system;
-import http;
+import system.net;
 import system.testing;
 import application;
 
@@ -14,9 +14,9 @@ async fun service_login(): void {
         Url.parse("http://127.0.0.1:" + port.to_string() + "/auth/login").unwrap()
     );
     request.headers.set("Content-Type", "application/json");
-    request.body = (
+    request.body = Encoding.utf8_encode(
         "{\"username\":\"demo\",\"password\":\"example-password\"}"
-    ).to_utf8();
+    );
     let response = client.send(request).await.unwrap();
     Assert.eq(response.status, 200);
     response.close();

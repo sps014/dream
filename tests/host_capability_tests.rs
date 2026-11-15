@@ -30,7 +30,9 @@ fn unused_capability_imports_and_functions_do_not_link_hosts() {
             r#"
         import system;
         import system.crypto;
+        import system.cli;
         import system.text;
+        fun unused_cli(): Command { return Command("unused"); }
         fun unused(): byte[] { return SecureRandom.bytes(1).unwrap(); }
         fun main(): void { System.println("hello"); }
     "#
@@ -86,6 +88,7 @@ fn optional_services_select_exact_libraries_and_bind_core() {
     );
     for (stem, capability) in [
         ("crypto_basic", HostCapability::Crypto),
+        ("process_run_basic", HostCapability::Process),
         ("app_signals", HostCapability::App),
     ] {
         let source = std::fs::read_to_string(crate::common::compiler_fixture(stem)).unwrap();
@@ -100,7 +103,7 @@ fn service_combinations_keep_one_core_and_canonical_order() {
             r#"
         import system; import system.text; import system.crypto;
         fun main(): void {
-            let text = "X".to_lower_unicode();
+            let text = "X".to_lower_unicode().normalize(UnicodeNormForm.Nfc);
             let bytes = SecureRandom.bytes(1);
             let zone = TimeZone.local;
         }
@@ -118,7 +121,7 @@ fn service_combinations_keep_one_core_and_canonical_order() {
 fn unicode_text_needs_no_host_library() {
     assert_eq!(
         inventory(
-            r#"import system.text; fun main(): void { let x = "Ǆ".to_lower_unicode(); }"#
+            r#"import system.text; fun main(): void { let x = "Ǆ".to_lower_unicode().normalize(UnicodeNormForm.Nfkc).graphemes(); }"#
         ),
         vec![]
     );

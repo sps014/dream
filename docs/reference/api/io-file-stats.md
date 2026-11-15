@@ -6,7 +6,7 @@ Read the [usage guide](../../library/io/file.md) for examples and common tasks. 
 
 ## `FileStats`
 
-File size, timestamps, mode, and entry kind returned by `File.stat`. Timestamps are UTC instants. `File.stat` follows symbolic links.
+File size, timestamps, mode, and entry kind returned by `File.stat`. Timestamps use UTC epoch milliseconds. `File.stat` follows symbolic links.
 
 ```dream
 public class FileStats
@@ -20,28 +20,28 @@ File size in bytes.
 public get size(): long
 ```
 
-## `modified`
+## `mtime_millis`
 
-Last modification time, in UTC.
+Last modification time in UTC epoch milliseconds.
 
 ```dream
-public get modified(): SystemTime
+public get mtime_millis(): long
 ```
 
-## `changed`
+## `ctime_millis`
 
-Last metadata-change time, in UTC. On Unix this is the inode change time, not the birth time.
+Last metadata-change time in UTC epoch milliseconds.
 
 ```dream
-public get changed(): SystemTime
+public get ctime_millis(): long
 ```
 
-## `accessed`
+## `atime_millis`
 
-Last access time, in UTC.
+Last access time in UTC epoch milliseconds.
 
 ```dream
-public get accessed(): SystemTime
+public get atime_millis(): long
 ```
 
 ## `mode`

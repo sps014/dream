@@ -1,9 +1,0 @@
-[package]
-name = "datetime"
-version = "0.1.0"
-edition = "2026"
-type = "lib"
-description = "Calendar dates, times of day, and IANA time zones."
-
-[dev-dependencies]
-datetime = { path = "." }

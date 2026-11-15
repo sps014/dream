@@ -1,0 +1,160 @@
+module system.text;
+
+/// Unicode normalization (UAX #15): decomposition, canonical ordering, and canonical composition.
+internal static class UnicodeNormalizer {
+    /// Normalizes `text` to `form`.
+    internal static fun normalize(text: string, form: UnicodeNormForm): string {
+        // No character below U+00A0 decomposes, composes, or has a nonzero combining class.
+        if CodePoints.all_below(text, 160) {
+            return text;
+        }
+        let compat = form == UnicodeNormForm.Nfkc || form == UnicodeNormForm.Nfkd;
+        let cps = UnicodeNormalizer.decompose(CodePoints.decode(text), compat);
+        let classes = Array.alloc<int>(cps.length);
+        let i = 0;
+        while i < cps.length {
+            classes[i] = UnicodeNormalizer.combining_class(cps[i]);
+            i = i + 1;
+        }
+        UnicodeNormalizer.reorder(cps, classes);
+        let count = cps.length;
+        if form == UnicodeNormForm.Nfc || form == UnicodeNormForm.Nfkc {
+            count = UnicodeNormalizer.compose(cps, classes);
+        }
+        let out = StringBuilder();
+        let j = 0;
+        while j < count {
+            CodePoints.append(out, cps[j]);
+            j = j + 1;
+        }
+        return out.build();
+    }
+
+    static fun combining_class(cp: int): int {
+        return UnicodeLookup.run_value(UNICODE_CCC_STARTS, UNICODE_CCC_VALUES, cp);
+    }
+
+    static fun decompose(borrow cps: int[], compat: bool): int[] {
+        let out = List<int>();
+        let i = 0;
+        while i < cps.length {
+            let cp = cps[i];
+            let s = cp - 44032;
+            if s >= 0 && s < 11172 {
+                out.push(4352 + s / 588);
+                out.push(4449 + (s % 588) / 28);
+                if s % 28 != 0 {
+                    out.push(4519 + s % 28);
+                }
+            } else if !(compat && UnicodeNormalizer.push_mapping(
+                out,
+                cp,
+                UNICODE_COMPAT_KEYS,
+                UNICODE_COMPAT_INFO,
+                UNICODE_COMPAT_DATA
+            )) && !UnicodeNormalizer.push_mapping(
+                out,
+                cp,
+                UNICODE_CANONICAL_KEYS,
+                UNICODE_CANONICAL_INFO,
+                UNICODE_CANONICAL_DATA
+            ) {
+                out.push(cp);
+            }
+            i = i + 1;
+        }
+        return out.take_array();
+    }
+
+    static fun push_mapping(
+        borrow out: List<int>,
+        cp: int,
+        borrow keys: int[],
+        borrow info: int[],
+        borrow data: int[]
+    ): bool {
+        let at = UnicodeLookup.index(keys, cp);
+        if at < 0 {
+            return false;
+        }
+        let start = info[at] >> 5;
+        let end = start + (info[at] & 31);
+        let i = start;
+        while i < end {
+            out.push(data[i]);
+            i = i + 1;
+        }
+        return true;
+    }
+
+    /// Stable-sorts each run of nonzero combining classes by class.
+    static fun reorder(borrow cps: int[], borrow classes: int[]): void {
+        let i = 1;
+        while i < cps.length {
+            let j = i;
+            while j > 0 && classes[j] != 0 && classes[j - 1] > classes[j] {
+                let cp = cps[j];
+                cps[j] = cps[j - 1];
+                cps[j - 1] = cp;
+                let cc = classes[j];
+                classes[j] = classes[j - 1];
+                classes[j - 1] = cc;
+                j = j - 1;
+            }
+            i = i + 1;
+        }
+    }
+
+    /// Composes `cps` in place and returns the new length.
+    static fun compose(borrow cps: int[], borrow classes: int[]): int {
+        if cps.length == 0 {
+            return 0;
+        }
+        let starter = 0;
+        let last_class = classes[0];
+        if last_class != 0 {
+            last_class = 256;
+        }
+        let w = 1;
+        let i = 1;
+        while i < cps.length {
+            let cp = cps[i];
+            let cc = classes[i];
+            let composite = UnicodeNormalizer.pair(cps[starter], cp);
+            if composite >= 0 && (last_class < cc || last_class == 0) {
+                cps[starter] = composite;
+            } else {
+                if cc == 0 {
+                    starter = w;
+                }
+                last_class = cc;
+                cps[w] = cp;
+                w = w + 1;
+            }
+            i = i + 1;
+        }
+        return w;
+    }
+
+    /// The primary composite of `first` followed by `second`, or -1.
+    static fun pair(first: int, second: int): int {
+        let l = first - 4352;
+        let v = second - 4449;
+        if l >= 0 && l < 19 && v >= 0 && v < 21 {
+            return 44032 + (l * 21 + v) * 28;
+        }
+        let s = first - 44032;
+        let t = second - 4519;
+        if s >= 0 && s < 11172 && s % 28 == 0 && t > 0 && t < 28 {
+            return first + t;
+        }
+        let at = UnicodeLookup.index_long(
+            UNICODE_COMPOSE_KEYS,
+            ((long)first << 21L) | (long)second
+        );
+        if at < 0 {
+            return -1;
+        }
+        return UNICODE_COMPOSE_VALUES[at];
+    }
+}

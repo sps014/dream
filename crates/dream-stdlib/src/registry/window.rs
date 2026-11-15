@@ -50,10 +50,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/window/window_size.dream"),
         ),
         (
-            "<std>/system/window/main_loop.dream",
-            include_str!("../system/window/main_loop.dream"),
-        ),
-        (
             "<std>/system/window/window_vector.dream",
             include_str!("../system/window/window_vector.dream"),
         ),

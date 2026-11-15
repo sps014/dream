@@ -64,9 +64,7 @@ pub fn run(
 ) -> Result<GenResult, String> {
     let files = RunFiles::new(&config.generator_cache_root(), generator)
         .map_err(|e| format!("generator '{generator}': scratch files: {e}"))?;
-    let snapshot_bytes = super::wire::encode_json(snapshot_json)
-        .map_err(|e| format!("generator '{generator}': encode snapshot: {e}"))?;
-    std::fs::write(&files.snapshot, &snapshot_bytes)
+    std::fs::write(&files.snapshot, snapshot_json)
         .map_err(|e| format!("generator '{generator}': write snapshot: {e}"))?;
     let mut cmd = Command::new(&exe.bin);
     let module = exe.ll.to_string_lossy().into_owned();
@@ -141,13 +139,13 @@ pub fn run(
             debug_hint()
         ));
     }
-    let result_bytes = std::fs::read(&files.result).map_err(|e| {
+    let text = std::fs::read_to_string(&files.result).map_err(|e| {
         format!(
             "generator '{generator}' wrote no result ({e}); {}",
             debug_hint()
         )
     })?;
-    let mut result: GenResult = super::wire::decode_typed(&result_bytes)
+    let mut result: GenResult = serde_json::from_str(&text)
         .map_err(|e| format!("generator '{generator}' wrote a malformed result: {e}"))?;
     if result.version != super::model::SNAPSHOT_VERSION || result.generator != generator {
         return Err(format!(

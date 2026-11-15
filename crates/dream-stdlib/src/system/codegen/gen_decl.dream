@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// A class, struct, union, enum or interface the generator's triggers selected.
 public class GenDecl {

@@ -2,17 +2,18 @@
 title: CLI arguments
 summary: Define commands and parse command-line arguments.
 icon: material/console-line
+api: reference/api/system-cli.md
 ---
 
 # Command-line arguments
 
-Import `cli` to declare commands, flags, options, positionals, and subcommands. `parse` returns `Result<ParsedArguments, CliError>` and does not print or exit.
+Import `system.cli` to declare commands, flags, options, positionals, and subcommands. `parse` returns `Result<ParsedArguments, CliError>` and does not print or exit.
 
 Help and version are successful results, so your program decides how to show them. Parsing works the same on every target.
 
 ```dream
 import system;
-import cli;
+import system.cli;
 
 fun main(): void {
     let command = Command("download")
@@ -100,7 +101,7 @@ so a misspelled name or a getter of the wrong type is reported instead of guesse
 
 ```dream
 import system;
-import cli;
+import system.cli;
 
 fun main(): void {
     let check = Command("check")
@@ -145,16 +146,16 @@ check help and version before starting the program's work.
 
 ```dream
 import system.io;
-import encoding;
+import system.encoding;
 import system;
-import cli;
+import system.cli;
 
 fun main(): int {
     let command = Command("inspect").version("1.0.0").positional("path", required: true);
 
     let result = command.parse(System.args);
     if result.is_err() {
-        System.stderr.write_all((result.unwrap_err().message() + "\n").to_utf8()).unwrap();
+        System.stderr.write_all(Encoding.utf8_encode(result.unwrap_err().message() + "\n")).unwrap();
         System.stderr.flush().unwrap();
         return 2;
     }
@@ -179,3 +180,4 @@ fun main(): int {
 The [download walkthrough](../../cookbook/download-file.md) applies this pattern to
 HTTP transfers, with each step and its cleanup explained on the page.
 
+[Command declarations](../../reference/api/cli-command.md) · [Parsed arguments and errors](../../reference/api/cli-parsed-arguments.md)

@@ -9,7 +9,7 @@ api: reference/api/system-net.md
 
 ## TCP and UDP
 
-`TcpListener`, `TcpStream`, and `UdpSocket` work on native, Node, and WASI builds. They do not exist in a browser build, so code that uses them fails to compile there; use the HTTP client from `http` instead.
+`TcpListener`, `TcpStream`, and `UdpSocket` work on native and Node. Browsers report `SocketCapabilities.supported == false` and return `EUNSUPPORTED`; use the HTTP client there.
 
 ```dream
 import system;
@@ -21,7 +21,7 @@ async fun main(): void {
     Promise.start(connecting);
     let server = listener.accept().await.unwrap();
     let client = connecting.await.unwrap();
-    client.write_all_async(("hello").to_utf8()).await.unwrap();
+    client.write_all_async(Encoding.utf8_encode("hello")).await.unwrap();
     client.shutdown_write().unwrap();
     let text = "";
     while true {
@@ -29,7 +29,7 @@ async fun main(): void {
         if bytes.length == 0 {
             break;
         }
-        text = text + string.from_utf8(bytes);
+        text = text + Encoding.utf8_decode(bytes);
     }
     System.println(text);
     server.close().unwrap();
@@ -49,8 +49,7 @@ TCP streams implement `AsyncReader` and `AsyncWriter`. Reads and writes may retu
 
 `connect`, `accept`, and `read_with_timeout` take a millisecond deadline. Zero means no deadline.
 
-- Async methods use the current task's cancellation unless you pass a token. Bytes already transferred stay transferred, and bytes a cancelled or timed-out read already received are returned by the next read.
-- A deadline covers connecting to each resolved address. A name lookup that the system resolver is still running finishes before the deadline is checked.
+- Async methods use the current task's cancellation unless you pass a token. Bytes already transferred stay transferred.
 - `close()` wakes pending operations and is safe to call again. An accepted stream stays valid after its listener closes.
 - Node queues at most 64 accepted sockets and rejects more. The native listener uses the operating system's backlog.
 
@@ -103,26 +102,26 @@ Async methods below also accept an optional trailing `token: Option<Cancellation
 
 ## Streaming gzip and zlib
 
-`compress` reads and writes gzip and zlib (DEFLATE) streams that match other tools, on every target, with nothing extra to deploy.
+`system.compress` reads and writes gzip and zlib (DEFLATE) streams that match other tools, on every target, with nothing extra to deploy.
 
 A wrapper borrows the underlying stream. It works in chunks and stops at `max_output_bytes` (default 64 MiB, at most 1 GiB).
 
 ```dream
 import system;
 import system.io;
-import compress;
+import system.compress;
 
 fun main(): void {
     let encoded = MemoryStream();
     let writer = Compression.writer(encoded, CompressionFormat.Gzip).unwrap();
-    writer.write_all(("hello compression").to_utf8()).unwrap();
+    writer.write_all(Encoding.utf8_encode("hello compression")).unwrap();
     writer.finish().unwrap();
     encoded.seek(0L).unwrap();
     let reader = Compression.reader(encoded, CompressionFormat.Gzip).unwrap();
     let decoded = MemoryStream();
     Streams.copy(reader, decoded).unwrap();
     decoded.seek(0L).unwrap();
-    System.println(string.from_utf8(decoded.read(100).unwrap()));
+    System.println(Encoding.utf8_decode(decoded.read(100).unwrap()));
     reader.close();
 }
 ```

@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// Decoded snapshot behind a `GenContext`.
 public class GenSnapshot {
@@ -39,7 +40,7 @@ public class GenSnapshot {
     public target: string;
 
     /// Options supplied to this generator.
-    public options: GenWire;
+    public options: JsonValue;
 
     /// Files available to this operation.
     public files: List<GenFile>;
@@ -62,8 +63,8 @@ public class GenSnapshot {
     /// Function call sites available to the generator.
     public calls: List<GenCallSite>;
 
-    /// Decodes a complete generation snapshot from its root wire object.
-    public constructor(root: GenWire) {
+    /// Decodes a complete generation snapshot from its root JSON object.
+    public constructor(root: JsonValue) {
         this.version = gen_int(root, "version");
         this.phase = gen_int(root, "phase");
         this.symbols = List<GenSymbol>();

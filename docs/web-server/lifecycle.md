@@ -11,7 +11,7 @@ Wrap `main` in `App.run` from `system.app`. Put startup in the `start` function,
 ```dream
 import system;
 import system.app;
-import webapi;
+import system.webapi;
 
 @router("")
 class Routes {
@@ -82,4 +82,4 @@ A handler, provider, or middleware that declares a `RequestContext` parameter re
 
 Keep typed resources in dependencies or service objects rather than serializing handles into these maps.
 
-See the [complete example](example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

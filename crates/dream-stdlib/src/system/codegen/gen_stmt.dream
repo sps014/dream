@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// A statement that a source generator can inspect.
 public class GenStmt {
@@ -38,7 +39,7 @@ public class GenStmt {
     nodes: List<GenExpr>;
 
     /// Decodes a `GenStmt` from its object in the generation snapshot.
-    public constructor(borrow v: GenWire) {
+    public constructor(borrow v: JsonValue) {
         this.id = gen_str(v, "id");
         this.ty = gen_type_ref(gen_obj(v, "ty"));
         this.symbol = gen_str(v, "symbol");

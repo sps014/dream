@@ -15,7 +15,7 @@ public class GenSourceMap
 Source locations associated with generated output.
 
 ```dream
-public mappings: GenWire
+public mappings: JsonValue
 ```
 
 ## `constructor`

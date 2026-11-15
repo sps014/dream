@@ -1,5 +1,5 @@
 import system;
-import audio;
+import system.audio;
 
 async fun main(): void {
     let audio = Audio("__BASE__/tone.wav");

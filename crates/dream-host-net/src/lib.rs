@@ -5,7 +5,8 @@ mod exports;
 mod http;
 mod http_server;
 mod oidc;
-mod operations;
+mod socket_operations;
+mod sockets;
 mod websocket;
 
 #[unsafe(no_mangle)]

@@ -1,6 +1,113 @@
-//! Host binding attributes (`@js`, `@runtime`, `@async_host`, `@main_loop`).
+//! Host binding attributes (`@js`, `@runtime`, `@async_host`) and runtime gating
+//! (`@native`, `@node`, `@web`).
 
 use super::*;
+
+/// Which runtimes a declaration is available on. Absent `@native`/`@node`/`@web` means all three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeSupport {
+    pub native: bool,
+    pub node: bool,
+    pub web: bool,
+}
+
+impl RuntimeSupport {
+    pub const ALL: Self = Self {
+        native: true,
+        node: true,
+        web: true,
+    };
+
+    pub fn from_attributes(attributes: &[AttributeNode]) -> Self {
+        let has_native = attributes
+            .iter()
+            .any(|a| is_compiler_attribute(a, "native"));
+        let has_node = attributes.iter().any(|a| is_compiler_attribute(a, "node"));
+        let has_web = attributes.iter().any(|a| is_compiler_attribute(a, "web"));
+        if !has_native && !has_node && !has_web {
+            return Self::ALL;
+        }
+        Self {
+            native: has_native,
+            node: has_node,
+            web: has_web,
+        }
+    }
+
+    pub fn display(&self) -> String {
+        if self.native && self.node && self.web {
+            return "all".to_string();
+        }
+        let mut parts = Vec::new();
+        if self.native {
+            parts.push("native");
+        }
+        if self.node {
+            parts.push("node");
+        }
+        if self.web {
+            parts.push("web");
+        }
+        parts.join(", ")
+    }
+}
+
+/// Active compile-time runtime target(s) selected by the driver/CLI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompileTargets {
+    pub native: bool,
+    pub node: bool,
+    pub web: bool,
+}
+
+impl CompileTargets {
+    pub fn native_only() -> Self {
+        Self {
+            native: true,
+            node: false,
+            web: false,
+        }
+    }
+
+    /// Every selected compile target must be listed in `support`.
+    pub fn allows(&self, support: RuntimeSupport) -> bool {
+        (!self.native || support.native)
+            && (!self.node || support.node)
+            && (!self.web || support.web)
+    }
+
+    pub fn display_list(&self) -> String {
+        let mut parts = Vec::new();
+        if self.native {
+            parts.push("native");
+        }
+        if self.node {
+            parts.push("node");
+        }
+        if self.web {
+            parts.push("web");
+        }
+        parts.join(", ")
+    }
+
+    fn missing_targets(&self, support: RuntimeSupport) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        if self.native && !support.native {
+            missing.push("native");
+        }
+        if self.node && !support.node {
+            missing.push("node");
+        }
+        if self.web && !support.web {
+            missing.push("web");
+        }
+        missing
+    }
+
+    pub fn first_missing_target(&self, support: RuntimeSupport) -> Option<&'static str> {
+        self.missing_targets(support).into_iter().next()
+    }
+}
 
 /// Extracts the `(module, field)` pair from a `@js("module", "field")` attribute, or `None` if the
 /// declaration carries no `@js` attribute. `validate_program_attributes` already guarantees that a
@@ -75,13 +182,6 @@ pub fn has_runtime_attr(attributes: &[AttributeNode]) -> bool {
     attributes
         .iter()
         .any(|a| is_compiler_attribute(a, "runtime"))
-}
-
-pub const MAIN_LOOP_ATTR: &str = "main_loop";
-
-/// True when the extern carries `@main_loop` (it owns the main thread on Android and iOS).
-pub fn has_main_loop_attr(attributes: &[AttributeNode]) -> bool {
-    has_named_attr(attributes, MAIN_LOOP_ATTR)
 }
 
 /// True when more than one of `@c`, `@js`, `@runtime`, `@intrinsic`, or `@llvm` is on the same

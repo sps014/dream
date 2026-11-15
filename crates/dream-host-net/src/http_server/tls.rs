@@ -1,5 +1,5 @@
 use super::state::error;
-use crate::operations::Failure;
+use crate::socket_operations::Failure;
 use std::{io::BufReader, sync::Arc};
 use tokio_rustls::{TlsAcceptor, rustls};
 

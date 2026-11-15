@@ -1,16 +1,16 @@
 import system;
 import system.crypto;
-import encoding;
+import system.encoding;
 
 fun main(): void {
     let empty = Sha256.hash(Array.alloc<byte>(0));
     System.println(Encoding.hex_encode(empty));
 
-    let abc = ("abc").to_utf8();
+    let abc = Encoding.utf8_encode("abc");
     System.println(Encoding.hex_encode(Sha256.hash(abc)));
 
-    let key = ("key").to_utf8();
-    let msg = ("The quick brown fox jumps over the lazy dog").to_utf8();
+    let key = Encoding.utf8_encode("key");
+    let msg = Encoding.utf8_encode("The quick brown fox jumps over the lazy dog");
     System.println(Encoding.hex_encode(HmacSha256.sign(key, msg)));
 
     System.println(Encoding.hex_encode(Sha512.hash(Array.alloc<byte>(0))));

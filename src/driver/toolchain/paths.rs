@@ -61,6 +61,20 @@ pub(super) fn runtime_sources(
         .unwrap_or(source)
 }
 
+/// The Cargo profile directory for an executable built by Cargo, where workspace cdylibs land.
+/// Cargo 1.99 puts test binaries in `<profile>/deps`; Cargo 1.100 puts them in
+/// `<profile>/build/<package>/<hash>/out`.
+fn cargo_profile_of(dir: &Path) -> Option<&Path> {
+    let name = |path: &Path| path.file_name().and_then(|s| s.to_str()).map(str::to_owned);
+    if name(dir).as_deref() == Some("deps") {
+        return dir.parent();
+    }
+    let build = dir.parent()?.parent()?.parent()?;
+    (name(dir).as_deref() == Some("out") && name(build).as_deref() == Some("build"))
+        .then(|| build.parent())
+        .flatten()
+}
+
 pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     let mut push = |dir: PathBuf| {
@@ -76,10 +90,8 @@ pub(super) fn host_library_dirs(config: &ToolchainConfig) -> Vec<PathBuf> {
         {
             if let Some(p) = exe.parent() {
                 push(p.to_path_buf());
-                if p.file_name().and_then(|s| s.to_str()) == Some("deps")
-                    && let Some(parent) = p.parent()
-                {
-                    push(parent.to_path_buf());
+                if let Some(profile) = cargo_profile_of(p) {
+                    push(profile.to_path_buf());
                 }
             }
         }

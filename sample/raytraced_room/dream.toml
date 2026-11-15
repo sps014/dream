@@ -5,6 +5,3 @@ type = "bin"
 entry = "main.dream"
 targets = ["native", "web"]
 description = "Interactive neon district with native ray queries and portable GPU triangle tracing"
-
-[dependencies]
-random = { path = "../../packages/random" }

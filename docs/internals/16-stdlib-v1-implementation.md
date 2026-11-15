@@ -51,7 +51,7 @@ Native filesystem calls already executing are not interrupted. The JS async brid
 pins host futures until Promise settlement and skips result allocation for
 cancelled frames, preventing stale callbacks and discarded-result leaks.
 
-`system.http` provides `Url` and ordered `UrlQuery`. The WHATWG basic URL parser,
+`system.net` provides `Url` and ordered `UrlQuery`. The WHATWG basic URL parser,
 host parsing, and serialization are written in Dream; only UTS #46 domain mapping for
 non-ASCII and `xn--` labels calls the `net` capability (`netDomainToAscii`). The runtime chunk catalog supports multiple source files per
 chunk so file-operation helpers are included only with filesystem imports.
@@ -128,16 +128,13 @@ wakes one FIFO waiter; closure wakes all. Shared channels enforce shared payload
 constraints, publish typed carriers, and synchronize their C queues across workers.
 Cancellation state reads and reference counts use atomics where threads are enabled.
 
-Process calls are typed `@runtime` externs: launch, pipe read, pipe write, and exit
-wait each return a call the guest awaits, cancels, and releases. Native code lives in
-runtime C (`process_spawn.c` launches with fork/exec or `CreateProcessW`;
-`process_child.c` owns children, a reaper thread per child, and one thread per blocked
-pipe call so quiet children never hold the shared blocking executor). Node implements
-the same calls over child-process streams. `Process.run` is Dream code that feeds
-stdin and drains both outputs concurrently; the first failure, deadline, or
-cancellation kills the child and wins. The API is gated to `Target.Native ||
-Target.Node`. POSIX pipe threads block SIGPIPE so broken pipes surface as `EPIPE`;
-the child resets its signal mask and SIGPIPE disposition before exec.
+Process options snapshot environment overrides, working directories, input bytes,
+output limits, and deadlines. Native services use a bounded Tokio runtime; Node
+uses asynchronous child-process streams. Both drain stdout/stderr concurrently,
+propagate pipe failures, and terminate/reap owned run children before returning
+cancellation or timeout. Borrowed process pipes implement the async stream APIs.
+Browser launch requests return EUNSUPPORTED. Unix process I/O workers block SIGPIPE
+to report broken pipes as errors; child exec resets that mask.
 
 Public fields and methods have source comments and API reference coverage. The
 source inventory now recognizes shared public classes. Generic method bodies keep

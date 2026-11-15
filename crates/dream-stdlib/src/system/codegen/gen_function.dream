@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// A method, or a top-level function.
 public class GenFunction {

@@ -1,0 +1,13 @@
+module system.cli;
+
+/// How a declared command-line argument receives its value.
+internal enum CliArgumentKind {
+    /// `--name value` or `-n value`, collected on every occurrence.
+    String,
+    /// Like `String`, restricted to decimal 32-bit integers.
+    Int,
+    /// `--name` or `-n` without a value.
+    Flag,
+    /// An ordered value without an option name.
+    Positional,
+}

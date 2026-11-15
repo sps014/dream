@@ -26,9 +26,17 @@ Calls of the functions named in this generator's `@on_call(...)`.
 public fun call_sites(): List<GenCallSite>
 ```
 
+## `options`
+
+`dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
+
+```dream
+public fun options<T>(): Result<T, ParseError>
+```
+
 ## `option_or`
 
-One option as text (`fallback` when unset). Strings are returned as written; numbers and booleans are returned in decimal or `true`/`false` form.
+One option as text (`fallback` when unset).
 
 ```dream
 public fun option_or(borrow key: string, fallback: string): string
@@ -196,12 +204,4 @@ Reports an error at the declaration; generation fails after the generator exits.
 
 ```dream
 public fun error(borrow decl: GenDecl, message: string): void
-```
-
-## `error`
-
-Reports an error at the field; generation fails after the generator exits.
-
-```dream
-public fun error(borrow field: GenField, message: string): void
 ```

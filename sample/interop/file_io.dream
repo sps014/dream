@@ -2,7 +2,7 @@
 // and under Node via runtime/dream.js, using one code path on both.
 import system;
 import system.io;
-import encoding;
+import system.encoding;
 
 async fun main(): void {
     let path = "scratch_file_io.txt";
@@ -24,7 +24,7 @@ async fun main(): void {
     // Buffered, seekable streaming. `open` returns a `Result<FileHandle, IoError>`.
     let stream = FileHandle.open(path, FileMode.Read).unwrap();
     System.print("first 5: ");
-    System.println(string.from_utf8(stream.read(5).unwrap())); // "Dream"
+    System.println(Encoding.utf8_decode(stream.read(5).unwrap())); // "Dream"
     System.print("at pos: ");
     System.println(stream.tell().unwrap()); // 5
     stream.seek(0L).unwrap();

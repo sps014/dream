@@ -4,8 +4,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     name: "system.process",
     deps: &[
         "system.core",
+        "system.json",
         "system.primitives",
         "system.text",
+        "system.encoding",
         "system.collections",
         "system.io",
         "system",
@@ -21,8 +23,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/process/process_options.dream"),
         ),
         (
-            "<std>/system/process/process_call.dream",
-            include_str!("../system/process/process_call.dream"),
+            "<std>/system/process/process_operation.dream",
+            include_str!("../system/process/process_operation.dream"),
         ),
         (
             "<std>/system/process/process_reader.dream",
@@ -41,8 +43,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/process/process_output.dream"),
         ),
         (
-            "<std>/system/process/process_run.dream",
-            include_str!("../system/process/process_run.dream"),
+            "<std>/system/process/process_wire_reader.dream",
+            include_str!("../system/process/process_wire_reader.dream"),
         ),
         (
             "<std>/system/process/child_process.dream",

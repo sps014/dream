@@ -1,9 +1,0 @@
-module compress;
-
-/// Standard wrapper format for a single compressed stream.
-public enum CompressionFormat {
-    /// Gzip framing with CRC and uncompressed-size validation.
-    Gzip,
-    /// Zlib framing with Adler-32 validation.
-    Zlib,
-}

@@ -1,6 +1,7 @@
 module system.codegen;
 import system;
 import system.collections;
+import system.json;
 
 /// Statement categories exposed to source generators.
 public enum StmtKind {

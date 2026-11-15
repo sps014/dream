@@ -1,0 +1,8 @@
+module system.webapi;
+
+/// Declares an HTTP GET route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct GetAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}

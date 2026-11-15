@@ -1,0 +1,91 @@
+module system.csv;
+
+/// RFC 4180 field quoting shared by `CsvReader` and `CsvWriter`.
+internal static class CsvSyntax {
+    /// Whether `delimiter` is an ASCII separator other than a quote or a line break.
+    internal static fun valid_delimiter(delimiter: char): bool {
+        return delimiter > (char)0
+            && delimiter < (char)128
+            && delimiter != '"'
+            && delimiter != '\r'
+            && delimiter != '\n';
+    }
+
+    /// Splits one record whose quoting `CsvReader` has already validated, removing the quotes
+    /// around quoted fields and collapsing each doubled quote inside them.
+    internal static fun split(borrow text: string, delimiter: char): string[] {
+        let fields = List<string>();
+        let field = StringBuilder();
+        let quoted = false;
+        let i = 0;
+        while i < text.length {
+            let c = text.char_at(i);
+            if quoted {
+                if c == '"' {
+                    if i + 1 < text.length && text.char_at(i + 1) == '"' {
+                        field.append_char('"');
+                        i = i + 1;
+                    } else {
+                        quoted = false;
+                    }
+                } else {
+                    field.append_char(c);
+                }
+            } else if c == '"' {
+                quoted = true;
+            } else if c == delimiter {
+                fields.push(field.build());
+                field.clear();
+            } else {
+                field.append_char(c);
+            }
+            i = i + 1;
+        }
+        fields.push(field.build());
+        return fields.take_array();
+    }
+
+    /// Encodes `fields` as one CRLF-terminated record. A field is quoted when it contains the
+    /// delimiter, a quote, or a line break, or when it is the only field and is empty, so that the
+    /// record stays distinguishable from a blank line.
+    internal static fun encode(borrow fields: string[], delimiter: char): string {
+        let out = StringBuilder();
+        let i = 0;
+        while i < fields.length {
+            if i > 0 {
+                out.append_char(delimiter);
+            }
+            let field = fields[i];
+            if CsvSyntax.needs_quotes(field, delimiter) || (fields.length == 1 && field.length == 0) {
+                out.append_char('"');
+                let j = 0;
+                while j < field.length {
+                    let c = field.char_at(j);
+                    if c == '"' {
+                        out.append_char('"');
+                    }
+                    out.append_char(c);
+                    j = j + 1;
+                }
+                out.append_char('"');
+            } else {
+                out.append(field);
+            }
+            i = i + 1;
+        }
+        out.append("\r\n");
+        return out.build();
+    }
+
+    static fun needs_quotes(borrow field: string, delimiter: char): bool {
+        let i = 0;
+        while i < field.length {
+            let c = field.char_at(i);
+            if c == delimiter || c == '"' || c == '\r' || c == '\n' {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+}

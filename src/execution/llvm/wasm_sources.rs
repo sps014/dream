@@ -9,10 +9,7 @@ use std::path::{Path, PathBuf};
 pub(super) struct PackageSources {
     pub bitcode: Vec<PathBuf>,
     pub libraries: Vec<PathBuf>,
-    /// Names that must survive internalization, including libc routines the set calls.
     pub public: Vec<String>,
-    /// Native-set exports a second module instance calls. These become wasm exports.
-    pub declared_exports: Vec<String>,
     pub exceptions: bool,
 }
 
@@ -55,7 +52,6 @@ pub(super) fn compile(
                 set.name
             ));
         }
-        out.declared_exports.extend(set.runtime_exports.iter().cloned());
         out.public.extend(set.runtime_exports);
         for (i, src) in set.sources.iter().enumerate() {
             let cxx = crate::driver::native_sets::is_cxx_source(Path::new(src));

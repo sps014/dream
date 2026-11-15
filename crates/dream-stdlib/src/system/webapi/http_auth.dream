@@ -1,0 +1,44 @@
+module system.webapi;
+
+/// Dependencies that read client credentials from standard request headers and document the
+/// matching OpenAPI security scheme.
+public static class HttpAuth {
+    /// Extracts the token from an `Authorization: Bearer <token>` header. Use it as a dependency,
+    /// `@dep(HttpAuth.bearer_token)`. Fails with 401 when the header is missing, uses another
+    /// scheme, or has an empty token. The token is not verified.
+    @security_scheme("BearerAuth", "http", "bearer")
+    public static async fun bearer_token(@header("Authorization") value: string): Result<string, HttpStatus> {
+        if !value.starts_with("Bearer ") {
+            return Result.Err(HttpStatus.unauthorized());
+        }
+        if value.length <= 7 {
+            return Result.Err(HttpStatus.unauthorized());
+        }
+        return Result.Ok(value.substring(7, value.length));
+    }
+
+    /// Extracts the key from an `X-Api-Key` header. Use it as a dependency,
+    /// `@dep(HttpAuth.api_key_header)`. Fails with 401 when the header is missing or empty. The
+    /// key is not checked.
+    @security_scheme("ApiKeyAuth", "apiKey", "", "X-Api-Key", "header")
+    public static async fun api_key_header(@header("X-Api-Key") value: string): Result<string, HttpStatus> {
+        if value.is_empty() {
+            return Result.Err(HttpStatus(401, "missing API key"));
+        }
+        return Result.Ok(value);
+    }
+
+    /// Extracts the encoded credentials after `Basic ` from an `Authorization` header. Use it as a
+    /// dependency, `@dep(HttpAuth.basic_auth)`. Fails with 401 when the header is missing, uses
+    /// another scheme, or is empty. The value is still Base64-encoded and is not verified.
+    @security_scheme("BasicAuth", "http", "basic")
+    public static async fun basic_auth(@header("Authorization") value: string): Result<string, HttpStatus> {
+        if !value.starts_with("Basic ") {
+            return Result.Err(HttpStatus.unauthorized());
+        }
+        if value.length <= 6 {
+            return Result.Err(HttpStatus.unauthorized());
+        }
+        return Result.Ok(value.substring(6, value.length));
+    }
+}

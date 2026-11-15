@@ -1,5 +1,5 @@
 use super::forwarded::{Client, Trusted};
-use crate::operations::Failure;
+use crate::socket_operations::Failure;
 use bytes::Bytes;
 use dream_host_abi::handles::HandleTable;
 use dream_host_abi::wire::Reader;

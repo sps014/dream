@@ -1,0 +1,8 @@
+module system.webapi;
+
+/// Declares an HTTP POST route.
+@attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
+public struct PostAttribute {
+    /// Route path relative to the router prefix; named segments use `{name}`.
+    public path: string;
+}

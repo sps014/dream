@@ -1,7 +1,7 @@
 import system;
-import webapi;
+import system.webapi;
 import system.json;
-import logging;
+import system.logging;
 
 let sink: int = 0;
 let measuring: bool = true;

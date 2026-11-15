@@ -1,7 +1,0 @@
-import system.testing;
-import system.json;
-
-@test
-fun json_declof(): void {
-    Assert.eq((declof(Json.serialize)).to_string(), "system.json::Json.serialize");
-}

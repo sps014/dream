@@ -1,0 +1,10 @@
+import system;
+
+@web
+fun f(): void {
+    System.println("web only");
+}
+
+fun main(): void {
+    f();
+}

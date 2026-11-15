@@ -117,15 +117,18 @@ fn capabilities_share_core_binding_and_allocation() {
 
         let crypto: Symbol<unsafe extern "C" fn(i32) -> *mut u8> =
             libraries[1].get(b"cryptoSecureRandomBytes").unwrap();
+        let process: Symbol<unsafe extern "C" fn(i32) -> *mut u8> =
+            libraries[2].get(b"processOperationResult").unwrap();
         let timezone: Symbol<unsafe extern "C" fn() -> *mut u8> =
-            libraries[2].get(b"dateLocalZoneName").unwrap();
+            libraries[3].get(b"dateLocalZoneName").unwrap();
         let before_strings = STRINGS.load(Ordering::Relaxed);
         let before_arrays = ARRAYS.load(Ordering::Relaxed);
         let random = crypto(7);
         assert_eq!(*(random as *const i32), 7);
+        assert!(!process(-1).is_null());
         assert!(!timezone().is_null());
         assert_eq!(STRINGS.load(Ordering::Relaxed), before_strings + 1);
-        assert_eq!(ARRAYS.load(Ordering::Relaxed), before_arrays + 1);
+        assert_eq!(ARRAYS.load(Ordering::Relaxed), before_arrays + 2);
 
         ALLOCATIONS.lock().unwrap().clear();
         drop(libraries);

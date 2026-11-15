@@ -2,17 +2,20 @@
 title: Random
 summary: "Repeatable random numbers for tests, games, and shuffling."
 icon: material/dice-multiple-outline
+api: reference/api/package-system.md
 ---
 
 # Random
 
 
-Use `Random` for tests, games, and shuffling. The same seed repeats the same sequence. Use [SecureRandom](../security/crypto.md) when the values must be unpredictable.
+Use `Random` for tests, games, and shuffling. The same seed repeats the same sequence; use [SecureRandom](../security/crypto.md) when the values must be unpredictable.
 
-**Import:** `import random;`
+**Import:** `import system;`
+
+A seedable generator for games, tests, and shuffling — **not** for secrets. For cryptographic randomness use [SecureRandom](../security/crypto.md).
 
 ```dream
-import random;
+import system;
 
 fun main() {
     let rng = Random(42u);

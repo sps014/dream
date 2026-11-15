@@ -19,7 +19,7 @@ User programs still import `system.json`, `system.gpu`, and the rest the same wa
 | `system.simd` | `Vector<T>` |
 | `system` | `CPtr`, `OwnedCPtr`, `NativeCallback`, `System.print`, `System.args` |
 
-Everything else is a library package. That includes `system.json`, `system.io`, `system.process`, `system.net`, `system.crypto`, `system.gpu`, `system.drawing`, `system.window`, `system.app`, and the text and time packages. `http`, `webapi`, and `validation` are ordinary packages outside this registry.
+Everything else is a library package. That includes `system.json`, `system.validation`, `system.io`, `system.process`, `system.net`, `system.crypto`, `system.gpu`, `system.drawing`, `system.window`, `system.audio`, `system.app`, and the text, time, and web packages.
 
 `system.io` and `system.process` are library packages. Their host capability field lists may still live next to the core host tables until every field is declared with `@runtime`.
 
@@ -50,7 +50,7 @@ A library package does not get a match arm in the compiler. Host wiring is data 
 - `guest_exports` lists extra symbols the guest module must export when one of the package's host imports is used (the GPU bundle version and index).
 - `web_assets` and `tools` list files the package ships next to the program.
 
-`@main_loop` marks the extern that owns the main thread on targets where the operating system keeps it (Android, iOS). Any package may declare one, through `@runtime` or `@c`; the generated `main` calls it with the guest entry and scheduler pump. A program links at most one, and without one the generated `main` runs the program directly.
+`platform_main` is a core identity (`core_items::PLATFORM_MAIN`), not an attribute. On targets where the operating system owns the main thread, the generated `main` calls the host loop it names.
 
 ## Generic library code
 

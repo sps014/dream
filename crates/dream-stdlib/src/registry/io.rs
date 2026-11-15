@@ -7,6 +7,7 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system.primitives",
         "system.collections",
         "system.text",
+        "system.encoding",
     ],
     core_language: false,
     web_assets: None,

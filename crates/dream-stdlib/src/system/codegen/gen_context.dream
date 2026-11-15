@@ -3,9 +3,12 @@ module system.codegen;
 import system;
 import system.io;
 import system.collections;
+import system.json;
+import system.encoding;
+
 // Snapshot format this package reads; the compiler writes the same number.
 fun gen_snapshot_version(): int {
-    return 3;
+    return 2;
 }
 
 // What a `@generator fun name(ctx: GenContext)` sees and produces. The compiler runs the
@@ -26,9 +29,9 @@ public class GenContext {
 
     snapshot: GenSnapshot;
     result_path: string;
-    outputs: GenWire;
-    diagnostics: GenWire;
-    logs: GenWire;
+    outputs: JsonValue;
+    diagnostics: JsonValue;
+    logs: JsonValue;
     extends: Map<string, StringBuilder>;
     error_count: int;
 
@@ -38,9 +41,9 @@ public class GenContext {
         this.target = snapshot.target;
         this.snapshot = snapshot;
         this.result_path = result_path;
-        this.outputs = GenWire.array();
-        this.diagnostics = GenWire.array();
-        this.logs = GenWire.array();
+        this.outputs = JsonValue.array();
+        this.diagnostics = JsonValue.array();
+        this.logs = JsonValue.array();
         this.extends = Map<string, StringBuilder>();
         this.error_count = 0;
     }
@@ -61,10 +64,10 @@ public class GenContext {
         if snapshot_path.is_empty() || result_path.is_empty() {
             return Result.Err("usage: --generator <name> --snapshot <path> --result <path>");
         }
-        let text = File.read_bytes(snapshot_path).await;
+        let text = File.read(snapshot_path).await;
         switch (text) {
             Ok(source) => {
-                switch (GenWire.decode(source)) {
+                switch (Json.parse(source)) {
                     Ok(root) => {
                         let snapshot = GenSnapshot(root);
                         if snapshot.version != gen_snapshot_version() {
@@ -79,7 +82,9 @@ public class GenContext {
                         return Result.Ok(GenContext(snapshot, result_path));
                     }
                     Err(e) => {
-                        return Result.Err("malformed snapshot " + snapshot_path + ": " + e);
+                        return Result.Err(
+                            "malformed snapshot " + snapshot_path + ": " + e.message()
+                        );
                     }
                 }
             }
@@ -322,8 +327,12 @@ public class GenContext {
         return this.snapshot.calls;
     }
 
-    /// One option as text (`fallback` when unset). Strings are returned as written;
-    /// numbers and booleans are returned in decimal or `true`/`false` form.
+    /// `dream.toml` `[[generators]].options`, decoded into the `@json` type `T`.
+    public fun options<T>(): Result<T, ParseError> {
+        return Json.deserialize<T>(Json.stringify(this.snapshot.options));
+    }
+
+    /// One option as text (`fallback` when unset).
     public fun option_or(borrow key: string, fallback: string): string {
         switch (this.snapshot.options.get(key)) {
             Some(v) => {
@@ -332,7 +341,7 @@ public class GenContext {
                         return s;
                     }
                     None => {
-                        return v.text();
+                        return Json.stringify(v);
                     }
                 }
             }
@@ -350,20 +359,20 @@ public class GenContext {
 
     /// Rewrites `block`'s site to the Dream expression `source`.
     public fun replace(borrow block: GenSyntaxBlock, source: string): void {
-        let out = GenWire.dict();
-        out["kind"] = GenWire.from_string("replace");
-        out["site"] = GenWire.from_string(block.id);
-        out["source"] = GenWire.from_string(source);
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("replace");
+        out["site"] = JsonValue.from_string(block.id);
+        out["source"] = JsonValue.from_string(source);
         this.outputs.push(out);
     }
 
     /// Adds a complete Dream source file at the generator-relative path `path` (`models.json.dream`).
     /// It is written under `generated/<entry>/<module-path>/<generator>/` and compiled with the program.
     public fun emit_file(path: string, source: string): void {
-        let out = GenWire.dict();
-        out["kind"] = GenWire.from_string("file");
-        out["path"] = GenWire.from_string(path);
-        out["source"] = GenWire.from_string(source);
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("file");
+        out["path"] = JsonValue.from_string(path);
+        out["source"] = JsonValue.from_string(source);
         this.outputs.push(out);
     }
 
@@ -395,10 +404,10 @@ public class GenContext {
         outputs: List<string>,
         opaque_outputs: List<string>
     ): void {
-        let out = GenWire.dict();
-        out["kind"] = GenWire.from_string("tool_run");
-        out["id"] = GenWire.from_string(id);
-        out["tool"] = GenWire.from_string(tool);
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("tool_run");
+        out["id"] = JsonValue.from_string(id);
+        out["tool"] = JsonValue.from_string(tool);
         out["args"] = gen_json_strings(args);
         out["inputs"] = gen_json_strings(inputs);
         out["outputs"] = gen_json_strings(outputs);
@@ -409,10 +418,10 @@ public class GenContext {
     /// Copies a tool output, named `tool:<request id>/<path>`, to `path` next to the compiled
     /// program. Publishing the same path twice, or a path a compiler output uses, is an error.
     public fun publish_tool_output(source: string, path: string): void {
-        let out = GenWire.dict();
-        out["kind"] = GenWire.from_string("publish");
-        out["path"] = GenWire.from_string(path);
-        out["source"] = GenWire.from_string(source);
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("publish");
+        out["path"] = JsonValue.from_string(path);
+        out["source"] = JsonValue.from_string(source);
         this.outputs.push(out);
     }
 
@@ -424,10 +433,10 @@ public class GenContext {
 
     /// Embeds an artifact or tool output for the selected target triples or families.
     public fun emit_asset(name: string, source: string, targets: List<string>): void {
-        let out = GenWire.dict();
-        out["kind"] = GenWire.from_string("asset");
-        out["name"] = GenWire.from_string(name);
-        out["source"] = GenWire.from_string(source);
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("asset");
+        out["name"] = JsonValue.from_string(name);
+        out["source"] = JsonValue.from_string(source);
         out["targets"] = gen_json_strings(targets);
         this.outputs.push(out);
     }
@@ -436,10 +445,10 @@ public class GenContext {
     /// is not compiled, and calling it from ordinary code is an error. `help` is shown under that
     /// error to say what to use instead, for example `dispatch it with Shaders.blur.dispatch(...)`.
     public fun consume(borrow f: GenFunction, help: string = ""): void {
-        let out = GenWire.dict();
-        out["kind"] = GenWire.from_string("consume");
-        out["target"] = GenWire.from_string(f.id);
-        out["help"] = GenWire.from_string(help);
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("consume");
+        out["target"] = JsonValue.from_string(f.id);
+        out["help"] = JsonValue.from_string(help);
         this.outputs.push(out);
     }
 
@@ -450,12 +459,12 @@ public class GenContext {
         borrow map: GenSourceMap,
         publish: bool = false
     ): void {
-        let out = GenWire.dict();
-        out["kind"] = GenWire.from_string("artifact");
-        out["path"] = GenWire.from_string(path);
-        out["contents"] = GenWire.from_string(contents);
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("artifact");
+        out["path"] = JsonValue.from_string(path);
+        out["contents"] = JsonValue.from_string(contents);
         out["mappings"] = map.mappings;
-        out["publish"] = GenWire.from_bool(publish);
+        out["publish"] = JsonValue.from_bool(publish);
         this.outputs.push(out);
     }
 
@@ -464,24 +473,24 @@ public class GenContext {
     /// inputs like text artifacts. With `publish`, the file is also copied beside the build
     /// output.
     public fun emit_artifact(path: string, contents: byte[], publish: bool = false): void {
-        let out = GenWire.dict();
-        out["kind"] = GenWire.from_string("artifact");
-        out["path"] = GenWire.from_string(path);
-        out["contents"] = GenWire.from_string(artifact_base64(contents));
-        out["mappings"] = GenWire.array();
-        out["publish"] = GenWire.from_bool(publish);
-        out["binary"] = GenWire.from_bool(true);
+        let out = JsonValue.dict();
+        out["kind"] = JsonValue.from_string("artifact");
+        out["path"] = JsonValue.from_string(path);
+        out["contents"] = JsonValue.from_string(Encoding.base64_encode(contents));
+        out["mappings"] = JsonValue.array();
+        out["publish"] = JsonValue.from_bool(publish);
+        out["binary"] = JsonValue.from_bool(true);
         this.outputs.push(out);
     }
 
     /// Reports an artifact location through its source map to the originating Dream node.
     public fun error_in_artifact(path: string, line: int, column: int, message: string): void {
-        let d = GenWire.dict();
-        d["severity"] = GenWire.from_string("error");
-        d["message"] = GenWire.from_string(message);
-        d["artifact"] = GenWire.from_string(path);
-        d["line"] = GenWire.from_int(line);
-        d["column"] = GenWire.from_int(column);
+        let d = JsonValue.dict();
+        d["severity"] = JsonValue.from_string("error");
+        d["message"] = JsonValue.from_string(message);
+        d["artifact"] = JsonValue.from_string(path);
+        d["line"] = JsonValue.from_int(line);
+        d["column"] = JsonValue.from_int(column);
         this.diagnostics.push(d);
         this.error_count = this.error_count + 1;
     }
@@ -501,10 +510,10 @@ public class GenContext {
     }
 
     fun report(severity: string, borrow target: string, message: string): void {
-        let d = GenWire.dict();
-        d["severity"] = GenWire.from_string(severity);
-        d["message"] = GenWire.from_string(message);
-        d["target"] = GenWire.from_string(target);
+        let d = JsonValue.dict();
+        d["severity"] = JsonValue.from_string(severity);
+        d["message"] = JsonValue.from_string(message);
+        d["target"] = JsonValue.from_string(target);
         this.diagnostics.push(d);
         if severity == "error" {
             this.error_count = this.error_count + 1;
@@ -560,7 +569,7 @@ public class GenContext {
 
     /// A line shown with `dream -v` / `dream generate --explain`.
     public fun log(message: string): void {
-        this.logs.push(GenWire.from_string(message));
+        this.logs.push(JsonValue.from_string(message));
     }
 
     // Writes the result for the compiler; the harness returns this as the exit code.
@@ -581,13 +590,13 @@ public class GenContext {
             }
             this.emit_file(path, header + entry.value.to_string());
         }
-        let root = GenWire.dict();
-        root["version"] = GenWire.from_int(gen_snapshot_version());
-        root["generator"] = GenWire.from_string(this.generator_id);
+        let root = JsonValue.dict();
+        root["version"] = JsonValue.from_int(gen_snapshot_version());
+        root["generator"] = JsonValue.from_string(this.generator_id);
         root["outputs"] = this.outputs;
         root["diagnostics"] = this.diagnostics;
         root["logs"] = this.logs;
-        let written = File.write_bytes(this.result_path, root.encode()).await;
+        let written = File.write(this.result_path, Json.stringify(root)).await;
         switch (written) {
             Ok(_) => {
                 return 0;
@@ -638,10 +647,10 @@ fun gen_decl_carries(borrow d: GenDecl, borrow id: string): bool {
     return false;
 }
 
-fun gen_json_strings(borrow strings: List<string>): GenWire {
-    let out = GenWire.array();
+fun gen_json_strings(borrow strings: List<string>): JsonValue {
+    let out = JsonValue.array();
     for (let s in strings) {
-        out.push(GenWire.from_string(s));
+        out.push(JsonValue.from_string(s));
     }
     return out;
 }

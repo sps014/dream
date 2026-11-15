@@ -1,0 +1,11 @@
+module system.net;
+
+// Operation codes shared with `dream-host-net`'s `websocket::Action` and the JS WebSocket host;
+// the values are wire format and must match them.
+internal enum WebSocketAction {
+    Connect = 1,
+    Receive = 2,
+    SendText = 3,
+    SendBinary = 4,
+    Close = 5
+}

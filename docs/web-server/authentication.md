@@ -6,12 +6,12 @@ icon: material/account-key-outline
 
 # Local authentication
 
-Use `webapi.auth` for Argon2id passwords, signed access tokens, and rotating refresh sessions. The account repository and persistent storage remain application-owned.
+Use `system.webapi.auth` for Argon2id passwords, signed access tokens, and rotating refresh sessions. The account repository and persistent storage remain application-owned.
 
 ```dream
 import system;
-import webapi;
-import webapi.auth;
+import system.webapi;
+import system.webapi.auth;
 
 class Accounts: AuthAccounts {
     hash: string;
@@ -105,6 +105,6 @@ Issuer, audience, algorithm, signature, expiry, and session activity are verifie
 
 Passwords use Argon2id PHC strings. Verification returns an error for a malformed or unsupported hash and false when the password does not match, so protect credential endpoints with request limits.
 
-See the [complete example](example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).
 
 To issue local browser session cookies, set `browser_sessions: true` and an explicit `browser_origin`. Browser login requests must send that exact Origin; subsequent cookie-authenticated writes must send the session CSRF token.

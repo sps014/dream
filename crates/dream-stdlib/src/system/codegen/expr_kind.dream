@@ -1,6 +1,7 @@
 module system.codegen;
 import system;
 import system.collections;
+import system.json;
 
 /// Expression categories exposed to source generators.
 public enum ExprKind {

@@ -1,5 +1,5 @@
 import system;
-import audio;
+import system.audio;
 import system.gpu;
 import system.window;
 

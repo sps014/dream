@@ -1,12 +1,18 @@
 use dream_abi::toolchain::PinnedTool;
 
 mod app;
+mod audio;
+mod cli;
 mod codegen;
 mod collections;
+mod compress;
+mod config;
 mod core;
 mod crypto;
+mod csv;
 mod drawing;
 mod drawing_gpu;
+mod encoding;
 mod gpu;
 mod gpu_shaders;
 mod interop;
@@ -14,6 +20,7 @@ mod io;
 mod js;
 mod json;
 mod json_derive;
+mod logging;
 mod net;
 mod primitives;
 mod process;
@@ -22,6 +29,12 @@ mod system;
 mod task;
 mod testing;
 mod text;
+mod uuid;
+mod validation;
+mod validation_derive;
+mod webapi;
+mod webapi_auth;
+mod webapi_derive;
 mod window;
 
 /// One embedded stdlib package: dotted import name, ordered source files, and package deps.
@@ -88,24 +101,37 @@ pub const BOOTSTRAP_PACKAGES: &[&str] = &["system.core", "system.primitives"];
 pub const STD_PACKAGES: &[StdPackage] = &[
     core::PACKAGE,
     js::PACKAGE,
+    audio::PACKAGE,
     primitives::PACKAGE,
     collections::PACKAGE,
     simd::PACKAGE,
     task::PACKAGE,
     text::PACKAGE,
+    encoding::PACKAGE,
     json::PACKAGE,
     io::PACKAGE,
     interop::PACKAGE,
     net::PACKAGE,
+    cli::PACKAGE,
+    config::PACKAGE,
+    csv::PACKAGE,
+    compress::PACKAGE,
     crypto::PACKAGE,
     drawing::PACKAGE,
     drawing_gpu::PACKAGE,
+    uuid::PACKAGE,
+    validation::PACKAGE,
+    validation_derive::PACKAGE,
     process::PACKAGE,
     system::PACKAGE,
     app::PACKAGE,
     testing::PACKAGE,
     codegen::PACKAGE,
     json_derive::PACKAGE,
+    logging::PACKAGE,
+    webapi::PACKAGE,
+    webapi_auth::PACKAGE,
+    webapi_derive::PACKAGE,
     window::PACKAGE,
     gpu::PACKAGE,
     gpu_shaders::PACKAGE,

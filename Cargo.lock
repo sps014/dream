@@ -1401,12 +1401,14 @@ name = "dream-host"
 version = "0.1.0"
 dependencies = [
  "dream-host-app",
+ "dream-host-audio",
  "dream-host-core",
  "dream-host-crypto",
  "dream-host-drawing",
  "dream-host-gpu",
  "dream-host-io",
  "dream-host-net",
+ "dream-host-process",
  "dream-host-timezone",
  "dream-host-window",
 ]
@@ -1429,6 +1431,16 @@ dependencies = [
  "libc",
  "signal-hook",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "dream-host-audio"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "dream-host-abi",
+ "dream-host-core",
+ "serde_json",
 ]
 
 [[package]]
@@ -1507,6 +1519,7 @@ dependencies = [
  "dream-host-abi",
  "dream-host-core",
  "futures-util",
+ "hex",
  "http-body-util",
  "hyper",
  "hyper-util",
@@ -1530,6 +1543,19 @@ dependencies = [
  "tokio-stream",
  "tokio-tungstenite",
  "url",
+]
+
+[[package]]
+name = "dream-host-process"
+version = "0.1.0"
+dependencies = [
+ "dream-host-abi",
+ "dream-host-core",
+ "indexmap 2.14.0",
+ "libc",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -6225,6 +6251,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",

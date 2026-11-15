@@ -2,6 +2,7 @@
 title: DateTime
 summary: "Dates, times, time zones, durations, and stopwatches."
 icon: material/calendar-clock-outline
+api: reference/api/package-system.md
 ---
 
 # DateTime
@@ -9,13 +10,12 @@ icon: material/calendar-clock-outline
 
 Use DateTime to represent an instant and display it in UTC or another time zone. Use Duration for a length of time, and Stopwatch to measure how long a task takes.
 
-**Import:** `import datetime;`
+**Import:** `import system;`
 
-An instant in time, shown in UTC or a zone offset. `Duration`, `Time`, and `Stopwatch` stay available from `import system;`.
+An instant in time, shown in UTC or a zone offset. Same package as `Time` and `Stopwatch`.
 
 ```dream
 import system;
-import datetime;
 
 fun main() {
     let now = DateTime.now();

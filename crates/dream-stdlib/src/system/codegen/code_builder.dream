@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// Accumulates Dream source lines for generator `emit_extend` / `emit_file` bodies.
 /// Indentation mirrors C# / Rust `IndentedTextWriter`: `indent()` / `dedent()` adjust depth;

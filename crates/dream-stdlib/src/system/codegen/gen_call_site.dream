@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// A call of one of the generator's `@on_call` functions.
 public class GenCallSite {

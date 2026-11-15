@@ -1,6 +1,6 @@
 module service.models;
 import system.json;
-import validation;
+import system.validation;
 
 @json
 public class CreateMessage {

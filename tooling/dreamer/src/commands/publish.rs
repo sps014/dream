@@ -12,57 +12,7 @@ pub fn run(
     token: Option<String>,
     package: Option<&str>,
 ) -> Result<()> {
-    if package.is_none()
-        && crate::manifest::Manifest::find_package_root(start_dir).is_none()
-        && let Some(ws_root) = crate::manifest::Manifest::find_workspace_root(start_dir)
-    {
-        return publish_workspace(&ws_root, registry_url, token);
-    }
     let workspace = Workspace::discover_package(start_dir, package)?;
-    publish_one(&workspace, registry_url, token)
-}
-
-/// Publishes every non-test member, dependencies before the packages that require them.
-/// A version that is already in the registry is left as-is so a later package can still refer to it.
-fn publish_workspace(
-    ws_root: &Path,
-    registry_url: Option<String>,
-    token: Option<String>,
-) -> Result<()> {
-    let members = crate::workspace::publish_order(ws_root)?;
-    if members.is_empty() {
-        bail!("workspace has no publishable packages");
-    }
-    let names: Vec<&str> = members
-        .iter()
-        .map(|member| member.manifest.package().map(|pkg| pkg.name.as_str()))
-        .collect::<Result<_>>()?;
-    println!(
-        "Publishing {} package(s), dependencies first: {}",
-        names.len(),
-        names.join(", ")
-    );
-    for member in &members {
-        match publish_one(member, registry_url.clone(), token.clone()) {
-            Ok(()) => {}
-            Err(error) if already_published(&error) => {
-                println!("{error}");
-            }
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(())
-}
-
-fn already_published(error: &anyhow::Error) -> bool {
-    error.to_string().contains("is already published")
-}
-
-fn publish_one(
-    workspace: &Workspace,
-    registry_url: Option<String>,
-    token: Option<String>,
-) -> Result<()> {
     workspace.manifest.validate()?;
     let pkg = workspace.manifest.package()?;
     if pkg.package_type == crate::manifest::PackageType::Test {

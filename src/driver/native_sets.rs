@@ -31,8 +31,6 @@ pub struct NativeSet {
     pub cflags: Vec<String>,
     pub frameworks: Vec<String>,
     pub libs: Vec<String>,
-    /// Symbols a host calls on another instance of the linked module.
-    pub exports: Vec<String>,
     /// Release builds llvm-link this set. `false` keeps the compiled objects.
     pub lto: bool,
 }
@@ -252,7 +250,6 @@ fn build_set(
         cflags: table.cflags.clone(),
         frameworks: table.frameworks.clone(),
         libs: table.libs.clone(),
-        exports: table.exports.clone(),
         lto: table.lto.unwrap_or(true),
     })
 }

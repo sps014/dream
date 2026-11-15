@@ -1,0 +1,5 @@
+module system.validation;
+
+/// A static model validator returning structured issues after fields pass validation.
+@attribute(AttributeTarget.StaticMethod)
+public struct ModelValidatorAttribute {}

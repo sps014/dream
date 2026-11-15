@@ -2,26 +2,28 @@ module system.testing;
 
 /// Assertion helpers for `system.testing`. On failure, prints a message and exits the process with
 /// a non-zero status (no exceptions/panics — assertions are meant to run in ordinary scripts).
-/// Exit-based failures need a process to end, so `Assert` is available on native builds and
-/// Node.js, not in browsers.
+/// Exit-based failures require a real process model (`@native` / `@node`); not available on `@web`.
 public static class Assert {
     /// Fails the current test run with `message`: prints it and terminates the process with a
     /// non-zero exit code. There is no exception mechanism to unwind through, so `Assert.*`
     /// failures are unrecoverable by design (matching `System.panic`).
-    @cfg(Target.Native || Target.Node)
+    @native
+    @node
     public static fun fail(message: string): void {
         System.println("FAIL " + message);
         System.exit(1);
     }
 
     /// Awaits actual and compares its value using the normal assertion diagnostics.
-    @cfg(Target.Native || Target.Node)
+    @native
+    @node
     public static async fun eq_async<T>(actual: Future<T>, expected: T): void {
         Assert.eq(actual.await, expected);
     }
 
     /// Awaits a fallible operation and returns its success value, reporting the error on failure.
-    @cfg(Target.Native || Target.Node)
+    @native
+    @node
     public static async fun ok_async<T, E>(actual: Future<Result<T, E>>): T {
         let result = actual.await;
         if result.is_err() {
@@ -31,7 +33,8 @@ public static class Assert {
     }
 
     /// Asserts that `actual == expected`. String failures quote the expected and actual values.
-    @cfg(Target.Native || Target.Node)
+    @native
+    @node
     public static fun eq<T>(actual: T, expected: T): void {
         if actual == expected {
             return;
@@ -45,7 +48,8 @@ public static class Assert {
     }
 
     /// Asserts that `actual != expected`.
-    @cfg(Target.Native || Target.Node)
+    @native
+    @node
     public static fun ne<T>(actual: T, expected: T): void {
         if actual != expected {
             return;
@@ -54,7 +58,8 @@ public static class Assert {
     }
 
     /// Asserts that `value` is `true`.
-    @cfg(Target.Native || Target.Node)
+    @native
+    @node
     public static fun is_true(value: bool): void {
         if value == true {
             return;
@@ -63,7 +68,8 @@ public static class Assert {
     }
 
     /// Asserts that `value` is `false`.
-    @cfg(Target.Native || Target.Node)
+    @native
+    @node
     public static fun is_false(value: bool): void {
         if value == false {
             return;
@@ -72,7 +78,8 @@ public static class Assert {
     }
 
     /// Asserts that two doubles are within `epsilon` of each other.
-    @cfg(Target.Native || Target.Node)
+    @native
+    @node
     public static fun approx(actual: double, expected: double, epsilon: double): void {
         let diff = actual - expected;
         if diff < 0.0d {

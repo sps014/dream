@@ -1,0 +1,56 @@
+module system.compress;
+
+/// Accumulates DEFLATE output bits least significant first, carrying a partial byte between blocks.
+internal class BitWriter {
+    buffer: byte[];
+    length: int;
+    bits: int;
+    count: int;
+
+    internal constructor() {
+        this.buffer = Array.alloc<byte>(1024);
+        this.length = 0;
+        this.bits = 0;
+        this.count = 0;
+    }
+
+    /// Appends the low `n` (at most 16) bits of `value`.
+    internal fun put(value: int, n: int): void {
+        this.bits = this.bits | (value << this.count);
+        this.count = this.count + n;
+        while this.count >= 8 {
+            this.push((byte)this.bits);
+            this.bits = this.bits >> 8;
+            this.count = this.count - 8;
+        }
+    }
+
+    /// Pads the partial byte with zero bits.
+    internal fun align(): void {
+        if this.count > 0 {
+            this.push((byte)this.bits);
+            this.bits = 0;
+            this.count = 0;
+        }
+    }
+
+    /// Appends a whole byte; call `align` first when bits are pending.
+    internal fun push(value: byte): void {
+        if this.length == this.buffer.length {
+            let grown = Array.alloc<byte>(this.buffer.length * 2);
+            for (let i = 0; i < this.length; i = i + 1) {
+                grown[i] = this.buffer[i];
+            }
+            this.buffer = grown;
+        }
+        this.buffer[this.length] = value;
+        this.length = this.length + 1;
+    }
+
+    /// Removes and returns every complete byte written so far.
+    internal fun take(): byte[] {
+        let out = this.buffer.slice(0, this.length);
+        this.length = 0;
+        return out;
+    }
+}

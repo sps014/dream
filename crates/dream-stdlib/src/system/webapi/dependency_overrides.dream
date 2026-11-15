@@ -1,0 +1,14 @@
+module system.webapi;
+
+/// Generated, type-checked dependency replacement selection for one application.
+public class DependencyOverrides {
+    internal providers: Map<string, string>;
+
+    /// Creates a `DependencyOverrides` with `providers`.
+    public constructor(providers: Map<string, string>) {
+        this.providers = Map<string, string>();
+        for (let entry in providers.entries()) {
+            this.providers[entry.key] = entry.value;
+        }
+    }
+}

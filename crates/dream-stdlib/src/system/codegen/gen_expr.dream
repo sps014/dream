@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// An expression that a source generator can inspect.
 public class GenExpr {
@@ -53,7 +54,7 @@ public class GenExpr {
     nodes: List<GenExpr>;
 
     /// Decodes a `GenExpr` from its object in the generation snapshot.
-    public constructor(borrow v: GenWire) {
+    public constructor(borrow v: JsonValue) {
         this.id = gen_str(v, "id");
         this.constant = Option.None;
         let constant = gen_obj(v, "constant");

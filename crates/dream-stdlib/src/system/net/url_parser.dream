@@ -1,0 +1,650 @@
+module system.net;
+
+/// The WHATWG basic URL parser, run over the UTF-8 bytes of the input without a state override.
+internal class UrlParser {
+    input: byte[];
+    base: Option<Url>;
+    state: UrlParseState;
+    p: int;
+    // Start of the raw scheme/authority/host/port text being scanned, or -1 before it starts.
+    mark: int;
+    buffer: StringBuilder;
+    at_sign: bool;
+    inside_brackets: bool;
+    password_token: bool;
+    scheme: string;
+    username: StringBuilder;
+    password: StringBuilder;
+    has_host: bool;
+    host: string;
+    port: int;
+    segments: List<string>;
+    opaque: bool;
+    opaque_path: StringBuilder;
+    has_query: bool;
+    query: StringBuilder;
+    has_fragment: bool;
+    fragment: StringBuilder;
+
+    constructor(input: byte[], base: Option<Url>) {
+        this.input = input;
+        this.base = base;
+        this.state = UrlParseState.SchemeStart;
+        this.p = 0;
+        this.mark = 0 - 1;
+        this.buffer = StringBuilder();
+        this.at_sign = false;
+        this.inside_brackets = false;
+        this.password_token = false;
+        this.scheme = "";
+        this.username = StringBuilder();
+        this.password = StringBuilder();
+        this.has_host = false;
+        this.host = "";
+        this.port = 0 - 1;
+        this.segments = List<string>();
+        this.opaque = false;
+        this.opaque_path = StringBuilder();
+        this.has_query = false;
+        this.query = StringBuilder();
+        this.has_fragment = false;
+        this.fragment = StringBuilder();
+    }
+
+    /// Parses `input`, resolving it against `base` when one is given; `None` means failure.
+    internal static fun parse(borrow input: string, base: Option<Url>): Option<Url> {
+        let parser = UrlParser(UrlParser.prepare(input), base);
+        while true {
+            let c = parser.p < parser.input.length ? (int)parser.input[parser.p] : 0 - 1;
+            if !parser.step(c) {
+                return Option.None;
+            }
+            if parser.p >= parser.input.length {
+                break;
+            }
+            parser.p = parser.p + 1;
+        }
+        return Option.Some(parser.build());
+    }
+
+    // Strips leading and trailing C0 controls and spaces, and removes every tab and newline.
+    static fun prepare(borrow input: string): byte[] {
+        let bytes = Encoding.utf8_encode(input);
+        let start = 0;
+        let end = bytes.length;
+        while start < end && (int)bytes[start] <= 0x20 {
+            start = start + 1;
+        }
+        while end > start && (int)bytes[end - 1] <= 0x20 {
+            end = end - 1;
+        }
+        let out = Buffer.alloc<byte>(end - start);
+        let count = 0;
+        for (let i = start; i < end; i = i + 1) {
+            let b = (int)bytes[i];
+            if b != 0x09 && b != 0x0A && b != 0x0D {
+                out[count] = bytes[i];
+                count = count + 1;
+            }
+        }
+        return out.slice(0, count);
+    }
+
+    fun build(): Url {
+        let host: Option<string> = this.has_host ? Option.Some(this.host) : Option.None;
+        let opaque_path: Option<string> = this.opaque
+            ? Option.Some(this.opaque_path.build())
+            : Option.None;
+        return Url(
+            this.scheme,
+            this.username.build(),
+            this.password.build(),
+            host,
+            this.port,
+            this.segments.take_array(),
+            opaque_path,
+            this.has_query ? "?" + this.query.build() : "",
+            this.has_fragment ? "#" + this.fragment.build() : ""
+        );
+    }
+
+    fun step(c: int): bool {
+        let s = this.state;
+        if s == UrlParseState.SchemeStart {
+            if !UrlText.alpha(c) {
+                this.state = UrlParseState.NoScheme;
+                this.p = this.p - 1;
+                return true;
+            }
+            this.state = UrlParseState.Scheme;
+            return true;
+        }
+        if s == UrlParseState.Scheme {
+            return this.scheme_state(c);
+        }
+        if s == UrlParseState.NoScheme {
+            return this.no_scheme_state(c);
+        }
+        if s == UrlParseState.SpecialRelativeOrAuthority {
+            if c == 0x2F && this.next_is(0x2F) {
+                this.state = UrlParseState.SpecialAuthorityIgnoreSlashes;
+                this.p = this.p + 1;
+            } else {
+                this.state = UrlParseState.Relative;
+                this.p = this.p - 1;
+            }
+            return true;
+        }
+        if s == UrlParseState.PathOrAuthority {
+            if c == 0x2F {
+                this.state = UrlParseState.Authority;
+            } else {
+                this.state = UrlParseState.Path;
+                this.p = this.p - 1;
+            }
+            return true;
+        }
+        if s == UrlParseState.Relative {
+            this.relative_state(c);
+            return true;
+        }
+        if s == UrlParseState.RelativeSlash {
+            if this.special() && (c == 0x2F || c == 0x5C) {
+                this.state = UrlParseState.SpecialAuthorityIgnoreSlashes;
+            } else if c == 0x2F {
+                this.state = UrlParseState.Authority;
+            } else {
+                this.copy_base_authority();
+                this.state = UrlParseState.Path;
+                this.p = this.p - 1;
+            }
+            return true;
+        }
+        if s == UrlParseState.SpecialAuthoritySlashes {
+            this.state = UrlParseState.SpecialAuthorityIgnoreSlashes;
+            if c == 0x2F && this.next_is(0x2F) {
+                this.p = this.p + 1;
+            } else {
+                this.p = this.p - 1;
+            }
+            return true;
+        }
+        if s == UrlParseState.SpecialAuthorityIgnoreSlashes {
+            if c != 0x2F && c != 0x5C {
+                this.state = UrlParseState.Authority;
+                this.p = this.p - 1;
+            }
+            return true;
+        }
+        if s == UrlParseState.Authority {
+            return this.authority_state(c);
+        }
+        if s == UrlParseState.Host {
+            return this.host_state(c);
+        }
+        if s == UrlParseState.Port {
+            return this.port_state(c);
+        }
+        if s == UrlParseState.File {
+            this.file_state(c);
+            return true;
+        }
+        if s == UrlParseState.FileSlash {
+            this.file_slash_state(c);
+            return true;
+        }
+        if s == UrlParseState.FileHost {
+            return this.file_host_state(c);
+        }
+        if s == UrlParseState.PathStart {
+            this.path_start_state(c);
+            return true;
+        }
+        if s == UrlParseState.Path {
+            this.path_state(c);
+            return true;
+        }
+        if s == UrlParseState.OpaquePath {
+            if !this.enter_query_or_fragment(c) {
+                if c == 0x20 {
+                    this.opaque_path.append(this.next_is(0x3F) || this.next_is(0x23) ? "%20" : " ");
+                } else if c >= 0 {
+                    UrlText.append_byte(this.opaque_path, c, UrlText.c0(c));
+                }
+            }
+            return true;
+        }
+        if s == UrlParseState.Query {
+            if c == 0x23 {
+                this.has_fragment = true;
+                this.state = UrlParseState.Fragment;
+            } else if c >= 0 {
+                UrlText.append_byte(this.query, c, UrlText.query(c, this.special()));
+            }
+            return true;
+        }
+        if c >= 0 {
+            UrlText.append_byte(this.fragment, c, UrlText.fragment(c));
+        }
+        return true;
+    }
+
+    fun scheme_state(c: int): bool {
+        if UrlText.alpha(c) || UrlText.digit(c) || c == 0x2B || c == 0x2D || c == 0x2E {
+            return true;
+        }
+        if c != 0x3A {
+            this.state = UrlParseState.NoScheme;
+            this.p = 0 - 1;
+            return true;
+        }
+        let name = StringBuilder();
+        for (let i = 0; i < this.p; i = i + 1) {
+            name.append_char((char)UrlText.lower((int)this.input[i]));
+        }
+        this.scheme = name.build();
+        if this.scheme == "file" {
+            this.state = UrlParseState.File;
+        } else if this.special() && this.base_scheme_is(this.scheme) {
+            this.state = UrlParseState.SpecialRelativeOrAuthority;
+        } else if this.special() {
+            this.state = UrlParseState.SpecialAuthoritySlashes;
+        } else if this.next_is(0x2F) {
+            this.state = UrlParseState.PathOrAuthority;
+            this.p = this.p + 1;
+        } else {
+            this.opaque = true;
+            this.state = UrlParseState.OpaquePath;
+        }
+        return true;
+    }
+
+    fun no_scheme_state(c: int): bool {
+        if this.base.is_none() {
+            return false;
+        }
+        let base = this.base.unwrap();
+        if base.opaque_path.is_some() {
+            if c != 0x23 {
+                return false;
+            }
+            this.scheme = base.scheme_text;
+            this.opaque = true;
+            this.opaque_path.append(base.opaque_path.unwrap());
+            this.copy_base_query();
+            this.has_fragment = true;
+            this.state = UrlParseState.Fragment;
+            return true;
+        }
+        this.state = base.scheme_text == "file" ? UrlParseState.File : UrlParseState.Relative;
+        this.p = this.p - 1;
+        return true;
+    }
+
+    fun relative_state(c: int): void {
+        this.scheme = this.base.unwrap().scheme_text;
+        if c == 0x2F || (this.special() && c == 0x5C) {
+            this.state = UrlParseState.RelativeSlash;
+            return;
+        }
+        this.copy_base_authority();
+        this.copy_base_segments();
+        this.copy_base_query();
+        if this.enter_query_or_fragment(c) {
+            return;
+        }
+        if c >= 0 {
+            this.has_query = false;
+            this.query.clear();
+            this.shorten();
+            this.state = UrlParseState.Path;
+            this.p = this.p - 1;
+        }
+    }
+
+    fun authority_state(c: int): bool {
+        if this.mark < 0 {
+            this.mark = this.p;
+        }
+        if c == 0x40 {
+            if this.at_sign {
+                (this.password_token ? this.password : this.username).append("%40");
+            }
+            this.at_sign = true;
+            for (let i = this.mark; i < this.p; i = i + 1) {
+                let b = (int)this.input[i];
+                if b == 0x3A && !this.password_token {
+                    this.password_token = true;
+                    continue;
+                }
+                UrlText.append_byte(
+                    this.password_token ? this.password : this.username,
+                    b,
+                    UrlText.userinfo(b)
+                );
+            }
+            this.mark = this.p + 1;
+            return true;
+        }
+        if this.ends_authority(c) {
+            if this.at_sign && this.mark == this.p {
+                return false;
+            }
+            this.p = this.mark - 1;
+            this.mark = 0 - 1;
+            this.state = UrlParseState.Host;
+        }
+        return true;
+    }
+
+    fun host_state(c: int): bool {
+        if this.mark < 0 {
+            this.mark = this.p;
+        }
+        if c == 0x3A && !this.inside_brackets {
+            if this.mark == this.p {
+                return false;
+            }
+            if !this.set_host(this.mark, this.p) {
+                return false;
+            }
+            this.mark = 0 - 1;
+            this.state = UrlParseState.Port;
+            return true;
+        }
+        if this.ends_authority(c) {
+            if this.special() && this.mark == this.p {
+                return false;
+            }
+            if !this.set_host(this.mark, this.p) {
+                return false;
+            }
+            this.mark = 0 - 1;
+            this.state = UrlParseState.PathStart;
+            this.p = this.p - 1;
+            return true;
+        }
+        if c == 0x5B {
+            this.inside_brackets = true;
+        } else if c == 0x5D {
+            this.inside_brackets = false;
+        }
+        return true;
+    }
+
+    fun port_state(c: int): bool {
+        if this.mark < 0 {
+            this.mark = this.p;
+        }
+        if UrlText.digit(c) {
+            return true;
+        }
+        if !this.ends_authority(c) {
+            return false;
+        }
+        if this.p > this.mark {
+            let value = 0;
+            for (let i = this.mark; i < this.p; i = i + 1) {
+                value = value * 10 + (int)this.input[i] - 0x30;
+                if value > 65535 {
+                    return false;
+                }
+            }
+            this.port = value == UrlParser.default_port(this.scheme) ? 0 - 1 : value;
+        }
+        this.mark = 0 - 1;
+        this.state = UrlParseState.PathStart;
+        this.p = this.p - 1;
+        return true;
+    }
+
+    fun file_state(c: int): void {
+        this.scheme = "file";
+        this.has_host = true;
+        this.host = "";
+        if c == 0x2F || c == 0x5C {
+            this.state = UrlParseState.FileSlash;
+            return;
+        }
+        if this.base_scheme_is("file") {
+            this.copy_base_host();
+            this.copy_base_segments();
+            this.copy_base_query();
+            if this.enter_query_or_fragment(c) {
+                return;
+            }
+            if c >= 0 {
+                this.has_query = false;
+                this.query.clear();
+                if this.starts_with_drive(this.p) {
+                    this.segments.clear();
+                } else {
+                    this.shorten();
+                }
+            } else {
+                return;
+            }
+        }
+        this.state = UrlParseState.Path;
+        this.p = this.p - 1;
+    }
+
+    fun file_slash_state(c: int): void {
+        if c == 0x2F || c == 0x5C {
+            this.state = UrlParseState.FileHost;
+            return;
+        }
+        if this.base_scheme_is("file") {
+            let base = this.base.unwrap();
+            this.copy_base_host();
+            if !this.starts_with_drive(this.p)
+                && base.segments.length > 0
+                && UrlParser.normalized_drive(base.segments[0]) {
+                this.segments.push(base.segments[0]);
+            }
+        }
+        this.state = UrlParseState.Path;
+        this.p = this.p - 1;
+    }
+
+    fun file_host_state(c: int): bool {
+        if this.mark < 0 {
+            this.mark = this.p;
+        }
+        if c >= 0 && c != 0x2F && c != 0x5C && c != 0x3F && c != 0x23 {
+            return true;
+        }
+        let start = this.mark;
+        this.mark = 0 - 1;
+        this.p = this.p - 1;
+        if this.p + 1 - start == 2 && this.drive_at(start) {
+            this.buffer.append_char((char)this.input[start]);
+            this.buffer.append_char((char)this.input[start + 1]);
+            this.state = UrlParseState.Path;
+            return true;
+        }
+        this.state = UrlParseState.PathStart;
+        if this.p + 1 == start {
+            this.has_host = true;
+            this.host = "";
+            return true;
+        }
+        if !this.set_host(start, this.p + 1) {
+            return false;
+        }
+        if this.host == "localhost" {
+            this.host = "";
+        }
+        return true;
+    }
+
+    fun path_start_state(c: int): void {
+        if this.special() {
+            this.state = UrlParseState.Path;
+            if c != 0x2F && c != 0x5C {
+                this.p = this.p - 1;
+            }
+        } else if !this.enter_query_or_fragment(c) && c >= 0 {
+            this.state = UrlParseState.Path;
+            if c != 0x2F {
+                this.p = this.p - 1;
+            }
+        }
+    }
+
+    fun path_state(c: int): void {
+        let slash = c == 0x2F || (this.special() && c == 0x5C);
+        if !slash && c >= 0 && c != 0x3F && c != 0x23 {
+            UrlText.append_byte(this.buffer, c, UrlText.path(c));
+            return;
+        }
+        let segment = this.buffer.build();
+        this.buffer.clear();
+        let dots = segment.to_lower();
+        let single = dots == "." || dots == "%2e";
+        if dots == ".." || dots == ".%2e" || dots == "%2e." || dots == "%2e%2e" {
+            this.shorten();
+            if !slash {
+                this.segments.push("");
+            }
+        } else if single {
+            if !slash {
+                this.segments.push("");
+            }
+        } else {
+            if this.scheme == "file" && this.segments.length == 0 && UrlParser.drive(segment) {
+                segment = segment.substring(0, 1) + ":";
+            }
+            this.segments.push(segment);
+        }
+        this.enter_query_or_fragment(c);
+    }
+
+    fun enter_query_or_fragment(c: int): bool {
+        if c == 0x3F {
+            this.has_query = true;
+            this.query.clear();
+            this.state = UrlParseState.Query;
+            return true;
+        }
+        if c == 0x23 {
+            this.has_fragment = true;
+            this.state = UrlParseState.Fragment;
+            return true;
+        }
+        return false;
+    }
+
+    fun set_host(start: int, end: int): bool {
+        let parsed = UrlHost.parse(this.input, start, end, this.special());
+        if parsed.is_none() {
+            return false;
+        }
+        this.has_host = true;
+        this.host = parsed.unwrap();
+        return true;
+    }
+
+    fun ends_authority(c: int): bool {
+        return c < 0 || c == 0x2F || c == 0x3F || c == 0x23 || (this.special() && c == 0x5C);
+    }
+
+    fun special(): bool {
+        return UrlParser.default_port(this.scheme) != 0 - 2;
+    }
+
+    fun next_is(b: int): bool {
+        return this.p + 1 < this.input.length && (int)this.input[this.p + 1] == b;
+    }
+
+    fun base_scheme_is(scheme: string): bool {
+        return this.base.is_some() && this.base.unwrap().scheme_text == scheme;
+    }
+
+    fun copy_base_host(): void {
+        let base = this.base.unwrap();
+        this.has_host = base.host_text.is_some();
+        this.host = base.host_text.unwrap_or("");
+    }
+
+    fun copy_base_authority(): void {
+        let base = this.base.unwrap();
+        this.username.clear();
+        this.username.append(base.username);
+        this.password.clear();
+        this.password.append(base.password);
+        this.copy_base_host();
+        this.port = base.port_number;
+    }
+
+    fun copy_base_segments(): void {
+        this.segments.clear();
+        for let segment in this.base.unwrap().segments {
+            this.segments.push(segment);
+        }
+    }
+
+    fun copy_base_query(): void {
+        let query = this.base.unwrap().query.render();
+        this.query.clear();
+        this.has_query = query.length > 0;
+        if this.has_query {
+            this.query.append(query.substring(1, query.length));
+        }
+    }
+
+    fun shorten(): void {
+        if this.scheme == "file"
+            && this.segments.length == 1
+            && UrlParser.normalized_drive(this.segments[0]) {
+            return;
+        }
+        if this.segments.length > 0 {
+            this.segments.remove_at(this.segments.length - 1);
+        }
+    }
+
+    fun drive_at(i: int): bool {
+        return i + 1 < this.input.length
+            && UrlText.alpha((int)this.input[i])
+            && ((int)this.input[i + 1] == 0x3A || (int)this.input[i + 1] == 0x7C);
+    }
+
+    fun starts_with_drive(i: int): bool {
+        if !this.drive_at(i) {
+            return false;
+        }
+        if i + 2 == this.input.length {
+            return true;
+        }
+        let next = (int)this.input[i + 2];
+        return next == 0x2F || next == 0x5C || next == 0x3F || next == 0x23;
+    }
+
+    /// Default port of a special scheme, `-1` for `file`, and `-2` for non-special schemes.
+    internal static fun default_port(scheme: string): int {
+        if scheme == "http" || scheme == "ws" {
+            return 80;
+        }
+        if scheme == "https" || scheme == "wss" {
+            return 443;
+        }
+        if scheme == "ftp" {
+            return 21;
+        }
+        if scheme == "file" {
+            return 0 - 1;
+        }
+        return 0 - 2;
+    }
+
+    static fun drive(borrow segment: string): bool {
+        return segment.length == 2
+            && UrlText.alpha((int)segment.char_at(0))
+            && (segment.char_at(1) == ':' || segment.char_at(1) == '|');
+    }
+
+    static fun normalized_drive(borrow segment: string): bool {
+        return UrlParser.drive(segment) && segment.char_at(1) == ':';
+    }
+}

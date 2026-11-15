@@ -46,12 +46,9 @@ with without_checkout_runtime(), tempfile.TemporaryDirectory(prefix='dream-relea
         output = command([compiler, *flags, 'run', source], work)
         assert output == 'release 日本語\n', repr(output)
         print('PASS native ' + ('release' if flags else 'debug'), flush=True)
-    cli_package = work / 'dream_packages' / 'cli'
-    shutil.copytree(root / 'packages' / 'cli' / 'src', cli_package / 'src')
-    shutil.copyfile(root / 'packages' / 'cli' / 'dream.toml', cli_package / 'dream.toml')
-    cli = work / 'cli_probe.dream'
+    cli = work / 'cli.dream'
     cli.write_text('''import system;
-import cli;
+import system.cli;
 fun main(): void {
     let command = Command("release").string_option("message");
     let parsed = command.parse(["--message", "native ABI"]).unwrap();
@@ -61,35 +58,20 @@ fun main(): void {
     assert command([compiler, '--release', 'run', cli], work) == 'native ABI\n'
     print('PASS native CLI capability ABI', flush=True)
     runner = work / 'verify.mjs'
-    for package in ('csv', 'compress'):
-        destination = work / 'dream_packages' / package
-        shutil.copytree(root / 'packages' / package / 'src', destination / 'src')
-        shutil.copyfile(root / 'packages' / package / 'dream.toml', destination / 'dream.toml')
-    for name, source_name, expected in [
-        ('hello', 'hello', 'Hello, world!\n'),
-        ('async', 'async', 'awake\n'),
-        ('typed_array', 'typed_array', '6\n'),
-        ('callback', 'callback', '14\n'),
-        ('csv', 'csv_probe', 'a\n'),
-        ('compression', 'compression', '27\n'),
-    ]:
-        source = work / (source_name + '.dream')
-        shutil.copyfile(root / f'tests/size/{source_name}.dream', source)
+    for name, expected in [('hello', 'Hello, world!\n'), ('async', 'awake\n'), ('typed_array', '6\n'), ('callback', '14\n'), ('csv', 'a\n'), ('compression', '27\n')]:
+        source = work / (name + '.dream')
+        shutil.copyfile(root / f'tests/size/{name}.dream', source)
         wasm = work / (name + '.wasm')
         command([compiler, '--runtime', '--node', '-o', wasm, source], work)
         assert wasm.read_bytes().startswith(b'\0asm'), name
         assert wasm.with_suffix('.wat').is_file(), name
-        runtime = wasm.with_suffix('.node.runtime.mjs')
+        runtime = wasm.with_suffix('.node.runtime.js')
         runner.write_text("import {pathToFileURL} from 'node:url';\nconst {run} = await import(pathToFileURL(" + json.dumps(str(runtime)) + "));\nawait run(pathToFileURL(" + json.dumps(str(wasm)) + "), {imports: {sum: values => Array.from(values).reduce((a,b) => a+b,0), invoke: callback => callback(7)}, stdout: text => process.stdout.write(text)});\n", encoding='utf-8')
         actual = command(['node', runner], work)
         assert actual == expected, (name, actual, expected)
         print('PASS Node ' + name, flush=True)
-    audio_package = work / 'dream_packages' / 'audio'
-    shutil.copytree(root / 'packages' / 'audio' / 'src', audio_package / 'src')
-    shutil.copytree(root / 'packages' / 'audio' / 'native', audio_package / 'native')
-    shutil.copyfile(root / 'packages' / 'audio' / 'dream.toml', audio_package / 'dream.toml')
-    audio = work / 'audio_probe.dream'
-    audio.write_text('''import audio;
+    audio = work / 'audio.dream'
+    audio.write_text('''import system.audio;
 async fun main(): void {
     let bytes: byte[] = [0];
     let result = AudioBuffer.decode(bytes).await;

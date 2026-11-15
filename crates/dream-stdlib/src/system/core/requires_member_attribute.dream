@@ -6,7 +6,7 @@ module system.core;
 /// own type parameters need, and the caller's requirement checks those transitively.
 @repeatable
 @attribute(AttributeTarget.Function, AttributeTarget.Method, AttributeTarget.StaticMethod)
-public struct RequiresMemberAttribute {
+internal struct RequiresMemberAttribute {
     /// Generic parameter whose bound type must provide the member.
     public parameter: string;
     /// Method name the bound type must declare, directly or through an extension.

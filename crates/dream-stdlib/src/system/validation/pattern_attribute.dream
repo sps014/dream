@@ -1,0 +1,8 @@
+module system.validation;
+
+/// Regular expression required for a string.
+@attribute(AttributeTarget.Field, AttributeTarget.Parameter)
+public struct PatternAttribute {
+    /// Regular expression that the input string must match.
+    public value: string;
+}

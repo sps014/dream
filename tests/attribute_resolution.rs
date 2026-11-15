@@ -25,7 +25,8 @@ public fun probe(ctx: GenContext): void {
         dir.path().join("main.dream"),
         r#"
 import gen;
-@probe(Math.sqrt)
+import system.logging;
+@probe(level_name)
 fun handler(): void {}
 fun main(): void {}
 "#,
@@ -39,7 +40,7 @@ fun main(): void {}
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("cannot consume") && stderr.contains("Math.sqrt"),
+        stderr.contains("cannot consume 'system.logging::level_name'"),
         "{stderr}"
     );
 }
@@ -256,13 +257,12 @@ fn webapi_generated_native_ir_is_deterministic() {
     use dream::{driver::compiler::Compiler, driver::toolchain::ToolchainConfig};
     use dream_mir::backend::Target;
     let root = tempfile::tempdir().unwrap();
-    crate::common::link_packages(root.path(), &["http", "webapi", "validation"]);
     let source = root.path().join("main.dream");
     let output = root.path().join("main.ll");
     std::fs::write(
         &source,
         r#"
-import webapi;
+import system.webapi;
 @router("")
 class Routes { @get("/hello/{id}") public static fun hello(@path id: int): string { return id.to_string(); } }
 async fun main(): void {
@@ -293,7 +293,6 @@ async fun main(): void {
 #[test]
 fn webapi_router_imports_model_types_from_loaded_modules() {
     let root = tempfile::tempdir().unwrap();
-    crate::common::link_packages(root.path(), &["http", "webapi", "validation"]);
     std::fs::write(
         root.path().join("models.dream"),
         r#"
@@ -308,7 +307,7 @@ public class Payload { public text: string; public constructor(text: string) { t
         root.path().join("routes.dream"),
         r#"
 module api.routes;
-import webapi;
+import system.webapi;
 import models;
 @router("/api")
 public class Routes {
@@ -322,7 +321,7 @@ public class Routes {
         root.path().join("main.dream"),
         r#"
 import system;
-import webapi;
+import system.webapi;
 import routes;
 fun main(): void {
     let app = WebApp(); app.include_router(Routes.router()).unwrap();

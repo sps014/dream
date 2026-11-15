@@ -1,0 +1,43 @@
+module system.compress;
+
+/// Streaming gzip/zlib factories; wrappers borrow their underlying stream.
+public static class Compression {
+    /// Creates an encoder; max_output_bytes bounds compressed output across every write and finish.
+    public static fun writer(
+        destination: Writer,
+        format: CompressionFormat = CompressionFormat.Gzip,
+        max_output_bytes: long = 67108864L
+    ): Result<CompressionWriter, IoError> {
+        Compression.check_limit(max_output_bytes)?;
+        return Result.Ok(
+            CompressionWriter(
+                destination,
+                Deflater(format == CompressionFormat.Gzip),
+                max_output_bytes
+            )
+        );
+    }
+
+    /// Creates a strict single-stream decoder; the output limit prevents unbounded expansion.
+    public static fun reader(
+        source: Reader,
+        format: CompressionFormat = CompressionFormat.Gzip,
+        max_output_bytes: long = 67108864L
+    ): Result<CompressionReader, IoError> {
+        Compression.check_limit(max_output_bytes)?;
+        return Result.Ok(
+            CompressionReader(
+                Inflater(source, format == CompressionFormat.Gzip, max_output_bytes)
+            )
+        );
+    }
+
+    static fun check_limit(limit: long): Result<Unit, IoError> {
+        if limit < 0L || limit > 1073741824L {
+            return Result.Err(
+                IoError.invalid("", "compression output limit must be between zero and 1 GiB")
+            );
+        }
+        return Result.Ok(Unit());
+    }
+}

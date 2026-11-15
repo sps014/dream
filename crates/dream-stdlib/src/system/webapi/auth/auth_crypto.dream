@@ -1,0 +1,77 @@
+module system.webapi.auth;
+
+internal static class AuthCrypto {
+    @native
+    @runtime("cryptoAuth", "crypto")
+    static extern fun host(request: string): string;
+
+    @native
+    internal static fun call(request: JsonValue): Result<JsonValue, AuthError> {
+        let result = Json.deserialize<JsonValue>(AuthCrypto.host(Json.serialize(request)));
+        if result.is_err() {
+            return Result.Err(AuthError("ECRYPTO", "invalid crypto completion"));
+        }
+        let value = result.unwrap();
+        if value.contains("error") {
+            return Result.Err(
+                AuthError(
+                    "ECRYPTO",
+                    value.get("error").unwrap_or(JsonValue.null())
+                        .as_string()
+                        .unwrap_or("cryptographic operation failed")
+                )
+            );
+        }
+        return Result.Ok(value.get("ok").unwrap_or(JsonValue.null()));
+    }
+
+    internal static fun request(action: string): JsonValue {
+        let value = JsonValue.dict();
+        value["action"] = JsonValue.from_string(action);
+        return value;
+    }
+
+    @native
+    internal static fun random(): Result<string, AuthError> {
+        let bytes = SecureRandom.bytes(32);
+        if bytes.is_err() {
+            return Result.Err(AuthError("EENTROPY", "secure random source failed"));
+        }
+        return Result.Ok(Encoding.hex_encode(bytes.unwrap()));
+    }
+
+    internal static fun digest(token: string): string {
+        return Encoding.hex_encode(Sha256.hash(Encoding.utf8_encode(token)));
+    }
+
+    internal static fun now(): long {
+        return DateTime.utc_now().epoch_millis / 1000L;
+    }
+
+    @native
+    internal static fun jwt(
+        options: JwtOptions,
+        action: string,
+        payload: JsonValue
+    ): Result<JsonValue, AuthError> {
+        if options.algorithm == JwtAlgorithm.HS256 {
+            if action == "sign" {
+                return Result.Ok(JsonValue.from_string(Hs256Jwt.sign(options, payload)?));
+            }
+            return Hs256Jwt.verify(options, payload.as_string().unwrap_or(""), AuthCrypto.now());
+        }
+        let request = AuthCrypto.request(action);
+        request["issuer"] = JsonValue.from_string(options.issuer);
+        request["audience"] = JsonValue.from_string(options.audience);
+        request["algorithm"] = JsonValue.from_string(options.algorithm.to_string());
+        let key = options.verification_key;
+        if action == "sign" {
+            key = options.signing_key;
+            request["claims"] = payload;
+        } else {
+            request["token"] = payload;
+        }
+        request["key"] = JsonValue.from_string(key);
+        return AuthCrypto.call(request);
+    }
+}

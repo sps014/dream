@@ -79,7 +79,7 @@ Stdlib functions implemented by the Dream runtime (files, process, crypto, …) 
 static internal extern fun file_read(borrow path: string): string;
 ```
 
-`@runtime` cannot be combined with `@js`, `@c`, or `@intrinsic` on the same extern. A leading `@cfg(...)` restricts which builds contain the API at all (`@cfg(Target.Native || Target.Node)`).
+`@runtime` cannot be combined with `@js`, `@c`, or `@intrinsic` on the same extern. `@native` / `@node` / `@web` still restrict *which* targets may mention the API (`@native @node @runtime("processRun")`).
 
 ## Running it from JavaScript
 
@@ -90,11 +90,11 @@ import { run } from "./runtime/dream.js";
 await run("hello.wasm");   // binds externs, calls main
 ```
 
-Optionally emit a smaller sibling `*.web.runtime.js` / `*.node.runtime.mjs` (only the host pieces that program needs) with `--runtime` plus one or both host flags. Without these flags, compile does **not** write a selective runtime — use the full shared host instead.
+Optionally emit a smaller sibling `*.web.runtime.js` / `*.node.runtime.js` (only the host pieces that program needs) with `--runtime` plus one or both host flags. Without these flags, compile does **not** write a selective runtime — use the full shared host instead.
 
 ```bash
 dream --runtime --web hello.dream           # hello.web.runtime.js
-dream --runtime --node hello.dream          # hello.node.runtime.mjs
+dream --runtime --node hello.dream          # hello.node.runtime.js
 dream --runtime --web --node hello.dream    # both in one compile
 ```
 
@@ -166,7 +166,7 @@ Functions cross the boundary in both directions too — see [Callbacks](../langu
 
 ## Built on interop
 
-- [Regex](../library/text/regex.md) — `Regex` from `import regex` (not a JS `RegExp`).
+- [Regex](../library/text/regex.md) — `Regex` in `system.text` (not a JS `RegExp`).
 
 ## Host feature matrix
 

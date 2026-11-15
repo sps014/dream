@@ -38,7 +38,7 @@ function httpRestricted(name) {
 }
 export function makeHttpHost() {
   return {
-    netCapabilities: () => isNode ? 6 : 0,
+    netCapabilities: () => isNode ? 14 : 0,
     netCookieJarCreate: () => 0,
     netCookieJarClose: () => {},
     netCookieJarControl: () => JSON.stringify({ code: "ENOTSUP", message: "managed cookie jars are unavailable on this host" }),

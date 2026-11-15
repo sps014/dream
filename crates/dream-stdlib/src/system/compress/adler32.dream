@@ -1,0 +1,38 @@
+module system.compress;
+
+/// Running Adler-32 checksum (RFC 1950) as used by the zlib trailer.
+internal class Adler32 {
+    a: uint;
+    b: uint;
+
+    internal constructor() {
+        this.a = 1u;
+        this.b = 0u;
+    }
+
+    /// Adds `bytes[start..start + count]` to the checksum.
+    internal fun update(borrow bytes: byte[], start: int, count: int): void {
+        let a = this.a;
+        let b = this.b;
+        let i = start;
+        let end = start + count;
+        while i < end {
+            // 5552 is the longest run whose sums cannot overflow 32 bits before reduction.
+            let run = end - i < 5552 ? end - i : 5552;
+            for (let j = 0; j < run; j = j + 1) {
+                a = a + (uint)bytes[i + j];
+                b = b + a;
+            }
+            a = a % 65521u;
+            b = b % 65521u;
+            i = i + run;
+        }
+        this.a = a;
+        this.b = b;
+    }
+
+    /// The checksum of every byte added so far.
+    internal fun value(): uint {
+        return (this.b << 16u) | this.a;
+    }
+}

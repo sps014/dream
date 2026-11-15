@@ -5,6 +5,7 @@ use crate::struct_table::StructTable;
 use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionTable;
 use bumpalo::Bump;
+use dream_abi::attributes::{CompileTargets, RuntimeSupport};
 use dream_diagnostics::{Diagnostic, DiagnosticBag};
 use dream_syntax::nodes::types::FUTURE_TYPE;
 use dream_syntax::nodes::{EnumDeclarationNode, ExtendNode};
@@ -27,10 +28,10 @@ mod declarations;
 mod expressions;
 mod generics;
 mod hir_emit;
+mod member_requirements;
 pub mod ide;
 mod iterators;
 mod js_interop;
-mod member_requirements;
 mod ownership;
 mod receiver_modes;
 mod statements;
@@ -295,9 +296,6 @@ pub struct Analyzer<'a> {
     struct_methods: Vec<(&'a FunctionNode<'a>, GenericBindings)>,
     /// Skip library bodies until reachable HIR names them; see `declarations::functions::reach`.
     lazy_library_bodies: bool,
-    /// Loaded files that belong to installed dependency packages; with the `<std>/` sources they
-    /// are the library code that lazy analysis and caller-line tracking apply to.
-    library_files: std::collections::BTreeSet<String>,
     /// Library bodies whose analysis waits for a reachable reference, keyed by their def.
     deferred_bodies: IndexMap<dream_types::DefId, (&'a FunctionNode<'a>, GenericBindings)>,
     /// Registered enums: name -> (member -> value). Enum values are plain `i32`s at runtime.
@@ -392,6 +390,11 @@ pub struct Analyzer<'a> {
     /// True while analyzing the body of an `@unsafe fun`/method. Gates calling another `@unsafe`
     /// function/method — see `Analyzer::check_unsafe_call`.
     current_function_is_unsafe: bool,
+    /// Runtime availability of the function whose body is currently being analyzed. Gates
+    /// `check_runtime_call` on nested calls — see `Analyzer::check_runtime_call`.
+    current_function_runtime: RuntimeSupport,
+    /// Active compile-time runtime target(s) from the driver/CLI. Defaults to native-only.
+    compile_targets: CompileTargets,
     /// Pointer facts used by the single HIR layout table.
     target_layout: dream_hir::TargetLayout,
     deferred_case_labels: Vec<Vec<(dream_hir::HExpr, Option<TextSpan>)>>,
@@ -488,7 +491,6 @@ impl<'a> Analyzer<'a> {
             generic_method_bindings: indexmap::IndexMap::new(),
             struct_methods: Vec::new(),
             lazy_library_bodies: false,
-            library_files: std::collections::BTreeSet::new(),
             deferred_bodies: IndexMap::new(),
             enum_table: IndexMap::new(),
             union_table: IndexMap::new(),
@@ -515,6 +517,8 @@ impl<'a> Analyzer<'a> {
             ref_struct_escape_muted: false,
             current_function_is_async: false,
             current_function_is_unsafe: false,
+            current_function_runtime: RuntimeSupport::ALL,
+            compile_targets: CompileTargets::native_only(),
             target_layout: dream_hir::TargetLayout::default(),
             deferred_case_labels: Vec::new(),
             overflow: dream_hir::Overflow::Wrapping,
@@ -582,6 +586,12 @@ impl<'a> Analyzer<'a> {
         self
     }
 
+    /// Active compile-time runtime target(s). Call before [`Self::analyze`].
+    pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
+        self.compile_targets = targets;
+        self
+    }
+
     /// Analyze only the library bodies a user body, export, or global initializer can reach.
     /// Unreached library code is then neither type-checked nor emitted, so callers that need
     /// diagnostics or facts for the whole prelude keep the default eager analysis.
@@ -589,17 +599,6 @@ impl<'a> Analyzer<'a> {
     pub fn with_lazy_library_bodies(mut self) -> Self {
         self.lazy_library_bodies = true;
         self
-    }
-
-    /// Marks dependency-package files as library code. Call before [`Self::analyze`].
-    pub fn with_library_files(mut self, files: impl IntoIterator<Item = String>) -> Self {
-        self.library_files = files.into_iter().collect();
-        self
-    }
-
-    /// True for stdlib and dependency-package sources.
-    pub(in crate::analyzer) fn is_library_file(&self, path: Option<&str>) -> bool {
-        path.is_some_and(|p| dream_stdlib::is_std_source(p) || self.library_files.contains(p))
     }
 
     pub fn with_target_layout(mut self, target: dream_hir::TargetLayout) -> Self {

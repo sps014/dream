@@ -1,0 +1,9 @@
+module system.validation;
+
+/// A synchronous field validator returning an optional error message.
+@attribute(AttributeTarget.Field)
+public struct ValidateWithAttribute {
+    /// Synchronous validation function; returns `None` on success or an error message on
+    /// failure.
+    public validator: DeclarationPath;
+}

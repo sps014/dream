@@ -5,7 +5,3 @@ type = "bin"
 entry = "main.dream"
 targets = ["native", "web"]
 description = "Audio playback, waveform and FFT spectrum using Dream audio and GPU APIs"
-
-[dependencies]
-audio = { path = "../../packages/audio" }
-http = { path = "../../packages/http" }

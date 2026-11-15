@@ -1,6 +1,6 @@
 module service.routes;
-import webapi;
-import webapi.auth;
+import system.webapi;
+import system.webapi.auth;
 import models;
 
 public fun request_label(@header("X-Request-ID") label: Option<string>): string {

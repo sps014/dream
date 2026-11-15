@@ -1,0 +1,45 @@
+module system.net;
+
+/// States of the WHATWG basic URL parser, named after the specification's states.
+internal enum UrlParseState {
+    /// Expecting the first letter of a scheme.
+    SchemeStart,
+    /// Reading the scheme up to its colon.
+    Scheme,
+    /// The input has no scheme and resolves against the base URL.
+    NoScheme,
+    /// A special scheme matching the base may continue with an authority or a relative path.
+    SpecialRelativeOrAuthority,
+    /// A non-special scheme followed by `/` may continue with an authority or a path.
+    PathOrAuthority,
+    /// Resolving a scheme-relative reference against the base URL.
+    Relative,
+    /// A relative reference that starts with a slash.
+    RelativeSlash,
+    /// Expecting the `//` before a special URL's authority.
+    SpecialAuthoritySlashes,
+    /// Skipping any extra slashes before a special URL's authority.
+    SpecialAuthorityIgnoreSlashes,
+    /// Reading credentials up to the host.
+    Authority,
+    /// Reading the host.
+    Host,
+    /// Reading the port digits.
+    Port,
+    /// The start of a `file` URL.
+    File,
+    /// A `file` URL after its first slash.
+    FileSlash,
+    /// Reading a `file` URL's host.
+    FileHost,
+    /// The start of a hierarchical path.
+    PathStart,
+    /// Reading hierarchical path segments.
+    Path,
+    /// Reading an opaque path such as `mailto:` or `data:` content.
+    OpaquePath,
+    /// Reading the query.
+    Query,
+    /// Reading the fragment.
+    Fragment,
+}

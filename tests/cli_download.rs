@@ -19,7 +19,6 @@ fn download_cli_runs_on_native() {
     let root = temp.path();
     let source = root.join("download.dream");
     std::fs::write(&source, include_str!("../sample/cli_download/main.dream")).unwrap();
-    crate::common::link_packages(root, &["cli", "http"]);
     let compiler = env!("CARGO_BIN_EXE_dream");
     let output = root.join("native.bin");
     successful(

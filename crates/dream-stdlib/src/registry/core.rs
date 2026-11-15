@@ -102,24 +102,28 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/requires_member_attribute.dream"),
         ),
         (
-            "<std>/system/core/main_loop_attribute.dream",
-            include_str!("../system/core/main_loop_attribute.dream"),
+            "<std>/system/core/platform_main.dream",
+            include_str!("../system/core/platform_main.dream"),
         ),
         (
             "<std>/system/core/async_host_attribute.dream",
             include_str!("../system/core/async_host_attribute.dream"),
         ),
         (
+            "<std>/system/core/native_attribute.dream",
+            include_str!("../system/core/native_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/node_attribute.dream",
+            include_str!("../system/core/node_attribute.dream"),
+        ),
+        (
+            "<std>/system/core/web_attribute.dream",
+            include_str!("../system/core/web_attribute.dream"),
+        ),
+        (
             "<std>/system/core/buffer.dream",
             include_str!("../system/core/buffer.dream"),
-        ),
-        (
-            "<std>/system/core/string_utf8.dream",
-            include_str!("../system/core/string_utf8.dream"),
-        ),
-        (
-            "<std>/system/core/system_time.dream",
-            include_str!("../system/core/system_time.dream"),
         ),
         (
             "<std>/system/core/bytes.dream",

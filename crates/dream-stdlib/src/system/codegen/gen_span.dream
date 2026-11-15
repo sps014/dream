@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// A source range described by its starting location and length.
 public class GenSpan {
@@ -18,7 +19,7 @@ public class GenSpan {
     public length: int;
 
     /// Decodes a `GenSpan` from its object in the generation snapshot.
-    public constructor(borrow v: GenWire) {
+    public constructor(borrow v: JsonValue) {
         this.file = gen_str(v, "file");
         this.line = gen_int(v, "line");
         this.column = gen_int(v, "column");

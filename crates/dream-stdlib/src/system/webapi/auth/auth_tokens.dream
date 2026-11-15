@@ -1,0 +1,36 @@
+module system.webapi.auth;
+
+/// Credentials returned after authentication or refresh. Keep refresh and CSRF tokens secret.
+@json
+public class AuthTokens {
+    /// Signed token sent with authenticated requests.
+    public access_token: string;
+
+    /// Secret used to obtain a new access token.
+    public refresh_token: string;
+
+    /// Authorization scheme returned with the tokens, usually `Bearer`.
+    public token_type: string;
+
+    /// Access token lifetime in seconds.
+    public expires_in: int;
+
+    /// Token the browser must send to protect cookie-authenticated requests.
+    public csrf_token: string;
+
+    /// Creates a `AuthTokens` with `access_token`, `refresh_token`, `token_type`, `expires_in`,
+    /// `csrf_token`.
+    public constructor(
+        access_token: string,
+        refresh_token: string,
+        token_type: string,
+        expires_in: int,
+        csrf_token: string
+    ) {
+        this.access_token = access_token;
+        this.refresh_token = refresh_token;
+        this.token_type = token_type;
+        this.expires_in = expires_in;
+        this.csrf_token = csrf_token;
+    }
+}

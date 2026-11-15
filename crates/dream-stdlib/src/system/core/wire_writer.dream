@@ -1,13 +1,13 @@
 module system.core;
 
-/// Builds a little-endian record: fixed-width integers and strings as a 32-bit UTF-8 byte
-/// length followed by the bytes.
-public class WireWriter {
+/// Builds a little-endian record for a native host: fixed-width integers and strings as a
+/// 32-bit UTF-8 byte length followed by the bytes.
+internal class WireWriter {
     bytes: byte[];
     count: int;
 
     /// Creates an empty record with room for `capacity` bytes before it grows.
-    public constructor(capacity: int) {
+    internal constructor(capacity: int) {
         this.bytes = Buffer.alloc<byte>(capacity < 16 ? 16 : capacity);
         this.count = 0;
     }
@@ -31,14 +31,14 @@ public class WireWriter {
     }
 
     /// Appends the low 8 bits of `value`.
-    public fun u8(value: int): void {
+    internal fun u8(value: int): void {
         this.ensure(1);
         this.put(this.count, value);
         this.count = this.count + 1;
     }
 
     /// Appends `value` as four bytes.
-    public fun i32(value: int): void {
+    internal fun i32(value: int): void {
         this.ensure(4);
         this.put(this.count, value);
         this.put(this.count + 1, value >> 8);
@@ -48,14 +48,14 @@ public class WireWriter {
     }
 
     /// Appends `value` as eight bytes.
-    public fun i64(value: long): void {
+    internal fun i64(value: long): void {
         this.i32((int)(value & 4294967295L));
         this.i32((int)(value >> 32));
     }
 
     /// Appends `value` as a 32-bit byte length and its UTF-8 bytes. Unpaired surrogates
     /// become U+FFFD.
-    public fun text(borrow value: string): void {
+    internal fun text(borrow value: string): void {
         let start = this.count;
         this.i32(0);
         this.ensure(value.length * 3);
@@ -104,7 +104,7 @@ public class WireWriter {
     }
 
     /// The finished record.
-    public fun finish(): byte[] {
+    internal fun finish(): byte[] {
         return this.bytes.slice(0, this.count);
     }
 }

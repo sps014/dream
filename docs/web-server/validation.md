@@ -6,12 +6,12 @@ icon: material/check-all
 
 # Models and validation
 
-Import `validation` for strict, reusable model decoding. These same rules describe web request models in OpenAPI.
+Import `system.validation` for strict, reusable model decoding. These same rules describe web request models in OpenAPI.
 
 ```dream
 import system;
 import system.json;
-import validation;
+import system.validation;
 
 @json
 class Person {
@@ -111,4 +111,4 @@ A `@body` parameter whose type is an `@json` model is decoded with `Validation.d
 
 Use `Json.deserialize` for ordinary JSON decoding without these rules. `@default_json` is validation metadata; it does not change a constructor's default arguments.
 
-See the [complete example](example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

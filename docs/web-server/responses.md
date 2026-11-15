@@ -10,7 +10,7 @@ Return a model for JSON or `HttpOutgoing` when you need explicit headers and sta
 
 ```dream
 import system;
-import webapi;
+import system.webapi;
 
 @router("")
 class Routes {
@@ -93,4 +93,4 @@ For any other code, construct one directly: `HttpStatus(402, "Payment Required")
 
 A middleware layer may return a response without invoking the endpoint.
 
-See the [complete example](example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

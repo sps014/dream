@@ -2,15 +2,16 @@
 title: URLs
 summary: Parse URLs and work with query parameters.
 icon: material/link-variant
+api: reference/api/system-net.md
 ---
 
 # URLs and query parameters
 
-Import `http` to parse an absolute URL and resolve a relative one. Parsing follows the WHATWG URL Standard on every target and returns `Result<Url, ParseError>`.
+Import `system.net` to parse an absolute URL and resolve a relative one. Parsing follows the WHATWG URL Standard on every target and returns `Result<Url, ParseError>`.
 
 ```dream
 import system;
-import http;
+import system.net;
 
 fun main(): Result<Unit, ParseError> {
     let base = Url.parse("HTTPS://Example.COM:443/v1/")?;
@@ -66,7 +67,7 @@ decoded, and repeated keys stay distinct.
 
 Existing query text stays until you change the query. After a change, spaces become `+`, a literal `+` becomes `%2b`, and an empty value keeps `=`.
 
-`import encoding` treats `+` differently from query form encoding. A bad percent escape stays as written, and invalid UTF-8 in a decoded value becomes U+FFFD instead of failing the parse.
+`system.encoding` treats `+` differently from query form encoding. A bad percent escape stays as written, and invalid UTF-8 in a decoded value becomes U+FFFD instead of failing the parse.
 
 Opaque paths preserve spaces inside the path. A final path space before a query
 or fragment is serialized as `%20`.

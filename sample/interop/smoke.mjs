@@ -24,7 +24,7 @@ const cases = [
   ["js", "js.mjs", "shout = HELLO, DREAM"],
   ["slots", "slots.mjs", "sum: 60"],
   ["structs", "structs.mjs", "score[1]=8"],
-  ["pattern", "regex.mjs", ""],
+  ["regex", "regex.mjs", ""],
 ];
 
 let failed = 0;

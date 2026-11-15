@@ -1,6 +1,6 @@
 //! Compile-time source generators: `@generator fun name(ctx: GenContext)` Dream functions
 //! triggered by `@on_attribute`, `@on_call` and `@syntax_block`, run as cached debuggable
-//! executables on a binary snapshot of the program, with results merged back as generated files
+//! executables on a JSON snapshot of the program, with results merged back as generated files
 //! and syntax-site replacements.
 
 mod apply;
@@ -51,7 +51,6 @@ mod tools;
 mod transcript;
 mod type_ref;
 mod walk;
-mod wire;
 
 pub use decls::module_of;
 #[cfg(feature = "native")]

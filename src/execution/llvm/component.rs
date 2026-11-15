@@ -26,7 +26,7 @@ pub(super) fn link(
     let mut paths = dream_mir::runtime::component_runtime_c_files(&config.runtime_c);
     let transport = config.runtime_c.join("sys/wasi/component");
     paths.extend(
-        ["domain.c", "http.c", "http_transport.c"]
+        ["domain.c", "http.c", "http_transport.c", "sockets.c"]
             .into_iter()
             .map(|name| transport.join(name)),
     );

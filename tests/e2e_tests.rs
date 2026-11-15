@@ -154,6 +154,7 @@ fn run_core_services_e2e() {
         "console_read_line",
         "crypto_basic",
         "process_run_basic",
+        "datetime",
     ]));
 }
 
@@ -294,7 +295,7 @@ fn assert_deterministic(prefix: &str, name: &str, src: &Path, source: Option<&st
         if let Some(source) = source {
             compiler = compiler
                 .with_virtual_entry(source.to_string())
-                .with_compile_targets(dream_abi::compile_targets::CompileTargets {
+                .with_compile_targets(dream_abi::attributes::CompileTargets {
                     native: false,
                     node: true,
                     web: false,

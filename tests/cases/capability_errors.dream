@@ -1,7 +1,7 @@
 // Compile-time capabilities need a type they can describe: @json models, JSON-encodable values,
 // and resolvable declarations.
 import system;
-import validation;
+import system.validation;
 import system.codegen;
 import system.json;
 

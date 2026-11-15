@@ -1,5 +1,6 @@
 module system.codegen;
 
+import system.json;
 
 /// A diagnostic associated with a declaration in the generator's input.
 public class GenCompilationError: Error {
@@ -9,7 +10,7 @@ public class GenCompilationError: Error {
     _message: string;
 
     // Decodes a pre-generation error restricted to this generator's triggered declarations.
-    internal constructor(borrow v: GenWire) {
+    internal constructor(borrow v: JsonValue) {
         this.target = gen_str(v, "target");
         this._message = gen_str(v, "message");
     }

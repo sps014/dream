@@ -135,7 +135,7 @@ public types: List<GenTypeRef>
 Decodes a `GenExpr` from its object in the generation snapshot.
 
 ```dream
-public constructor(borrow v: GenWire)
+public constructor(borrow v: JsonValue)
 ```
 
 ## `children`

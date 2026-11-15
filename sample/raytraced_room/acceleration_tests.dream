@@ -1,6 +1,5 @@
 import system;
 import system.gpu;
-import random;
 import system.testing;
 import room_scene;
 import room_shading;

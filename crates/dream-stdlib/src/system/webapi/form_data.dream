@@ -1,0 +1,102 @@
+module system.webapi;
+
+/// The parsed fields of a `multipart/form-data` request, returned by `HttpIncoming.form`.
+/// Text fields and file parts keep the order the client sent them in; a name can repeat.
+public class FormData {
+    names: List<string>;
+    values: List<string>;
+    file_names: List<string>;
+    uploads: List<UploadedFile>;
+
+    internal constructor(parsed: JsonValue) {
+        this.names = List<string>();
+        this.values = List<string>();
+        this.file_names = List<string>();
+        this.uploads = List<UploadedFile>();
+        for (let field in parsed.get("fields").unwrap_or(JsonValue.null())
+            .as_array()
+            .unwrap_or(List<JsonValue>())) {
+            this.names.push(FormData.text(field, "name"));
+            this.values.push(FormData.text(field, "value"));
+        }
+        for (let file in parsed.get("files").unwrap_or(JsonValue.null())
+            .as_array()
+            .unwrap_or(List<JsonValue>())) {
+            let headers = HttpHeaders();
+            for (let pair in file.get("headers").unwrap_or(JsonValue.null())
+                .as_array()
+                .unwrap_or(List<JsonValue>())) {
+                let values = pair.as_array().unwrap_or(List<JsonValue>());
+                if values.length == 2 {
+                    headers.append(
+                        values[0].as_string().unwrap_or(""),
+                        values[1].as_string().unwrap_or("")
+                    );
+                }
+            }
+            this.file_names.push(FormData.text(file, "name"));
+            this.uploads.push(
+                UploadedFile(
+                    file.get("handle").unwrap_or(JsonValue.null()).as_int().unwrap_or(0),
+                    FormData.text(file, "filename"),
+                    FormData.text(file, "content_type"),
+                    headers,
+                    (long)file.get("size").unwrap_or(JsonValue.null()).as_double().unwrap_or(0.0)
+                )
+            );
+        }
+    }
+
+    static fun text(value: JsonValue, key: string): string {
+        return value.get(key).unwrap_or(JsonValue.null()).as_string().unwrap_or("");
+    }
+
+    /// Returns the first text field named `name`.
+    public fun get(name: string): Option<string> {
+        for (let i = 0; i < this.names.length; i = i + 1) {
+            if this.names[i] == name {
+                return Option.Some(this.values[i]);
+            }
+        }
+        return Option.None;
+    }
+
+    /// Returns every text field named `name`, in the order they were sent.
+    public fun get_all(name: string): List<string> {
+        let result = List<string>();
+        for (let i = 0; i < this.names.length; i = i + 1) {
+            if this.names[i] == name {
+                result.push(this.values[i]);
+            }
+        }
+        return result;
+    }
+
+    /// Returns the first file part named `name`.
+    public fun file(name: string): Option<UploadedFile> {
+        for (let i = 0; i < this.file_names.length; i = i + 1) {
+            if this.file_names[i] == name {
+                return Option.Some(this.uploads[i]);
+            }
+        }
+        return Option.None;
+    }
+
+    /// Returns every file part named `name`, in the order they were sent.
+    public fun files(name: string): List<UploadedFile> {
+        let result = List<UploadedFile>();
+        for (let i = 0; i < this.file_names.length; i = i + 1) {
+            if this.file_names[i] == name {
+                result.push(this.uploads[i]);
+            }
+        }
+        return result;
+    }
+
+    /// Closes every uploaded file now instead of when the request finishes.
+    public fun close(): void {
+        for (let upload in this.uploads) {
+            upload.close();
+        }
+    }
+}

@@ -44,7 +44,7 @@ fun snippet(): string {
 | `types_with<A>()` / `functions_with<A>()` | declarations carrying `@A` |
 | `call_sites()` | calls of the generator's `@on_call` functions |
 | `type_index()` / `find_type(name)` | every type in the program, by name and `DeclKind` |
-| `option_or(key, fallback)` | one `dream.toml` `[[generators]].options` value as text |
+| `options<T>()` / `option_or(key, fallback)` | `dream.toml` `[[generators]].options` |
 | `replace(block, source)` | swap a syntax site before type-check |
 | `emit_extend(decl, body)` / `emit_file(path, source)` | add members or a whole file |
 | `error(node, message)` / `warning(decl, message)` / `log(message)` | diagnostics and `-v` log lines |

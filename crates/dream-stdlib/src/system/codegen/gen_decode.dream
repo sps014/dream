@@ -2,30 +2,31 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
-// Snapshot wire value → model, written by hand: `@json` cannot derive inside the package the `@json`
+// Snapshot JSON → model, written by hand: `@json` cannot derive inside the package the `@json`
 // generator itself is built from.
-internal fun gen_str(borrow v: GenWire, borrow key: string): string {
-    return v.get(key).and_then((item: GenWire) => item.as_string()).unwrap_or("");
+internal fun gen_str(borrow v: JsonValue, borrow key: string): string {
+    return v.get(key).and_then((item: JsonValue) => item.as_string()).unwrap_or("");
 }
 
-internal fun gen_int(borrow v: GenWire, borrow key: string): int {
-    return v.get(key).and_then((item: GenWire) => item.as_int()).unwrap_or(0);
+internal fun gen_int(borrow v: JsonValue, borrow key: string): int {
+    return v.get(key).and_then((item: JsonValue) => item.as_int()).unwrap_or(0);
 }
 
-internal fun gen_bool(borrow v: GenWire, borrow key: string): bool {
-    return v.get(key).and_then((item: GenWire) => item.as_bool()).unwrap_or(false);
+internal fun gen_bool(borrow v: JsonValue, borrow key: string): bool {
+    return v.get(key).and_then((item: JsonValue) => item.as_bool()).unwrap_or(false);
 }
 
-internal fun gen_items(borrow v: GenWire, borrow key: string): List<GenWire> {
-    return v.get(key).unwrap_or(GenWire.array()).as_array().unwrap_or(List<GenWire>());
+internal fun gen_items(borrow v: JsonValue, borrow key: string): List<JsonValue> {
+    return v.get(key).unwrap_or(JsonValue.array()).as_array().unwrap_or(List<JsonValue>());
 }
 
-internal fun gen_obj(borrow v: GenWire, borrow key: string): GenWire {
-    return v.get(key).unwrap_or(GenWire.dict());
+internal fun gen_obj(borrow v: JsonValue, borrow key: string): JsonValue {
+    return v.get(key).unwrap_or(JsonValue.dict());
 }
 
-internal fun gen_strings(borrow v: GenWire, borrow key: string): List<string> {
+internal fun gen_strings(borrow v: JsonValue, borrow key: string): List<string> {
     let out = List<string>();
     for (let item in gen_items(v, key)) {
         out.push(item.as_string().unwrap_or(""));
@@ -74,7 +75,7 @@ internal fun gen_decl_kind(borrow kind: string): DeclKind {
     return DeclKind.Class;
 }
 
-internal fun gen_type_ref(borrow v: GenWire): GenTypeRef {
+internal fun gen_type_ref(borrow v: JsonValue): GenTypeRef {
     let args = List<GenTypeRef>();
     for (let a in gen_items(v, "args")) {
         args.push(gen_type_ref(a));
@@ -89,7 +90,7 @@ internal fun gen_type_ref(borrow v: GenWire): GenTypeRef {
     );
 }
 
-internal fun gen_type_refs(borrow v: GenWire, borrow key: string): List<GenTypeRef> {
+internal fun gen_type_refs(borrow v: JsonValue, borrow key: string): List<GenTypeRef> {
     let out = List<GenTypeRef>();
     for (let item in gen_items(v, key)) {
         out.push(gen_type_ref(item));
@@ -97,12 +98,12 @@ internal fun gen_type_refs(borrow v: GenWire, borrow key: string): List<GenTypeR
     return out;
 }
 
-internal fun gen_location(borrow v: GenWire): GenLocation {
+internal fun gen_location(borrow v: JsonValue): GenLocation {
     let loc = gen_obj(v, "location");
     return GenLocation(gen_str(loc, "file"), gen_int(loc, "line"), gen_int(loc, "column"));
 }
 
-internal fun gen_attributes(borrow v: GenWire): List<GenAttribute> {
+internal fun gen_attributes(borrow v: JsonValue): List<GenAttribute> {
     let out = List<GenAttribute>();
     for (let a in gen_items(v, "attributes")) {
         let args = List<GenAttrArg>();
@@ -120,7 +121,7 @@ internal fun gen_attributes(borrow v: GenWire): List<GenAttribute> {
     return out;
 }
 
-internal fun gen_fields(borrow v: GenWire): List<GenField> {
+internal fun gen_fields(borrow v: JsonValue): List<GenField> {
     let out = List<GenField>();
     for (let f in gen_items(v, "fields")) {
         out.push(
@@ -137,7 +138,7 @@ internal fun gen_fields(borrow v: GenWire): List<GenField> {
     return out;
 }
 
-internal fun gen_function(borrow f: GenWire): GenFunction {
+internal fun gen_function(borrow f: JsonValue): GenFunction {
     let params = List<GenParam>();
     for (let p in gen_items(f, "params")) {
         params.push(
@@ -165,7 +166,7 @@ internal fun gen_function(borrow f: GenWire): GenFunction {
     );
 }
 
-internal fun gen_functions(borrow v: GenWire, borrow key: string): List<GenFunction> {
+internal fun gen_functions(borrow v: JsonValue, borrow key: string): List<GenFunction> {
     let out = List<GenFunction>();
     for (let f in gen_items(v, key)) {
         out.push(gen_function(f));
@@ -173,7 +174,7 @@ internal fun gen_functions(borrow v: GenWire, borrow key: string): List<GenFunct
     return out;
 }
 
-internal fun gen_decl(borrow d: GenWire): GenDecl {
+internal fun gen_decl(borrow d: JsonValue): GenDecl {
     let variants = List<GenVariant>();
     for (let v in gen_items(d, "variants")) {
         variants.push(

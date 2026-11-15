@@ -201,15 +201,9 @@ fn optimized_wasm_audio_decoder_exports_worker_entry_points() {
             }
         }
     }
-    for name in [
-        "dream_audio_worker_alloc",
-        "dream_audio_worker_free",
-        "dream_audio_worker_decode",
-        "dream_audio_worker_stream_open",
-        "dream_audio_worker_stream_read",
-        "dream_audio_worker_stream_reposition",
-        "dream_audio_worker_stream_close",
-    ] {
+    for name in
+        dream_mir::runtime::modules::worker_exports(dream_mir::runtime::runtime_need_from_keys(["audioDecodeStart"]))
+    {
         assert!(
             exports.iter().any(|export| export == name),
             "missing {name}: {exports:?}"

@@ -119,12 +119,12 @@ Declare a foreign function and call it like any Dream function. Dream converts v
 
 ### Serve typed web APIs.
 
-`webapi` builds native HTTP services. A route is a typed static method, so a handler cannot receive an argument of the wrong type.
+`system.webapi` builds native HTTP services. A route is a typed static method, so a handler cannot receive an argument of the wrong type.
 
 ```typescript
 import system;
 import system.json;
-import webapi;
+import system.webapi;
 
 @json
 class Greeting {

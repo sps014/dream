@@ -5,60 +5,48 @@ use std::collections::HashSet;
 
 const HOST_SOURCES: &[&str] = &[
     include_str!("../../dream-host-crypto/src/exports.rs"),
+    include_str!("../../dream-host-process/src/exports.rs"),
     include_str!("../../dream-host-timezone/src/exports.rs"),
     include_str!("../../dream-host-net/src/exports.rs"),
     include_str!("../../dream-host-io/src/exports.rs"),
     include_str!("../../dream-host-window/src/exports.rs"),
     include_str!("../../dream-host-gpu/src/exports.rs"),
+    include_str!("../../dream-host-audio/src/lib.rs"),
     include_str!("../../dream-host-drawing/src/lib.rs"),
     include_str!("../../dream-host-app/src/exports.rs"),
 ];
 
 fn prelude_dream_host_names(include_native_only: bool) -> HashSet<String> {
-    use dream_abi::attributes::{js_import_target, runtime_import_field};
-    use dream_abi::compile_targets::CompileTargets;
-    use dream_abi::target::TargetSpec;
+    use dream_abi::attributes::{RuntimeSupport, js_import_target, runtime_import_field};
     use dream_syntax::{lexer::Lexer, parser::Parser};
-    let wasm = TargetSpec::parse("wasm32-unknown-unknown").unwrap();
-    let js_host = |node: bool| {
-        CompileTargets {
-            native: false,
-            node,
-            web: !node,
-        }
-        .cfg_symbols(&wasm, false)
-    };
-    let mut builds = vec![js_host(false), js_host(true)];
-    if include_native_only {
-        builds.push(CompileTargets::native_only().cfg_symbols(&TargetSpec::host(), false));
-    }
     let mut declared = HashSet::new();
     for (path, source) in dream_stdlib::all_prelude_files() {
-        for &cfg in &builds {
-            let arena = bumpalo::Bump::new();
-            let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
-            let mut parser =
-                Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics).with_cfg(cfg);
-            let syntax = parser
-                .parse()
-                .unwrap_or_else(|_| panic!("invalid stdlib source: {path}"));
-            let program = syntax.get_root();
-            dream_stdlib::attributes::resolve_source_attribute_ids(program);
-            let functions = program
-                .functions
-                .iter()
-                .chain(program.structs.iter().flat_map(|d| &d.methods))
-                .chain(program.enums.iter().flat_map(|d| &d.methods))
-                .chain(program.extends.iter().flat_map(|d| &d.methods));
-            for function in functions {
-                if let Some(field) = runtime_import_field(&function.attributes) {
-                    declared.insert(field);
-                }
-                if let Some((module, field)) = js_import_target(&function.attributes)
-                    && module == HOST_MODULE
-                {
-                    declared.insert(field);
-                }
+        let arena = bumpalo::Bump::new();
+        let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
+        let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
+        let syntax = parser
+            .parse()
+            .unwrap_or_else(|_| panic!("invalid stdlib source: {path}"));
+        let program = syntax.get_root();
+        dream_stdlib::attributes::resolve_source_attribute_ids(program);
+        let functions = program
+            .functions
+            .iter()
+            .chain(program.structs.iter().flat_map(|d| &d.methods))
+            .chain(program.enums.iter().flat_map(|d| &d.methods))
+            .chain(program.extends.iter().flat_map(|d| &d.methods));
+        for function in functions {
+            let support = RuntimeSupport::from_attributes(&function.attributes);
+            if !include_native_only && !support.node && !support.web {
+                continue;
+            }
+            if let Some(field) = runtime_import_field(&function.attributes) {
+                declared.insert(field);
+            }
+            if let Some((module, field)) = js_import_target(&function.attributes)
+                && module == HOST_MODULE
+            {
+                declared.insert(field);
             }
         }
     }
@@ -79,7 +67,7 @@ fn c_abi_fn_names(src: &str) -> Vec<String> {
             if !name.is_empty()
                 && !matches!(
                     name,
-                    "dream_host_bind_v3" | "dream_host_drawing_abi_v3"
+                    "dream_host_bind_v3" | "dream_host_audio_abi_v3" | "dream_host_drawing_abi_v3"
                 )
             {
                 out.push(name.strip_suffix("Async").unwrap_or(name).to_string());
@@ -114,13 +102,15 @@ fn capability_inventory_matches_each_library_exports() {
     use dream_abi::host_capability::HostCapability;
     for (capability, sources) in [
         (HostCapability::Crypto, vec![HOST_SOURCES[0]]),
-        (HostCapability::Timezone, vec![HOST_SOURCES[1]]),
-        (HostCapability::Net, vec![HOST_SOURCES[2]]),
-        (HostCapability::Io, vec![HOST_SOURCES[3]]),
-        (HostCapability::Window, vec![HOST_SOURCES[4]]),
-        (HostCapability::Gpu, vec![HOST_SOURCES[5]]),
-        (HostCapability::Drawing, vec![HOST_SOURCES[6]]),
-        (HostCapability::App, vec![HOST_SOURCES[7]]),
+        (HostCapability::Process, vec![HOST_SOURCES[1]]),
+        (HostCapability::Timezone, vec![HOST_SOURCES[2]]),
+        (HostCapability::Net, vec![HOST_SOURCES[3]]),
+        (HostCapability::Io, vec![HOST_SOURCES[4]]),
+        (HostCapability::Window, vec![HOST_SOURCES[5]]),
+        (HostCapability::Gpu, vec![HOST_SOURCES[6]]),
+        (HostCapability::Audio, vec![HOST_SOURCES[7]]),
+        (HostCapability::Drawing, vec![HOST_SOURCES[8]]),
+        (HostCapability::App, vec![HOST_SOURCES[9]]),
     ] {
         let exported: HashSet<_> = sources.iter().flat_map(|s| c_abi_fn_names(s)).collect();
         let declared: HashSet<_> = dream_stdlib::runtime_host_fields()
@@ -128,7 +118,12 @@ fn capability_inventory_matches_each_library_exports() {
             .filter(|(_, host)| *host == capability.name())
             .map(|(field, _)| field.to_string())
             .collect();
-        assert_eq!(exported, declared, "{} export inventory", capability.name());
+        assert_eq!(
+            exported,
+            declared,
+            "{} export inventory",
+            capability.name()
+        );
     }
 }
 
@@ -148,8 +143,10 @@ const JS_HOST_SOURCES: &[&str] = &[
     include_str!("../../../runtime/src/hosts/gpu.js"),
     include_str!("../../../runtime/src/hosts/drawing.js"),
     include_str!("../../../runtime/src/hosts/app.js"),
-    // Playback, capture, media, and decode hosts belong to the audio package.
-    // Their `@runtime` names are not in the compiler prelude.
+    include_str!("../../../runtime/src/hosts/audio.js"),
+    include_str!("../../../runtime/src/hosts/audio_media.js"),
+    include_str!("../../../runtime/src/hosts/audio_capture.js"),
+    include_str!("../../../runtime/src/hosts/audio_decoder.js"),
     include_str!("../../../runtime/src/workers.js"),
 ];
 
@@ -159,6 +156,7 @@ const RUNTIME_ARCHIVE_KEYS: &[&str] = &["weakBind", "weakDead", "weakLoad", "wea
 // `@runtime` services compiled into the guest from runtime C on every target, so no JS host.
 const RUNTIME_C_SERVICES: &[&str] = &[
     include_str!("../../dream-mir/src/runtime/c/regex.c"),
+    include_str!("../../dream-mir/src/runtime/c/core/audio_fft.c"),
     include_str!("../../dream-mir/src/runtime/c/core/string_view.c"),
 ];
 // Shared scheduling imports these bridges directly rather than through a stdlib extern.

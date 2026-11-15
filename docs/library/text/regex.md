@@ -2,6 +2,7 @@
 title: Regex
 summary: "Find, extract, and replace text with regular expressions."
 icon: material/regex
+api: reference/api/system-text.md
 ---
 
 # Regex
@@ -9,7 +10,7 @@ icon: material/regex
 
 Create a pattern once, then test text, extract matches, or replace them. `Regex.compile` returns an error when the pattern is invalid.
 
-**Import:** `import regex;`
+**Import:** `import system.text;`
 
 Patterns use familiar syntax (`\d`, groups, lookaround). `Regex.compile` returns `Result<Regex, RegexError>`.
 
@@ -18,7 +19,7 @@ past a complete character, including a surrogate pair, so a global search always
 
 ```dream
 import system;
-import regex;
+import system.text;
 
 fun main() {
     let digits = Regex.compile("\\d+", RegexFlags.Global).unwrap();
@@ -79,7 +80,7 @@ switch (re.match_info("555-1234")) {
 }
 ```
 
-Save the first example as `pattern.dream` and run `dream run pattern.dream`. It prints whether a match exists, then the text with every numeric group replaced by `#`.
+Save the first example as `regex.dream` and run `dream run regex.dream`. It prints whether a match exists, then the text with every numeric group replaced by `#`.
 
 ## Invalid patterns
 
@@ -87,7 +88,7 @@ Handle patterns supplied by users without unwrapping the result:
 
 ```dream
 import system;
-import regex;
+import system.text;
 
 fun main(): void {
     switch (Regex.compile("[unfinished")) {

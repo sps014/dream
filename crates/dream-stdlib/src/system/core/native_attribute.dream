@@ -1,0 +1,10 @@
+module system.core;
+
+/// Marks a function/method as available on the native (C) host. Combine with `@node`/`@web` to restrict; absent all three means every runtime.
+@attribute(
+    AttributeTarget.Function,
+    AttributeTarget.Method,
+    AttributeTarget.StaticMethod,
+    AttributeTarget.ExternFunction
+)
+public struct NativeAttribute {}

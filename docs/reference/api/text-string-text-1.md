@@ -122,6 +122,22 @@ A new string with every character uppercased by the Unicode full case mapping, w
 public fun to_upper_unicode(): string
 ```
 
+## `graphemes`
+
+Splits the string into extended grapheme clusters (Unicode UAX #29), the units a reader perceives as single characters: a letter with its accents, an emoji sequence joined by zero-width joiners, or a flag. Returns an empty array for an empty string.
+
+```dream
+public fun graphemes(): string[]
+```
+
+## `normalize`
+
+Returns the string in Unicode normalization `form` (UAX #15). `Nfc` and `Nfd` preserve meaning; `Nfkc` and `Nfkd` also replace compatibility characters such as `ﬁ` with `fi`.
+
+```dream
+public fun normalize(form: UnicodeNormForm): string
+```
+
 ## `trim`
 
 A new string with leading and trailing whitespace removed.
@@ -176,20 +192,4 @@ The index of the last occurrence of `target`, or `None`.
 
 ```dream
 public fun last_index_of(target: char): Option<int>
-```
-
-## `last_index_of`
-
-The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`. Byte-compare scan like `index_of` — allocates nothing per candidate.
-
-```dream
-public fun last_index_of(borrow sub: string): Option<int>
-```
-
-## `replace_first`
-
-Replaces the first occurrence of `old` with `replacement`.
-
-```dream
-public fun replace_first(borrow old: string, borrow replacement: string): string
 ```

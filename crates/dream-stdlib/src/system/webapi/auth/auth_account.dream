@@ -1,0 +1,20 @@
+module system.webapi.auth;
+
+/// Persisted account data supplied by an application repository.
+public class AuthAccount {
+    /// Stable identifier of the authenticated account.
+    public subject: string;
+
+    /// Encoded password hash; never a plain-text password.
+    public password_hash: string;
+
+    /// Space-separated permissions granted to this account or token.
+    public scopes: string;
+
+    /// Creates a `AuthAccount` with `subject`, `password_hash`, `scopes`.
+    public constructor(subject: string, password_hash: string, scopes: string = "") {
+        this.subject = subject;
+        this.password_hash = password_hash;
+        this.scopes = scopes;
+    }
+}

@@ -10,7 +10,7 @@ Use parameter attributes to identify input sources. Required inputs must be pres
 
 ```dream
 import system;
-import webapi;
+import system.webapi;
 import system.json;
 
 @json
@@ -90,4 +90,4 @@ The 422 responses use the same `{"detail": [{"loc", "type", "msg"}]}` shape as m
 
 The server sets no limit on body size. Set one at your [reverse proxy](../deploy/web-server.md#request-size-limits), or read large bodies with [`stream()`](streaming.md#reading-a-request-body-as-a-stream).
 
-See the [complete example](example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

@@ -96,7 +96,7 @@ mod tests {
     fn removes_only_owned_companions_after_their_last_application_drops_them() {
         let temp = tempfile::tempdir().unwrap();
         let spec = TargetSpec::host();
-        let library = temp.path().join(HostCapability::Drawing.library_name(&spec));
+        let library = temp.path().join(HostCapability::Audio.library_name(&spec));
         let unrelated = temp.path().join("user.dat");
         std::fs::write(&library, b"audio").unwrap();
         std::fs::write(&unrelated, b"user").unwrap();
@@ -104,8 +104,8 @@ mod tests {
         let second = temp.path().join("second.bin");
         update(&first, &[], &spec).unwrap();
         assert!(library.exists());
-        update(&first, &[HostCapability::Drawing], &spec).unwrap();
-        update(&second, &[HostCapability::Drawing], &spec).unwrap();
+        update(&first, &[HostCapability::Audio], &spec).unwrap();
+        update(&second, &[HostCapability::Audio], &spec).unwrap();
         update(&first, &[], &spec).unwrap();
         assert!(library.exists());
         update(&second, &[], &spec).unwrap();

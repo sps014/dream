@@ -10,8 +10,8 @@ Bind to port zero and test through the public HTTP client. Each test creates an 
 
 ```dream
 import system;
-import webapi;
-import http;
+import system.webapi;
+import system.net;
 import system.testing;
 
 @router("")
@@ -70,4 +70,4 @@ Override external dependencies with a generated replacement class and `app.overr
 
 HTTP server tests need the native target. Pass `0` to `listen`, use the returned port in the client URL, and close each response and stop the app before the test returns.
 
-See the [complete example](example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

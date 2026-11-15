@@ -1,0 +1,14 @@
+module system.webapi;
+
+/// Immutable generated route group; mount it explicitly on an application.
+public class WebRouter {
+    internal routes: List<WebEndpoint>;
+
+    /// Creates a `WebRouter` with `routes`.
+    public constructor(routes: List<WebEndpoint>) {
+        this.routes = List<WebEndpoint>();
+        for (let route in routes) {
+            this.routes.push(route);
+        }
+    }
+}

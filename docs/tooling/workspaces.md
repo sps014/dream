@@ -124,11 +124,8 @@ CodeLens) and that member’s `dream_packages/` symlink for import completion.
 
 ### Publishing from a monorepo
 
-`dreamer publish` from the workspace root publishes every member except `type = "test"`. A member
-that another member depends on is published first, so the later package can require the version
-already in the registry. `dreamer publish -p greeter` still publishes one member. The tarball
-contains only that package’s `dream.toml` + `src/` + README — not siblings. A version that is
-already published is skipped, and the rest of the workspace continues.
+Publish is always a **single member** (`dreamer publish -p greeter`, or `cd` into the member). The
+tarball still contains only that package’s `dream.toml` + `src/` + README — not siblings.
 
 Path-only deps (`greeter = { path = "..." }` with no version) cannot be resolved by registry
 consumers; `dreamer publish` errors and asks you to write:
@@ -138,5 +135,6 @@ greeter = { version = "0.1.0", path = "../../packages/greeter" }
 ```
 
 Install still prefers the path locally; the published index records the version requirement.
+Publish leaf libraries before apps that depend on them.
 
 See `sample/monorepo/` for a complete layout.

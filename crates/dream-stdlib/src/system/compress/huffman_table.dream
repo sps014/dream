@@ -1,0 +1,74 @@
+module system.compress;
+
+/// Canonical Huffman decoding table for one DEFLATE alphabet (RFC 1951 section 3.2.2).
+internal class HuffmanTable {
+    // counts[len] is the number of codes of each bit length; symbols lists them in code order.
+    internal counts: int[];
+    internal symbols: int[];
+    // Indexed by the next 9 input bits (least significant first): symbol * 16 + length, or -1
+    // when the code is longer than 9 bits.
+    internal fast: int[];
+    // Whether the last build used every code of its lengths (no unused bit patterns).
+    internal complete: bool;
+
+    internal constructor() {
+        this.complete = false;
+        this.counts = Array.alloc<int>(16);
+        this.symbols = Array.alloc<int>(288);
+        this.fast = Array.alloc<int>(512);
+    }
+
+    /// Builds the table from `lengths[start..start + n]`. Over-subscribed codes are rejected, and an
+    /// incomplete code is accepted only when it is empty or a single one-bit code, as zlib does.
+    internal fun build(borrow lengths: int[], start: int, n: int): bool {
+        for (let len = 0; len < 16; len = len + 1) {
+            this.counts[len] = 0;
+        }
+        for (let i = 0; i < n; i = i + 1) {
+            this.counts[lengths[start + i]] = this.counts[lengths[start + i]] + 1;
+        }
+        let left = 1;
+        for (let len = 1; len < 16; len = len + 1) {
+            left = left * 2 - this.counts[len];
+            if left < 0 {
+                return false;
+            }
+        }
+        this.complete = left == 0;
+        let used = n - this.counts[0];
+        if left > 0 && used != 0 && !(used == 1 && this.counts[1] == 1) {
+            return false;
+        }
+        let offsets = Array.alloc<int>(16);
+        for (let len = 1; len < 15; len = len + 1) {
+            offsets[len + 1] = offsets[len] + this.counts[len];
+        }
+        for (let i = 0; i < n; i = i + 1) {
+            let len = lengths[start + i];
+            if len != 0 {
+                this.symbols[offsets[len]] = i;
+                offsets[len] = offsets[len] + 1;
+            }
+        }
+        for (let i = 0; i < 512; i = i + 1) {
+            this.fast[i] = 0 - 1;
+        }
+        let code = 0;
+        let index = 0;
+        for (let len = 1; len <= 9; len = len + 1) {
+            for (let k = 0; k < this.counts[len]; k = k + 1) {
+                let reversed = 0;
+                for (let b = 0; b < len; b = b + 1) {
+                    reversed = reversed | (((code >> b) & 1) << (len - 1 - b));
+                }
+                for (let fill = reversed; fill < 512; fill = fill + (1 << len)) {
+                    this.fast[fill] = this.symbols[index] * 16 + len;
+                }
+                code = code + 1;
+                index = index + 1;
+            }
+            code = code * 2;
+        }
+        return true;
+    }
+}

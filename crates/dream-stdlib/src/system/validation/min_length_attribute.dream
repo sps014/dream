@@ -1,0 +1,8 @@
+module system.validation;
+
+/// Minimum string or collection length.
+@attribute(AttributeTarget.Field, AttributeTarget.Parameter)
+public struct MinLengthAttribute {
+    /// Minimum number of characters or collection elements.
+    public value: int;
+}

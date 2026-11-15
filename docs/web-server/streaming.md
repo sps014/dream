@@ -10,7 +10,7 @@ Yield items instead of building a complete response in memory.
 
 ```dream
 import system;
-import webapi;
+import system.webapi;
 
 @router("")
 class Routes {
@@ -64,7 +64,7 @@ Once response headers or chunks have been sent, later errors cannot replace them
 
 ```dream
 import system;
-import webapi;
+import system.webapi;
 
 @router("")
 class Routes {
@@ -105,4 +105,4 @@ A body can be read whole or streamed, but not both, because streamed bytes are n
 - If the body was already read with `read_body_bytes`, `read_body_text`, or `form`, `stream()` replays the bytes held in memory.
 - Once you start reading `stream()`, `read_body_bytes`, `read_body_text`, and `form` fail with `ECLOSED`.
 
-See the [complete example](example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

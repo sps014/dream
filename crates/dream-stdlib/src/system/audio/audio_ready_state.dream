@@ -1,0 +1,13 @@
+module system.audio;
+
+/// How much of an audio source is available for playback.
+public enum AudioReadyState {
+    /// No source metadata has been loaded.
+    Nothing,
+    /// Source metadata is available but no playable samples are buffered.
+    Metadata,
+    /// Samples at the current position are available.
+    CurrentData,
+    /// Samples at and beyond the current position are available.
+    FutureData,
+}

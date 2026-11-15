@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// Builds generated source text and records its source locations.
 public class ArtifactBuilder {

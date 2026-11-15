@@ -1,9 +1,0 @@
-[package]
-name = "encoding"
-version = "0.1.0"
-edition = "2026"
-type = "lib"
-description = "Hex, Base64, and percent encoding."
-
-[dev-dependencies]
-encoding = { path = "." }

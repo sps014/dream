@@ -1,0 +1,48 @@
+module system.compress;
+
+/// Incremental decompressor with bounded chunks, checksum validation, and strict trailing-byte rejection.
+public class CompressionReader: Reader {
+    inflater: Inflater;
+    finished: bool;
+    closed: bool;
+
+    internal constructor(inflater: Inflater) {
+        this.inflater = inflater;
+        this.finished = false;
+        this.closed = false;
+    }
+
+    /// Returns up to `max_bytes` (at most 64 KiB) decoded bytes, or an empty array once the stream
+    /// is complete. Malformed, truncated, oversized, or concatenated input returns an `ECOMPRESS`
+    /// error, and source read failures are returned unchanged; either closes the reader.
+    public fun read(max_bytes: int): Result<byte[], IoError> {
+        if this.closed {
+            return Result.Err(IoError.closed("compression stream"));
+        }
+        if max_bytes < 0 {
+            return Result.Err(IoError.invalid("", "negative read size"));
+        }
+        if max_bytes == 0 || this.finished {
+            return Result.Ok(Buffer.alloc<byte>(0));
+        }
+        let next = this.inflater.read(max_bytes < 65536 ? max_bytes : 65536);
+        if next.is_err() {
+            this.close();
+            return next;
+        }
+        if this.inflater.done() {
+            let end = this.inflater.check_end();
+            if end.is_err() {
+                this.close();
+                return Result.Err(end.unwrap_err());
+            }
+            this.finished = true;
+        }
+        return next;
+    }
+
+    /// Stops decoding without closing the borrowed source; later reads fail.
+    public fun close(): void {
+        this.closed = true;
+    }
+}

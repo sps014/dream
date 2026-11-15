@@ -9,6 +9,8 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         "system",
         "system.io",
         "system.collections",
+        "system.json",
+        "system.encoding",
     ],
     core_language: true,
     web_assets: None,
@@ -16,10 +18,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     guest_exports: &[],
     generators: &[],
     files: &[
-        (
-            "<std>/system/codegen/gen_wire.dream",
-            include_str!("../system/codegen/gen_wire.dream"),
-        ),
         (
             "<std>/system/codegen/gen_symbol_kind.dream",
             include_str!("../system/codegen/gen_symbol_kind.dream"),
@@ -211,10 +209,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
         (
             "<std>/system/codegen/gen_snapshot.dream",
             include_str!("../system/codegen/gen_snapshot.dream"),
-        ),
-        (
-            "<std>/system/codegen/artifact_base64.dream",
-            include_str!("../system/codegen/artifact_base64.dream"),
         ),
         (
             "<std>/system/codegen/gen_context.dream",

@@ -497,25 +497,6 @@ pub const ASYNC_STUB: &str = "
     }
 ";
 
-/// Points `root/dream_packages/<name>` at this repo's package so a temp project can import it.
-pub fn link_packages(root: &std::path::Path, names: &[&str]) {
-    let packages = root.join("dream_packages");
-    std::fs::create_dir_all(&packages).unwrap();
-    for name in names {
-        let dest = packages.join(name);
-        if dest.symlink_metadata().is_ok() {
-            continue;
-        }
-        std::os::unix::fs::symlink(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("packages")
-                .join(name),
-            dest,
-        )
-        .unwrap();
-    }
-}
-
 /// Source files under the corpus, excluding generated artifacts.
 pub fn corpus_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();

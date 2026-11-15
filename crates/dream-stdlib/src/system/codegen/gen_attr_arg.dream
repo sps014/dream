@@ -2,6 +2,7 @@ module system.codegen;
 
 import system;
 import system.collections;
+import system.json;
 
 /// One attribute argument as written: `kind` is `string`, `int`, `float`, `double`, `bool` or
 /// `enum`; `value` is the unquoted string, literal text, or dotted enum path.

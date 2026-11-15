@@ -35,14 +35,13 @@ Split a program into `.dream` files as it grows. An `import` makes another file'
 Opt-in stdlib APIs live under the reserved `system.*` package tree. A plain import loads that package (and its dependencies) into the program; public names are then usable unqualified:
 
 ```dream
-import system; // System, Duration, Stopwatch, …
-import datetime; // DateTime, TimeZone
+import system; // System, DateTime, Stopwatch, Random, …
 import system.collections; // List, Map, Set, Queue, Stack
-import system.text; // string methods, StringBuilder, formatting
-import regex; // Regex
+import system.text; // string methods, StringBuilder, Regex
 import system.json; // Json, JsonValue
 import system.io; // File, FileHandle, Path, IoError
-import encoding; // Encoding (hex / Base64)
+import system.encoding; // Encoding (UTF-8 / hex / Base64)
+import system.logging; // Logger, LogLevel, handlers
 import system.crypto; // Sha256, HmacSha256, SecureRandom
 import system.task; // Task, TaskPool (real threads)
 ```
@@ -52,8 +51,6 @@ Always available without an import (bootstrap): `Option`, `Result`, `Error`, `Pa
 There is no `import system.*;` wildcard — import each package you need (the editor offers an auto-import quick fix when you type an unresolved stdlib name).
 
 Reserved `system` / `system.*` paths always resolve to the embedded stdlib, not a local `system/…` file.
-
-`unicode`, `random`, `logging`, `csv`, `compress`, `cli`, `config`, `uuid`, and `audio` are separate packages. Add each one as a dependency, run `dreamer install`, then import its name.
 
 ## Importing a file
 

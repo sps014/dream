@@ -1,9 +1,0 @@
-[package]
-name = "cli"
-version = "0.1.0"
-edition = "2026"
-type = "lib"
-description = "Commands, flags, options, and positionals."
-
-[dev-dependencies]
-cli = { path = "." }

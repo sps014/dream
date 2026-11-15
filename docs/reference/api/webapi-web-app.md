@@ -1,0 +1,135 @@
+# Web App
+
+**Import:** `import system.webapi;`
+
+See the [Web APIs guide](../../web-server/index.md) for runnable examples, lifecycle, and error behavior.
+
+## `WebApp`
+
+An isolated native HTTP application with explicitly mounted routers.
+
+```dream
+public class WebApp
+```
+
+## `state`
+
+Application-wide values shared by every request; each request sees this map as `RequestContext.app_state`.
+
+```dream
+public state: Map<string, string>
+```
+
+## `constructor`
+
+Creates a `WebApp` with default settings.
+
+```dream
+public constructor()
+```
+
+## `constructor`
+
+Creates a `WebApp` with `options`.
+
+```dream
+public constructor(options: WebAppOptions)
+```
+
+## `use`
+
+Appends an outer-to-inner middleware layer before startup.
+
+```dream
+public fun use(middleware: Middleware): Result<Unit, IoError>
+```
+
+## `include_router`
+
+Mounts a router with an optional additional path prefix.
+
+```dream
+public fun include_router(router: WebRouter, prefix: string = ""): Result<Unit, IoError>
+```
+
+## `override_dependencies`
+
+Installs generated dependency replacements before startup.
+
+```dream
+public fun override_dependencies(overrides: DependencyOverrides): Result<Unit, IoError>
+```
+
+## `shutdown`
+
+Stops accepting traffic and cancels active transport operations on this app.
+
+```dream
+public fun shutdown(): void
+```
+
+## `wait`
+
+Drains this application's requests and releases its listener.
+
+```dream
+public fun wait(token: Option<CancellationToken> = Option.None): Future<void>
+```
+
+## `listen`
+
+Binds this app with the default `ServerConfig` and returns the bound port; port zero selects an ephemeral port.
+
+```dream
+public fun listen(
+    host: string,
+    port: int,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<int, IoError>>
+```
+
+## `listen`
+
+Binds this app with the transport settings in `config` and returns the bound port; port zero selects an ephemeral port. Negative settings fail with `EINVAL`.
+
+```dream
+public fun listen(
+    host: string,
+    port: int,
+    config: ServerConfig,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<int, IoError>>
+```
+
+## `run`
+
+Listens with the default `ServerConfig` and waits until shutdown or cancellation. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `App.stopping` is cancelled.
+
+```dream
+public fun run(
+    host: string,
+    port: int,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<Unit, IoError>>
+```
+
+## `run`
+
+Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`. Without a `token` (explicit or inherited from the current task) the server stops gracefully when `App.stopping` is cancelled.
+
+```dream
+public fun run(
+    host: string,
+    port: int,
+    config: ServerConfig,
+    token: Option<CancellationToken> = Option.None
+): Future<Result<Unit, IoError>>
+```
+
+## `openapi`
+
+Produces documentation for this application's mounted routes only.
+
+```dream
+public fun openapi(): string
+```

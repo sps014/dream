@@ -1,0 +1,8 @@
+module system.webapi;
+
+/// Replaces a provider for applications explicitly installing the containing class's dependencies().
+@attribute(AttributeTarget.StaticMethod)
+public struct DependencyOverrideAttribute {
+    /// Dependency function to evaluate for this parameter or replace for this application.
+    public provider: DeclarationPath;
+}

@@ -1,0 +1,45 @@
+module system.audio;
+
+/// Ordered player notifications. Timestamps are monotonic nanoseconds.
+public enum AudioEvent {
+    /// Loading began.
+    LoadStart(timestamp: long),
+    /// Source metadata became available.
+    LoadedMetadata(timestamp: long),
+    /// Samples are available for playback.
+    CanPlay(timestamp: long),
+    /// Playback was requested and pause state cleared.
+    Play(timestamp: long),
+    /// Output started or recovered from buffering.
+    Playing(timestamp: long),
+    /// Playback paused without changing position.
+    Pause(timestamp: long),
+    /// A seek was accepted; position is the requested time in seconds.
+    Seeking(timestamp: long, position: double),
+    /// A seek completed; position is the actual time in seconds.
+    Seeked(timestamp: long, position: double),
+    /// Playback position changed; emitted at most four times per second.
+    TimeUpdate(timestamp: long, position: double),
+    /// Playback is waiting for source data.
+    Waiting(timestamp: long),
+    /// The source reached its natural end without looping.
+    Ended(timestamp: long),
+    /// Volume or mute changed.
+    VolumeChange(timestamp: long),
+    /// The known duration changed.
+    DurationChange(timestamp: long),
+    /// Previous source state was reset.
+    Emptied(timestamp: long),
+    /// Pending loading was cancelled.
+    Abort(timestamp: long),
+    /// An operation failed; terminal marks a failure that stopped playback.
+    Error(timestamp: long, error: AudioError, operation: string, terminal: bool),
+    /// The selected output changed.
+    SinkChange(timestamp: long, sink_id: string),
+    /// Output disappeared and playback paused.
+    DeviceLost(timestamp: long, error: AudioError),
+    /// Playback resources were released.
+    Closed(timestamp: long),
+    /// Queue overflow discarded count older events.
+    EventsLost(timestamp: long, count: int),
+}

@@ -123,11 +123,7 @@ fn registry_and_pinned_tools_run_in_parallel_with_opaque_outputs() {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     };
     let toolchains = root.path().join("toolchains");
-    let slang = toolchains.join(
-        dream_stdlib::toolchain::pinned_tool("slang")
-            .unwrap()
-            .install_dir(),
-    );
+    let slang = toolchains.join(dream_stdlib::toolchain::pinned_tool("slang").unwrap().install_dir());
     executable(
         &slang.join("bin/slangc"),
         include_bytes!("cases/support/generator_framework/tools/slangc.sh"),
@@ -237,7 +233,7 @@ fn registry_and_pinned_tools_run_in_parallel_with_opaque_outputs() {
         );
         std::fs::write(
             project.join("run.mjs"),
-            "import {run, embeddedAssets} from './opaque.node.runtime.mjs';\nif (embeddedAssets.blob.length !== 1048576 || embeddedAssets.blob[0] !== 255) throw new Error('missing opaque asset');\nawait run('./opaque.wasm', {stdout: s => process.stdout.write(s)});\n",
+            "import {run, embeddedAssets} from './opaque.node.runtime.js';\nif (embeddedAssets.blob.length !== 1048576 || embeddedAssets.blob[0] !== 255) throw new Error('missing opaque asset');\nawait run('./opaque.wasm', {stdout: s => process.stdout.write(s)});\n",
         )
         .unwrap();
         let node = Command::new("node")

@@ -17,8 +17,6 @@ pub struct NativeTable {
     pub libs: Vec<String>,
     /// Package-relative globs dropped from this set on the target that lists them.
     pub exclude: Vec<String>,
-    /// Symbols a host calls on a second instance of this module. They stay exported.
-    pub exports: Vec<String>,
     /// `Some(false)` keeps this set's objects out of release link-time optimization.
     pub lto: Option<bool>,
 }
@@ -53,7 +51,6 @@ impl NativeSetSpec {
         t.frameworks.extend(os.frameworks.iter().cloned());
         t.libs.extend(os.libs.iter().cloned());
         t.exclude.extend(os.exclude.iter().cloned());
-        t.exports.extend(os.exports.iter().cloned());
         if os.lto.is_some() {
             t.lto = os.lto;
         }
@@ -87,7 +84,7 @@ pub struct GeneratorEntry {
     pub path: String,
     /// Extra input files (relative to the manifest directory) passed in the generator snapshot.
     pub additional_files: Vec<String>,
-    /// `options = { key = "value" }`, read in Dream through `ctx.option_or`.
+    /// `options = { key = "value" }`, read in Dream through `ctx.options<T>()`.
     pub options: std::collections::BTreeMap<String, serde_json::Value>,
     /// Per-run limit in seconds; `None` uses the compiler default.
     pub timeout_secs: Option<u64>,
@@ -258,7 +255,7 @@ impl ProjectManifest {
 }
 
 const OS_KEYS: [&str; 4] = ["macos", "linux", "windows", "wasm"];
-const LIST_KEYS: [&str; 8] = [
+const LIST_KEYS: [&str; 7] = [
     "sources",
     "include",
     "defines",
@@ -266,7 +263,6 @@ const LIST_KEYS: [&str; 8] = [
     "frameworks",
     "libs",
     "exclude",
-    "exports",
 ];
 
 fn parse_set(name: &str, set: &toml::Table) -> Result<NativeSetSpec, String> {
@@ -337,7 +333,6 @@ fn parse_table(ctx: &str, t: &toml::Table) -> Result<NativeTable, String> {
             "frameworks" => out.frameworks = list,
             "libs" => out.libs = list,
             "exclude" => out.exclude = list,
-            "exports" => out.exports = list,
             other => {
                 return Err(format!(
                     "unknown key '{other}' in [{ctx}] (expected one of {})",

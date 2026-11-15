@@ -36,10 +36,7 @@ impl Compiler {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<FrontEnd<'a>, CompileError> {
         let mut acc = ProgramAccumulator {
-            cfg: self
-                .compile_targets
-                .cfg_symbols(self.target.spec(), !self.profile.is_debug()),
-            package_base: self.package_base.clone(),
+            cfg: self.target.spec().cfg_symbols(!self.profile.is_debug()),
             ..ProgramAccumulator::default()
         };
         let source_phase = tracing::info_span!("compile_phase", phase = "source_load").entered();

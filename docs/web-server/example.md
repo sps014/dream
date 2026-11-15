@@ -27,7 +27,7 @@ it accepts only the `demo` account and does not link external identities.
 ```dream
 module service.models;
 import system.json;
-import validation;
+import system.validation;
 
 @json
 public class CreateMessage {
@@ -45,7 +45,7 @@ public class CreateMessage {
 
 ```dream
 module service.accounts;
-import webapi.auth;
+import system.webapi.auth;
 
 public class DemoAccounts: AuthAccounts {
     hash: string;
@@ -78,8 +78,8 @@ public class DemoAccounts: AuthAccounts {
 
 ```dream
 module service.routes;
-import webapi;
-import webapi.auth;
+import system.webapi;
+import system.webapi.auth;
 import models;
 
 public fun request_label(@header("X-Request-ID") label: Option<string>): string {
@@ -108,8 +108,8 @@ public class Messages {
 ```dream
 module service.application;
 import system;
-import webapi;
-import webapi.auth;
+import system.webapi;
+import system.webapi.auth;
 import accounts;
 import routes;
 
@@ -182,7 +182,7 @@ Save this as `service_tests.dream` in the same directory:
 
 ```dream
 import system;
-import http;
+import system.net;
 import system.testing;
 import application;
 
@@ -197,9 +197,9 @@ async fun service_login(): void {
         Url.parse("http://127.0.0.1:" + port.to_string() + "/auth/login").unwrap()
     );
     request.headers.set("Content-Type", "application/json");
-    request.body = (
+    request.body = Encoding.utf8_encode(
         "{\"username\":\"demo\",\"password\":\"example-password\"}"
-    ).to_utf8();
+    );
     let response = client.send(request).await.unwrap();
     Assert.eq(response.status, 200);
     response.close();
@@ -215,4 +215,4 @@ The test supplies explicit non-production keys and credentials, binds an ephemer
 
 For external login, configure `OidcOptions` and implement `AuthAccounts.link_identity` according to your account policy. See [OAuth2/OIDC](oidc.md) for callback URLs, transaction storage, and browser cookies.
 
-See the [testing guide](testing.md) for dependency overrides and failure cases.
+See the [API lookup](../reference/api/system-webapi.md) for public signatures and [testing guide](testing.md) for dependency overrides and failure cases.

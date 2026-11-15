@@ -20,8 +20,8 @@ pub(crate) struct ModuleAbi<'a> {
     pub execution_environment: dream_abi::target::ExecutionEnvironment,
     pub exports: &'a [String],
     pub export_functions: &'a [dream_abi::exports::ExportFunction],
-    /// `(module, field)` of the `@main_loop` extern, which the generated `main` calls itself.
-    pub main_loop: Option<&'a (String, String)>,
+    /// Host field of the platform main loop, which the generated `main` calls itself.
+    pub platform_main: Option<&'a str>,
 }
 
 /// WASM custom-section name the JS loader reads with `WebAssembly.Module.customSections`.
@@ -158,7 +158,7 @@ pub(crate) fn build_abi_json(
     module: &ModuleAbi<'_>,
 ) -> String {
     let layouts = module.layouts;
-    let main_loop = module.main_loop;
+    let platform_main = module.platform_main;
     let live: BTreeSet<(&str, &str)> = live_imports
         .iter()
         .map(|(m, f)| (m.as_str(), f.as_str()))
@@ -271,14 +271,13 @@ pub(crate) fn build_abi_json(
             if !live.contains(&(module.as_str(), field.as_str())) {
                 continue;
             }
-            declared_capabilities.extend(dream_abi::attributes::runtime_host_capability(
-                &func.attributes,
-            ));
+            declared_capabilities
+                .extend(dream_abi::attributes::runtime_host_capability(&func.attributes));
+            if platform_main.is_some_and(|host| host == field) {
+                continue;
+            }
             if let Some(lib) = c_lib {
                 c_lib_set.insert(lib);
-            }
-            if main_loop.is_some_and(|(m, f)| *m == module && *f == field) {
-                continue;
             }
             if !seen_fields.insert((module, field)) {
                 continue;
@@ -317,8 +316,8 @@ pub(crate) fn build_abi_json(
         dream_abi::host_capability::HostCapability::required(declared_capabilities)
             .into_iter()
             .map(|capability| format!("\"{}\"", capability.name()))
-            .collect::<Vec<_>>()
-            .join(", ");
+        .collect::<Vec<_>>()
+        .join(", ");
 
     format!(
         "{{\n  \"target_triple\": \"{}\",\n  \"execution_environment\": \"{}\",\n  \"native_abi_version\": 3,\n  \"main_async\": {},\n  \"externs\": [\n{}\n  ],\n  \"exports\": [{}],\n  \"export_functions\": {},\n  \"host_capabilities\": [{}]{}{}{}\n}}\n",
@@ -372,7 +371,7 @@ fn c_sources_json(sets: &[&NativeSet], shims: &BTreeMap<String, WrittenShim>) ->
         .map(|s| {
             let mut sources = s.sources.clone();
             let mut include = s.include.clone();
-            let mut exports: Vec<String> = s.exports.clone();
+            let mut exports: Vec<String> = Vec::new();
             if let Some(shim) = shims.get(&s.name) {
                 sources.push(shim.source.clone());
                 include.push(shim.include.clone());
@@ -615,7 +614,7 @@ mod tests {
                 export_functions: &[],
                 target_triple: "",
                 execution_environment: dream_abi::target::ExecutionEnvironment::Native,
-                main_loop: None,
+                platform_main: None,
             },
         )
     }
@@ -669,7 +668,6 @@ mod tests {
                 cflags: vec![],
                 frameworks: vec![],
                 libs: vec!["m".into()],
-                exports: vec![],
                 lto: true,
             },
         );
@@ -692,7 +690,7 @@ mod tests {
                 export_functions: &[],
                 target_triple: "",
                 execution_environment: dream_abi::target::ExecutionEnvironment::Native,
-                main_loop: None,
+                platform_main: None,
             },
         );
         assert!(json.contains("\"c_libs\": [\"z\"]"), "{}", json);
@@ -859,7 +857,7 @@ mod tests {
                     export_functions: &[],
                     target_triple: "",
                     execution_environment: dream_abi::target::ExecutionEnvironment::Native,
-                    main_loop: None,
+                    platform_main: None,
                 },
             );
             assert!(

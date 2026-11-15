@@ -1,0 +1,18 @@
+module system.webapi;
+
+/// Documents an additional explicit response without changing handler behavior.
+@repeatable
+@attribute(AttributeTarget.StaticMethod)
+public struct ResponseAttribute {
+    /// HTTP response status code.
+    public status: int;
+
+    /// Description displayed in the API documentation.
+    public description: string;
+
+    /// Optional declaration describing the response body.
+    public model: Option<DeclarationPath>;
+
+    /// Media type of the response body.
+    public content_type: Option<string>;
+}

@@ -331,7 +331,6 @@ pub fn link_wasm(
     public.extend(dream_mir::runtime::modules::vendor_runtime_exports(need).map(str::to_owned));
     public.extend(dream_mir::runtime::modules::worker_exports(need).map(str::to_owned));
     public.extend(module_exports(&src).map(str::to_string));
-    let package_exports = packages.declared_exports.clone();
     public.extend(packages.public);
     public.sort();
     public.dedup();
@@ -467,14 +466,6 @@ pub fn link_wasm(
     for name in dream_mir::runtime::modules::worker_exports(need) {
         cmd.arg(format!("--export={name}"));
     }
-    // Declared native-set exports are entry points a second instance calls. Shim callbacks stay
-    // internalized; exporting them would change every C++ package's wasm surface.
-    for name in &package_exports {
-        if name == "dream_callback_retain" || name == "dream_callback_release" {
-            continue;
-        }
-        cmd.arg(format!("--export={name}"));
-    }
     if !packages.libraries.is_empty() {
         cmd.arg("--fatal-warnings");
     }
@@ -488,8 +479,7 @@ pub fn link_wasm(
         .arg(builtins);
     // Codec parsers use standard C routines beyond Dream's small freestanding libc.
     // Archive extraction retains only their unresolved routines, without WASI services.
-    // Package C uses the ordinary C library. The archive contributes only unresolved routines.
-    if dream_mir::runtime::modules::needs_wasi_libc(need) || !packages.bitcode.is_empty() {
+    if dream_mir::runtime::modules::needs_wasi_libc(need) {
         let flavor = if threads {
             "wasm32-wasip1-threads"
         } else {

@@ -6,7 +6,7 @@ Read the [process guide](../../library/system/process.md) for launch settings, c
 
 ## `Process`
 
-Launches child processes and finds commands on `PATH`. Available in native programs and in Node.js; browsers have no process API.
+Launches processes asynchronously on native and Node; browser operations return EUNSUPPORTED.
 
 ```dream
 public static class Process
@@ -14,7 +14,7 @@ public static class Process
 
 ## `run`
 
-Runs a command to completion with default options: writes nothing to stdin, captures stdout and stderr as UTF-8 text, and returns them with the exit status. A nonzero exit status is not an error; check `ProcessOutput.success`. Fails with `ESPAWN` when the command cannot be launched.
+Runs a command, concurrently drains both outputs, and closes stdin after sending input.
 
 ```dream
 public static fun run(
@@ -26,7 +26,7 @@ public static fun run(
 
 ## `run`
 
-Runs a command with explicit options: working directory, environment, stdin bytes, output limit, and deadline. Fails with `ETIMEOUT` after the deadline, `ELIMIT` when an output exceeds the limit, and `ECANCELLED` when `token` is cancelled; each kills the child first.
+Runs with explicit environment, input, output limits, and an optional deadline.
 
 ```dream
 public static fun run(
@@ -39,7 +39,7 @@ public static fun run(
 
 ## `run_in`
 
-Runs a command in `cwd` with otherwise default options.
+Runs a command in a specific working directory with otherwise default options.
 
 ```dream
 public static fun run_in(
@@ -52,7 +52,7 @@ public static fun run_in(
 
 ## `spawn`
 
-Launches a command and returns the running child with streaming stdin, stdout, and stderr pipes. Fails with `ESPAWN` when the command cannot be launched.
+Spawns an owned child exposing streaming stdin, stdout, and stderr pipes.
 
 ```dream
 public static fun spawn(
@@ -64,7 +64,7 @@ public static fun spawn(
 
 ## `spawn`
 
-Launches a command with an explicit working directory and environment. The deadline, output limit, and input options apply only to `run`.
+Spawns with explicit launch settings; child closure terminates and reaps unfinished work.
 
 ```dream
 public static fun spawn(
@@ -77,7 +77,7 @@ public static fun spawn(
 
 ## `spawn_in`
 
-Launches a child in `cwd` with otherwise default options.
+Spawns a child in a specific directory with otherwise default options.
 
 ```dream
 public static fun spawn_in(
@@ -90,7 +90,7 @@ public static fun spawn_in(
 
 ## `run_checked`
 
-Runs a command like `run`, and also fails with `EEXIT` when it exits with a nonzero status.
+Captures output and additionally treats nonzero exit statuses as EEXIT errors.
 
 ```dream
 public static async fun run_checked(

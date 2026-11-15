@@ -52,8 +52,8 @@ public files: List<GenToolFile>
 
 ## `constructor`
 
-Reads a tool result from its wire value.
+Reads a tool result from its JSON representation.
 
 ```dream
-public constructor(borrow v: GenWire)
+public constructor(borrow v: JsonValue)
 ```

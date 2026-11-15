@@ -13,7 +13,7 @@ Settings come in two groups, the same split FastAPI and Uvicorn make:
 
 ```dream
 import system;
-import webapi;
+import system.webapi;
 
 async fun main(): void {
     let options = WebAppOptions(
@@ -80,7 +80,7 @@ The server has no limit on request body size, and neither do FastAPI and Uvicorn
 
 ```dream
 import system;
-import webapi;
+import system.webapi;
 
 async fun main(): void {
     let app = WebApp();
@@ -114,7 +114,7 @@ The server trusts these headers only from peers in `forwarded_allow_ips`. When `
 
 ```dream
 import system;
-import webapi;
+import system.webapi;
 
 async fun main(): void {
     let app = WebApp();
@@ -151,4 +151,4 @@ Mount routers and install middleware and overrides before startup. After startup
 
 Duplicate routes and documentation URL collisions fail before the server accepts traffic. To run another server, construct another app.
 
-See the [complete example](example.md).
+See the [API lookup](../reference/api/system-webapi.md) and [complete example](example.md).

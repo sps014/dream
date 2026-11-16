@@ -329,9 +329,9 @@ jobs:
             -o "$stress_dir/worker"
           "$stress_dir/worker"
 
-  # Each host and guest profile runs the corpus once. Native debug runs under the address
-  # sanitizer below, so the debug profile here covers Node only. Release covers both hosts
-  # and checks that their isolated stdout matches.
+  # Debug runs both hosts and checks that their isolated stdout matches. Release guest builds
+  # are slow enough that one runner for both hosts was reclaimed mid-corpus, so each release
+  # host gets its own runner.
   golden-corpus:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
@@ -340,12 +340,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Node corpus (debug)
+          - name: Native and Node corpus with output parity (debug)
+            key: debug
             profile: debug
-            corpus: --node
-          - name: Full native corpus and WASM parity (release)
+            corpus: --both
+            node: true
+          - name: Native corpus (release)
+            key: release-native
             profile: release
-            corpus: --both --release
+            corpus: --release
+            node: false
+          - name: Node corpus (release)
+            key: release-node
+            profile: release
+            corpus: --node --release
+            node: true
     steps:
       - name: Install native dependencies
         run: |
@@ -376,6 +385,7 @@ jobs:
         with:
           node-version: "22"
       - name: JavaScript runtime storage and generated bundle
+        if: matrix.profile == 'debug'
         run: |
           node scripts/bundle-runtime.mjs --check
           node --test scripts/test-pointer-integers.mjs scripts/test-bundle-runtime.mjs scripts/test-window-host.mjs scripts/test-typed-host.mjs scripts/test-socket-spans.mjs scripts/test-gpu-host.mjs scripts/test-stdlib-hosts.mjs scripts/test-cancellation-host.mjs scripts/test-http-host.mjs
@@ -410,6 +420,7 @@ jobs:
           key: slang-2026.20-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-host-gpu/native/recorder/**', 'crates/dream-host-gpu/native/replay/layout_blob.*') }}
       - run: cargo run --locked -p dreamer -- toolchain install slang
       - name: Build drawing WASM host for Node assertions
+        if: matrix.node
         run: |
           rustup target add wasm32-unknown-unknown
           cargo install wasm-bindgen-cli --version 0.2.129 --locked
@@ -438,20 +449,27 @@ jobs:
             target/drawing-browser/presentation.json
           if-no-files-found: ignore
           retention-days: 7
-      # Release compilation is substantially slower; separate runners give each profile
-      # its own budget and preserve one result if the other runner stops.
-      - name: Assertion corpus (${{ matrix.profile }} guest builds)
+      # Resource samples go to the job log so they survive a runner that is reclaimed before
+      # artifacts upload.
+      - name: Assertion corpus (${{ matrix.name }})
         shell: bash
         run: |
           mkdir -p target
-          python3 scripts/test_corpus.py ${{ matrix.corpus }} 2>&1 | tee target/corpus-${{ matrix.profile }}.log
+          while sleep 60; do
+            echo "resources: $(df -h --output=avail,pcent / | tail -1 | xargs) disk free; $(free -m | awk '/^Mem:/ {print $7 " MiB available of " $2}')"
+          done &
+          monitor=$!
+          status=0
+          python3 scripts/test_corpus.py ${{ matrix.corpus }} 2>&1 | tee target/corpus-${{ matrix.key }}.log || status=$?
+          kill "$monitor"
+          exit "$status"
       - name: Preserve corpus results and compilation timings
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: corpus-Linux-${{ matrix.profile }}
+          name: corpus-Linux-${{ matrix.key }}
           path: |
-            target/corpus-${{ matrix.profile }}.log
+            target/corpus-${{ matrix.key }}.log
             target/cargo-timings/*.html
           retention-days: 7
           if-no-files-found: ignore

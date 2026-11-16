@@ -81,9 +81,9 @@ jobs:
           set -euo pipefail
           # macOS /bin/bash is 3.2: `"${arr[@]}"` with `set -u` and an empty array is an error.
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-gpu -p dream-host-window -p dream-host-audio -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
+            cargo build --profile dist -p dream -p dream-host -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-gpu -p dream-host-window -p dream-host-audio -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
           else
-            cargo build --release -p dream -p dream-host -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-gpu -p dream-host-window -p dream-host-audio -p dreamer -p dream-lsp
+            cargo build --profile dist -p dream -p dream-host -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-gpu -p dream-host-window -p dream-host-audio -p dreamer -p dream-lsp
           fi
 
       # The official LLVM (clang) builds the runtime the archive ships prebuilt; it is not shipped.
@@ -115,9 +115,9 @@ jobs:
             EXT=".exe"
           fi
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            BIN_DIR="target/${{ matrix.rust_target }}/release"
+            BIN_DIR="target/${{ matrix.rust_target }}/dist"
           else
-            BIN_DIR="target/release"
+            BIN_DIR="target/dist"
           fi
           cp "${BIN_DIR}/dream${EXT}" "$STAGE/"
           cp "${BIN_DIR}/dreamer${EXT}" "$STAGE/"
@@ -177,8 +177,23 @@ jobs:
               tar -C dist -a -cf "dist/dream-${VERSION}-${{ matrix.target }}.zip" "dream-${VERSION}-${{ matrix.target }}"
             fi
           else
-            tar -C dist -czf "dist/dream-${VERSION}-${{ matrix.target }}.tar.gz" "dream-${VERSION}-${{ matrix.target }}"
+            # A large xz dictionary sees the near-identical prebuilt runtime trees as repeats;
+            # gzip's 32 KB window cannot. Piped through xz because macOS bsdtar ignores XZ_OPT,
+            # and single-threaded because threaded blocks cannot match across each other.
+            tar -C dist -cf - "dream-${VERSION}-${{ matrix.target }}" \
+              | xz -T1 --lzma2=preset=9e,dict=256MiB > "dist/dream-${VERSION}-${{ matrix.target }}.tar.xz"
           fi
+
+      - name: Size gate
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="$(ls dist/*.tar.xz)"
+          BYTES=$(wc -c < "$ARCHIVE")
+          MAX_MB=100
+          echo "$ARCHIVE: $((BYTES / 1024 / 1024)) MB (budget ${MAX_MB} MB)"
+          test "$BYTES" -le $((MAX_MB * 1024 * 1024))
 
       # The staged archive alone must build native and wasm32 programs: no DREAM_LLVM, and the
       # development LLVM moved out of reach.
@@ -217,7 +232,7 @@ jobs:
         with:
           name: dream-${{ matrix.target }}
           path: |
-            dist/*.tar.gz
+            dist/*.tar.xz
             dist/*.zip
 
   vscode:
@@ -268,7 +283,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.vsix' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name '*.tar.xz' -o -name '*.zip' -o -name '*.vsix' \) -exec cp {} release/ \;
           cd release
           sha256sum * > SHA256SUMS
           ls -la

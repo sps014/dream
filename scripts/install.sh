@@ -90,8 +90,12 @@ if [ "$TARGET" = "windows-x64" ] || [ "$TARGET" = "windows-arm64" ]; then
   ARCHIVE="dream-${VERSION}-${TARGET}.zip"
   EXTRACT=zip
 else
-  ARCHIVE="dream-${VERSION}-${TARGET}.tar.gz"
+  ARCHIVE="dream-${VERSION}-${TARGET}.tar.xz"
   EXTRACT=tar
+  # GNU tar delegates -J to the xz program; macOS bsdtar decodes xz itself.
+  case "$TARGET" in
+    linux-*) need xz ;;
+  esac
 fi
 
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
@@ -138,7 +142,7 @@ echo "Checksum OK"
 
 mkdir -p "${WORK}/out"
 if [ "$EXTRACT" = tar ]; then
-  tar -xzf "${WORK}/${ARCHIVE}" -C "${WORK}/out"
+  tar -xJf "${WORK}/${ARCHIVE}" -C "${WORK}/out"
 else
   need unzip
   unzip -q "${WORK}/${ARCHIVE}" -d "${WORK}/out"

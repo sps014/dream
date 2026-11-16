@@ -6,7 +6,7 @@
 //! always-inline helpers) and each needed module's own wrapper (`regex.c`), so `opt` sees every
 //! runtime function the program calls. Vendored libraries (PCRE2) only call libc and stay in a
 //! native archive. `dream_rt.sigs` is the reduced disassembly the backend types runtime calls
-//! from.
+//! from; a release keeps only the O0 copy, which `signatures::load` reads for every level.
 //!
 //! The bitcode carries no `target-cpu`/`target-features`: the machine that built it is not the
 //! one that runs it, so the program's `-mcpu` (see `build::cpu_args`) decides for both.
@@ -25,7 +25,6 @@ use std::process::Command;
 
 pub struct LlvmRuntime {
     pub bc: PathBuf,
-    pub sigs: PathBuf,
     /// Vendored C for the needed modules, compiled natively (`None` when nothing is needed).
     pub archive: Option<PathBuf>,
 }
@@ -36,7 +35,6 @@ fn snapshot(cache: &RuntimeCache, outputs: &[PathBuf]) -> Result<LlvmRuntime, St
     let outputs = cache.snapshot(outputs)?;
     Ok(LlvmRuntime {
         bc: outputs[0].clone(),
-        sigs: outputs[1].clone(),
         archive: outputs.get(2).cloned(),
     })
 }
@@ -248,7 +246,6 @@ pub fn llvm_runtime(
         ),
         RtDir::Prebuilt(dir) => Ok(LlvmRuntime {
             bc: prebuilt_file(&dir, "dream_rt.bc")?,
-            sigs: prebuilt_file(&dir, "dream_rt.sigs")?,
             archive: Some(dir.join(VENDOR_ARCHIVE)).filter(|a| a.is_file()),
         }),
         RtDir::Cache(dir) => {
@@ -556,8 +553,10 @@ mod tests {
             false,
         )
         .expect("runtime");
-        let sigs =
-            RuntimeSigs::parse(&std::fs::read_to_string(&rt.sigs).expect("sigs")).expect("parse");
+        let sigs = RuntimeSigs::parse(
+            &std::fs::read_to_string(rt.bc.with_file_name("dream_rt.sigs")).expect("sigs"),
+        )
+        .expect("parse");
         assert!(sigs.function("dream_panic").noreturn);
         assert_eq!(sigs.function("dream_retain").fty.params, vec![Ty::Ptr]);
         assert_eq!(sigs.function("dream_malloc").fty.ret, Ty::Ptr);

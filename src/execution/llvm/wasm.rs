@@ -21,7 +21,6 @@ use std::path::{Path, PathBuf};
 
 pub struct WasmRuntime {
     pub bc: PathBuf,
-    pub sigs: PathBuf,
     pub objs: Vec<PathBuf>,
 }
 
@@ -116,7 +115,6 @@ pub fn wasm_runtime(
             objs.sort();
             Ok(WasmRuntime {
                 bc: prebuilt_file(&dir, "dream_rt.bc")?,
-                sigs: prebuilt_file(&dir, "dream_rt.sigs")?,
                 objs,
             })
         }
@@ -282,7 +280,6 @@ fn snapshot(cache: &RuntimeCache, outputs: &[PathBuf]) -> Result<WasmRuntime, St
     let outputs = cache.snapshot(outputs)?;
     Ok(WasmRuntime {
         bc: outputs[0].clone(),
-        sigs: outputs[1].clone(),
         objs: outputs[2..].to_vec(),
     })
 }

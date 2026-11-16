@@ -22,18 +22,26 @@ async fun iso_combinator_item(id: int): iso_CombinatorItem { return iso_Combinat
 
 async fun iso_combinator_value(id: int): iso_CombinatorValue { return iso_CombinatorValue(iso_CombinatorItem(id)); }
 
-async fun iso_combinator_exercise(): void {
+// Locals leaving the same scope have no specified drop order, so each result array gets its
+// own scope.
+async fun iso_combinator_items(): void {
     let items = Promise.all([iso_combinator_item(1), iso_combinator_item(2)]).await;
     Assert.eq("items " + items[0].id + " " + items[1].id, "items 1 2");
+    Assert.eq(iso_combinator_log, "");
+}
+
+async fun iso_combinator_values(): void {
     let values = Promise.all([iso_combinator_value(3), iso_combinator_value(4)]).await;
     Assert.eq("values " + values[0].item.id + " " + values[1].item.id, "values 3 4");
-    Assert.eq(iso_combinator_log, "");
+    Assert.eq(iso_combinator_log, "drop 1;drop 2;");
 }
 
 @test
 async fun iso_async_combinator_owned_results(): void {
     iso_combinator_log = "";
-    iso_combinator_exercise().await;
+    iso_combinator_items().await;
+    Assert.eq(iso_combinator_log, "drop 1;drop 2;");
+    iso_combinator_values().await;
     Assert.eq(iso_combinator_log, "drop 1;drop 2;drop 3;drop 4;");
     iso_combinator_log = "";
 }

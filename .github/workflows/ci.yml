@@ -329,14 +329,23 @@ jobs:
             -o "$stress_dir/worker"
           "$stress_dir/worker"
 
+  # Each host and guest profile runs the corpus once. Native debug runs under the address
+  # sanitizer below, so the debug profile here covers Node only. Release covers both hosts
+  # and checks that their isolated stdout matches.
   golden-corpus:
-    name: Full native corpus and WASM parity (${{ matrix.profile }})
+    name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        profile: [debug, release]
+        include:
+          - name: Node corpus (debug)
+            profile: debug
+            corpus: --node
+          - name: Full native corpus and WASM parity (release)
+            profile: release
+            corpus: --both --release
     steps:
       - name: Install native dependencies
         run: |
@@ -431,11 +440,11 @@ jobs:
           retention-days: 7
       # Release compilation is substantially slower; separate runners give each profile
       # its own budget and preserve one result if the other runner stops.
-      - name: Full native and Node assertion corpus (${{ matrix.profile }} guest builds)
+      - name: Assertion corpus (${{ matrix.profile }} guest builds)
         shell: bash
         run: |
           mkdir -p target
-          python3 scripts/test_corpus.py --both ${{ matrix.profile == 'release' && '--release' || '' }} 2>&1 | tee target/corpus-${{ matrix.profile }}.log
+          python3 scripts/test_corpus.py ${{ matrix.corpus }} 2>&1 | tee target/corpus-${{ matrix.profile }}.log
       - name: Preserve corpus results and compilation timings
         if: always()
         uses: actions/upload-artifact@v7
@@ -460,17 +469,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Setup consumed 23 minutes before the debug corpus; the combined job then
-        # expired during release compilation. Each profile needs its own budget.
+        # Native release guest builds run once, uninstrumented, in the release corpus job.
         include:
           - name: Golden corpus under address,undefined sanitizer
             sanitizer: address,undefined
             profile: debug
             timeout: 60
-          - name: Optimized corpus under address,undefined sanitizer
-            sanitizer: address,undefined
-            profile: release
-            timeout: 180
           - name: Golden corpus under thread sanitizer
             sanitizer: thread
             profile: concurrency
@@ -525,12 +529,6 @@ jobs:
         run: |
           mkdir -p target
           python3 scripts/test_corpus.py 2>&1 | tee target/probe-sanitize.log
-      - name: Full native corpus, release guest builds (runtime instrumented)
-        if: matrix.profile == 'release'
-        shell: bash
-        run: |
-          mkdir -p target
-          python3 scripts/test_corpus.py --release 2>&1 | tee target/probe-sanitize-release.log
       - name: Concurrency cases (runtime instrumented)
         if: matrix.profile == 'concurrency'
         shell: bash

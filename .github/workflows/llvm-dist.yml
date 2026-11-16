@@ -24,7 +24,7 @@ jobs:
       matrix:
         include:
           # Compressed budget: the shared-libLLVM hosts come to ~12 MB (macOS arm64); Windows
-          # links each tool statically.
+          # links each tool statically, and clang alone brings it to ~160 MB.
           - os: ubuntu-latest
             target: linux-x64
             arch: x86_64
@@ -44,7 +44,7 @@ jobs:
           - os: windows-latest
             target: windows-x64
             arch: x86_64
-            max_mb: 90
+            max_mb: 180
 
     runs-on: ${{ matrix.os }}
     # Same glibc floor as the release binaries.

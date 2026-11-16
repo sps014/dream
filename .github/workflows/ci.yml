@@ -350,11 +350,13 @@ jobs:
             profile: release
             corpus: --release
             node: false
+          # Four optimized WASM suites at once exhausted the runner and it was reclaimed.
           - name: Node corpus (release)
             key: release-node
             profile: release
             corpus: --node --release
             node: true
+            jobs: 2
     steps:
       - name: Install native dependencies
         run: |
@@ -453,6 +455,8 @@ jobs:
       # artifacts upload.
       - name: Assertion corpus (${{ matrix.name }})
         shell: bash
+        env:
+          CORPUS_JOBS: ${{ matrix.jobs || 4 }}
         run: |
           mkdir -p target
           while sleep 60; do

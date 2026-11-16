@@ -81,9 +81,9 @@ jobs:
           set -euo pipefail
           # macOS /bin/bash is 3.2: `"${arr[@]}"` with `set -u` and an empty array is an error.
           if [[ -n "${{ matrix.rust_target }}" ]]; then
-            cargo build --profile dist -p dream -p dream-host -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-gpu -p dream-host-window -p dream-host-audio -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
+            cargo build --profile dist -p dream -p dream-host -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-gpu -p dream-host-window -p dream-host-audio -p dream-host-drawing -p dreamer -p dream-lsp --target "${{ matrix.rust_target }}"
           else
-            cargo build --profile dist -p dream -p dream-host -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-gpu -p dream-host-window -p dream-host-audio -p dreamer -p dream-lsp
+            cargo build --profile dist -p dream -p dream-host -p dream-host-core -p dream-host-crypto -p dream-host-process -p dream-host-timezone -p dream-host-net -p dream-host-io -p dream-host-gpu -p dream-host-window -p dream-host-audio -p dream-host-drawing -p dreamer -p dream-lsp
           fi
 
       # The official LLVM (clang) builds the runtime the archive ships prebuilt; it is not shipped.
@@ -100,7 +100,7 @@ jobs:
         run: |
           rustup target add wasm32-unknown-unknown
           cargo install wasm-bindgen-cli --version 0.2.129 --locked
-          python scripts/build-drawing-web.py
+          ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/build-drawing-web.py
 
       - name: Package archive
         shell: bash

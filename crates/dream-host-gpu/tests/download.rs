@@ -81,6 +81,8 @@ fn truncated_transfers_restart_without_appending_to_the_partial_file() {
                     other => panic!("expected download connection: {other:?}"),
                 }
             };
+            // BSD sockets inherit the listener's non-blocking mode on accept.
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .unwrap();

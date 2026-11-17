@@ -1,0 +1,5 @@
+[package]
+name = "raven_example"
+version = "0.1.0"
+type = "bin"
+entry = "src/main.dream"

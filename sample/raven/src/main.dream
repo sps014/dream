@@ -1,0 +1,225 @@
+import system;
+import system.audio;
+import system.collections;
+import system.interop;
+import tracks;
+cimport "raven/raven_core.h" from "raven" as core;
+cimport "raven/raven_xml.h" from "raven" as xml;
+cimport "raven/raven_window.h" from "raven" as windows;
+cimport "raven/raven_widget.h" from "raven" as widgets;
+cimport "raven/raven_controls.h" from "raven" as controls;
+
+let actions = List<string>();
+
+fun queue_action(_sender: uint, action: CPtr, _data: CPtr): void {
+    actions.push(Ffi.read_cstring(action).unwrap_or(""));
+}
+
+@unsafe
+fun c_text(text: string): RawPtr<byte> {
+    let bytes = Encoding.utf8_encode(text);
+    let buffer = RawPtr<byte>.alloc((usize)bytes.length + 1);
+    for (let i = 0; i < bytes.length; i = i + 1) {
+        buffer[i] = bytes[i];
+    }
+    buffer[bytes.length] = (byte)0;
+    return buffer;
+}
+
+@unsafe
+fun find_widget(window: uint, name: string): uint {
+    let text = c_text(name);
+    let widget = widgets.Rwidget_find(window, CPtr(text.address()));
+    text.free();
+    return widget;
+}
+
+@unsafe
+fun label(widget: uint, value: string): void {
+    let text = c_text(value);
+    controls.Rlabel_set_text(widget, CPtr(text.address()));
+    text.free();
+}
+
+@unsafe
+fun button_text(widget: uint, value: string): void {
+    let text = c_text(value);
+    controls.Rbutton_set_text(widget, CPtr(text.address()));
+    text.free();
+}
+
+@unsafe
+fun artwork(widget: uint, color: string): void {
+    let key = c_text("EffectColor");
+    let value = c_text(color);
+    xml.Rwidget_set_attribute(widget, CPtr(key.address()), CPtr(value.address()));
+    value.free();
+    key.free();
+}
+
+fun timestamp(seconds: double): string {
+    let total = (int)seconds;
+    let remainder = total % 60;
+    let minutes = total / 60;
+    if remainder < 10 {
+        return "" + minutes + ":0" + remainder;
+    }
+    return "" + minutes + ":" + remainder;
+}
+
+@unsafe
+async fun main(): int {
+    if core.Rinit_ex(CPtr.null()) == core.R_FALSE {
+        System.println("Could not initialize Raven. Check that a Vulkan driver is available.");
+        return 1;
+    }
+
+    let path = c_text("player.xml");
+    let window = xml.Rwindow_create_from_xml_file(CPtr(path.address()));
+    path.free();
+    if window == core.R_INVALID_ID {
+        System.println("Could not load player.xml. Run this sample from its directory.");
+        core.Rshutdown();
+        return 1;
+    }
+
+    let title = find_widget(window, "title");
+    let detail = find_widget(window, "detail");
+    let next = find_widget(window, "next");
+    let art = find_widget(window, "art");
+    let elapsed = find_widget(window, "elapsed");
+    let duration = find_widget(window, "duration");
+    let seek = find_widget(window, "seek");
+    let volume = find_widget(window, "volume");
+    let play = find_widget(window, "play");
+    let repeat_button = find_widget(window, "repeat");
+    let status = find_widget(window, "status");
+    let names = [
+        "track.0",
+        "track.1",
+        "track.2",
+        "player.previous",
+        "player.toggle",
+        "player.next",
+        "player.repeat",
+        "player.seek",
+        "player.volume"
+    ];
+    for (let i = 0; i < names.length; i = i + 1) {
+        let name = c_text(names[i]);
+        core.Raction_bind(CPtr(name.address()), queue_action, CPtr.null());
+        name.free();
+    }
+
+    let titles = ["Violet Hour", "Glass Tides", "Signal Bloom"];
+    let details = ["Soft arpeggio", "Slow ambient pulse", "Bright synth sequence"];
+    let colors = ["#A878FF", "#58DFDA", "#FF966C"];
+    let track = 0;
+    let shown_track = -1;
+    let audio = synth_track(track);
+    audio.load().await.unwrap();
+    audio.volume = controls.Rslider_get_value(volume);
+    let repeat = false;
+    let shown_repeat = false;
+    let shown_paused = true;
+    let shown_second = -1;
+
+    while core.Ris_running() != core.R_FALSE {
+        let requested = track;
+        let start = audio.ended;
+        if start {
+            requested = (track + 1) % titles.length;
+        }
+        for (let i = 0; i < actions.length; i = i + 1) {
+            let action = actions[i];
+            if action == "track.0" {
+                requested = 0;
+                start = true;
+            } else if action == "track.1" {
+                requested = 1;
+                start = true;
+            } else if action == "track.2" {
+                requested = 2;
+                start = true;
+            } else if action == "player.next" {
+                requested = (requested + 1) % titles.length;
+                start = true;
+            } else if action == "player.previous" {
+                requested = (requested + titles.length - 1) % titles.length;
+                start = true;
+            } else if action == "player.toggle" {
+                if audio.paused {
+                    start = true;
+                } else {
+                    audio.pause();
+                    start = false;
+                }
+            } else if action == "player.seek" {
+                audio.current_time = (double)controls.Rslider_get_value(seek);
+            } else if action == "player.volume" {
+                audio.volume = controls.Rslider_get_value(volume);
+            } else if action == "player.repeat" {
+                repeat = !repeat;
+                audio.loop = repeat;
+            }
+        }
+        actions.clear();
+
+        if requested != track {
+            audio.close();
+            track = requested;
+            audio = synth_track(track);
+            audio.load().await.unwrap();
+            audio.volume = controls.Rslider_get_value(volume);
+            audio.loop = repeat;
+        }
+        if start && audio.paused {
+            let result = audio.play().await;
+            if result.is_err() {
+                label(status, result.unwrap_err().message());
+            } else {
+                label(status, "");
+            }
+        }
+
+        if shown_track != track {
+            label(title, titles[track]);
+            label(detail, details[track]);
+            label(next, titles[(track + 1) % titles.length]);
+            artwork(art, colors[track]);
+            let length = audio.duration.unwrap_or(0.0d);
+            controls.Rslider_set_range(seek, 0.0f, (float)length);
+            label(duration, timestamp(length));
+            if shown_track < 0 {
+                windows.Rwindow_show(window);
+            }
+            shown_track = track;
+        }
+        let paused = audio.paused;
+        if shown_paused != paused {
+            button_text(play, paused ? "Play" : "Pause");
+            shown_paused = paused;
+        }
+        if shown_repeat != repeat {
+            button_text(repeat_button, repeat ? "Repeat on" : "Repeat off");
+            shown_repeat = repeat;
+        }
+        let time = audio.current_time;
+        controls.Rslider_set_value(seek, (float)time);
+        if (int)time != shown_second {
+            label(elapsed, timestamp(time));
+            shown_second = (int)time;
+        }
+        core.Rwait_frame(0.05d);
+    }
+
+    audio.close();
+    for (let i = 0; i < names.length; i = i + 1) {
+        let name = c_text(names[i]);
+        core.Raction_unbind(CPtr(name.address()));
+        name.free();
+    }
+    let result = core.Rget_exit_code();
+    core.Rshutdown();
+    return result;
+}

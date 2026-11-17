@@ -1,0 +1,8 @@
+[package]
+name = "raygui_example"
+version = "0.1.0"
+type = "bin"
+entry = "src/main.dream"
+
+[native.raygui_example]
+include = ["target/deps/include"]

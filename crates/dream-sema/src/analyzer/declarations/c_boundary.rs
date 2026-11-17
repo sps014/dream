@@ -52,7 +52,7 @@ impl<'a> Analyzer<'a> {
         if function.parameters.iter().any(|p| p.is_variadic) {
             diagnostics.report_error(
                 format!(
-                    "'@c' extern '{}' cannot be variadic; declare one overload per arity",
+                    "'@c' extern '{}' cannot be variadic; bind a fixed-arity C wrapper",
                     function.name.text
                 ),
                 Some(function.name.position),

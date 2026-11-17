@@ -18,7 +18,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Parses the flexible function-modifier prefix (`async`/`public`/`internal`/`static`/`extern`,
     /// which may appear in several orders). Consumes
     /// exactly the modifier tokens, leaving the cursor on the `fun`/constructor/`del` token.
-    pub(crate) fn parse_function_modifiers(&mut self, is_intrinsic: bool) -> FunctionModifiers {
+    pub(crate) fn parse_function_modifiers(
+        &mut self,
+        allows_public_extern: bool,
+    ) -> FunctionModifiers {
         let mut m = FunctionModifiers::default();
         loop {
             if self.try_consume_visibility(&mut m.visibility) {
@@ -44,7 +47,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 _ => break,
             }
         }
-        if m.is_extern && m.visibility.is_public() && !is_intrinsic {
+        if m.is_extern && m.visibility.is_public() && !allows_public_extern {
             self.diagnostics.report_error(
                 "A function cannot be both 'public' and 'extern': 'extern' declares an imported host symbol, while 'public' exports a defined one".to_string(),
                 Some(self.current_token().position),
@@ -80,7 +83,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_static,
             is_extern,
             is_override,
-        } = self.parse_function_modifiers(no_host_symbol);
+        } = self.parse_function_modifiers(
+            no_host_symbol
+                || attributes
+                    .iter()
+                    .any(|attribute| attribute.name.text == "c"),
+        );
 
         // Optional receiver-mode qualifier immediately before `fun` (`[borrow | unique] fun ...`):
         // pins the method's mutation contract instead of letting the analyzer infer it from the

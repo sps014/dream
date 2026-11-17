@@ -82,7 +82,7 @@ fn asm_objs(dir: &Path, units: &[Unit]) -> Vec<PathBuf> {
 }
 
 /// The WASI libc headers `scripts/fetch-dev-llvm.sh` unpacks beside the development LLVM.
-pub(super) fn wasi_sysroot(clang: &Path) -> Result<PathBuf, String> {
+pub(crate) fn wasi_sysroot(clang: &Path) -> Result<PathBuf, String> {
     let root = clang
         .parent()
         .and_then(Path::parent)

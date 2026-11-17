@@ -46,6 +46,9 @@ pub struct Parser<'a, 'b> {
     cfg: crate::conditional::CfgSymbols,
     /// Ranges of items dropped by a false `@cfg` condition.
     inactive_spans: Vec<TextSpan>,
+    c_import_scope: String,
+    c_import_names: HashMap<String, String>,
+    c_import_uses: HashMap<String, Vec<SyntaxToken>>,
 }
 
 /// How deep expressions, statements, types, and patterns may nest. Past this the parser reports
@@ -71,12 +74,20 @@ impl<'a, 'b> Parser<'a, 'b> {
             nesting_reported: false,
             cfg: crate::conditional::CfgSymbols::default(),
             inactive_spans: Vec::new(),
+            c_import_scope: String::new(),
+            c_import_names: HashMap::new(),
+            c_import_uses: HashMap::new(),
         }
     }
 
     /// Evaluates `@cfg` conditions against `cfg` instead of the host debug set.
     pub fn with_cfg(mut self, cfg: crate::conditional::CfgSymbols) -> Self {
         self.cfg = cfg;
+        self
+    }
+
+    pub fn with_c_import_scope(mut self, scope: String) -> Self {
+        self.c_import_scope = scope;
         self
     }
 
@@ -625,11 +636,11 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         while matches!(
             self.current_token().kind,
-            TokenKind::ImportToken | TokenKind::JsImportToken
+            TokenKind::ImportToken | TokenKind::JsImportToken | TokenKind::CImportToken
         ) || (self.at_cfg_attribute()
             && matches!(
                 self.core_keyword_after_attrs(),
-                TokenKind::ImportToken | TokenKind::JsImportToken
+                TokenKind::ImportToken | TokenKind::JsImportToken | TokenKind::CImportToken
             ))
         {
             let loop_start = self.current_token_index;
@@ -637,7 +648,24 @@ impl<'a, 'b> Parser<'a, 'b> {
             let parsed = self.parse_import();
             let keep = self.keep_cfg_item(gate);
             match parsed {
-                Ok(import_node) if keep => imports.push(import_node),
+                Ok(import_node) if keep => {
+                    if let Some(alias) = &import_node.alias {
+                        if imports.iter().any(|prior: &crate::nodes::ImportNode| {
+                            (prior.c.is_some() || import_node.c.is_some())
+                                && prior.alias.as_ref().is_some_and(|a| a.text == alias.text)
+                        }) {
+                            self.diagnostics.report_error(
+                                format!("duplicate C import namespace '{}'", alias.text),
+                                Some(alias.position),
+                            );
+                        }
+                        if let Some(c) = &import_node.c {
+                            self.c_import_names
+                                .insert(alias.text.clone(), c.prefix.clone());
+                        }
+                    }
+                    imports.push(import_node);
+                }
                 Ok(_) => {}
                 Err(_) => self.recover_to_next_declaration(),
             }
@@ -739,6 +767,16 @@ impl<'a, 'b> Parser<'a, 'b> {
             // top-level parsing can never spin forever.
             self.ensure_progress(loop_start);
         }
+        for import in &mut imports {
+            if let (Some(c), Some(alias)) = (&mut import.c, &import.alias) {
+                c.uses = self.c_import_uses.remove(&alias.text).unwrap_or_default();
+                c.uses.retain(|usage| {
+                    !self.inactive_spans.iter().any(|span| {
+                        span.start <= usage.position.start && usage.position.end <= span.end
+                    })
+                });
+            }
+        }
         let mut program = ProgramNode::new(
             imports, structs, interfaces, functions, enums, extends, globals,
         );
@@ -776,6 +814,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     | TokenKind::ConstToken
                     | TokenKind::ImportToken
                     | TokenKind::JsImportToken
+                    | TokenKind::CImportToken
             ) {
                 break;
             }

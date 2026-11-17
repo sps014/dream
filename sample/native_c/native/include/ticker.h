@@ -11,6 +11,7 @@ ticker* ticker_new(const char* name);
 void ticker_free(ticker* t);
 const char* ticker_name(const ticker* t);
 void ticker_on_tick(ticker* t, ticker_fn fn, void* user);
+void ticker_clear_callback(ticker* t);
 int ticker_run(ticker* t, int ticks);
 /* NULL past the last tick run so far. */
 const char* ticker_label(ticker* t, int tick);

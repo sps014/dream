@@ -15,7 +15,7 @@ pub(super) fn dependencies(
             .program
             .imports
             .iter()
-            .filter(|import| import.alias.is_some() && !import.is_js)
+            .filter(|import| import.alias.is_some() && !import.is_js && import.c.is_none())
         {
             if let Some((path, _)) = import.module_name.text.rsplit_once('.')
                 && let Some(&id) = names.get(path)

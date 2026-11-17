@@ -2,7 +2,7 @@ use dream_syntax::token::{syntax_token::SyntaxToken, token_kind::TokenKind};
 
 use crate::{
     generics::detect_type_arg_regions,
-    spacing::{is_try_question_mark, needs_space},
+    spacing::{c_import_from_needs_space, is_try_question_mark, needs_space},
 };
 
 /// Layout metadata is indexed by token so nested lists are measured once, independent of
@@ -70,11 +70,11 @@ impl Groups {
         let mut hard_breaks = vec![0usize];
         for (i, token) in tokens.iter().enumerate() {
             let space = i > 0
-                && needs_space(
+                && (needs_space(
                     i.checked_sub(2).map(|j| tokens[j].kind),
                     tokens[i - 1].kind,
                     token.kind,
-                )
+                ) || c_import_from_needs_space(tokens, i))
                 && !type_delimiter[i]
                 && !(tokens[i - 1].kind == TokenKind::SmallerThanToken && type_delimiter[i - 1]);
             widths.push(widths[i] + token.text.chars().count() + usize::from(space));

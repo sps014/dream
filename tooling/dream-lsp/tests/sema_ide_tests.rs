@@ -269,3 +269,55 @@ fn broken_program_still_yields_snapshot_for_parsed_region() {
         "expected string members despite unrelated error, got {comps:?}"
     );
 }
+
+#[test]
+fn c_namespace_completion_and_definition_use_cached_bindings() {
+    use dream_sema::analyzer::ide::IdeTarget;
+    use std::fs;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let path = root.join("main.dream");
+    let source = "cimport \"interop.h\" as c;\nfun main(): int { return c.answer(); }";
+    fs::write(root.join("dream.toml"), "[package]\nname = \"c-ide\"\n").unwrap();
+    fs::write(&path, source).unwrap();
+
+    let arena = bumpalo::Bump::new();
+    let mut diagnostics = dream::diagnostics::DiagnosticBag::new(None);
+    let lexer = dream::syntax::lexer::Lexer::new(source.into());
+    let ast = dream::syntax::parser::Parser::new(lexer, &arena, &mut diagnostics)
+        .with_c_import_scope(dream::driver::c_imports::source_scope(&path))
+        .parse()
+        .unwrap();
+    let import = ast.get_root().imports[0].c.as_ref().unwrap();
+    let cache = root
+        .join("target/obj/cimport")
+        .join(dream_abi::target::TargetSpec::host().llvm_triple());
+    fs::create_dir_all(&cache).unwrap();
+    let stem = cache.join(import.prefix.trim_end_matches('_'));
+    let bindings = format!(
+        "import system.interop;\n@c(\"c\", \"answer\")\npublic extern fun {}answer(): int;\n",
+        import.prefix
+    );
+    fs::write(stem.with_extension("dream"), &bindings).unwrap();
+    fs::write(
+        stem.with_extension("json"),
+        serde_json::json!({
+            "fingerprint": "test",
+            "source": bindings,
+            "omissions": {},
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let result = dream_lsp::analysis::analyze_document(path.to_str(), source);
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    let snapshot = result.sema.unwrap();
+    let member = source.find("c.answer").unwrap() + "c.".len();
+    let items = sema_ide::member_completions(&snapshot, source, member).unwrap();
+    assert!(items.iter().any(|(name, ..)| name == "answer"), "{items:?}");
+    let target = &snapshot.ref_covering(member).unwrap().target;
+    assert!(
+        matches!(target, IdeTarget::Resolved { source, .. } if source.file.as_deref().is_some_and(|file| file.ends_with(stem.with_extension("dream").file_name().unwrap().to_str().unwrap())))
+    );
+}

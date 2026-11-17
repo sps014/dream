@@ -1,110 +1,15 @@
-import system.interop;
-// Create a local SQLite file, insert rows, then SELECT them back.
-//
-// Run from any cwd:
-//   dream run /path/to/Dream/sample/sqlite/db.dream
-//
-// Creates `./demo.db` in the process working directory.
-import system;
-
-@c("sqlite3", "sqlite3_open")
-extern fun sqlite3_open(path: string, ref db: CPtr): int;
-
-@c("sqlite3", "sqlite3_close")
-extern fun sqlite3_close(db: CPtr): int;
-
-@c("sqlite3", "sqlite3_exec")
-extern fun sqlite3_exec(
-    db: CPtr,
-    sql: string,
-    callback: fun(CPtr, int, CPtr, CPtr): int,
-    arg: Option<CPtr>,
-    ref errmsg: CPtr
-): int;
-
-fun ignore_row(_arg: CPtr, _argc: int, _argv: CPtr, _cols: CPtr): int {
-    return 0;
-}
-
-fun print_row(_arg: CPtr, argc: int, argv: CPtr, _cols: CPtr): int {
-    let line = "";
-    let i = 0;
-    while i < argc {
-        if i > 0 {
-            line = line + "|";
-        }
-        line = line + Ffi.read_cstring(Ffi.read_ptr(argv, i)).unwrap_or("NULL");
-        i = i + 1;
-    }
-    System.println(line);
-    return 0;
-}
-
-class Database {
-    handle: CPtr;
-    public is_open: bool;
-
-    constructor(handle: CPtr, is_open: bool) {
-        this.handle = handle;
-        this.is_open = is_open;
-    }
-
-    public static fun open(path: string): Database {
-        let handle = CPtr.null();
-        let rc = sqlite3_open(path, ref handle);
-        if rc != 0 {
-            System.println("sqlite3_open('" + path + "') failed with rc=" + rc);
-            return Database(CPtr.null(), false);
-        }
-        return Database(handle, true);
-    }
-
-    public fun exec(sql: string): int {
-        if this.is_open == false {
-            return -1;
-        }
-        let errmsg = CPtr.null();
-        return sqlite3_exec(this.handle, sql, ignore_row, Option.None, ref errmsg);
-    }
-
-    public fun query(sql: string): int {
-        if this.is_open == false {
-            return -1;
-        }
-        let errmsg = CPtr.null();
-        return sqlite3_exec(this.handle, sql, print_row, Option.None, ref errmsg);
-    }
-
-    public fun close(): void {
-        if this.is_open {
-            sqlite3_close(this.handle);
-            this.is_open = false;
-        }
-    }
-}
+import sqlite;
 
 fun main(): void {
-    // Relative to process cwd (not the .dream file). Repo-relative paths like
-    // `sample/sqlite/demo.db` only work when you launch from the Dream repo root.
-    let path = "demo.db";
-    let db = Database.open(path);
-    if db.is_open == false {
-        System.println("aborting: could not open database");
-        return;
+    switch (Database.open("demo.db")) {
+        Some(db) => {
+            if db.exec(
+                "DROP TABLE IF EXISTS items; CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);"
+            ) && db.exec("INSERT INTO items(name) VALUES ('apple'), ('pear'), ('kiwi');") {
+                db.query("SELECT id, name FROM items ORDER BY id;");
+            }
+            db.close();
+        }
+        None => {}
     }
-    System.println("opened " + path + " (cwd=" + System.cwd.unwrap_or("?") + ")");
-
-    let rc = db.exec("DROP TABLE IF EXISTS items;");
-    System.println("DROP rc=" + rc);
-    rc = db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);");
-    System.println("CREATE rc=" + rc);
-    rc = db.exec("INSERT INTO items(name) VALUES ('apple'), ('pear'), ('kiwi');");
-    System.println("INSERT rc=" + rc);
-
-    System.println("--- SELECT ---");
-    rc = db.query("SELECT id, name FROM items ORDER BY id;");
-    System.println("SELECT rc=" + rc);
-
-    db.close();
-    System.println("done");
 }

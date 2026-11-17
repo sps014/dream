@@ -509,3 +509,50 @@ fn wrong_pointer_width_is_diagnosed_before_llvm_can_turn_it_into_a_trap() {
     assert!(err.contains("C ABI mismatch for 'width'"), "{}", err);
     assert!(err.contains("usize/isize"), "{}", err);
 }
+
+#[test]
+fn node_links_cimport_value_types_and_constants() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    std::fs::create_dir_all(root.join("native/include")).unwrap();
+    std::fs::write(root.join("dream.toml"), "[package]\nname = \"compound\"\n").unwrap();
+    std::fs::write(
+        root.join("native/include/compound.h"),
+        r#"
+        typedef struct __attribute__((packed)) { char label; int amount; } Part;
+        typedef struct { Part part; int extra; } Bundle;
+        enum Mode { UP = 1, ALSO_UP = UP, DOWN = 2 };
+        #define FLAGS (UP | DOWN)
+        Bundle make_bundle(int amount);
+    "#,
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("native/compound.c"),
+        r#"
+        #include "compound.h"
+        Bundle make_bundle(int amount) { return (Bundle){{'X', amount}, 39}; }
+    "#,
+    )
+    .unwrap();
+    let entry = root.join("main.dream");
+    std::fs::write(
+        &entry,
+        r#"
+        import system;
+        cimport "compound.h";
+        fun main(): void {
+            let bundle: compound.Bundle = compound.make_bundle(compound.FLAGS);
+            System.println(bundle.part.amount + bundle.extra);
+            System.println(compound.ALSO_UP);
+        }
+    "#,
+    )
+    .unwrap();
+    let output = root.join("main.wasm");
+    compile(&entry, &output, None).unwrap();
+    assert_eq!(
+        run_with_runtime(&output, &output.with_extension("node.runtime.js")),
+        "42\n1\n"
+    );
+}

@@ -111,6 +111,14 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     fn parse_primary_expression_inner(&mut self) -> Result<ExpressionNode<'a>, Error> {
+        if let Some(name) = self.c_qualified_name() {
+            let expr = if self.current_token().kind == TokenKind::OpenParenthesisToken {
+                self.parse_named_invocation(name)?
+            } else {
+                ExpressionNode::Identifier(name)
+            };
+            return self.parse_postfix_chain(expr);
+        }
         // `switch (subject) { pattern => body, ... }` in expression (pattern-matching) form.
         if self.current_token().kind == TokenKind::SwitchToken {
             return self.parse_switch_expr();
@@ -719,7 +727,13 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Parses a function invocation expression
     pub(crate) fn parse_invocation_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
         let function_name = self.match_token(TokenKind::IdentifierToken);
+        self.parse_named_invocation(function_name)
+    }
 
+    fn parse_named_invocation(
+        &mut self,
+        function_name: SyntaxToken,
+    ) -> Result<ExpressionNode<'a>, Error> {
         let mut generic_arguments = None;
         if self.current_token().kind == TokenKind::SmallerThanToken {
             self.match_token(TokenKind::SmallerThanToken);

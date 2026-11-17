@@ -99,6 +99,9 @@ pub fn member_completions(
     text: &str,
     offset: usize,
 ) -> Option<Vec<CompletionOut>> {
+    if let Some(items) = c_namespace_completions(snapshot, text, offset) {
+        return Some(items);
+    }
     let r = receiver_ref_at(snapshot, text, offset)?;
 
     let members: Vec<MemberInfo> = match &r.result {
@@ -141,6 +144,73 @@ pub fn member_completions(
     )
 }
 
+fn c_namespace_completions(
+    snapshot: &IdeSnapshot,
+    text: &str,
+    offset: usize,
+) -> Option<Vec<CompletionOut>> {
+    if snapshot.c_namespaces.is_empty() {
+        return None;
+    }
+    let before = text.get(..offset)?;
+    let (receiver, member) = before.rsplit_once('.')?;
+    if !member.bytes().all(is_ident_byte) {
+        return None;
+    }
+    let receiver = receiver.trim_end();
+    let alias = receiver
+        .rsplit(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .next()?;
+    let prefix = snapshot.c_namespaces.get(alias)?;
+    let mut items = Vec::new();
+    for (key, sig) in &snapshot.functions {
+        if let Some(name) = sig
+            .label
+            .strip_prefix(prefix)
+            .filter(|name| name.starts_with(member))
+            && let Some(detail) = fn_signature(snapshot, key, name)
+        {
+            items.push((
+                name.to_owned(),
+                SymKind::Function,
+                detail.replace(prefix, &format!("{alias}.")),
+                None,
+            ));
+        }
+    }
+    for name in snapshot
+        .type_names
+        .values()
+        .filter_map(|name| name.strip_prefix(prefix))
+    {
+        if name.starts_with(member) {
+            items.push((
+                name.to_owned(),
+                SymKind::Struct,
+                format!("struct {name}"),
+                None,
+            ));
+        }
+    }
+    for global in &snapshot.globals {
+        if let Some(name) = global
+            .name
+            .strip_prefix(prefix)
+            .filter(|name| name.starts_with(member))
+        {
+            items.push((
+                name.to_owned(),
+                SymKind::Variable,
+                format!("{name}: {}", global.display),
+                None,
+            ));
+        }
+    }
+    items.sort_by(|a, b| a.0.cmp(&b.0));
+    items.dedup_by(|a, b| a.0 == b.0);
+    Some(items)
+}
+
 /// Renders hover markdown for whatever the analyzer resolved at `offset`. Returns `None` when no
 /// reference covers the position (caller falls back to the AST-index hover).
 /// Hover for `offset`: the analyzer's concrete signature with the declaration's doc comment, or
@@ -162,7 +232,10 @@ pub fn hover(snapshot: Option<&IdeSnapshot>, idx: &Index, offset: usize) -> Opti
 
 pub fn hover_at(snapshot: &IdeSnapshot, offset: usize) -> Option<(usize, usize, String)> {
     let r = snapshot.ref_covering(offset)?;
-    let body = hover_body(snapshot, r);
+    let mut body = hover_body(snapshot, r);
+    for (alias, prefix) in &snapshot.c_namespaces {
+        body = body.replace(prefix, &format!("{alias}."));
+    }
     let mut contents = format!("```dream\n{body}\n```");
     if let Some(namespace) = r
         .result

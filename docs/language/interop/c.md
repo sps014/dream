@@ -19,7 +19,37 @@ extern fun cube_root(x: double): double;
 
 C++ uses [`@cpp`](cpp.md). A library that calls back into Dream uses [`NativeCallback`](native-callbacks.md).
 
-The compiler does not read C headers. You write the Dream declaration yourself, so the editor can complete and jump to it. Dream checks that the declaration matches the compiled C function. A mismatch is a build error.
+A handwritten `@c` declaration describes the ABI directly. Use `cimport` to read declarations from a C header automatically. When the build has a compiled C definition to compare, Dream checks its lowered signature against the declaration. For prebuilt libraries, check the declaration against the library’s header.
+
+## Generate bindings from a header
+
+Put the header in `native/include/` and its C implementation in `native/`.
+Import the header and call its functions through the namespace:
+
+```dream
+import system;
+cimport "add.h";
+
+fun main(): void {
+    System.println(add.add_numbers(20, 22));
+}
+```
+
+Create this exact project with `dreamer init ffi native_add`. Run `dreamer run`
+from the new directory to see `42`. A normal build regenerates the bindings
+when an included header changes. Use `as` to choose a namespace, or `from`
+to name an installed library:
+
+```dream
+cimport "sqlite3.h" from "sqlite3" as sqlite;
+```
+
+Functions, value structs, and supported integer constants use their C names.
+Pointers arrive as `CPtr`. Use a handwritten `@c` declaration when a C
+pointer's contract calls for Dream marshalling, such as copying a UTF-8
+string or owning a result. Unsupported declarations only produce a
+diagnostic when referenced. The editor reads generated declarations after
+the first successful native build.
 
 ## Where the C lives
 
@@ -73,7 +103,29 @@ extern fun cube_root(x: double): double;
 - Bare `@c` uses this package's `native/` set. The Dream name is the C name.
 - `@c("lib")` uses another set or a system library. `@c("lib", "symbol")` also picks the C name.
 - One declaration cannot also be `@js`, `@runtime`, or `@intrinsic`.
-- `@c` functions are not generic and not variadic. Write one declaration per argument count.
+- `@c` functions are fixed-arity and non-generic. To call a variadic C function, bind a fixed-arity C wrapper.
+
+Put the following wrapper in `native/print_count.c`.
+
+```c
+#include <stdint.h>
+#include <stdio.h>
+
+void print_count(int32_t count) {
+    printf("%lld\n", (long long)count);
+}
+```
+
+```dream
+import system.interop;
+
+@c
+extern fun print_count(count: int): void;
+
+fun main(): void {
+    print_count(42);
+}
+```
 
 ## Types
 
@@ -161,9 +213,39 @@ extern fun ticker_new(name: string): OwnedCPtr;
 extern fun sqlite3_open(path: string, ref db: CPtr): int;
 ```
 
-`Ffi` reads and writes memory through a `CPtr`. The index is an `isize` byte offset. A null pointer stops the program. `Ffi.read_cstring` returns `Option.None` for `NULL`.
+`Ffi` reads and writes memory through a `CPtr`. The `isize` index counts elements of the type being read or written. For example, `Ffi.read_ptr(base, 1)` reads the second pointer. Use `CPtr.offset(bytes)` to move by bytes. A null pointer stops the program. `Ffi.read_cstring` returns `Option.None` for `NULL`.
 
 A value struct used with `@c` contains only numbers, `bool`, `char`, `byte`, or more of the same structs. Field order matches the C struct. Add `@packed` when the C type is packed.
+
+### Close a handle returned through an out-parameter
+
+Some C APIs return a status and write a handle to caller-provided storage.
+Give `ref` a mutable local and check the API’s ownership contract on success
+and failure. SQLite can return an allocated handle on failure, so close any
+non-null handle before returning the error.
+
+```dream
+import system;
+import system.interop;
+cimport "sqlite3.h" from "sqlite3" as sqlite;
+
+@c("sqlite3")
+extern fun sqlite3_open(path: string, ref db: CPtr): int;
+
+fun main(): void {
+    let db = CPtr.null();
+    let status = sqlite3_open(":memory:", ref db);
+    if status != 0 {
+        System.println("Open failed with status " + status);
+    }
+    if !db.is_null() {
+        let closed = sqlite.sqlite3_close(db);
+        if closed != 0 {
+            System.println("Close failed with status " + closed);
+        }
+    }
+}
+```
 
 ## Async
 
@@ -229,9 +311,8 @@ Workers are Dream tasks. WASI `pthread_create` is not available. A callback stay
 
 `dream_set_platform` checks `dream_platform.size`. `0` is accepted. Any other value must be `sizeof(dream_platform)`.
 
-## What v1 does not do
+## Unsupported boundaries
 
-- Read C or C++ headers for you.
-- C variadic functions. Write one declaration per argument count.
+- Direct calls to C variadic functions.
 - A callback from one WebAssembly instance into another.
 - `@c` combined with `@js` or `@runtime`.

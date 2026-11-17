@@ -64,19 +64,48 @@ When linking a static archive into a C, Swift or Kotlin host, append the `link_a
 `<stem>.link.json`. Required Dream host capability libraries remain dynamic dependencies and must
 be available to the host application.
 
-The generated header contains both the exported declarations and the embedding API. For example:
+## Build and run a C consumer
+
+The generated header contains the exports and the embedding API. Build the sample
+with both link modes using a C compiler and Python:
+
+```sh
+python3 sample/native_embed/run.py
+```
+
+Run this command from the Dream repository. Set `DREAM` or `CC` if the executables
+you want are outside your search path. The consumer prints `42` for each link mode.
+It checks the embedding ABI version, calls a scalar export, reads a managed string
+through `dream_string_units`, and releases the string with `dream_release`.
+
+The consumer includes the generated header for the library containing `add` and
+`greeting`. The latter returns a Dream string with one reference owned by C.
 
 ```c
-#include "lib.h"
+#include "native_embed.h"
+#include <stdint.h>
+
 int main(void) {
+    if (dream_embed_abi_version() != DREAM_EMBED_ABI_VERSION) {
+        return 1;
+    }
+
     dream_thread_attach();
-    int answer = add(20, 22);
+    int32_t sum = add(20, 22);
+    void *text = greeting();
+    int valid = sum == 42 && dream_string_length(text) == 5;
+    dream_release(text);
     dream_thread_detach();
-    return answer == 42 ? 0 : 1;
+    return valid ? 0 : 1;
 }
 ```
 
-Serialize the first exported call so module globals initialize once. Attach every calling thread, detach it before the thread exits, and follow the embedding API's rules for threads and callbacks.
+Serialize the first exported call so module globals initialize once. Attach each
+calling thread with `dream_thread_attach()` and detach it before exit. For a shared
+build, configure the host loader to find the Dream library and any required host
+capability libraries. The sample uses an rpath on macOS and Linux and places the
+DLL beside the consumer on Windows. For a static build, append the generated
+`link_args` to the host’s link command.
 
 The exported ABI uses 32-bit integers for `int`, `uint`, `bool`, `byte`, `char`, and enums, and 64-bit integers for `long` and `ulong`. `isize` and `usize` are pointer-width, and `float` and `double` stay native floating-point values.
 

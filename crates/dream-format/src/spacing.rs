@@ -41,6 +41,7 @@ pub(super) fn is_decl_starter(kind: TokenKind) -> bool {
             | TokenKind::ExtendToken
             | TokenKind::ImportToken
             | TokenKind::JsImportToken
+            | TokenKind::CImportToken
             | TokenKind::ModuleToken
             | TokenKind::LetToken
             | TokenKind::ConstToken
@@ -129,6 +130,7 @@ pub(super) fn is_keyword_needing_space(kind: TokenKind) -> bool {
             | TokenKind::OperatorToken
             | TokenKind::ImportToken
             | TokenKind::JsImportToken
+            | TokenKind::CImportToken
             | TokenKind::AsToken
             | TokenKind::ModuleToken
             | TokenKind::PublicToken
@@ -185,6 +187,23 @@ pub(super) fn ends_operand(kind: TokenKind) -> bool {
             | TokenKind::CurlyCloseBracketToken
             | TokenKind::AwaitToken
     )
+}
+
+pub(super) fn c_import_from_needs_space(tokens: &[SyntaxToken], i: usize) -> bool {
+    [2, 3]
+        .into_iter()
+        .filter_map(|offset| i.checked_sub(offset))
+        .any(|start| {
+            matches!(
+                tokens.get(start..start + 4),
+                Some([import, header, from, library])
+                    if import.kind == TokenKind::CImportToken
+                        && header.kind == TokenKind::StringToken
+                        && from.kind == TokenKind::IdentifierToken
+                        && from.text == "from"
+                        && library.kind == TokenKind::StringToken
+            )
+        })
 }
 
 /// Decides whether a single space belongs between `prev` and `cur`.

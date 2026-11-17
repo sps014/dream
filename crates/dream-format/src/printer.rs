@@ -6,7 +6,9 @@ use crate::generics::detect_type_arg_regions;
 use crate::groups::Groups;
 use crate::layout::Layout;
 use crate::line_index::LineIndex;
-use crate::spacing::{ends_operand, is_decl_starter, is_try_question_mark, needs_space};
+use crate::spacing::{
+    c_import_from_needs_space, ends_operand, is_decl_starter, is_try_question_mark, needs_space,
+};
 use dream_syntax::token::syntax_token::SyntaxToken;
 use dream_syntax::token::token_kind::TokenKind;
 
@@ -264,7 +266,7 @@ impl Printer {
                 self.prev_prev_kind,
                 self.prev_kind.unwrap_or(TokenKind::EndOfFileToken),
                 kind,
-            );
+            ) || c_import_from_needs_space(tokens, i);
             if kind == TokenKind::QuestionMarkToken && is_try_question_mark(tokens, i) {
                 space = false;
             }

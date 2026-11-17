@@ -674,3 +674,89 @@ fn wasm32_prunes_an_unused_c_import() {
     let wat = fs::read_to_string(out).unwrap();
     assert!(!wat.contains("\"c/libc\""), "{}", wat);
 }
+
+#[test]
+fn cimport_resolves_packaged_headers_and_refreshes_transitive_changes() {
+    let root = project(
+        "cimport",
+        &[
+            ("dream.toml", "[package]\nname = \"app\"\n"),
+            (
+                "main.dream",
+                "import system;\nimport ticker;\nfun main(): void { System.println(read_tick()); }",
+            ),
+            (
+                "dream_packages/ticker/dream.toml",
+                "[package]\nname = \"ticker\"\ntype = \"lib\"\n",
+            ),
+            (
+                "dream_packages/ticker/src/ticker.dream",
+                r#"
+            module ticker;
+            cimport "ticks.h" as c;
+            fun double_tick(value: int): int { return value * 2; }
+            public fun read_tick(): int {
+                let value: c.Tick = c.make_tick(c.START);
+                return c.apply_tick(value, double_tick);
+            }
+        "#,
+            ),
+            (
+                "dream_packages/ticker/native/include/values.h",
+                "#define VALUE 20\n",
+            ),
+            (
+                "dream_packages/ticker/native/include/unused.h",
+                "#error unrelated header\n",
+            ),
+            (
+                "dream_packages/ticker/native/include/ticks.h",
+                r#"
+            #include "values.h"
+            #define START (VALUE + 1)
+            typedef struct __attribute__((packed)) { short n; int extra; } Inner;
+            typedef struct { Inner item; char flag; } Tick;
+            Tick make_tick(int n);
+            int apply_tick(Tick t, int (*callback)(int));
+            int variadic(int known, ...);
+        "#,
+            ),
+            (
+                "dream_packages/ticker/native/ticks.c",
+                r#"
+            #include "ticks.h"
+            Tick make_tick(int n) { return (Tick){{(short)n, 10}, 'a'}; }
+            int apply_tick(Tick t, int (*callback)(int)) { return callback(t.item.n); }
+        "#,
+            ),
+        ],
+    );
+    let entry = root.join("main.dream");
+    let run = || run_at(&entry, "cimport-dependency", OptLevel::O2);
+    assert_eq!(run().unwrap().trim(), "42");
+
+    let generated = root
+        .join("target/obj/cimport")
+        .join(dream_abi::target::TargetSpec::host().llvm_triple());
+    let source = fs::read_dir(generated)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|path| path.extension().is_some_and(|e| e == "dream"))
+        .unwrap();
+    let modified = fs::metadata(&source).unwrap().modified().unwrap();
+    assert_eq!(run().unwrap().trim(), "42");
+    assert_eq!(fs::metadata(&source).unwrap().modified().unwrap(), modified);
+
+    let transitive = root.join("dream_packages/ticker/native/include/values.h");
+    fs::write(&transitive, "#error broken imported header\n").unwrap();
+    assert_contains(&run().unwrap_err(), "broken imported header");
+    fs::write(&transitive, "#define VALUE 49\n").unwrap();
+    assert_eq!(run().unwrap().trim(), "100");
+
+    let dependency = root.join("dream_packages/ticker/src/ticker.dream");
+    fs::write(dependency, "module ticker;\ncimport \"ticks.h\" as c;\npublic fun read_tick(): int { return c.variadic(0); }\n").unwrap();
+    assert_contains(
+        &run().unwrap_err(),
+        "variadic C functions need a fixed-arity C wrapper",
+    );
+}

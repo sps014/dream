@@ -1,73 +1,15 @@
-import system.interop;
-// Raw `@c` bindings to libsqlite3. Out-params use Dream `ref`.
-// `CPtr.address()` is `usize`; SQLite's status and row-count parameters remain C `int`.
-//
-// Run:
-//   dream run sample/sqlite/raw.dream
-//
-// Assumes libsqlite3 is on the system loader path, or place a copy under
-// `sample/sqlite/native/libsqlite3.dylib` (macOS) / `.so` / `.dll`.
-import system;
-
-@c("sqlite3", "sqlite3_open")
-extern fun sqlite3_open(path: string, ref db: CPtr): int;
-
-@c("sqlite3", "sqlite3_close")
-extern fun sqlite3_close(db: CPtr): int;
-
-// sqlite3_exec callback: int (*)(void*, int, char**, char**)
-@c("sqlite3", "sqlite3_exec")
-extern fun sqlite3_exec(
-    db: CPtr,
-    sql: string,
-    callback: fun(CPtr, int, CPtr, CPtr): int,
-    arg: Option<CPtr>,
-    ref errmsg: CPtr
-): int;
-
-fun ignore_row(_arg: CPtr, _argc: int, _argv: CPtr, _cols: CPtr): int {
-    return 0;
-}
-
-fun print_row(_arg: CPtr, argc: int, argv: CPtr, _cols: CPtr): int {
-    let line = "";
-    let i = 0;
-    while i < argc {
-        if i > 0 {
-            line = line + "|";
-        }
-        line = line + Ffi.read_cstring(Ffi.read_ptr(argv, i)).unwrap_or("NULL");
-        i = i + 1;
-    }
-    System.println(line);
-    return 0;
-}
+import sqlite;
 
 fun main(): void {
-    let db = CPtr.null();
-    let rc = sqlite3_open(":memory:", ref db);
-    if rc != 0 {
-        System.println("sqlite3_open failed: " + rc);
-        return;
+    switch (Database.open(":memory:")) {
+        Some(db) => {
+            if db.exec("CREATE TABLE t(x INT); INSERT INTO t VALUES (1), (2);") {
+                db.query("SELECT x FROM t ORDER BY x;");
+            }
+            db.exec("SELECT * FROM missing_table;");
+            db.close();
+        }
+        None => {}
     }
-    System.println("opened in-memory database");
-
-    let errmsg = CPtr.null();
-    let ddl = "CREATE TABLE t(x INT); INSERT INTO t VALUES (1), (2);";
-    let ok = sqlite3_exec(db, ddl, ignore_row, Option.None, ref errmsg);
-    if ok != 0 {
-        System.println("exec failed with rc=" + ok);
-    } else {
-        System.println("exec ok");
-    }
-
-    let qerr = CPtr.null();
-    let qrc = sqlite3_exec(db, "SELECT x FROM t ORDER BY x;", print_row, Option.None, ref qerr);
-    System.println("SELECT rc=" + qrc);
-    if qrc != 0 {
-        System.println("SELECT error: " + Ffi.read_cstring(qerr).unwrap_or("?"));
-    }
-
-    let closed = sqlite3_close(db);
-    System.println("closed with rc=" + closed);
+    Database.open("/");
 }

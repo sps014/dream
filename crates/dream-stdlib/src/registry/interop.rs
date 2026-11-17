@@ -1,7 +1,7 @@
 use super::StdPackage;
 
 pub(super) const PACKAGE: StdPackage = StdPackage {
-    name: "system.interop",
+    name: dream_abi::core_items::C_INTEROP_PACKAGE,
     deps: &["system.core", "system"],
     core_language: true,
     web_assets: None,

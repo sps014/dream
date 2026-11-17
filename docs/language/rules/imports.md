@@ -28,6 +28,7 @@ Split a program into `.dream` files as it grows. An `import` makes another file'
 | `import system;` / `import system.<package>;` | `import system.io;` | Loads a built-in library package and its dependencies |
 | `import <path>;` | `import utils.math_lib;` | Loads `utils/math_lib.dream` relative to this file, falling back to installed `dream_packages/` dependencies |
 | `import <module>.<item> as <alias>;` | `import utils.math.add as add_int;` | Makes one `public` or `internal` item of a declared module available under a new name |
+| `cimport "<header>" [from "<library>"] [as <name>];` | `cimport "ticker.h" as ticker;` | Generates bindings for a C header in a file-local namespace. See [C interop](../interop/c.md) |
 | `module <path>;` | `module utils.math;` | Puts this file's declarations in a named module; must come before every `import` and declaration |
 
 ## Standard library packages

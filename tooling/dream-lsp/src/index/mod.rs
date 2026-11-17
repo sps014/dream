@@ -106,7 +106,7 @@ impl Index {
 
             // Collect std + file imports before prelude merge so opt-in packages load.
             for import in &program.imports {
-                if import.is_js || import.alias.is_some() {
+                if import.is_js || import.c.is_some() || import.alias.is_some() {
                     continue;
                 }
                 let module_name = import.module_name.text.as_str();
@@ -123,7 +123,7 @@ impl Index {
                 acc.visited.insert(path_str.to_string());
 
                 for import in &program.imports {
-                    if import.is_js || import.alias.is_some() {
+                    if import.is_js || import.c.is_some() || import.alias.is_some() {
                         continue;
                     }
                     let module_name = import.module_name.text.as_str();

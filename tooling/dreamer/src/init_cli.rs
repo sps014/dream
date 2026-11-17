@@ -7,6 +7,8 @@ enum Template {
     /// A command-line program.
     #[default]
     Console,
+    /// A command-line program that calls bundled C.
+    Ffi,
     /// A GPU canvas app for the current desktop OS.
     Desktop,
     /// A shared GPU canvas project for Android and iOS.
@@ -62,6 +64,7 @@ impl InitArgs {
         }
         Ok(match self.template {
             Template::Console => (Scaffold::Bin, None),
+            Template::Ffi => (Scaffold::Ffi, None),
             Template::Desktop => (Scaffold::Canvas, Some("native")),
             Template::Mobile => (Scaffold::Canvas, Some("android,ios")),
             Template::App => (Scaffold::Canvas, Some("native,android,ios")),

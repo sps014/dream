@@ -88,7 +88,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             return Ok(parsed_type);
         }
 
-        let type_token = if self.current_token().kind == TokenKind::DataTypeToken {
+        let type_token = if let Some(name) = self.c_qualified_name() {
+            name
+        } else if self.current_token().kind == TokenKind::DataTypeToken {
             self.match_token(TokenKind::DataTypeToken)
         } else {
             self.match_token(TokenKind::IdentifierToken)

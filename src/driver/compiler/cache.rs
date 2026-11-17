@@ -444,7 +444,8 @@ impl Compiler {
             key: hash.finalize(),
             request,
             inputs,
-            early: self.virtual_entry.is_none()
+            early: !loaded.acc.has_c_imports
+                && self.virtual_entry.is_none()
                 && self.toolchain_config.compiler_environment.is_empty(),
             warnings: Warnings::default(),
         })

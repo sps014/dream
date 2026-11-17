@@ -1,0 +1,6 @@
+import system;
+cimport "add.h";
+
+fun main(): void {
+    System.println(add.add_numbers(20, 22));
+}

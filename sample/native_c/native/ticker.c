@@ -32,6 +32,11 @@ void ticker_on_tick(ticker* t, ticker_fn fn, void* user) {
     t->user = user;
 }
 
+void ticker_clear_callback(ticker* t) {
+    t->fn = NULL;
+    t->user = NULL;
+}
+
 int ticker_run(ticker* t, int ticks) {
     int total = 0;
     for (int i = 0; i < ticks; i++) {

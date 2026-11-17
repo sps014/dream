@@ -1,0 +1,7 @@
+[package]
+name = "native_embed"
+version = "0.1.0"
+type = "lib"
+
+[lib]
+output-type = "staticlib"

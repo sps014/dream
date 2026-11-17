@@ -586,3 +586,15 @@ fn tight_ranges_preserve_comments_and_separate_dot_tokens() {
         assert_idempotent(source);
     }
 }
+
+#[test]
+fn c_import_spaces_the_contextual_from_clause() {
+    assert_format(
+        r#"cimport "sqlite3.h"from"sqlite3" as sqlite;"#,
+        "cimport \"sqlite3.h\" from \"sqlite3\" as sqlite;\n",
+    );
+    assert_format(
+        r#"fun from():string{return"sqlite3";}"#,
+        "fun from(): string {\n    return \"sqlite3\";\n}\n",
+    );
+}

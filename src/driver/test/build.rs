@@ -7,7 +7,6 @@ use crate::driver::compiler::{BuildOutcome, Compiler};
 use crate::driver::js_runtime::JsRuntimeTarget;
 use crate::driver::output::OutputKind;
 use crate::driver::wasm_opt::OptLevel;
-use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -137,11 +136,6 @@ impl BuildRequest<'_> {
         let compiler = self
             .compiler(true, "test|node".into())?
             .with_runtimes(vec![JsRuntimeTarget::Node])
-            .with_compile_targets(CompileTargets {
-                native: false,
-                node: true,
-                web: false,
-            })
             .with_output_kind(OutputKind::Wasm);
         let wasm = wat.with_extension("wasm");
         let js = out_dir.join(format!(

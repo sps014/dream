@@ -46,7 +46,7 @@ public class Window {
     @runtime("windowOpen", "window")
     static extern fun open_host(borrow title: string, width: int, height: int, flags: int): int;
 
-    @web
+    @cfg(Target.Browser)
     @runtime("windowCanvas")
     static extern fun canvas_host(borrow id: string, flags: int): int;
 
@@ -105,7 +105,7 @@ public class Window {
     /// reports changes as `WindowEvent.Resized`. The canvas becomes focusable so it can
     /// receive keyboard input after the user clicks it. Returns a `WindowError` with
     /// code `ENOTFOUND` when no such canvas exists.
-    @web
+    @cfg(Target.Browser)
     public static fun canvas(id: string): Result<Window, WindowError> {
         let handle = Window.canvas_host(id, 5);
         if handle <= 0 {

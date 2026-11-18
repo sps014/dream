@@ -367,7 +367,7 @@ fn build_models(
     version: i32,
     target: &TargetSpec,
 ) -> CachedIndex {
-    let index = Arc::new(Index::build(file_path, text));
+    let index = Arc::new(Index::build_for_target(file_path, text, target));
     let outcome = analysis::analyze_document_for_target(file_path, text, target);
     let diagnostics = Arc::new(lsp_diagnostics(&outcome.diagnostics));
     CachedIndex {

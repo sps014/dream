@@ -14,12 +14,23 @@ impl<'a> Analyzer<'a> {
         function: &FunctionNode<'a>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Rc<RefCell<SymbolTable>>, SemanticError> {
+        self.analyze_function_with_body_checks(function, diagnostics, false)
+    }
+
+    pub(in crate::analyzer) fn analyze_function_with_body_checks(
+        &mut self,
+        original: &FunctionNode<'a>,
+        diagnostics: &mut DiagnosticBag,
+        cached: bool,
+    ) -> Result<Rc<RefCell<SymbolTable>>, SemanticError> {
+        let function = original;
         self.current_file = function.file_path.clone();
         self.type_ctx
             .set_scope(self.graph.module_for_file(function.file_path.as_deref()));
         let function = self
             .iterator_factory(function, diagnostics)
             .unwrap_or(function);
+        let cached = cached && std::ptr::eq(function, original);
         let param_table = Rc::new(RefCell::new(
             self.add_function_param_table(function, diagnostics)?,
         ));
@@ -28,24 +39,20 @@ impl<'a> Analyzer<'a> {
         self.hir_begin_function(function);
         self.hir_constructor_field_defaults(function, &param_table, diagnostics);
         let is_unsafe = dream_abi::attributes::has_unsafe_attr(&function.attributes);
-        let runtime_support =
-            dream_abi::attributes::RuntimeSupport::from_attributes(&function.attributes);
         let saved_overflow = std::mem::replace(&mut self.overflow, dream_hir::Overflow::Wrapping);
-        let body = self.with_runtime_flag(runtime_support, |s| {
-            s.with_unsafe_flag(is_unsafe, |s| {
-                s.with_async_flag(function.is_async, |s| {
-                    s.analyze_body(
-                        function.body,
-                        function,
-                        Some(&param_table),
-                        false,
-                        diagnostics,
-                    )?;
-                    // Enforce the v1 `await` placement rules (only in async functions, only at statement
-                    // position) and that non-async functions contain no `await` at all.
+        let body = self.with_unsafe_flag(is_unsafe, |s| {
+            s.with_async_flag(function.is_async, |s| {
+                s.analyze_body(
+                    function.body,
+                    function,
+                    Some(&param_table),
+                    false,
+                    diagnostics,
+                )?;
+                if !cached {
                     s.check_await_positions(function, diagnostics);
-                    Ok(())
-                })
+                }
+                Ok(())
             })
         });
         self.overflow = saved_overflow;
@@ -58,9 +65,9 @@ impl<'a> Analyzer<'a> {
             .as_ref()
             .borrow()
             .report_unused_locals(diagnostics);
-        // check return
-        let mut graph = FunctionControlGraph::new(function, diagnostics);
-        graph.build();
+        if !cached {
+            FunctionControlGraph::new(function, diagnostics).build();
+        }
         Ok(param_table.clone())
     }
 

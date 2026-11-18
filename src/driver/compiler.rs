@@ -13,7 +13,6 @@ use crate::driver::prelude::merge_prelude;
 use crate::driver::source_loader::{ProgramAccumulator, parse_file_recursive};
 use crate::driver::ui::{BuildReporter, SilentReporter};
 use crate::driver::wasm_opt::OptLevel;
-use dream_abi::attributes::CompileTargets;
 use dream_diagnostics::{DiagnosticBag, format_diagnostics, render_with};
 use dream_mir::backend::Target;
 use dream_sema::analyzer::Analyzer;
@@ -87,9 +86,6 @@ pub struct Compiler {
     /// When non-empty (CLI `--runtime --web` / `--runtime --node`), emit a tree-shaken sibling
     /// `*.{web,node}.runtime.js` for each listed host (both may be set in one compile).
     runtimes: Vec<JsRuntimeTarget>,
-    /// Active compile-time runtime target(s) for semantic availability checks. Defaults to
-    /// native-only; overridden by `--target` or inferred from `--runtime --web`/`--node`.
-    compile_targets: CompileTargets,
     /// Library vs binary; libs reject a primary-file `main`.
     crate_type: dream_sema::analyzer::CrateType,
     /// Progress/artifact sink (silent by default; the CLI installs [`ConsoleReporter`](crate::driver::ui::ConsoleReporter)).
@@ -120,15 +116,6 @@ impl Compiler {
         target: Target,
         toolchain_config: Arc<crate::driver::toolchain::ToolchainConfig>,
     ) -> Self {
-        let compile_targets = if target.spec().capabilities.linear_memory {
-            CompileTargets {
-                native: false,
-                node: false,
-                web: true,
-            }
-        } else {
-            CompileTargets::native_only()
-        };
         Self {
             output_kind: if target.spec().capabilities.linear_memory {
                 crate::driver::output::OutputKind::Wasm
@@ -145,7 +132,6 @@ impl Compiler {
             virtual_entry: None,
             render_diagnostics: true,
             runtimes: Vec::new(),
-            compile_targets,
             crate_type: dream_sema::analyzer::CrateType::Bin,
             reporter: Arc::new(SilentReporter),
             emit_mir: None,
@@ -284,20 +270,23 @@ impl Compiler {
             }
         }
         self.runtimes = out;
-        if !self.runtimes.is_empty() {
-            self.compile_targets = CompileTargets {
-                native: false,
-                node: seen_node,
-                web: seen_web,
-            };
-        }
         self
     }
 
-    /// Builder: set compile-time runtime target(s) explicitly (`--target native|node|web`).
-    pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
-        self.compile_targets = targets;
-        self
+    fn cfg_symbols(&self) -> dream_syntax::conditional::CfgSymbols {
+        let spec = self.target.spec();
+        let cfg = spec.cfg_symbols(!self.profile.is_debug());
+        if spec.execution_environment != dream_abi::target::ExecutionEnvironment::Browser {
+            return cfg;
+        }
+        match (
+            self.runtimes.contains(&JsRuntimeTarget::Web),
+            self.runtimes.contains(&JsRuntimeTarget::Node),
+        ) {
+            (true, true) => cfg.for_browser_and_node(),
+            (false, true) => cfg.for_node(),
+            _ => cfg,
+        }
     }
 
     /// Library output selects a unit without a process entry point.
@@ -435,7 +424,7 @@ fn report_wasm_c_imports(
             format!(
                 "'{what}' has no package C/C++ source set for wasm32; \
                  provide portable sources in `native/`, bind the browser/Node equivalent with `@js`, \
-                 or guard the call with `@native`"
+                 or guard the call with `@cfg(Target.Native)`"
             ),
             Some(at),
             file,

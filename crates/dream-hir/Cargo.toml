@@ -11,3 +11,4 @@ path = "src/lib.rs"
 [dependencies]
 dream-types = { path = "../dream-types" }
 indexmap = "2"
+serde = { version = "1", features = ["derive"] }

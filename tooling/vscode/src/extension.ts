@@ -1026,10 +1026,13 @@ export async function activate(context: vscode.ExtensionContext) {
             { scheme: 'untitled', language: 'dream' }
         ],
         outputChannel: outputChannel,
-        initializationOptions: () => ({
-            target: vscode.workspace.getConfiguration('dream').get<string>('analysisTarget') ||
-                (readBuildSettings().runtimeTarget === 'native' ? '' : 'wasm32-unknown-unknown')
-        })
+        initializationOptions: () => {
+            const runtime = readBuildSettings().runtimeTarget;
+            const target = { native: '', web: 'wasm32-unknown-unknown', node: 'node' }[runtime];
+            return {
+                target: vscode.workspace.getConfiguration('dream').get<string>('analysisTarget') || target
+            };
+        }
     };
 
     client = new LanguageClient(

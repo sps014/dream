@@ -1,6 +1,8 @@
 use crate::common;
 
 use common::TestHarness;
+use dream_abi::target::TargetSpec;
+use dream_lsp::index::Index;
 use dream_lsp::index::Located;
 use dream_lsp::sema_ide;
 
@@ -175,9 +177,11 @@ fun main(): void {
 fn js_type_and_static_member_completions() {
     // The dynamic API is explicitly imported.
     let harness = TestHarness::new("import system.js;\nfun main(): void {\n    |\n}\n");
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
+    let comps = Index::build_for_target(None, &harness.src, &TargetSpec::wasm32()).completions(
+        None,
+        &harness.src,
+        harness.offset,
+    );
     assert!(
         comps
             .iter()
@@ -187,9 +191,11 @@ fn js_type_and_static_member_completions() {
     );
 
     let harness = TestHarness::new("import system.js;\nfun main(): void {\n    js.|\n}\n");
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
+    let comps = Index::build_for_target(None, &harness.src, &TargetSpec::wasm32()).completions(
+        None,
+        &harness.src,
+        harness.offset,
+    );
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.contains(&"global")
@@ -202,9 +208,11 @@ fn js_type_and_static_member_completions() {
 
     // `js.global.` is typed as `js` (property form / static return), so instance helpers appear.
     let harness = TestHarness::new("import system.js;\nfun main(): void {\n    js.global.|\n}\n");
-    let comps = harness
-        .index()
-        .completions(None, &harness.src, harness.offset);
+    let comps = Index::build_for_target(None, &harness.src, &TargetSpec::wasm32()).completions(
+        None,
+        &harness.src,
+        harness.offset,
+    );
     let names: Vec<&str> = comps.iter().map(|(n, ..)| n.as_str()).collect();
     assert!(
         names.iter().any(|n| n.starts_with("to_")),
@@ -219,8 +227,7 @@ fn js_global_hover_is_not_regex_global() {
     let harness = TestHarness::new(
         "import system.js;\nfun main(): void {\n    let d = js.|global.document;\n}\n",
     );
-    let hover = harness
-        .index()
+    let hover = Index::build_for_target(None, &harness.src, &TargetSpec::wasm32())
         .hover(harness.offset)
         .expect("hover on js.global");
     assert!(
@@ -2841,13 +2848,15 @@ fn javascript_import_completion_and_hover_use_declarations() {
     let marked = "jsimport \"./library.mjs\" as library; fun main():void { let item=library.read(); let other=|item; }";
     let harness = TestHarness::new(marked);
     let file = file.to_str().unwrap();
-    let outcome = dream_lsp::analysis::analyze_document(Some(file), &harness.src);
+    let target = TargetSpec::node();
+    let outcome =
+        dream_lsp::analysis::analyze_document_for_target(Some(file), &harness.src, &target);
     assert!(
         outcome.diagnostics.iter().all(|d| d.severity != "error"),
         "{:?}",
         outcome.diagnostics
     );
-    let index = dream_lsp::index::Index::build(Some(file), &harness.src);
+    let index = Index::build_for_target(Some(file), &harness.src, &target);
     let hover = dream_lsp::sema_ide::hover(outcome.sema.as_ref(), &index, harness.offset).unwrap();
     assert!(
         hover.contents.contains("Namespace: `./library.mjs`"),
@@ -2865,7 +2874,7 @@ fn javascript_import_completion_and_hover_use_declarations() {
         ),
     ] {
         let harness = TestHarness::new(source);
-        let index = dream_lsp::index::Index::build(Some(file), &harness.src);
+        let index = Index::build_for_target(Some(file), &harness.src, &target);
         let completions = index.completions(Some(file), &harness.src, harness.offset);
         assert!(
             completions.iter().any(|(name, ..)| name == member),

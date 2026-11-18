@@ -159,8 +159,7 @@ public static class Process {
 
     /// Finds an existing nondirectory command path, directly or by searching `PATH`.
     /// This does not validate execute permissions or expand platform-specific extensions.
-    @native
-    @node
+    @cfg(Target.Native || Target.Node)
     public static fun which(cmd: string): Option<string> {
         if cmd.is_empty() {
             return Option.None;

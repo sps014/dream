@@ -2,15 +2,47 @@
 
 use crate::layout::LayoutTable;
 use crate::nodes::{HExpr, HStmt};
+use dream_types::portable::{self, IdSpace};
 use dream_types::{CScalar, DefId, TypeId};
 
 /// A local variable slot within a function (parameters and `let`-bindings), unique per function.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct LocalId(pub u32);
 
 /// A module-level (global) variable slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct GlobalId(pub u32);
+
+impl serde::Serialize for GlobalId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        portable::serialize_id(IdSpace::Global, self.0 as u64, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for GlobalId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = portable::deserialize_id(IdSpace::Global, deserializer)?;
+        u32::try_from(raw)
+            .map(GlobalId)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+/// Serde adapter for [`crate::HExprKind::InterfaceCall`]'s position in the interface table.
+pub(crate) mod interface_index {
+    use dream_types::portable::{self, IdSpace};
+
+    pub fn serialize<S: serde::Serializer>(index: &usize, serializer: S) -> Result<S::Ok, S::Error> {
+        portable::serialize_id(IdSpace::Interface, *index as u64, serializer)
+    }
+
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<usize, D::Error> {
+        let raw = portable::deserialize_id(IdSpace::Interface, deserializer)?;
+        usize::try_from(raw).map_err(serde::de::Error::custom)
+    }
+}
 
 /// An index into [`Hir::instances`] identifying one monomorphized instance of a generic def.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -226,7 +258,7 @@ pub struct HGlobal {
     pub init: Option<HExpr>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HFunction {
     /// Internal slot getter returning a +0 alias of its first argument.
     pub borrowed_result: bool,
@@ -249,7 +281,7 @@ pub struct HFunction {
 }
 
 /// Inlining request from `@inline` / `@noinline` on the source declaration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum InlineHint {
     #[default]
     Default,
@@ -259,7 +291,7 @@ pub enum InlineHint {
     Never,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HParam {
     pub local: LocalId,
     pub name: String,
@@ -267,7 +299,7 @@ pub struct HParam {
     pub mode: ParamMode,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ParamMode {
     Borrow,
     Share,
@@ -277,7 +309,7 @@ pub enum ParamMode {
 
 /// Declaration metadata for a function local (used by the backend to allocate slots and by RC
 /// insertion to know which locals are references).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HLocal {
     pub id: LocalId,
     pub name: String,

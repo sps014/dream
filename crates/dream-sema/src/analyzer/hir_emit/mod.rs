@@ -516,6 +516,33 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    pub(in crate::analyzer) fn hir_global_name(&self, id: GlobalId) -> Option<&str> {
+        self.hir
+            .globals
+            .iter()
+            .find_map(|(name, &(global, _))| (global == id).then_some(name.as_str()))
+    }
+
+    pub(in crate::analyzer) fn hir_global_id(&self, name: &str) -> Option<GlobalId> {
+        self.hir.globals.get(name).map(|&(id, _)| id)
+    }
+
+    pub(in crate::analyzer) fn hir_function_symbol(
+        &self,
+        lookup: &str,
+        file: Option<&std::rc::Rc<str>>,
+        args: &[String],
+    ) -> String {
+        let module = self.module_of(file);
+        let namespace = module.as_ref().map(|module| format!("{module}::"));
+        // Cross-module collision promotion changes lookup keys, not declaration identity.
+        let name = namespace
+            .as_ref()
+            .and_then(|prefix| lookup.strip_prefix(prefix))
+            .unwrap_or(lookup);
+        dream_types::function_symbol(module.as_deref(), name, args)
+    }
+
     /// Finishes the current function: if it was a fully-supported candidate, builds and records its
     /// [`HFunction`]. Always turns collection back off.
     ///
@@ -536,7 +563,6 @@ impl<'a> Analyzer<'a> {
             if let (Some(def), Some(ret)) = (self.hir.def, self.hir.ret) {
                 let body = self.hir.blocks.pop().unwrap_or_default();
                 let source_file = self.hir.file.as_deref().map(std::rc::Rc::from);
-                let module = self.module_of(source_file.as_ref());
                 let args = self
                     .hir
                     .instance
@@ -545,13 +571,7 @@ impl<'a> Analyzer<'a> {
                         dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, ty)
                     })
                     .collect::<Vec<_>>();
-                // Cross-module collision promotion changes lookup keys, not declaration identity.
-                let namespace = module.as_ref().map(|m| format!("{m}::"));
-                let name = namespace
-                    .as_ref()
-                    .and_then(|prefix| self.hir.name.strip_prefix(prefix))
-                    .unwrap_or(&self.hir.name);
-                let symbol = dream_types::function_symbol(module.as_deref(), name, &args);
+                let symbol = self.hir_function_symbol(&self.hir.name, source_file.as_ref(), &args);
                 self.hir.functions.push(HFunction {
                     borrowed_result: self.hir.borrowed_result,
                     def,

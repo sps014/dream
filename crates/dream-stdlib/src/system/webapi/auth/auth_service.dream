@@ -64,12 +64,12 @@ public class AuthService {
 
     /// Verifies local credentials and creates access and refresh tokens. Invalid credentials
     /// return `AuthError`.
-    @native
+    @cfg(Target.Native)
     public fun login(login: string, password: string): Future<Result<AuthTokens, AuthError>> {
         return AuthService.login_owned(this, login, password);
     }
 
-    @native
+    @cfg(Target.Native)
     static async fun login_owned(
         service: AuthService,
         login: string,
@@ -90,7 +90,7 @@ public class AuthService {
         return AuthService.issue(service, account.unwrap()).await;
     }
 
-    @native
+    @cfg(Target.Native)
     internal static async fun issue(
         service: AuthService,
         account: AuthAccount
@@ -111,7 +111,7 @@ public class AuthService {
         return Result.Ok(result);
     }
 
-    @native
+    @cfg(Target.Native)
     static fun tokens(
         service: AuthService,
         session: AuthSession,
@@ -137,12 +137,12 @@ public class AuthService {
 
     /// Consumes a refresh token and returns replacement tokens. Invalid, expired, or replayed
     /// tokens return `AuthError`.
-    @native
+    @cfg(Target.Native)
     public fun refresh(token: string): Future<Result<AuthTokens, AuthError>> {
         return AuthService.refresh_owned(this, token);
     }
 
-    @native
+    @cfg(Target.Native)
     static async fun refresh_owned(
         service: AuthService,
         token: string
@@ -170,12 +170,12 @@ public class AuthService {
 
     /// Revokes the session family associated with the refresh token. Invalid tokens return
     /// `AuthError`.
-    @native
+    @cfg(Target.Native)
     public fun logout(token: string): Future<Result<Unit, AuthError>> {
         return AuthService.logout_owned(this, token);
     }
 
-    @native
+    @cfg(Target.Native)
     static async fun logout_owned(service: AuthService, token: string): Result<Unit, AuthError> {
         let session = service.store.find(AuthCrypto.digest(token), AuthCrypto.now()).await?;
         return service.store.revoke(session.family).await;
@@ -183,12 +183,12 @@ public class AuthService {
 
     /// Verifies an access token and its active session, returning the principal or an
     /// authentication error.
-    @native
+    @cfg(Target.Native)
     public fun verify(token: string): Future<Result<AuthPrincipal, AuthError>> {
         return AuthService.verify_owned(this, token);
     }
 
-    @native
+    @cfg(Target.Native)
     static async fun verify_owned(
         service: AuthService,
         token: string
@@ -207,7 +207,7 @@ public class AuthService {
     }
 
     /// Installs verified identity into request state. Invalid credentials always short-circuit.
-    @native
+    @cfg(Target.Native)
     public fun middleware(): Middleware {
         let service = this;
         return Middleware(

@@ -28,7 +28,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "cfg_errors",
-        "unknown target 'Target.Freebsd'; expected one of Target.Debug, Target.Release, Target.Windows, Target.Macos, Target.Linux, Target.Android, Target.Ios, Target.Native, Target.Wasm, Target.Browser, Target.Wasi\n'@cfg' conditions test 'Target.<name>', but found 'Os'\nexpected '&&', '||', or ')' in a '@cfg' condition but found identifier\nan item can have only one '@cfg'; combine the conditions with '&&' or '||'\n'@cfg' must be the first attribute of a declaration, member, or statement\n'@cfg' must be followed by the declaration, member, or statement it controls",
+        "unknown target 'Target.Freebsd'; expected one of Target.Debug, Target.Release, Target.Windows, Target.Macos, Target.Linux, Target.Android, Target.Ios, Target.Native, Target.Wasm, Target.Browser, Target.Node, Target.Wasi\n'@cfg' conditions test 'Target.<name>', but found 'Os'\nexpected '&&', '||', or ')' in a '@cfg' condition but found identifier\nan item can have only one '@cfg'; combine the conditions with '&&' or '||'\n'@cfg' must be the first attribute of a declaration, member, or statement\n'@cfg' must be followed by the declaration, member, or statement it controls",
         true,
     ),
     Case::error(
@@ -178,9 +178,9 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error_targets(
-        "runtime_attr_web_only",
-        Some("'f' is not available on compile target 'native' (available on: web)"),
-        Some("'f' is not available on compile target 'node' (available on: web)"),
+        "cfg_host_availability",
+        Some("Function does not exist (browser_only)"),
+        Some("Function does not exist (native_only)"),
     ),
     Case::error("sizeof_case_duplicates", "duplicate case label '8'", true),
     Case::error(

@@ -267,14 +267,70 @@ fn native_debug_reuses_unchanged_codegen_units_and_matches_a_clean_link() {
     let bin = dream::driver::output::OutputKind::Executable
         .artifact_path(&ir, &dream_abi::target::TargetSpec::host());
     let cache = root.join("cache/native-rt/program-objects");
+    let body_cache = root.join("cache/body-checks");
     std::fs::write(
         &source,
-        "import system; import caller; fun main(): void { System.println(compute()); }",
+        "import system; import caller; import numbers; fun main(): void { System.println(describe(3)); System.println(compute() + (int)answer()); }",
     )
     .unwrap();
     std::fs::write(
         &importer,
-        "module caller; import numbers; public fun compute(): int { return (int)answer(); }",
+        r#"module caller;
+import system;
+import numbers;
+
+public interface Shape {
+    fun area(): int;
+}
+
+public class Square : Shape {
+    public side: int;
+
+    public constructor(side: int) {
+        this.side = side;
+    }
+
+    public fun area(): int {
+        return this.side * this.side;
+    }
+
+    public fun grow(by: int): Square {
+        return Square(this.side + by);
+    }
+}
+
+let scale: int = 2;
+
+fun pick<T>(a: T, b: T, first: bool): T {
+    if (first) {
+        return a;
+    }
+    return b;
+}
+
+fun total(shapes: List<Shape>): int {
+    let sum = 0;
+    for (let shape in shapes) {
+        sum += shape.area();
+    }
+    return sum;
+}
+
+public fun compute(): int {
+    let shapes = List<Shape>();
+    shapes.push(Square(2));
+    shapes.push(Square(3).grow(1));
+    return total(shapes) * scale + pick<int>(1, 2, true);
+}
+
+public fun describe(n: int): string {
+    let parts = List<string>();
+    for (let i = 0; i < n; i += 1) {
+        parts.push("x" + i.to_string());
+    }
+    return parts.join(",") + ":" + pick<string>("a", "b", false);
+}
+"#,
     )
     .unwrap();
     let write_dependency = |ret, value| {
@@ -293,7 +349,7 @@ fn native_debug_reuses_unchanged_codegen_units_and_matches_a_clean_link() {
     };
     let llvm = tool("llvm");
     let mold = (!cfg!(windows)).then(|| tool("mold"));
-    let link = |expected: &str| {
+    let link = |expected: &str, reused_modules: usize, reused_functions: usize| {
         let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_dream"));
         command
             .current_dir(root)
@@ -303,7 +359,13 @@ fn native_debug_reuses_unchanged_codegen_units_and_matches_a_clean_link() {
             command.env("DREAM_MOLD", mold);
         }
         let result = command
-            .args(["-o", ir.to_str().unwrap(), "run", source.to_str().unwrap()])
+            .args([
+                "-v",
+                "-o",
+                ir.to_str().unwrap(),
+                "run",
+                source.to_str().unwrap(),
+            ])
             .output()
             .unwrap();
         assert!(
@@ -318,6 +380,21 @@ fn native_debug_reuses_unchanged_codegen_units_and_matches_a_clean_link() {
                 .any(|line| line == expected),
             "{}",
             String::from_utf8_lossy(&result.stdout)
+        );
+        let trace = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(
+            trace.contains(&format!(
+                "reusing syntax-only body checks modules={reused_modules}"
+            )),
+            "{trace}"
+        );
+        assert!(
+            trace.contains(&format!("reused typed HIR functions={reused_functions}")),
+            "{trace}"
         );
     };
     let objects = || {
@@ -335,21 +412,31 @@ fn native_debug_reuses_unchanged_codegen_units_and_matches_a_clean_link() {
     };
 
     write_dependency("int", "42");
-    link("42");
+    link("83", 0, 0);
     let cold = objects();
     assert_eq!(cold.len(), 3);
     write_dependency("int", "43");
-    link("43");
+    link("84", 1, 6);
     let edited = objects();
     assert_eq!(edited.difference(&cold).count(), 1);
+    let incremental = std::fs::read(&bin).unwrap();
+    let saved = root.join("saved-body-checks");
+    std::fs::rename(&body_cache, &saved).unwrap();
+    std::fs::remove_file(&bin).unwrap();
+    std::fs::remove_dir_all(&cache).unwrap();
+    link("84", 0, 0);
+    assert_eq!(std::fs::read(&bin).unwrap(), incremental);
+    std::fs::remove_dir_all(&body_cache).unwrap();
+    std::fs::rename(saved, &body_cache).unwrap();
 
     write_dependency("long", "44L");
-    link("44");
+    link("85", 0, 0);
     let interface_edit = objects();
     assert!(interface_edit.difference(&edited).count() >= 2);
     let cached = std::fs::read(&bin).unwrap();
     std::fs::remove_file(&bin).unwrap();
     std::fs::remove_dir_all(cache).unwrap();
-    link("44");
+    std::fs::remove_dir_all(body_cache).unwrap();
+    link("85", 0, 0);
     assert_eq!(std::fs::read(&bin).unwrap(), cached);
 }

@@ -1,0 +1,13 @@
+@cfg(Target.Browser)
+fun browser_only(): void {}
+
+@cfg(Target.Native)
+fun native_only(): void {}
+
+fun main(): void {
+    @cfg(Target.Native)
+    browser_only();
+
+    @cfg(Target.Node)
+    native_only();
+}

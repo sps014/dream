@@ -54,7 +54,7 @@ Native output normally goes under `target/debug/` or `target/release/`. Browser 
 
 Use `--web` or `--node` to build the program and its corresponding launcher support. These select WebAssembly output and imply `--runtime`. `--wasm` requests WebAssembly output without that generated support.
 
-`--runtime-target native`, `web`, or `node` selects the availability rules checked for your code; it is separate from a platform target. Read [integration](../language/interop/index.md) before creating your own launcher.
+Use `--web` or `--node` to select the JavaScript host and its `@cfg` conditions. Read [integration](../language/interop/index.md) before creating your own launcher.
 
 ## Another platform
 

@@ -294,6 +294,33 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ids: Vec<_> = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+        self.ensure_union_instance(def, base_name, ids, position, diagnostics);
+    }
+
+    /// [`Self::ensure_union_instantiated`] for an already resolved definition.
+    pub(in crate::analyzer) fn ensure_union_instance(
+        &mut self,
+        def: dream_types::DefId,
+        base_name: &str,
+        ids: Vec<dream_types::TypeId>,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let request = crate::analyzer::typed_hir_cache::Request::Union(def, ids.clone());
+        self.journaled(
+            |_| Some(request),
+            |s| s.instantiate_generic_union(def, base_name, ids, position, diagnostics),
+        );
+    }
+
+    fn instantiate_generic_union(
+        &mut self,
+        def: dream_types::DefId,
+        base_name: &str,
+        ids: Vec<dream_types::TypeId>,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
         let instance = self.type_ctx.instantiate(def, ids.clone());
         if self.union_info(instance).is_some() {
             return;

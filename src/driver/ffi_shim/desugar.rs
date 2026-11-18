@@ -239,7 +239,6 @@ fn member_source(
         Visibility::Internal => "internal",
         Visibility::Public | Visibility::Private => "public",
     };
-    let hosts = &m.hosts;
     let params: Vec<String> = m
         .params
         .iter()
@@ -251,16 +250,16 @@ fn member_source(
     let params = params.join(", ");
     let _ = match m.kind {
         MemberKind::Constructor => {
-            writeln!(out, "{indent}{hosts}{vis} constructor({params}) {{")
+            writeln!(out, "{indent}{vis} constructor({params}) {{")
         }
         MemberKind::Static => writeln!(
             out,
-            "{indent}{hosts}{vis} static fun {}({params}): {} {{",
+            "{indent}{vis} static fun {}({params}): {} {{",
             m.name, m.ret_dream
         ),
         MemberKind::Instance | MemberKind::Free => writeln!(
             out,
-            "{indent}{hosts}{vis} fun {}({params}): {} {{",
+            "{indent}{vis} fun {}({params}): {} {{",
             m.name, m.ret_dream
         ),
     };

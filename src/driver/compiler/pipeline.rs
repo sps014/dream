@@ -2,6 +2,8 @@ use super::*;
 
 #[path = "analyze.rs"]
 mod analyze;
+#[path = "body_cache.rs"]
+mod body_cache;
 #[path = "cache.rs"]
 mod cache;
 #[path = "emit.rs"]
@@ -39,12 +41,21 @@ impl Compiler {
             self.load_program(main_file_path, &arena, &mut diagnostics)?
         };
         info!("finished parsing");
+        let modules = self
+            .build_cache
+            .is_some()
+            .then(|| loaded.graph.module_hashes());
         let (stamp, cached) = {
             let _phase = tracing::info_span!("compile_phase", phase = "cache_lookup").entered();
-            let stamp = self
-                .build_cache
-                .as_deref()
-                .and_then(|link_key| self.build_stamp(link_key, &loaded, main_file_path, out_path));
+            let stamp = self.build_cache.as_deref().and_then(|link_key| {
+                self.build_stamp(
+                    link_key,
+                    &loaded,
+                    modules.as_deref()?,
+                    main_file_path,
+                    out_path,
+                )
+            });
             let cached = stamp.as_ref().and_then(BuildStamp::lookup);
             (stamp, cached)
         };
@@ -54,6 +65,20 @@ impl Compiler {
         }
 
         let mut analyzer = self.prepare_analyzer(&loaded, &arena);
+        let body_cache = modules.as_ref().and_then(|modules| {
+            body_cache::BodyCache::new(
+                self.toolchain_config(),
+                &loaded,
+                modules,
+                (self.target.spec(), self.crate_type, self.debug_info),
+            )
+        });
+        if let Some(cache) = &body_cache {
+            let (hits, typed) = cache.load();
+            tracing::info!(modules = hits.len(), "reusing syntax-only body checks");
+            analyzer.set_cached_body_checks(hits);
+            analyzer.set_cached_typed_bodies(typed);
+        }
         let mut dump = match &self.emit_mir {
             Some(spec) => dream_mir::passes::MirDump::new(spec.clone()),
             None => dream_mir::passes::MirDump::disabled(),
@@ -65,6 +90,14 @@ impl Compiler {
             // off the (often small) main thread of an installed binary or the language server.
             stacker::maybe_grow(64 * 1024, 16 * 1024 * 1024, || {
                 let analyzed = self.analyze_graph(&mut analyzer, &loaded, &mut diagnostics)?;
+                if let Some(cache) = &body_cache {
+                    let typed = analyzer.take_typed_bodies();
+                    tracing::info!(
+                        functions = analyzer.reused_typed_bodies(),
+                        "reused typed HIR"
+                    );
+                    cache.store(analyzer.body_checks_with_diagnostics(), &typed);
+                }
                 let interner = analyzer.interner();
                 let mut mir = self.lower_hir(&analyzed.hir, interner, &mut dump);
                 if self.output_kind.is_library() {

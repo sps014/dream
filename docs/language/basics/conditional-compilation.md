@@ -118,7 +118,8 @@ A condition names targets as `Target.<name>`. The names a build defines:
 | `Target.Release` | building with `--release` |
 | `Target.Native` | building a native binary |
 | `Target.Wasm` | building a WebAssembly module |
-| `Target.Browser` | building WebAssembly for a browser or Node.js host |
+| `Target.Browser` | building WebAssembly for a browser host |
+| `Target.Node` | building WebAssembly for Node.js |
 | `Target.Wasi` | building WebAssembly for a WASI host |
 | `Target.Windows` | building a native binary for Windows |
 | `Target.Macos` | building a native binary for macOS |
@@ -126,7 +127,7 @@ A condition names targets as `Target.<name>`. The names a build defines:
 | `Target.Android` | building a native binary for Android |
 | `Target.Ios` | building a native binary for iOS |
 
-Every build defines exactly one of `Debug` and `Release`, and exactly one of `Native` and `Wasm`. A native build also defines its operating system, and a WebAssembly build defines `Browser` or `Wasi`.
+Every build defines exactly one of `Debug` and `Release`, and exactly one of `Native` and `Wasm`. A native build also defines its operating system, and a WebAssembly build defines `Browser`, `Node`, or `Wasi`. For an artifact shared by `--web --node`, a condition must hold for both hosts. Use `Target.Browser || Target.Node` for code shared by those hosts.
 
 Pass `--target` with a target triple to build for another operating system.
 

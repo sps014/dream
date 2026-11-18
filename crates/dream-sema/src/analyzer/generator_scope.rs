@@ -59,7 +59,7 @@ pub(super) struct GeneratorScope {
 }
 
 impl GeneratorScope {
-    fn active(&self) -> bool {
+    pub(super) fn active(&self) -> bool {
         !self.consumed.is_empty() || !self.declarations.is_empty()
     }
 

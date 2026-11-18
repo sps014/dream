@@ -247,7 +247,7 @@ impl Compiler {
             self.optimize,
             self.generator_stage,
             self.runtimes,
-            self.compile_targets,
+            self.cfg_symbols().key(),
             self.crate_type,
             self.opt_ir,
             self.output_kind,
@@ -335,6 +335,7 @@ impl Compiler {
         &self,
         link_key: &str,
         loaded: &load::LoadedProgram<'_>,
+        modules: &[dream_sema::module_graph::ModuleHashes],
         main_file_path: &str,
         out_path: &str,
     ) -> Option<BuildStamp> {
@@ -359,7 +360,7 @@ impl Compiler {
             field("file", file.path.as_bytes());
             field("source", file.source.as_bytes());
         }
-        for module in loaded.graph.module_hashes() {
+        for module in modules {
             field("module", &module.cache_key());
         }
         for (name, bytes) in &loaded.graph.embedded_assets {
@@ -453,14 +454,14 @@ mod tests {
             .unwrap();
         assert!(
             compiler
-                .build_stamp("test", &loaded, &source, out)
+                .build_stamp("test", &loaded, &loaded.graph.module_hashes(), &source, out)
                 .is_some()
         );
 
         fs::write(&path, "fun main(): int { return 2; }").unwrap();
         assert!(
             compiler
-                .build_stamp("test", &loaded, &source, out)
+                .build_stamp("test", &loaded, &loaded.graph.module_hashes(), &source, out)
                 .is_none()
         );
     }

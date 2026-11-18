@@ -110,18 +110,6 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/core/async_host_attribute.dream"),
         ),
         (
-            "<std>/system/core/native_attribute.dream",
-            include_str!("../system/core/native_attribute.dream"),
-        ),
-        (
-            "<std>/system/core/node_attribute.dream",
-            include_str!("../system/core/node_attribute.dream"),
-        ),
-        (
-            "<std>/system/core/web_attribute.dream",
-            include_str!("../system/core/web_attribute.dream"),
-        ),
-        (
             "<std>/system/core/buffer.dream",
             include_str!("../system/core/buffer.dream"),
         ),

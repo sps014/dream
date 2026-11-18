@@ -83,7 +83,7 @@
         "dream.analysisTarget": {
           "type": "string",
           "default": "",
-          "description": "LLVM target triple for language-server analysis and cached C bindings. By default, follow Dream's runtime target."
+          "description": "LLVM target triple or node for language-server analysis and cached C bindings. The default follows Dream's runtime target."
         },
         "dream.home": {
           "type": "string",

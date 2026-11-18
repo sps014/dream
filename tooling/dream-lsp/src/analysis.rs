@@ -7,7 +7,7 @@ use dream::diagnostics::{Diagnostic, DiagnosticBag, Severity};
 use dream::driver::source_loader::collect_declarations;
 use dream::syntax::lexer::Lexer;
 use dream::syntax::parser::Parser;
-use dream_abi::target::TargetSpec;
+use dream_abi::target::{ExecutionEnvironment, TargetSpec};
 use dream_sema::analyzer::Analyzer;
 use dream_stdlib::std_package_from_slash_path;
 
@@ -170,7 +170,11 @@ pub fn analyze_document_for_target(
         &arena,
         &mut acc,
         file_path.unwrap_or(MAIN_FILE),
-        "web",
+        if target.execution_environment == ExecutionEnvironment::Node {
+            "node"
+        } else {
+            "web"
+        },
         false,
         &mut diagnostics,
     );

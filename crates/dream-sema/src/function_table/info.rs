@@ -47,9 +47,6 @@ pub struct FunctionTableInfo {
     /// net. Calling it is only permitted from another `@unsafe` function/method — checked at every
     /// call site (see `Analyzer::check_unsafe_call`, `src/semantics/analyzer/calls/mod.rs`).
     pub is_unsafe: bool,
-    /// Runtimes this declaration is available on (`@native`/`@node`/`@web`). Absent all three
-    /// means every runtime; checked at call sites via `Analyzer::check_runtime_call`.
-    pub runtime_support: dream_abi::attributes::RuntimeSupport,
     pub intrinsic_name: Option<String>,
     /// Accessibility of the declaration. For methods this gates external calls (private methods
     /// may only be called from within their declaring type; `internal` ones from anywhere in the
@@ -94,7 +91,6 @@ impl FunctionTableInfo {
             is_async: false,
             is_static: false,
             is_unsafe: false,
-            runtime_support: dream_abi::attributes::RuntimeSupport::ALL,
             intrinsic_name: None,
             visibility: Visibility::Public,
             declaring_file: None,
@@ -171,8 +167,6 @@ impl FunctionTableInfo {
             && dream_abi::iterators::element(type_ctx, resolved_return, true).is_none();
         info.is_static = func.is_static;
         info.is_unsafe = dream_abi::attributes::has_unsafe_attr(&func.attributes);
-        info.runtime_support =
-            dream_abi::attributes::RuntimeSupport::from_attributes(&func.attributes);
         info.intrinsic_name = intrinsic_name;
         // Intrinsics are language operations, so their declared member visibility applies even
         // though their implementation is external to Dream source.

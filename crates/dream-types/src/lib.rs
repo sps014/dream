@@ -14,6 +14,7 @@ mod interner;
 mod kind;
 mod lower;
 mod naming;
+pub mod portable;
 mod syntax;
 
 pub use c_scalar::CScalar;

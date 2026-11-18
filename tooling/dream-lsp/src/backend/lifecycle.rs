@@ -12,7 +12,11 @@ impl Backend {
             .and_then(serde_json::Value::as_str)
             .filter(|triple| !triple.is_empty())
         {
-            let target = TargetSpec::parse(triple).map_err(jsonrpc::Error::invalid_params)?;
+            let target = if triple == "node" {
+                TargetSpec::node()
+            } else {
+                TargetSpec::parse(triple).map_err(jsonrpc::Error::invalid_params)?
+            };
             let _ = self.target.set(target);
         }
         Ok(InitializeResult {

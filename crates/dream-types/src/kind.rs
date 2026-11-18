@@ -6,7 +6,7 @@ use super::{DefId, TypeId};
 
 /// The built-in scalar types. `String` is included here for naming convenience even though it is a
 /// heap reference at runtime; reference-ness is decided by [`TyKind::is_reference`], not by `PrimTy`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PrimTy {
     Int,
     UInt,

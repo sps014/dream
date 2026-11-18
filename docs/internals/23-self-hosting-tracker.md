@@ -135,9 +135,17 @@ concept" rule. Each one gets `///` documentation, a reference page and assertion
 
 ## Prerequisites in Stage 0 (Rust)
 
-- [ ] **Per-module incremental analysis.** Reuse each module's declaration tables and its
-  HIR/MIR across edits, keyed by `ModuleHashes::cache_key`
-  (`crates/dream-sema/src/module_graph.rs`).
+- [x] **Cache syntax-only body validation.** Named modules reuse successful return-path and
+  await-placement checks for ordinary functions, keyed by module and dependency interfaces.
+- [x] **Persist typed HIR for named-module bodies.** The module cache keeps the typed HIR of
+  ordinary functions, methods and constructors in named user modules, including bodies that
+  use classes, interfaces, globals and generic instances. Type, declaration, global and
+  interface ids are stored as structural keys and resolved in the current compilation.
+  Generic struct, union, interface, array and function instances requested by a body are
+  journaled and replayed on a hit, so the later tables match a fresh analysis. A body is
+  stored only when the journal accounts for every table it grew and it produced no
+  diagnostics. Generic templates, generator and `main` bodies, lambdas created inside a
+  generic instantiation, the root module and the stdlib are analyzed every time.
 - [x] **Native Debug executable codegen units.** See [Codegen units](#codegen-units).
 - [ ] **Release split after optimization.** See [Codegen units](#codegen-units).
 - [ ] **Parallel compiler phases.** Function passes run in parallel (see

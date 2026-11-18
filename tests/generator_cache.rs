@@ -259,7 +259,9 @@ fn unrelated_function_edit_reuses_the_program_cache() {
     if !llvm_available() {
         return;
     }
-    let source = format!("{JSON_PROGRAM}\nfun unused(): int {{ return 1; }}\n");
+    let source = format!(
+        "{JSON_PROGRAM}\nfun unused(): int {{ return 1; }}\n\nclass Helper {{\n    public fun value(): int {{ return 1; }}\n}}\n"
+    );
     let dir = project("unrelated", &source);
     compile(&dir);
     std::fs::write(

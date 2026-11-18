@@ -300,10 +300,13 @@ generator executable result. The new program cache (`src/driver/generate/result_
 sits in front of that. Its key is the compiler identity, the target layout, the generator
 executable identities, the fingerprints of the tools those generators run, and the syntactic trigger set: each matched call's enclosing
 declaration, each attributed declaration, and each syntax block. The stored entry is the
-generated files plus the module interface hashes and the text hashes of the declarations the
-snapshot closure named. A hit merges those files and skips semantic analysis, snapshot
-expansion and body lowering. Editing an unrelated function body hits. Editing a trigger
-call, an attributed declaration, or a declaration the generator read misses. The snapshot's
+generated files plus the declared module interface hashes (exported signatures and layouts,
+without the conservative implementation fallback) and the text hashes of the declarations the
+snapshot closure named. A declaration whose body no generator saw is hashed by its signature
+alone. A hit merges those files and skips semantic analysis, snapshot expansion and body
+lowering. Editing an unrelated function body, or the body of a function the generator saw
+only by signature, hits. Editing a trigger call, an attributed declaration, or a declaration
+or body the generator read misses. The snapshot's
 symbol list is trimmed to that closure, so an unrelated generic instantiation does not
 change what the generator would have seen. `DREAM_GENERATOR_CACHE=0` disables the cache.
 The entry lives under the toolchain generator cache and shares the 256 MB result budget.

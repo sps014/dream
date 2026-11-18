@@ -539,7 +539,7 @@ fn module_interfaces(acc: &ProgramAccumulator<'_>) -> BTreeMap<String, String> {
     acc.module_graph()
         .module_hashes()
         .into_iter()
-        .map(|module| (module.path, hex(&module.interface)))
+        .map(|module| (module.path, hex(&module.declared)))
         .collect()
 }
 
@@ -560,23 +560,38 @@ fn declaration_dependencies(
     acc: &ProgramAccumulator<'_>,
     runs: &[GenRun<'_>],
 ) -> BTreeMap<String, String> {
-    let mut decls = BTreeMap::new();
-    for run in runs {
-        for id in run.spans.ids() {
-            let Some(base) = id.split('#').next() else {
-                continue;
-            };
-            if base.starts_with("site:") || base.starts_with("call:") || base.starts_with("module:")
-            {
-                continue;
-            }
-            if let Some(hash) = declaration_hash(acc, base) {
-                decls.insert(base.to_string(), hash);
-            }
+    // Body nodes are identified under their declaration, directly or through its overload
+    // (`declaration#emitted#b.0`), so a declaration whose body no generator saw is recorded by
+    // its signature alone.
+    let mut bodies = BTreeMap::new();
+    for id in runs.iter().flat_map(|run| run.spans.ids()) {
+        let Some(base) = id.split('#').next() else {
+            continue;
+        };
+        if base.starts_with("site:") || base.starts_with("call:") || base.starts_with("module:") {
+            continue;
         }
+        let body = id
+            .split('#')
+            .skip(1)
+            .any(|part| part == "b" || part.starts_with("b."));
+        *bodies.entry(base).or_insert(false) |= body;
     }
-    decls
+    bodies
+        .into_iter()
+        .filter_map(|(base, body)| {
+            let key = if body {
+                base.to_string()
+            } else {
+                format!("{base}{SIGNATURE}")
+            };
+            Some((key.clone(), declaration_hash(acc, &key)?))
+        })
+        .collect()
 }
+
+/// Marks a recorded declaration whose generator saw its signature but no body.
+const SIGNATURE: &str = "#signature";
 
 fn consumed_artifact_paths(
     _acc: &ProgramAccumulator<'_>,
@@ -780,7 +795,7 @@ impl Cover {
     }
 }
 
-fn cover_function(function: &FunctionNode<'_>) -> Cover {
+fn cover_function(function: &FunctionNode<'_>, bodies: bool) -> Cover {
     let mut cover = Cover::new(&function.name);
     for attribute in &function.attributes {
         cover.token(&attribute.name);
@@ -795,7 +810,7 @@ fn cover_function(function: &FunctionNode<'_>) -> Cover {
     if let Some(ret) = &function.return_type {
         cover.ty(ret);
     }
-    for statement in function.body {
+    for statement in function.body.iter().filter(|_| bodies) {
         if let Some(span) = statement.position() {
             cover.start = cover.start.min(span.start);
             cover.end = cover.end.max(span.end);
@@ -804,7 +819,7 @@ fn cover_function(function: &FunctionNode<'_>) -> Cover {
     cover
 }
 
-fn cover_struct(declaration: &StructDeclarationNode<'_>) -> Cover {
+fn cover_struct(declaration: &StructDeclarationNode<'_>, bodies: bool) -> Cover {
     let mut cover = Cover::new(&declaration.name);
     for attribute in &declaration.attributes {
         cover.token(&attribute.name);
@@ -817,7 +832,7 @@ fn cover_struct(declaration: &StructDeclarationNode<'_>) -> Cover {
         }
     }
     for method in &declaration.methods {
-        cover.merge(&cover_function(method));
+        cover.merge(&cover_function(method, bodies));
     }
     cover
 }
@@ -877,7 +892,10 @@ fn declaration_span(
 }
 
 fn declaration_text(acc: &ProgramAccumulator<'_>, id: &str) -> Option<String> {
-    let id = id.split('#').next()?;
+    let (id, bodies) = match id.strip_suffix(SIGNATURE) {
+        Some(id) => (id, false),
+        None => (id.split('#').next()?, true),
+    };
     let (owner, member) = split_member(id);
     let mut parts = Vec::new();
     for declaration in &acc.all_structs {
@@ -899,14 +917,14 @@ fn declaration_text(acc: &ProgramAccumulator<'_>, id: &str) -> Option<String> {
                     parts.push(slice(
                         acc,
                         declaration.file_path.as_deref(),
-                        &cover_function(method),
+                        &cover_function(method, bodies),
                     )?);
                 }
             }
             None => parts.push(slice(
                 acc,
                 declaration.file_path.as_deref(),
-                &cover_struct(declaration),
+                &cover_struct(declaration, bodies),
             )?),
         }
     }
@@ -934,7 +952,7 @@ fn declaration_text(acc: &ProgramAccumulator<'_>, id: &str) -> Option<String> {
             if member.is_some_and(|name| method.name.text != name) {
                 continue;
             }
-            cover.merge(&cover_function(method));
+            cover.merge(&cover_function(method, bodies));
         }
         if member.is_none() || cover.start != declaration.name.position.start {
             parts.push(slice(acc, declaration.file_path.as_deref(), &cover)?);
@@ -954,7 +972,7 @@ fn declaration_text(acc: &ProgramAccumulator<'_>, id: &str) -> Option<String> {
             if member.is_some_and(|name| method.name.text != name) {
                 continue;
             }
-            cover.merge(&cover_function(method));
+            cover.merge(&cover_function(method, bodies));
         }
         parts.push(slice(acc, declaration.file_path.as_deref(), &cover)?);
     }
@@ -966,7 +984,7 @@ fn declaration_text(acc: &ProgramAccumulator<'_>, id: &str) -> Option<String> {
             parts.push(slice(
                 acc,
                 function.file_path.as_deref(),
-                &cover_function(function),
+                &cover_function(function, bodies),
             )?);
         }
     }
@@ -978,7 +996,7 @@ fn declaration_text(acc: &ProgramAccumulator<'_>, id: &str) -> Option<String> {
                 parts.push(slice(
                     acc,
                     extension.file_path.as_deref(),
-                    &cover_function(method),
+                    &cover_function(method, bodies),
                 )?);
             }
         }
@@ -1010,7 +1028,7 @@ fn enclosing(acc: &ProgramAccumulator<'_>, call: &FoundCall) -> (String, usize) 
         if file.is_some() && function_file != file {
             return;
         }
-        let cover = cover_function(function);
+        let cover = cover_function(function, true);
         if pos < cover.start || pos >= cover.end {
             return;
         }

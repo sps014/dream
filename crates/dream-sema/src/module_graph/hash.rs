@@ -1,11 +1,12 @@
 use super::*;
 use dream_syntax::nodes::{FunctionNode, Visibility};
 
-/// The module's own content and interface hashes, excluding its dependencies.
+/// The module's own content, interface and declared-interface hashes, excluding its
+/// dependencies. The declared interface omits the implementation fallback.
 pub(super) fn module_hashes(
     module: &SourceModule,
     files: &[SourceFile<'_>],
-) -> ([u8; 32], [u8; 32]) {
+) -> ([u8; 32], [u8; 32], [u8; 32]) {
     let mut content = blake3::Hasher::new();
     let mut interface = blake3::Hasher::new();
     hash_text(&mut content, "dream-module-content-v2");
@@ -162,6 +163,7 @@ pub(super) fn module_hashes(
             }
         }
     }
+    let declared = *interface.clone().finalize().as_bytes();
     if module
         .files
         .iter()
@@ -174,6 +176,7 @@ pub(super) fn module_hashes(
     (
         *content.finalize().as_bytes(),
         *interface.finalize().as_bytes(),
+        declared,
     )
 }
 

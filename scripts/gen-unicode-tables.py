@@ -231,8 +231,14 @@ def grapheme_tables():
     return out
 
 
-def dream_cps(cps):
-    return "[" + ", ".join(str(c) for c in cps) + "]"
+def conformance_batch(name, check, rows):
+    # Keep the vectors as data so LLVM doesn't optimize thousands of array construction sites.
+    lines = [";".join(",".join(map(str, column)) for column in row) for row in rows]
+    return [
+        "", "@test", f"fun {name}(): void {{", f'    {check}("""',
+        *(f"        {line}" for line in lines),
+        '        """);', "}",
+    ]
 
 
 def conformance_tests():
@@ -263,6 +269,18 @@ def conformance_tests():
         "import system.testing;",
         "import system.text;",
         "",
+        "fun parse_ints(text: string): int[] {",
+        "    if text.length == 0 {",
+        "        return Array.alloc<int>(0);",
+        "    }",
+        "    let fields = text.split(',');",
+        "    let values = Array.alloc<int>(fields.length);",
+        "    for (let i = 0; i < fields.length; i = i + 1) {",
+        "        values[i] = int.parse(fields[i]).unwrap();",
+        "    }",
+        "    return values;",
+        "}",
+        "",
         "fun from_cps(cps: int[]): string {",
         "    let out = StringBuilder();",
         "    for (let cp in cps) {",
@@ -284,6 +302,20 @@ def conformance_tests():
         "    Assert.eq(source.normalize(UnicodeNormForm.Nfkd), from_cps(cols[4]));",
         "}",
         "",
+        "fun check_normalizations(rows: string): void {",
+        "    for (let row in rows.split('\\n')) {",
+        "        let fields = row.split(';');",
+        "        Assert.eq(fields.length, 5);",
+        "        check_normalization([",
+        "            parse_ints(fields[0]),",
+        "            parse_ints(fields[1]),",
+        "            parse_ints(fields[2]),",
+        "            parse_ints(fields[3]),",
+        "            parse_ints(fields[4]),",
+        "        ]);",
+        "    }",
+        "}",
+        "",
         "fun check_graphemes(cps: int[], breaks: int[]): void {",
         "    let clusters = from_cps(cps).graphemes();",
         "    Assert.eq(clusters.length, breaks.length - 1);",
@@ -299,18 +331,24 @@ def conformance_tests():
         "        i = i + 1;",
         "    }",
         "}",
+        "",
+        "fun check_grapheme_rows(rows: string): void {",
+        "    for (let row in rows.split('\\n')) {",
+        "        let fields = row.split(';');",
+        "        Assert.eq(fields.length, 2);",
+        "        check_graphemes(parse_ints(fields[0]), parse_ints(fields[1]));",
+        "    }",
+        "}",
     ]
     chunk = 200
     for n in range(0, len(norm), chunk):
-        out += ["", "@test", f"fun unicode_normalization_{n // chunk}(): void {{"]
-        for cols in norm[n:n + chunk]:
-            out.append(f"    check_normalization([{', '.join(dream_cps(c) for c in cols)}]);")
-        out.append("}")
+        out += conformance_batch(
+            f"unicode_normalization_{n // chunk}", "check_normalizations", norm[n:n + chunk]
+        )
     for n in range(0, len(graphemes), chunk):
-        out += ["", "@test", f"fun unicode_graphemes_{n // chunk}(): void {{"]
-        for cps, breaks in graphemes[n:n + chunk]:
-            out.append(f"    check_graphemes({dream_cps(cps)}, {dream_cps(breaks)});")
-        out.append("}")
+        out += conformance_batch(
+            f"unicode_graphemes_{n // chunk}", "check_grapheme_rows", graphemes[n:n + chunk]
+        )
     return "\n".join(out) + "\n"
 
 

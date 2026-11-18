@@ -65,7 +65,7 @@ impl Compiler {
         }
 
         let mut analyzer = self.prepare_analyzer(&loaded, &arena);
-        let body_cache = modules.as_ref().and_then(|modules| {
+        let mut body_cache = modules.as_ref().and_then(|modules| {
             body_cache::BodyCache::new(
                 self.toolchain_config(),
                 &loaded,
@@ -73,7 +73,7 @@ impl Compiler {
                 (self.target.spec(), self.crate_type, self.debug_info),
             )
         });
-        if let Some(cache) = &body_cache {
+        if let Some(cache) = &mut body_cache {
             let (hits, typed) = cache.load();
             tracing::info!(modules = hits.len(), "reusing syntax-only body checks");
             analyzer.set_cached_body_checks(hits);

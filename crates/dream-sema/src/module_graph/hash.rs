@@ -177,6 +177,50 @@ pub(super) fn module_hashes(
     )
 }
 
+/// The names a module declares, which is all a standard-library body can observe of user code:
+/// the library never spells a user declaration, so only a colliding or overloading name changes
+/// how its bodies resolve.
+pub(super) fn module_names(module: &SourceModule, files: &[SourceFile<'_>]) -> [u8; 32] {
+    let mut hash = blake3::Hasher::new();
+    hash_text(&mut hash, "dream-module-names-v1");
+    for &index in &module.files {
+        let program = &files[index].program;
+        for global in &program.globals {
+            hash_text(&mut hash, "global");
+            hash_text(&mut hash, &global.name.text);
+        }
+        for function in &program.functions {
+            hash_text(&mut hash, "function");
+            hash_text(&mut hash, &function.name.text);
+        }
+        for declaration in &program.structs {
+            hash_text(&mut hash, "struct");
+            hash_text(&mut hash, &declaration.name.text);
+        }
+        for declaration in &program.interfaces {
+            hash_text(&mut hash, "interface");
+            hash_text(&mut hash, &declaration.name.text);
+        }
+        for declaration in &program.enums {
+            hash_text(&mut hash, "enum");
+            hash_text(&mut hash, &declaration.name.text);
+        }
+        for extension in &program.extends {
+            hash_text(&mut hash, "extension");
+            hash_text(&mut hash, &extension.target.text);
+            hash_count(&mut hash, extension.implements.len());
+            for implemented in &extension.implements {
+                hash_type(&mut hash, implemented);
+            }
+            hash_count(&mut hash, extension.methods.len());
+            for method in &extension.methods {
+                hash_text(&mut hash, &method.name.text);
+            }
+        }
+    }
+    *hash.finalize().as_bytes()
+}
+
 fn hash_signature(hash: &mut blake3::Hasher, function: &FunctionNode<'_>) {
     hash_text(hash, "function");
     hash_text(hash, &function.name.text);

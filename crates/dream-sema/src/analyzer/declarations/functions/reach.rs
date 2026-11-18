@@ -125,7 +125,9 @@ impl<'a> Analyzer<'a> {
                 continue;
             };
             diagnostics.file_path = file_path_string(&function.file_path);
-            self.with_generic_bindings(bindings, |s| s.analyze_function(function, diagnostics))?;
+            self.with_generic_bindings(bindings, |s| {
+                s.analyze_cacheable_body(function, diagnostics)
+            })?;
             progressed = true;
         }
         Ok(progressed)

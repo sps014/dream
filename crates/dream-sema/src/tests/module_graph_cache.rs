@@ -202,6 +202,34 @@ fn dependency_keys_track_interfaces_content_and_transitive_changes() {
 }
 
 #[test]
+fn library_keys_observe_only_the_names_user_modules_declare() {
+    let arena = Bump::new();
+    let library = "module system.lib; public fun lib(): int { return 1; }";
+    let key = |user: &str| {
+        graph(
+            &arena,
+            &[("<std>/system/lib.dream", library), ("main.dream", user)],
+            &[("<std>/system/lib.dream", &["main.dream"])],
+        )
+        .module_hashes()
+        .into_iter()
+        .find(|m| m.path == "system.lib")
+        .unwrap()
+        .cache_key()
+    };
+    let base = key("class C {} fun f(): int { return 1; }");
+    assert_eq!(
+        base,
+        key("class C { x: int; } fun f(): long { return 2L; }")
+    );
+    assert_ne!(base, key("class C {} fun g(): int { return 1; }"));
+    assert_ne!(
+        base,
+        key("class C {} fun f(): int { return 1; } extend int { fun lib(): int { return 1; } }")
+    );
+}
+
+#[test]
 fn dependency_keys_are_order_independent_and_cycles_terminate() {
     let arena = Bump::new();
     let sources = [

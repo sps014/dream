@@ -1,11 +1,63 @@
 module tracks;
 
 import system.audio;
+import system.collections;
+import system.net;
 
 const SAMPLE_RATE: int = 24000;
 const TAU: double = 6.283185307179586d;
 
-public fun synth_track(track: int): Audio {
+public async fun load_track(track: int): Result<Audio, string> {
+    let audio = Audio();
+    if track == 3 {
+        let client = HttpClient();
+        let url = Url.parse("https://audio.ncs.io/superheroalexhagenrework/original-1dd51215.mp3")
+            .unwrap();
+        let sent = client.send(HttpRequest(HttpMethod.Get, url)).await;
+        if sent.is_err() {
+            client.close();
+            return Result.Err(sent.unwrap_err().message());
+        }
+        let response = sent.unwrap();
+        let bytes = List<byte>();
+        let error = "";
+        if response.status != 200 {
+            error = "NCS returned HTTP " + response.status;
+        }
+        while error == "" {
+            let read = response.body.read_async(65536).await;
+            if read.is_err() {
+                error = read.unwrap_err().message();
+                break;
+            }
+            let chunk = read.unwrap();
+            if chunk.length == 0 {
+                break;
+            }
+            if bytes.length + chunk.length > 16777216 {
+                error = "NCS audio exceeds the 16 MiB download limit";
+                break;
+            }
+            bytes.push_all(chunk);
+        }
+        response.close();
+        client.close();
+        if error != "" {
+            return Result.Err(error);
+        }
+        audio = Audio(bytes.take_array());
+    } else {
+        audio = synth_track(track);
+    }
+    let loaded = audio.load().await;
+    if loaded.is_err() {
+        audio.close();
+        return Result.Err(loaded.unwrap_err().message());
+    }
+    return Result.Ok(audio);
+}
+
+fun synth_track(track: int): Audio {
     let tempo = [0.46d, 0.54d, 0.41d][track];
     let root = [110.0d, 98.0d, 130.8128d][track];
     let steps = [1.0d, 1.5d, 1.189207d, 2.0d, 1.0d, 1.33484d, 1.681793d, 1.5d];

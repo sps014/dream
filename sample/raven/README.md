@@ -1,6 +1,14 @@
 # Afterglow music player with Raven
 
-Afterglow is a desktop music player with frosted glass panels and album art drawn by Raven. Select one of three synthesized tracks from the library, or start with **Play**. The transport can pause, skip, seek, and repeat the current track. The right panel shows what plays next and controls volume.
+Afterglow is a desktop music player with frosted glass panels and album art drawn by Raven. Select **Superhero** by Alex Hagen to play the NCS release, or choose one of three locally synthesized tracks. The transport can pause, skip, seek, and repeat the current track. The library panel controls volume.
+
+Superhero needs an internet connection. The player downloads the MP3 into memory before playback so seeking works throughout the song. A failed load appears in the library panel and keeps the previous track available.
+
+Song: Alex Hagen - Superhero
+
+Music provided by NoCopyrightSounds
+
+Free Download/Stream: https://ncs.io/superheroalexhagenrework
 
 Download and extract the [Raven 0.2.3 shared library archive](https://github.com/oscar-soirey/Raven/releases/tag/v0.2.3) for your desktop platform. Choose the universal macOS, Linux x64, or MSVC Windows x64 archive. Raven uses Vulkan. On macOS install MoltenVK with `brew install molten-vk`. On Linux and Windows use a Vulkan loader and a driver for your GPU. See [Raven's platform setup](https://github.com/oscar-soirey/Raven/blob/v0.2.3/README.md).
 
@@ -38,4 +46,4 @@ dreamer run
 
 Raven loads the glass materials, controls, and layout from `player.xml`. Keep the working directory at `sample/raven` so it can find that file. Each `cimport` reads one Raven API header and links the same shared library. Dream generates the function, constant, and callback bindings during the build.
 
-The XML names the actions that controls send to Dream. Raven calls a generated C callback to queue each action on the UI thread. The player consumes those actions between frames and uses Dream's native audio API for playback. The three covers use Raven's procedural effects, and the audio is synthesized locally in `src/tracks.dream`.
+The XML names the actions that controls send to Dream. Raven calls a generated C callback to queue each action on the UI thread. The player consumes those actions between frames and uses Dream's native audio API for playback. The covers use Raven's procedural effects. `src/tracks.dream` loads the NCS track from its audio server and synthesizes the other three tracks.

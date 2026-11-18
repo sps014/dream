@@ -93,6 +93,7 @@ async fun main(): int {
         "track.0",
         "track.1",
         "track.2",
+        "track.3",
         "player.previous",
         "player.toggle",
         "player.next",
@@ -106,13 +107,17 @@ async fun main(): int {
         name.free();
     }
 
-    let titles = ["Violet Hour", "Glass Tides", "Signal Bloom"];
-    let details = ["Soft arpeggio", "Slow ambient pulse", "Bright synth sequence"];
-    let colors = ["#A878FF", "#58DFDA", "#FF966C"];
+    let titles = ["Violet Hour", "Glass Tides", "Signal Bloom", "Superhero"];
+    let details = [
+        "Soft arpeggio",
+        "Slow ambient pulse",
+        "Bright synth sequence",
+        "Alex Hagen · NCS"
+    ];
+    let colors = ["#A878FF", "#58DFDA", "#FF966C", "#F078A8"];
     let track = 0;
     let shown_track = -1;
-    let audio = synth_track(track);
-    audio.load().await.unwrap();
+    let audio = load_track(track).await.unwrap();
     audio.volume = controls.Rslider_get_value(volume);
     let repeat = false;
     let shown_repeat = false;
@@ -135,6 +140,9 @@ async fun main(): int {
                 start = true;
             } else if action == "track.2" {
                 requested = 2;
+                start = true;
+            } else if action == "track.3" {
+                requested = 3;
                 start = true;
             } else if action == "player.next" {
                 requested = (requested + 1) % titles.length;
@@ -161,12 +169,20 @@ async fun main(): int {
         actions.clear();
 
         if requested != track {
-            audio.close();
-            track = requested;
-            audio = synth_track(track);
-            audio.load().await.unwrap();
-            audio.volume = controls.Rslider_get_value(volume);
-            audio.loop = repeat;
+            label(status, "Loading " + titles[requested] + "...");
+            core.Rwait_frame(0.0d);
+            let loaded = load_track(requested).await;
+            if loaded.is_err() {
+                label(status, loaded.unwrap_err());
+                start = false;
+            } else {
+                audio.close();
+                track = requested;
+                audio = loaded.unwrap();
+                audio.volume = controls.Rslider_get_value(volume);
+                audio.loop = repeat;
+                label(status, "");
+            }
         }
         if start && audio.paused {
             let result = audio.play().await;
@@ -210,6 +226,7 @@ async fun main(): int {
             shown_second = (int)time;
         }
         core.Rwait_frame(0.05d);
+        Time.delay(1).await;
     }
 
     audio.close();

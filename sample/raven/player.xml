@@ -13,6 +13,8 @@
                     <Label Text="afterglow" TextSize="25"/>
                     <Separator Slot.Padding="0,12"/>
                     <Label Text="Your library" TextSize="12" Opacity="0.5"/>
+                    <Button Text="Superhero" Style="Flat" OnClicked="track.3" Height="38"
+                        Tooltip="Alex Hagen · Music provided by NoCopyrightSounds"/>
                     <Button Text="Violet Hour" Style="Flat" OnClicked="track.0" Height="38"/>
                     <Button Text="Glass Tides" Style="Flat" OnClicked="track.1" Height="38"/>
                     <Button Text="Signal Bloom" Style="Flat" OnClicked="track.2" Height="38"/>

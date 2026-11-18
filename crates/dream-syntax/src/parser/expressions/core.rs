@@ -637,9 +637,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let name = self.next_token();
             self.match_token(TokenKind::ColonToken);
-            let value = self.parse_expression(0)?;
+            let value = self.parse_call_argument_value()?;
             return Ok(ExpressionNode::NamedArg(name, self.arena.alloc(value)));
         }
+        self.parse_call_argument_value()
+    }
+
+    fn parse_call_argument_value(&mut self) -> Result<ExpressionNode<'a>, Error> {
         // A pass-by-reference argument: `ref place`. The place shape (identifier/member/index) is
         // validated by the analyzer, not here — parsing accepts any unary-level expression.
         if self.current_token().kind == TokenKind::RefToken {

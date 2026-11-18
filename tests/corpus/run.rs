@@ -257,6 +257,7 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
             &config,
             &output,
             dream::execution::llvm::NativeBuildOptions {
+                codegen_units: &[],
                 target: dream_abi::target::TargetSpec::host(),
                 opt_ll: None,
                 opt_remarks: None,

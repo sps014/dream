@@ -103,4 +103,8 @@ fun nested_type_display(): void {
     take(List<int>());
 }
 
+fun ambiguous_named_call(): void {
+    System.println(g(a: 5, b: 5));
+}
+
 fun main(): void {}

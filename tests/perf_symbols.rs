@@ -98,7 +98,10 @@ fn profiling_and_debugger_settings_have_distinct_cache_identities() {
             .unwrap()
     };
     for (perf, debug) in [(false, false), (true, false), (false, true)] {
-        let BuildOutcome::Built(Some(stamp)) = compile(perf, debug) else {
+        let BuildOutcome::Built {
+            stamp: Some(stamp), ..
+        } = compile(perf, debug)
+        else {
             panic!("changed symbol policy must rebuild");
         };
         stamp.store(std::slice::from_ref(&out));

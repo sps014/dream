@@ -13,7 +13,7 @@ use std::path::PathBuf;
 /// (`Debug.live_objects` and the exit-time leak report). Release links counter-free bitcode.
 const HEAP_COUNTERS_DEFINE: &str = "-DDREAM_HEAP_COUNTERS=1";
 
-fn compile_objects<T: Sync>(
+pub(super) fn compile_objects<T: Sync>(
     units: &[T],
     compile: impl Fn(usize, &T) -> Result<PathBuf, String> + Sync,
 ) -> Result<Vec<PathBuf>, String> {

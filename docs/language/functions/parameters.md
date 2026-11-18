@@ -98,8 +98,8 @@ Rules:
   has none).
 - Named arguments work for **free functions, constructors, and instance methods**, including
   overloaded callees: each overload's parameter names are tried, then argument types pick among
-  the survivors (an ambiguous name layout across overloads is an error). Use positional arguments
-  when you prefer not to involve names.
+  the survivors. A call is ambiguous when the best overloads tie after type checking.
+  To name a pass-by-reference argument, write `parameter: ref variable`.
 
 Named arguments and defaults together let a call skip a middle optional parameter and still pass a later one:
 

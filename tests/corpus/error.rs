@@ -48,7 +48,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "call_errors",
-        "No overload of 'Point.constructor' matches argument types (Point, string)\nAmbiguous call to 'g'\n'add' is overloaded; give it a fun(...) type to select an overload\nNo overload of 'add' takes parameters (bool, bool)\nNo overload of 'h'\nno parameter named 'nam'\nvariadic parameter 'nums' cannot be passed by name\nfunction 'takes_ref' expects parameter 1 to be passed with 'ref', but it was passed by value\nfunction 'takes_value' expects parameter 1 to be passed by value, but 'ref' was given\n'clear' is an instance method of 'Counter'; call it on a 'Counter' value, not on the type name\nfunction 'take' expects parameter 1 to be List<List<int>>, got List<int>",
+        "No overload of 'Point.constructor' matches argument types (Point, string)\nAmbiguous call to 'g'\nAmbiguous named-argument call to 'g'\n'add' is overloaded; give it a fun(...) type to select an overload\nNo overload of 'add' takes parameters (bool, bool)\nNo overload of 'h'\nno parameter named 'nam'\nvariadic parameter 'nums' cannot be passed by name\nfunction 'takes_ref' expects parameter 1 to be passed with 'ref', but it was passed by value\nfunction 'takes_value' expects parameter 1 to be passed by value, but 'ref' was given\n'clear' is an instance method of 'Counter'; call it on a 'Counter' value, not on the type name\nfunction 'take' expects parameter 1 to be List<List<int>>, got List<int>",
         true,
     ),
     Case::error(

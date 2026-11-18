@@ -120,7 +120,7 @@ void dream_start(dream_ptr f) {
     dream_enqueue(f);
 }
 
-#ifdef DREAM_WASM32
+#if defined(DREAM_WASM32) && !defined(DREAM_COMPONENT)
 static int64_t vclock;
 #endif
 
@@ -507,6 +507,20 @@ int dream_async_pending(void) {
     return rq_head != NULL || timer_count != 0;
 }
 
+#ifdef DREAM_COMPONENT
+static int (*component_poll_http)(void);
+static int (*component_poll_sockets)(void);
+
+void dream_component_register_http(int (*poll)(void)) { component_poll_http = poll; }
+void dream_component_register_sockets(int (*poll)(void)) { component_poll_sockets = poll; }
+
+static int poll_component_io(void) {
+    int http_pending = component_poll_http && component_poll_http();
+    int sockets_pending = component_poll_sockets && component_poll_sockets();
+    return http_pending || sockets_pending;
+}
+#endif
+
 static void run_ready(void) {
     while (rq_head) {
         ReadyNode *n = rq_head;
@@ -561,6 +575,14 @@ void dream_run_loop(void) {
             timer_finish();
             return;
         }
+#elif defined(DREAM_COMPONENT)
+        int io_pending = poll_component_io();
+        if (rq_head) { continue; }
+        if (!timer_count && !io_pending) {
+            ready_finish();
+            timer_finish();
+            return;
+        }
 #else
         if (!timer_count) {
             ready_finish();
@@ -572,7 +594,13 @@ void dream_run_loop(void) {
 #ifdef DREAM_WASM32
 #ifdef DREAM_COMPONENT
             void dream_component_wait_until(int64_t deadline);
-            dream_component_wait_until(timer_peek()->due);
+            int64_t due = timer_count ? timer_peek()->due : INT64_MAX;
+            if (io_pending) {
+                /* A host that has pending I/O needs a bounded park even when no Dream timer is armed. */
+                int64_t next_poll = timeNowNanos() + 1000000;
+                if (next_poll < due) { due = next_poll; }
+            }
+            dream_component_wait_until(due);
             int64_t now = timeNowNanos();
 #else
             int64_t now = timer_peek()->due;

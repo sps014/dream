@@ -13,8 +13,12 @@ fn build(source: &Path, out: &Path, link_key: &str) -> BuildOutcome {
 
 fn record(outcome: BuildOutcome, out: &Path) {
     match outcome {
-        BuildOutcome::Built(Some(stamp)) => stamp.store(&[out.to_path_buf()]),
-        BuildOutcome::Built(None) => panic!("diagnostic-free build should be cacheable"),
+        BuildOutcome::Built {
+            stamp: Some(stamp), ..
+        } => stamp.store(&[out.to_path_buf()]),
+        BuildOutcome::Built { stamp: None, .. } => {
+            panic!("diagnostic-free build should be cacheable")
+        }
         BuildOutcome::Cached(_) => panic!("expected a fresh build"),
     }
 }
@@ -22,7 +26,7 @@ fn record(outcome: BuildOutcome, out: &Path) {
 fn cached(outcome: BuildOutcome) -> Option<Vec<PathBuf>> {
     match outcome {
         BuildOutcome::Cached(artifacts) => Some(artifacts),
-        BuildOutcome::Built(_) => None,
+        BuildOutcome::Built { .. } => None,
     }
 }
 
@@ -250,4 +254,102 @@ fn concurrent_cli_requests_do_not_remove_each_others_llvm_input() {
         );
     }
     assert!(output.is_file());
+}
+
+#[test]
+fn native_debug_reuses_unchanged_codegen_units_and_matches_a_clean_link() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let source = root.join("main.dream");
+    let dependency = root.join("numbers.dream");
+    let importer = root.join("caller.dream");
+    let ir = root.join("main.ll");
+    let bin = dream::driver::output::OutputKind::Executable
+        .artifact_path(&ir, &dream_abi::target::TargetSpec::host());
+    let cache = root.join("cache/native-rt/program-objects");
+    std::fs::write(
+        &source,
+        "import system; import caller; fun main(): void { System.println(compute()); }",
+    )
+    .unwrap();
+    std::fs::write(
+        &importer,
+        "module caller; import numbers; public fun compute(): int { return (int)answer(); }",
+    )
+    .unwrap();
+    let write_dependency = |ret, value| {
+        std::fs::write(
+            &dependency,
+            format!("module numbers; public fun answer(): {ret} {{ return {value}; }}"),
+        )
+        .unwrap();
+    };
+    let config = dream::driver::toolchain::ToolchainConfig::default();
+    let tool = |name| {
+        config
+            .locate_tool(dream_abi::toolchain::compiler_tool(name).unwrap())
+            .unwrap()
+            .root
+    };
+    let llvm = tool("llvm");
+    let mold = (!cfg!(windows)).then(|| tool("mold"));
+    let link = |expected: &str| {
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_dream"));
+        command
+            .current_dir(root)
+            .env("DREAM_PREFIX", root)
+            .env("DREAM_LLVM", &llvm);
+        if let Some(mold) = &mold {
+            command.env("DREAM_MOLD", mold);
+        }
+        let result = command
+            .args(["-o", ir.to_str().unwrap(), "run", source.to_str().unwrap()])
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&result.stdout)
+                .lines()
+                .any(|line| line == expected),
+            "{}",
+            String::from_utf8_lossy(&result.stdout)
+        );
+    };
+    let objects = || {
+        std::fs::read_dir(&cache)
+            .unwrap()
+            .filter_map(|entry| {
+                let entry = entry.unwrap();
+                entry
+                    .path()
+                    .join("unit.o")
+                    .is_file()
+                    .then(|| entry.file_name())
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+
+    write_dependency("int", "42");
+    link("42");
+    let cold = objects();
+    assert_eq!(cold.len(), 3);
+    write_dependency("int", "43");
+    link("43");
+    let edited = objects();
+    assert_eq!(edited.difference(&cold).count(), 1);
+
+    write_dependency("long", "44L");
+    link("44");
+    let interface_edit = objects();
+    assert!(interface_edit.difference(&edited).count() >= 2);
+    let cached = std::fs::read(&bin).unwrap();
+    std::fs::remove_file(&bin).unwrap();
+    std::fs::remove_dir_all(cache).unwrap();
+    link("44");
+    assert_eq!(std::fs::read(&bin).unwrap(), cached);
 }

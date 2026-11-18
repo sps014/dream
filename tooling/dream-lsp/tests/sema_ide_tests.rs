@@ -289,9 +289,19 @@ fn c_namespace_completion_and_definition_use_cached_bindings() {
         .parse()
         .unwrap();
     let import = ast.get_root().imports[0].c.as_ref().unwrap();
-    let cache = root
-        .join("target/obj/cimport")
-        .join(dream_abi::target::TargetSpec::host().llvm_triple());
+    let target = dream_abi::target::TargetSpec::parse("wasm32-wasip2").unwrap();
+    let cache = root.join("target/obj/cimport").join("wasm32-wasip2");
+    let header = root.join("interop.h");
+    let dependency = root.join("values.h");
+    fs::write(&header, "#include \"values.h\"\nint answer(void);").unwrap();
+    fs::write(&dependency, "#define ANSWER 42").unwrap();
+    let headers = [&header, &dependency]
+        .into_iter()
+        .map(|path| {
+            let bytes = fs::read(path).unwrap();
+            (path, blake3::hash(&bytes).to_hex().to_string())
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
     fs::create_dir_all(&cache).unwrap();
     let stem = cache.join(import.prefix.trim_end_matches('_'));
     let bindings = format!(
@@ -305,12 +315,15 @@ fn c_namespace_completion_and_definition_use_cached_bindings() {
             "fingerprint": "test",
             "source": bindings,
             "omissions": {},
+            "headers": headers,
         })
         .to_string(),
     )
     .unwrap();
 
-    let result = dream_lsp::analysis::analyze_document(path.to_str(), source);
+    let analyze =
+        |target| dream_lsp::analysis::analyze_document_for_target(path.to_str(), source, target);
+    let result = analyze(&target);
     assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
     let snapshot = result.sema.unwrap();
     let member = source.find("c.answer").unwrap() + "c.".len();
@@ -319,5 +332,19 @@ fn c_namespace_completion_and_definition_use_cached_bindings() {
     let target = &snapshot.ref_covering(member).unwrap().target;
     assert!(
         matches!(target, IdeTarget::Resolved { source, .. } if source.file.as_deref().is_some_and(|file| file.ends_with(stem.with_extension("dream").file_name().unwrap().to_str().unwrap())))
+    );
+    let other = dream_abi::target::TargetSpec::parse("wasm32-wasip3").unwrap();
+    assert!(
+        analyze(&other)
+            .diagnostics
+            .iter()
+            .any(|diag| diag.message.contains("bindings are missing"))
+    );
+    fs::write(&dependency, "#define ANSWER 12").unwrap();
+    assert!(
+        analyze(&dream_abi::target::TargetSpec::parse("wasm32-wasip2").unwrap())
+            .diagnostics
+            .iter()
+            .any(|diag| diag.message.contains("bindings are stale"))
     );
 }

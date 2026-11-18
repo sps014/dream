@@ -100,6 +100,7 @@ pub(crate) fn join<T: fmt::Display>(attrs: &[T]) -> String {
 pub enum Linkage {
     External,
     Internal,
+    Hidden,
     Private,
     LinkOnceOdr,
 }
@@ -109,6 +110,7 @@ impl Linkage {
         match self {
             Linkage::External => "",
             Linkage::Internal => "internal ",
+            Linkage::Hidden => "hidden ",
             Linkage::Private => "private ",
             Linkage::LinkOnceOdr => "linkonce_odr ",
         }

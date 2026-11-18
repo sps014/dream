@@ -9,6 +9,7 @@ import subprocess
 import socketserver
 import tempfile
 import threading
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,15 +18,34 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dream", type=Path, default=ROOT / "target/debug" / ("dream.exe" if os.name == "nt" else "dream"))
     parser.add_argument("--wasmtime", type=Path, default=Path.home() / ".dream/toolchains/wasmtime-49.0.4" / ("wasmtime.exe" if os.name == "nt" else "wasmtime"))
+    parser.add_argument("--preview", choices=["p2", "p3"], action="append", help="run a single preview")
     args = parser.parse_args()
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            data = "component network 日本語".encode()
+            if self.path in ("/slow", "/cancel"):
+                time.sleep(0.5)
+            self.send_data("component network 日本語".encode())
+
+        def do_POST(self):
+            if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+                body = bytearray()
+                while size := int(self.rfile.readline().split(b";", 1)[0], 16):
+                    body.extend(self.rfile.read(size))
+                    self.rfile.read(2)
+                self.rfile.readline()
+            else:
+                body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            self.send_data(body)
+
+        def send_data(self, data):
             self.send_response(200)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
         def log_message(self, *_):
             pass
@@ -46,14 +66,37 @@ def qualify(args, handler, tcp_port):
         cleanup.callback(server.shutdown)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         directory = Path(temporary)
+        (directory / "dream.toml").write_text('[package]\nname = "wasi_qualification"\n', encoding="utf-8")
+        include = directory / "native/include"
+        include.mkdir(parents=True)
+        (include / "probe.h").write_text("""#if defined(__wasip2__)
+int preview_two(int value);
+#define EXPECTED_PREVIEW 2
+#elif defined(__wasip3__)
+int preview_three(int value);
+#define EXPECTED_PREVIEW 3
+#endif
+""", encoding="utf-8")
+        (directory / "native/probe.c").write_text("""#include "probe.h"
+#if defined(__wasip2__)
+int preview_two(int value) { return value + 2; }
+#elif defined(__wasip3__)
+int preview_three(int value) { return value + 3; }
+#endif
+""", encoding="utf-8")
         source = directory / "check.dream"
-        source.write_text('''import system;
+        program = '''import system;
 import system.io;
 import system.net;
-import system.interop;
+import system.task;
+cimport "probe.h";
 
-@c("c", "abs")
-extern fun c_abs(value: int): int;
+async fun slow_request(client: HttpClient): void {
+    let request = HttpRequest(HttpMethod.Get, Url.parse("http://127.0.0.1:PORT/slow").unwrap());
+    let response = client.send(request).await.unwrap();
+    System.println("slow response");
+    response.close();
+}
 
 async fun main(): void {
     let written = File.write("component-test.txt", "portable filesystem").await;
@@ -62,21 +105,41 @@ async fun main(): void {
         return;
     }
     Time.sleep(1).await;
-    System.println(c_abs(0 - 7));
+    System.println(probe.TARGET_FUNCTION(7 - probe.EXPECTED_PREVIEW));
     System.println(File.read("component-test.txt").await.unwrap());
     let client = HttpClient();
+    let slow = slow_request(client);
+    Promise.start(slow);
+    Time.sleep(10).await;
+    System.println("timer while HTTP pending");
     let request = HttpRequest(HttpMethod.Get, Url.parse("http://127.0.0.1:PORT/check?q=value").unwrap());
     let response = client.send(request).await.unwrap();
     System.println(response.status);
     System.println(response.read_text().await.unwrap());
     response.close();
+    slow.await;
+    let upload = HttpRequest(HttpMethod.Post, Url.parse("http://127.0.0.1:PORT/upload").unwrap());
+    upload.set_text("upload");
+    let echoed = client.send(upload).await.unwrap();
+    System.println(echoed.read_text().await.unwrap());
+    echoed.close();
+    let cancellation = CancellationSource();
+    let cancel_request = HttpRequest(
+        HttpMethod.Get,
+        Url.parse("http://127.0.0.1:PORT/cancel").unwrap()
+    );
+    let cancelled = client.send(cancel_request, Option.Some(cancellation.token));
+    Promise.start(cancelled);
+    Time.sleep(10).await;
+    cancellation.cancel();
+    System.println(cancelled.await.unwrap_err().code());
     client.close();
-    let tcp = TcpStream.connect("127.0.0.1", TCP_PORT, 1000).await.unwrap();
+    let tcp = TcpStream.connect("localhost", TCP_PORT, 1000).await.unwrap();
     tcp.write_all_async(Encoding.utf8_encode("tcp echo")).await.unwrap();
     System.println(Encoding.utf8_decode(tcp.read_with_timeout(8, 1000).await.unwrap()));
     tcp.close();
     let udp = UdpSocket.bind("127.0.0.1", 0).await.unwrap();
-    let sent = udp.send("127.0.0.1", udp.local_port, Encoding.utf8_encode("udp echo"), 1000).await;
+    let sent = udp.send("localhost", udp.local_port, Encoding.utf8_encode("udp echo"), 1000).await;
     if sent.is_err() {
         System.println(sent.unwrap_err().message());
         return;
@@ -84,8 +147,11 @@ async fun main(): void {
     System.println(Encoding.utf8_decode(udp.receive(8, 1000).await.unwrap().data));
     udp.close();
 }
-'''.replace("TCP_PORT", str(tcp_port)).replace("PORT", str(server.server_port)), encoding="utf-8", newline="\n")
-        for preview in ["p2", "p3"]:
+'''.replace("TCP_PORT", str(tcp_port)).replace("PORT", str(server.server_port))
+        for preview, function in [("p2", "preview_two"), ("p3", "preview_three")]:
+            if args.preview and preview not in args.preview:
+                continue
+            source.write_text(program.replace("TARGET_FUNCTION", function), encoding="utf-8", newline="\n")
             output = directory / ("check_" + preview + ".wat")
             subprocess.run([str(args.dream.resolve()), "--target", "wasm32-wasi" + preview, "-o", str(output), str(source)], cwd=ROOT, check=True, timeout=180)
             artifacts = [output, output.with_suffix(".wasm"), output.with_suffix(".abi.json")]
@@ -94,14 +160,14 @@ async fun main(): void {
             subprocess.run([str(args.dream.resolve()), "--target", "wasm32-wasi" + preview, "-o", str(output), str(source)], cwd=ROOT, check=True, timeout=180)
             if previous != [path.read_bytes() for path in artifacts]:
                 raise RuntimeError(preview + " component output is not deterministic")
-            flags = [str(args.wasmtime.resolve()), "run", "-S", "http=y", "-S", "inherit-network=y"]
+            flags = [str(args.wasmtime.resolve()), "run", "-S", "http=y", "-S", "inherit-network=y", "-S", "allow-ip-name-lookup=y"]
             if preview == "p3":
                 flags += ["-S", "p3=y", "-W", "component-model-async=y", "-W", "component-model-more-async-builtins=y", "-W", "component-model-async-stackful=y"]
             command = flags + ["--dir", str(directory) + "::.", str(output.with_suffix(".wasm"))]
             run = subprocess.run(command, check=False, capture_output=True, text=True, encoding="utf-8", timeout=45)
             if run.returncode:
                 raise RuntimeError(preview + " execution failed: " + run.stdout + run.stderr)
-            if run.stdout.replace("\r\n", "\n") != "7\nportable filesystem\n200\ncomponent network 日本語\ntcp echo\nudp echo\n":
+            if run.stdout.replace("\r\n", "\n") != "7\nportable filesystem\ntimer while HTTP pending\n200\ncomponent network 日本語\nslow response\nupload\nECANCELLED\ntcp echo\nudp echo\n":
                 raise RuntimeError(preview + " output: " + repr(run.stdout) + run.stderr)
             denied = subprocess.run(flags + [str(output.with_suffix(".wasm"))], check=True, capture_output=True, text=True, encoding="utf-8", timeout=45)
             if denied.stdout.strip() != "filesystem denied":

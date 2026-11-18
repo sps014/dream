@@ -6,7 +6,7 @@ use bumpalo::Bump;
 use indexmap::IndexSet;
 use std::collections::{HashMap, HashSet};
 use std::io::{Error, ErrorKind};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use dream_diagnostics::DiagnosticBag;
@@ -34,7 +34,9 @@ pub struct ProgramAccumulator<'a> {
     /// Entry directory retained before following dependency cache symlinks.
     pub(crate) package_base: Option<std::path::PathBuf>,
     pub parsed_files: indexmap::IndexMap<String, ProgramNode<'a>>,
-    pub resolution_inputs: indexmap::IndexSet<std::path::PathBuf>,
+    pub resolution_inputs: indexmap::IndexSet<PathBuf>,
+    pub(crate) track_build_inputs: bool,
+    pub(crate) input_snapshots: indexmap::IndexMap<PathBuf, Option<String>>,
     pub import_edges: indexmap::IndexMap<String, Vec<String>>,
     pub visited: HashSet<String>,
     pub all_functions: Vec<FunctionNode<'a>>,
@@ -69,6 +71,68 @@ pub struct ProgramAccumulator<'a> {
     pub untracked_generator_inputs: bool,
     /// Symbols every file's `@cfg` conditions are evaluated against.
     pub cfg: dream_syntax::conditional::CfgSymbols,
+}
+
+impl ProgramAccumulator<'_> {
+    pub(crate) fn observe_resolution_input(&mut self, path: PathBuf) {
+        if self.track_build_inputs {
+            let hash = input_hash(&path);
+            self.record_input_snapshot(path.clone(), hash);
+        }
+        self.resolution_inputs.insert(path);
+    }
+
+    pub(crate) fn record_file_input(&mut self, path: PathBuf, bytes: &[u8]) {
+        if self.track_build_inputs {
+            self.record_input_snapshot(path, Some(file_input_hash(bytes)));
+        }
+    }
+
+    fn record_input_snapshot(&mut self, path: PathBuf, hash: Option<String>) {
+        self.input_snapshots
+            .entry(path)
+            .and_modify(|previous| {
+                if *previous != hash {
+                    *previous = None;
+                }
+            })
+            .or_insert(hash);
+    }
+}
+
+fn file_input_hash(bytes: &[u8]) -> String {
+    format!("file:{}", blake3::hash(bytes))
+}
+
+pub(crate) fn input_hash(path: &Path) -> Option<String> {
+    if path.is_dir() {
+        let mut entries = std::fs::read_dir(path)
+            .ok()?
+            .map(|entry| {
+                let entry = entry.ok()?;
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let kind = entry.file_type().ok()?;
+                Some((name, kind.is_dir(), kind.is_symlink()))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        entries.retain(|(name, directory, symlink)| {
+            *directory
+                || *symlink
+                || name.ends_with(".dream")
+                || matches!(name.as_str(), "dream.toml" | "dream.lock")
+        });
+        entries.sort();
+        Some(format!(
+            "dir:{}",
+            blake3::hash(&serde_json::to_vec(&entries).ok()?)
+        ))
+    } else {
+        match std::fs::read(path) {
+            Ok(bytes) => Some(file_input_hash(&bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some("missing".into()),
+            Err(_) => None,
+        }
+    }
 }
 
 /// Resolves an `import a.b.c;` reference (passed here as the slash-joined path `a/b/c`) relative to
@@ -235,6 +299,7 @@ pub fn parse_file_recursive<'a>(
 
     let text = std::fs::read_to_string(&path)
         .map_err(|e| Error::new(e.kind(), format!("{}: {e}", path.display())))?;
+    acc.record_file_input(path, text.as_bytes());
     parse_source_recursive(path_str, text, acc, arena, diagnostics)
 }
 
@@ -334,12 +399,11 @@ pub fn parse_source_recursive<'a>(
         if local_candidate.extension().is_none() {
             local_candidate.set_extension("dream");
         }
-        acc.resolution_inputs.insert(local_candidate);
+        acc.observe_resolution_input(local_candidate);
         for ancestor in parent_dir.ancestors() {
-            acc.resolution_inputs
-                .insert(ancestor.join("dream_packages"));
-            acc.resolution_inputs.insert(ancestor.join("dream.toml"));
-            acc.resolution_inputs.insert(ancestor.join("dream.lock"));
+            acc.observe_resolution_input(ancestor.join("dream_packages"));
+            acc.observe_resolution_input(ancestor.join("dream.toml"));
+            acc.observe_resolution_input(ancestor.join("dream.lock"));
             if ancestor.join("dream.toml").is_file() {
                 break;
             }
@@ -349,7 +413,7 @@ pub fn parse_source_recursive<'a>(
             .as_deref()
             .and_then(find_dream_packages_dir);
         let import_path = resolve_import(parent_dir, module_name, packages_dir.as_deref());
-        acc.resolution_inputs.insert(import_path.clone());
+        acc.observe_resolution_input(import_path.clone());
 
         let import_path_str = match import_path.to_str() {
             Some(s) => s.to_string(),

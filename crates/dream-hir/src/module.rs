@@ -34,6 +34,8 @@ pub struct Hir {
     /// Host/extern functions the module imports. The backend emits one `(import ...)` per entry;
     /// call sites resolve to `$name` (which the import declares).
     pub imports: Vec<HImport>,
+    /// The core C pointer value has pointer ABI inside C records.
+    pub c_pointer: Option<TypeId>,
     /// Host symbol of the `@platform_main` extern, which the generated `main` calls on targets
     /// whose operating system owns the main thread.
     pub platform_main: Option<String>,

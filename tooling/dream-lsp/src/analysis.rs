@@ -7,6 +7,7 @@ use dream::diagnostics::{Diagnostic, DiagnosticBag, Severity};
 use dream::driver::source_loader::collect_declarations;
 use dream::syntax::lexer::Lexer;
 use dream::syntax::parser::Parser;
+use dream_abi::target::TargetSpec;
 use dream_sema::analyzer::Analyzer;
 use dream_stdlib::std_package_from_slash_path;
 
@@ -53,6 +54,14 @@ pub const INACTIVE_CODE: &str = "inactive-code";
 /// Runs the full front-end over `text` and returns the diagnostics that belong to the user's
 /// document (with byte spans converted to LSP ranges) plus the analyzer's IDE snapshot.
 pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome {
+    analyze_document_for_target(file_path, text, &TargetSpec::host())
+}
+
+pub fn analyze_document_for_target(
+    file_path: Option<&str>,
+    text: &str,
+    target: &TargetSpec,
+) -> AnalysisOutcome {
     let arena = Bump::new();
     let line_index = LineIndex::new(text);
     let mut sema: Option<dream_sema::analyzer::IdeSnapshot> = None;
@@ -60,13 +69,14 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     let mut diagnostics = DiagnosticBag::new(None);
 
     let mut acc = dream::driver::source_loader::ProgramAccumulator::default();
+    acc.cfg = target.cfg_symbols(false);
     let mut native_graph = None;
 
     // Parse the user's document. Parsing reports lexical/syntactic errors into `user_bag`.
     let mut user_bag = DiagnosticBag::new(Some(MAIN_FILE.to_string()));
     let user_ast = {
         let lexer = Lexer::new(text.to_string());
-        let mut parser = Parser::new(lexer, &arena, &mut user_bag);
+        let mut parser = Parser::new(lexer, &arena, &mut user_bag).with_cfg(acc.cfg);
         if let Some(path) = file_path {
             parser = parser.with_c_import_scope(dream::driver::c_imports::source_scope(
                 std::path::Path::new(path),
@@ -145,11 +155,9 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
                 }
             }
 
-            if let Ok(mut graph) = dream::driver::native_sets::NativeGraph::load(
-                path_str,
-                &acc,
-                &dream_abi::target::TargetSpec::host(),
-            ) {
+            if let Ok(mut graph) =
+                dream::driver::native_sets::NativeGraph::load(path_str, &acc, target)
+            {
                 graph
                     .aliases
                     .insert(MAIN_FILE.to_string(), path_str.to_string());
@@ -168,7 +176,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     );
 
     if let Some(path) = file_path {
-        let _ = dream::driver::c_imports::replay(&mut acc, &arena, &mut diagnostics, path);
+        let _ = dream::driver::c_imports::replay(&mut acc, &arena, &mut diagnostics, path, target);
     }
 
     let _ = dream::driver::prelude::merge_prelude(
@@ -217,13 +225,12 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     });
     if let Ok(attributes) = dream::driver::attributes::prepare(&arena, &mut acc, &mut diagnostics) {
         let config = std::sync::Arc::new(dream::driver::toolchain::ToolchainConfig::default());
-        let target = dream_abi::target::TargetSpec::host();
         let _ = dream::driver::generate::run_generators(
             &dream::driver::generate::GenerateRequest {
                 config: &config,
                 stage: dream::driver::generate::GeneratorStage::All,
                 entry_file: replay_entry.as_deref().unwrap_or(MAIN_FILE),
-                target: &target,
+                target,
                 replay_materialized: true,
             },
             &arena,
@@ -246,7 +253,6 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         // arena); a panic degrades to "syntax diagnostics only" with no snapshot.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             stacker::maybe_grow(64 * 1024, 16 * 1024 * 1024, || {
-                let target = dream_abi::target::TargetSpec::host();
                 let mut analyzer = Analyzer::new(&graph, &arena)
                     .with_aliased_imports(acc.aliased_imports.clone())
                     .with_target_layout(dream_hir::TargetLayout {

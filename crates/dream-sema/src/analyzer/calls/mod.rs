@@ -12,6 +12,7 @@ pub(crate) mod args;
 pub(crate) mod constructor;
 pub(crate) mod free_functions;
 pub(crate) mod member_calls;
+mod named_overload;
 pub(crate) mod overload_resolution;
 
 use super::*;

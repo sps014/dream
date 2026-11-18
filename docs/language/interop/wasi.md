@@ -65,7 +65,9 @@ async fun main(): void {
 }
 ```
 
-Enable HTTP with `-S http=y`. Sockets also need host network permission (`-S inherit-network=y` on Wasmtime), and you should still handle `Result.Err` when a connection fails or the host rejects the request.
+Enable HTTP with `-S http=y`. In Wasmtime, grant socket access with
+`-S inherit-network=y` and allow hostname lookup with `-S allow-ip-name-lookup=y`.
+Handle `Result.Err` when lookup or connection fails or the host rejects a request.
 
 Command components provide stdio, files, clocks, secure randomness, TCP, UDP, and HTTP. HTTP returns individual responses, and an explicit redirect limit reports an unsupported operation.
 

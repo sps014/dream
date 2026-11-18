@@ -124,7 +124,8 @@ impl Compiler {
                         &loaded.acc.file_contents,
                     ));
                 }
-                let emitted = self.emit_module(&mir, interner, live_imports, llvm.as_deref())?;
+                let emitted =
+                    self.emit_module(&mir, interner, live_imports, &loaded, llvm.as_deref())?;
                 Ok((emitted, mir.layouts))
             })
         }));
@@ -142,11 +143,12 @@ impl Compiler {
         };
         {
             let _phase = tracing::info_span!("compile_phase", phase = "artifacts").entered();
-            self.emit_artifacts(out_path, &loaded, emitted, layouts, llvm.as_deref())?;
+            self.emit_artifacts(out_path, &loaded, &emitted, layouts, llvm.as_deref())?;
         }
         self.publish_generated_artifacts(out_path, &loaded.acc)?;
-        Ok(BuildOutcome::Built(stamp.map(|stamp| {
-            stamp.with_warnings(&diagnostics, &loaded.acc.file_contents)
-        })))
+        Ok(BuildOutcome::Built {
+            stamp: stamp.map(|stamp| stamp.with_warnings(&diagnostics, &loaded.acc.file_contents)),
+            codegen_units: emitted.codegen_units,
+        })
     }
 }

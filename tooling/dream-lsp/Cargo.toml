@@ -30,4 +30,5 @@ stacker = "0.1"
 dashmap = "5.5"
 
 [dev-dependencies]
+blake3 = "1"
 tempfile = "3"

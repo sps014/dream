@@ -138,10 +138,10 @@ concept" rule. Each one gets `///` documentation, a reference page and assertion
 - [ ] **Per-module incremental analysis.** Reuse each module's declaration tables and its
   HIR/MIR across edits, keyed by `ModuleHashes::cache_key`
   (`crates/dream-sema/src/module_graph.rs`).
-- [ ] **Debug codegen units.** See [Codegen units](#codegen-units).
+- [x] **Native Debug executable codegen units.** See [Codegen units](#codegen-units).
 - [ ] **Release split after optimization.** See [Codegen units](#codegen-units).
 - [ ] **Parallel compiler phases.** Function passes run in parallel (see
-  [Compiler performance](#compiler-performance)). Debug LLVM emission is still one `llc`.
+  [Compiler performance](#compiler-performance)). Native Debug codegen units run in parallel.
 - [x] **Prelude cache.** Parsed prelude packages are reused for the process, keyed by package
   name, path and the embedded source identity.
 - [x] **Self-host benchmark.** `scripts/bench.py build --workload selfhost` compiles an 8,000
@@ -165,28 +165,18 @@ concept" rule. Each one gets `///` documentation, a reference page and assertion
 
 ## Codegen units
 
-Today the backend emits one `.ll` for the whole program
-(`src/execution/llvm/build.rs`):
+The backend emits a whole-program `.ll` for inspection. Native Debug executables
+with named modules also emit linkable units. Each named source module owns its
+functions and monomorphized bodies. A shared unit owns globals, runtime glue and
+functions from the unnamed module. The emitter gives cross-unit symbols hidden
+linkage and declares the referenced functions and data in each consuming unit.
 
-- **Debug:** the program module goes through `opt` (only with `-O`) and then a single `llc`,
-  and is linked with the cached runtime objects. Any edit recompiles the whole program with
-  `llc`.
-- **Release:** `llvm-link` merges the program with the runtime bitcode, then one whole-program
-  `opt` and one `llc` run, both single-threaded.
+The driver keys each object on its unit IR, target and exact `llc` binary.
+Unchanged objects are reused, changed units run `llc` in parallel, and the
+driver relinks in deterministic module order. Builds with debug symbols,
+sanitizers, or native library output currently use one program object. Semantic
+analysis and MIR optimization still cover the entire program.
 
-Splitting into several `.ll` files helps, but it should be done differently per profile.
-
-- [ ] **Debug: one codegen unit per Dream module.**
-  - The emitter writes one `.ll` per module.
-  - Cross-unit references become `declare`s with external linkage.
-  - Monomorphized instances, string constants and type metadata go to the unit that first
-    requests them in module order, emitted as `linkonce_odr` (in a COMDAT where the target
-    needs it), so the linker removes duplicates.
-  - Each unit's object is cached under the hash of its `.ll` text. An edit runs `llc` only for
-    the units whose text changed, in parallel, and relinks.
-  - This also gives per-module MIR caching an output to reuse.
-  - For a 160k-line compiler, a single `llc` at O0 takes several seconds per edit. With units,
-    the cost scales with the edited module.
 - [ ] **Release: keep one whole-program module through `opt`, then split it for code
   generation.**
   - Whole-program `opt` with internalization is what makes Release fast, so it stays.

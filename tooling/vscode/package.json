@@ -80,6 +80,11 @@
           "default": "native",
           "description": "Execution/runtime target for Run and compile commands."
         },
+        "dream.analysisTarget": {
+          "type": "string",
+          "default": "",
+          "description": "LLVM target triple for language-server analysis and cached C bindings. By default, follow Dream's runtime target."
+        },
         "dream.home": {
           "type": "string",
           "default": "",

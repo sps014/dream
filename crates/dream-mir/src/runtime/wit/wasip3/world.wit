@@ -2,4 +2,5 @@ package dream:wasip3;
 
 world transport {
     import wasi:http/client@0.3.0;
+    import wasi:sockets/ip-name-lookup@0.3.0;
 }

@@ -1584,6 +1584,7 @@ dependencies = [
 name = "dream-lsp"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "bumpalo",
  "dashmap",
  "dream",

@@ -498,6 +498,7 @@ mod tests {
             instances: vec![],
             layouts: LayoutTable::default(),
             imports: vec![],
+            c_pointer: None,
             platform_main: None,
             intrinsics: vec![],
             interfaces: InterfaceTable::default(),

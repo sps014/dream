@@ -218,6 +218,7 @@ pub fn restore<'a>(
             std::fs::write(&path, bytes).map_err(|e| io_error(&path, e))?;
         }
         written.push(path.clone());
+        acc.record_file_input(path.clone(), bytes);
         acc.resolution_inputs.insert(path.clone());
         if inputs
             .gens

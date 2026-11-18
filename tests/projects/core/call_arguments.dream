@@ -224,3 +224,81 @@ fun overload_resolution(): void {
     Assert.eq(b.describe(), "(3, 4)");
     Assert.eq(c.describe(), "(5, 5)");
 }
+
+fun named_layout(left: int, right: int): int {
+    return 0;
+}
+
+fun named_layout(right: string, left: int): int {
+    return left + right.length;
+}
+
+fun named_layout_reversed(right: string, left: int): int {
+    return left + right.length;
+}
+
+fun named_layout_reversed(left: int, right: int): int {
+    return 0;
+}
+
+fun named_default(left: int, offset: int = 1, right: int = 2): int {
+    return 0;
+}
+
+fun named_default(right: string, offset: int = 40, left: int = 1): int {
+    return left + offset + right.length;
+}
+
+fun named_ref(left: int, right: string): void {
+    System.println(right);
+}
+
+fun named_ref(right: string, ref left: int): void {
+    left = left + right.length;
+}
+
+class NamedOverload {
+    public value: int;
+
+    public constructor(left: int, right: int) {
+        this.value = 0;
+    }
+
+    public constructor(right: string, left: int) {
+        this.value = left + right.length;
+    }
+
+    public fun read(left: int, right: int): int {
+        return 0;
+    }
+
+    public fun read(right: string, left: int): int {
+        return this.value + left + right.length;
+    }
+
+    public static fun choose(left: int, right: int): int {
+        return 0;
+    }
+
+    public static fun choose(right: string, left: int): int {
+        return left + right.length;
+    }
+}
+
+@test
+fun named_overloads_bind_each_candidate(): void {
+    Assert.eq(named_layout(left: 40, right: "ab"), 42);
+    Assert.eq(named_layout_reversed(left: 40, right: "ab"), 42);
+    Assert.eq(named_default(left: 1, right: "a"), 42);
+    Assert.eq(c29b_h(x: 39, 3), 42);
+    Assert.eq(c29b_h(x: 42), 42);
+
+    let value = 40;
+    named_ref(left: ref value, right: "ab");
+    Assert.eq(value, 42);
+
+    let instance = NamedOverload(left: 40, right: "ab");
+    Assert.eq(instance.value, 42);
+    Assert.eq(instance.read(left: 1, right: "a"), 44);
+    Assert.eq(NamedOverload.choose(left: 40, right: "ab"), 42);
+}

@@ -798,8 +798,11 @@ fn main() -> ExitCode {
         run_after_compile,
         run_dir: run_dir.as_deref(),
     };
-    let stamp = match outcome {
-        BuildOutcome::Built(stamp) => stamp,
+    let (stamp, codegen_units) = match outcome {
+        BuildOutcome::Built {
+            stamp,
+            codegen_units,
+        } => (stamp, codegen_units),
         BuildOutcome::Cached(artifacts) => {
             ui.finish(start.elapsed().as_secs_f64(), "cached", &artifacts);
             let linked = native && !cli.object && !cli.emit_llvm && !output_kind.is_library();
@@ -898,6 +901,7 @@ fn main() -> ExitCode {
             &config,
             raw_ll,
             dream::execution::llvm::NativeBuildOptions {
+                codegen_units: &codegen_units,
                 target: target.spec().clone(),
                 opt_ll: cli.emit_opt_ir.then_some(opt_ll.as_path()),
                 opt_remarks: remarks.as_deref(),

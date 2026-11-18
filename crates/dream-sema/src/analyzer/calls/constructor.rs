@@ -21,16 +21,19 @@ impl<'a> Analyzer<'a> {
     pub(crate) fn analyze_constructor_call(
         &mut self,
         name: &SyntaxToken,
-        generic_args: &Option<Vec<Type>>,
+        (generic_args, named_signature): (
+            &Option<Vec<Type>>,
+            Option<crate::function_table::FunctionTableInfo>,
+        ),
         params_types: &mut Vec<dream_types::TypeId>,
         arg_hirs: &mut Vec<Option<dream_hir::HExpr>>,
         parent_function: &FunctionNode<'a>,
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(Type, Option<crate::function_table::FunctionIdentity>), SemanticError> {
-        let pinned = self.core_ctor.filter(|identity| {
-            dream_abi::core_items::short_name(identity) == name.text
-        });
+        let pinned = self
+            .core_ctor
+            .filter(|identity| dream_abi::core_items::short_name(identity) == name.text);
         let lookup: &str = pinned.unwrap_or(name.text.as_str());
         let inferred_args = generic_args.clone().or_else(|| {
             let def = self.type_ctx.resolve(DefKind::Struct, lookup)?;
@@ -118,7 +121,9 @@ impl<'a> Analyzer<'a> {
         // overloaded free function/method: the implicit `this` (the struct itself) plus the given
         // argument types are matched against every registered overload's full parameter list.
         let resolved_ctor: Option<crate::function_table::FunctionTableInfo> =
-            if self.method_overloaded(owner, ctor_member) {
+            if named_signature.is_some() {
+                named_signature
+            } else if self.method_overloaded(owner, ctor_member) {
                 let mut selection_args = Vec::with_capacity(params_types.len() + 1);
                 selection_args.push(owner);
                 selection_args.extend(params_types.iter().cloned());

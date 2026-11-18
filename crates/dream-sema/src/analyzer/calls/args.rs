@@ -11,7 +11,30 @@ use dream_text::text_span::TextSpan;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-type CallArgAnalysis = (Vec<dream_types::TypeId>, Vec<Option<HExpr>>, Vec<bool>);
+pub(super) type CallArgAnalysis = (Vec<dream_types::TypeId>, Vec<Option<HExpr>>, Vec<bool>);
+
+pub(super) enum NamedSlot {
+    Source(usize),
+    Default(Type),
+    Variadic(Vec<usize>),
+}
+
+impl NamedSlot {
+    pub(super) fn expression<'a>(&self, raw: &[ExpressionNode<'a>]) -> ExpressionNode<'a> {
+        let value = |index: usize| match &raw[index] {
+            ExpressionNode::NamedArg(_, value) => (**value).clone(),
+            value => value.clone(),
+        };
+        match self {
+            Self::Source(index) => value(*index),
+            Self::Default(value) => ExpressionNode::Literal(value.clone()),
+            Self::Variadic(indices) => ExpressionNode::ArrayLiteral(
+                synthetic_token(TokenKind::OpenBracketToken, "["),
+                indices.iter().copied().map(value).collect(),
+            ),
+        }
+    }
+}
 
 impl<'a> Analyzer<'a> {
     /// Reorders a call's raw AST arguments into pure positional order when the source used named
@@ -46,7 +69,7 @@ impl<'a> Analyzer<'a> {
             call_position,
             is_variadic,
         ) {
-            Ok(args) => Ok(args),
+            Ok(slots) => Ok(slots.iter().map(|slot| slot.expression(raw_args)).collect()),
             Err((message, span)) => Err(report(diagnostics, message, span)),
         }
     }
@@ -57,18 +80,18 @@ impl<'a> Analyzer<'a> {
     /// Dry-run counterpart of [`Self::normalize_named_arguments`]: returns the normalized argument
     /// list or `(message, span)` without touching diagnostics — used to filter overload candidates
     /// by named-argument binding before committing to one signature.
-    pub(crate) fn try_normalize_named_arguments(
+    pub(super) fn try_normalize_named_arguments(
         param_names: &[String],
         defaults: &[Option<Type>],
         raw_args: &[ExpressionNode<'a>],
         call_position: TextSpan,
         is_variadic: bool,
-    ) -> Result<Vec<ExpressionNode<'a>>, (String, Option<TextSpan>)> {
+    ) -> Result<Vec<NamedSlot>, (String, Option<TextSpan>)> {
         if !raw_args
             .iter()
             .any(|a| matches!(a, ExpressionNode::NamedArg(..)))
         {
-            return Ok(raw_args.to_vec());
+            return Ok((0..raw_args.len()).map(NamedSlot::Source).collect());
         }
         let fixed_len = if is_variadic {
             param_names.len().saturating_sub(1)
@@ -76,13 +99,13 @@ impl<'a> Analyzer<'a> {
             param_names.len()
         };
         let nameable = &param_names[..fixed_len];
-        let mut slots: Vec<Option<ExpressionNode<'a>>> = vec![None; fixed_len];
-        let mut variadic_tail: Vec<ExpressionNode<'a>> = Vec::new();
+        let mut slots: Vec<Option<NamedSlot>> = (0..fixed_len).map(|_| None).collect();
+        let mut variadic_tail = Vec::new();
         let mut seen_named = false;
         let mut next_positional = 0usize;
-        for arg in raw_args.iter() {
+        for (index, arg) in raw_args.iter().enumerate() {
             match arg {
-                ExpressionNode::NamedArg(name_tok, value) => {
+                ExpressionNode::NamedArg(name_tok, _) => {
                     if is_variadic && param_names.last().is_some_and(|n| n == &name_tok.text) {
                         return Err((
                             format!(
@@ -105,12 +128,12 @@ impl<'a> Analyzer<'a> {
                             Some(name_tok.position),
                         ));
                     }
-                    slots[idx] = Some((**value).clone());
+                    slots[idx] = Some(NamedSlot::Source(index));
                 }
                 other => {
                     if seen_named {
                         if is_variadic {
-                            variadic_tail.push(other.clone());
+                            variadic_tail.push(index);
                             continue;
                         }
                         return Err((
@@ -131,15 +154,15 @@ impl<'a> Analyzer<'a> {
                                 other.position().or(Some(call_position)),
                             ));
                         }
-                        slots[next_positional] = Some(other.clone());
+                        slots[next_positional] = Some(NamedSlot::Source(index));
                         next_positional += 1;
                     } else if is_variadic {
-                        variadic_tail.push(other.clone());
+                        variadic_tail.push(index);
                     } else {
                         // Extra positional — leave for arity checking later by preserving as-is
                         // beyond fixed slots (non-variadic normalize historically sized slots to
                         // max(param_names, raw_args); keep trailing extras for the arity diagnostic).
-                        slots.push(Some(other.clone()));
+                        slots.push(Some(NamedSlot::Source(index)));
                     }
                 }
             }
@@ -148,7 +171,7 @@ impl<'a> Analyzer<'a> {
             for (i, slot) in slots.iter_mut().enumerate() {
                 if slot.is_none() {
                     match defaults.get(i).and_then(|d| d.clone()) {
-                        Some(default_lit) => *slot = Some(ExpressionNode::Literal(default_lit)),
+                        Some(default_lit) => *slot = Some(NamedSlot::Default(default_lit)),
                         None => {
                             let pname = nameable
                                 .get(i)
@@ -162,14 +185,10 @@ impl<'a> Analyzer<'a> {
                     }
                 }
             }
-            let Some(mut result): Option<Vec<ExpressionNode<'a>>> = slots.into_iter().collect()
-            else {
+            let Some(mut result): Option<Vec<NamedSlot>> = slots.into_iter().collect() else {
                 crate::internal_error!("validated variadic arguments still contain an empty slot");
             };
-            result.push(ExpressionNode::ArrayLiteral(
-                synthetic_token(TokenKind::OpenBracketToken, "["),
-                variadic_tail,
-            ));
+            result.push(NamedSlot::Variadic(variadic_tail));
             return Ok(result);
         }
 
@@ -179,7 +198,7 @@ impl<'a> Analyzer<'a> {
         for (i, slot) in slots.iter_mut().enumerate() {
             if slot.is_none() {
                 match defaults.get(i).and_then(|d| d.clone()) {
-                    Some(default_lit) => *slot = Some(ExpressionNode::Literal(default_lit)),
+                    Some(default_lit) => *slot = Some(NamedSlot::Default(default_lit)),
                     None => {
                         let pname = param_names
                             .get(i)
@@ -233,101 +252,6 @@ impl<'a> Analyzer<'a> {
         arg_hirs.push(self.hir_take());
         params_types.push(array_ty_id);
         arg_is_ref.push(false);
-    }
-
-    /// Tries each overload's parameter names for a named-argument call and returns one shared
-    /// normalized argument list when every successful candidate agrees. `user_param_offset` skips
-    /// the implicit `this` for methods/constructors (`1`) or nothing for free functions (`0`).
-    /// Tries each overload's parameter names for a named-argument call and returns one shared
-    /// normalized argument list when every successful candidate agrees. `user_param_offset` skips
-    /// the implicit `this` for methods/constructors (`1`) or nothing for free functions (`0`).
-    pub(crate) fn normalize_named_for_overloads(
-        &self,
-        base: &str,
-        raw_args: &[ExpressionNode<'a>],
-        call_position: TextSpan,
-        user_param_offset: usize,
-        diagnostics: &mut DiagnosticBag,
-    ) -> Result<Vec<ExpressionNode<'a>>, SemanticError> {
-        let keys = self.function_candidates(base);
-        self.normalize_named_for_candidates(
-            base,
-            keys,
-            raw_args,
-            call_position,
-            user_param_offset,
-            diagnostics,
-        )
-    }
-
-    pub(crate) fn normalize_named_for_candidates(
-        &self,
-        base: &str,
-        keys: Vec<crate::function_table::FunctionIdentity>,
-        raw_args: &[ExpressionNode<'a>],
-        call_position: TextSpan,
-        user_param_offset: usize,
-        diagnostics: &mut DiagnosticBag,
-    ) -> Result<Vec<ExpressionNode<'a>>, SemanticError> {
-        if keys.is_empty() {
-            return Err(report(
-                diagnostics,
-                format!("named arguments are not supported for '{}'", base),
-                Some(call_position),
-            ));
-        }
-        let mut successes: Vec<Vec<ExpressionNode<'a>>> = Vec::new();
-        let mut last_err: Option<(String, Option<TextSpan>)> = None;
-        for key in &keys {
-            let Ok(info) = self.function_table.get_function(key) else {
-                continue;
-            };
-            let param_names: Vec<String> = info
-                .param_names
-                .iter()
-                .skip(user_param_offset)
-                .cloned()
-                .collect();
-            let defaults: Vec<Option<Type>> = info
-                .defaults
-                .iter()
-                .skip(user_param_offset)
-                .cloned()
-                .collect();
-            match Self::try_normalize_named_arguments(
-                &param_names,
-                &defaults,
-                raw_args,
-                call_position,
-                info.is_variadic,
-            ) {
-                Ok(norm) => successes.push(norm),
-                Err(e) => last_err = Some(e),
-            }
-        }
-        if successes.is_empty() {
-            let (message, span) = last_err.unwrap_or_else(|| {
-                (
-                    format!("no overload of '{}' accepts these named arguments", base),
-                    Some(call_position),
-                )
-            });
-            return Err(report(diagnostics, message, span));
-        }
-        let first = successes[0].clone();
-        for other in successes.iter().skip(1) {
-            if other.len() != first.len() {
-                return Err(report(
-                    diagnostics,
-                    format!(
-                        "Ambiguous named-argument call to '{}': overloads disagree on argument layout",
-                        base
-                    ),
-                    Some(call_position),
-                ));
-            }
-        }
-        Ok(first)
     }
 
     /// Resolves a `ref` call argument's inner place (`f(ref x)` / `f(ref obj.field)` /
@@ -592,8 +516,10 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
             arg_is_ref.push(false);
-            let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
+            let analyzed =
+                self.analyze_expression(param, parent_function, symbol_table, diagnostics);
             self.current_expected_type = saved_expected;
+            let t = analyzed?;
             arg_hirs.push(self.hir_take());
             arg_types.push(self.type_ctx.lower(&t));
         }

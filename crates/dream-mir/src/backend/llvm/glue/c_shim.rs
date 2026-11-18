@@ -81,6 +81,7 @@ fn c_struct(l: &Lcx<'_>, shim: &mut CShim, ty: TypeId) -> usize {
         .into_iter()
         .map(|(offset, fty)| {
             let field = match l.interner.kind(fty) {
+                _ if l.mir.c_pointer == Some(fty) => Some(CField::Ptr),
                 TyKind::Prim(p) => CScalar::of_prim(*p).map(CField::Scalar),
                 TyKind::Struct(..) if l.interner.is_value_type(fty) => {
                     Some(CField::Struct(c_struct(l, shim, fty)))

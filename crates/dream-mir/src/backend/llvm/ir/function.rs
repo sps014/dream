@@ -351,6 +351,19 @@ impl FunctionWriter {
 
     // ---- output -------------------------------------------------------------------------------
 
+    pub(super) fn declaration(&self) -> super::module::Decl {
+        super::module::Decl {
+            fty: super::ty::FnTy::new(
+                self.ret.clone(),
+                self.params.iter().map(|(ty, _)| ty.clone()).collect(),
+            ),
+            ret_attrs: self.ret_attrs.clone(),
+            param_attrs: self.params.iter().map(|(_, attrs)| attrs.clone()).collect(),
+            attrs: Vec::new(),
+            cc: self.cc,
+        }
+    }
+
     pub fn write(&self, out: &mut String) {
         let params = self
             .params

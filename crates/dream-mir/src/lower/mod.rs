@@ -193,6 +193,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         interfaces: hir.interfaces.clone(),
         enums: hir.enums.clone(),
         type_names: hir.type_names.clone(),
+        c_pointer: hir.c_pointer,
         type_symbols: hir.type_symbols.clone(),
         object_methods: hir.object_methods.clone(),
         frame_objects: Default::default(),

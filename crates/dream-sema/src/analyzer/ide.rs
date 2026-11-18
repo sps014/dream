@@ -169,6 +169,7 @@ pub struct GlobalOut {
 #[derive(Debug, Clone, Default)]
 pub struct IdeSnapshot {
     pub primary_file: Option<String>,
+    pub c_namespaces: IndexMap<String, String>,
     pub refs: Vec<IdeRef>,
     pub functions: HashMap<FunctionIdentity, FnSigOut>,
     pub methods: IndexMap<dream_types::TypeId, Vec<MemberInfo>>,
@@ -558,6 +559,7 @@ impl<'a> Analyzer<'a> {
             .collect();
         IdeSnapshot {
             primary_file: None,
+            c_namespaces: IndexMap::new(),
             refs,
             functions,
             methods,

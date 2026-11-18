@@ -1,0 +1,9 @@
+@export
+fun add(a: int, b: int): int {
+    return a + b;
+}
+
+@export
+fun greeting(): string {
+    return "Dream";
+}

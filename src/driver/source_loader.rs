@@ -27,6 +27,7 @@ mod graph;
 /// correctly.
 #[derive(Default)]
 pub struct ProgramAccumulator<'a> {
+    pub has_c_imports: bool,
     pub js_modules: Vec<crate::driver::js_imports::JsModule>,
     pub js_bundles: indexmap::IndexMap<String, String>,
     pub js_project_root: Option<std::path::PathBuf>,
@@ -264,7 +265,9 @@ pub fn parse_source_recursive<'a>(
     let mut file_diagnostics = DiagnosticBag::new(Some(path_str.clone()));
 
     let lexer = Lexer::new(text);
-    let mut parser = Parser::new(lexer, arena, &mut file_diagnostics).with_cfg(acc.cfg);
+    let mut parser = Parser::new(lexer, arena, &mut file_diagnostics)
+        .with_cfg(acc.cfg)
+        .with_c_import_scope(super::c_imports::source_scope(&path));
 
     let ast = match parser.parse() {
         Ok(ast) => ast,
@@ -288,6 +291,9 @@ pub fn parse_source_recursive<'a>(
     }
 
     for import in &program.imports {
+        if import.c.is_some() {
+            continue;
+        }
         if import.is_js {
             acc.requested_std_packages.insert("system.js".into());
             continue;

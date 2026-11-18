@@ -162,6 +162,7 @@ impl Printer {
                 kind,
                 TokenKind::ImportToken
                     | TokenKind::JsImportToken
+                    | TokenKind::CImportToken
                     | TokenKind::LetToken
                     | TokenKind::ConstToken
             )

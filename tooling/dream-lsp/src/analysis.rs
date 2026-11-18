@@ -67,6 +67,11 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
     let user_ast = {
         let lexer = Lexer::new(text.to_string());
         let mut parser = Parser::new(lexer, &arena, &mut user_bag);
+        if let Some(path) = file_path {
+            parser = parser.with_c_import_scope(dream::driver::c_imports::source_scope(
+                std::path::Path::new(path),
+            ));
+        }
         parser.parse()
     };
     diagnostics.extend(&user_bag);
@@ -95,7 +100,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         );
 
         for import in &program.imports {
-            if import.is_js || import.alias.is_some() {
+            if import.is_js || import.c.is_some() || import.alias.is_some() {
                 continue;
             }
             let module_name = import.module_name.text.as_str();
@@ -112,7 +117,7 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
             acc.visited.insert(MAIN_FILE.to_string());
 
             for import in &program.imports {
-                if import.is_js || import.alias.is_some() {
+                if import.is_js || import.c.is_some() || import.alias.is_some() {
                     continue;
                 }
                 let module_name = import.module_name.text.as_str();
@@ -161,6 +166,10 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         false,
         &mut diagnostics,
     );
+
+    if let Some(path) = file_path {
+        let _ = dream::driver::c_imports::replay(&mut acc, &arena, &mut diagnostics, path);
+    }
 
     let _ = dream::driver::prelude::merge_prelude(
         &arena,
@@ -251,6 +260,16 @@ pub fn analyze_document(file_path: Option<&str>, text: &str) -> AnalysisOutcome 
         }));
         match result {
             Ok(mut snapshot) => {
+                if let Some(program) = acc.parsed_files.get(MAIN_FILE) {
+                    snapshot
+                        .c_namespaces
+                        .extend(program.imports.iter().filter_map(|import| {
+                            Some((
+                                import.alias.as_ref()?.text.clone(),
+                                import.c.as_ref()?.prefix.clone(),
+                            ))
+                        }));
+                }
                 snapshot.refs.retain(|reference| {
                     reference
                         .file

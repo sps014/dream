@@ -83,6 +83,24 @@ impl Compiler {
         let native_graph =
             crate::driver::native_sets::NativeGraph::load(main_file_path, &acc, self.target.spec())
                 .map_err(CompileError::Manifest)?;
+        #[cfg(feature = "native")]
+        if !diagnostics.has_errors() {
+            crate::driver::c_imports::prepare(
+                &mut acc,
+                arena,
+                diagnostics,
+                main_file_path,
+                self.target.spec(),
+                crate::driver::c_imports::Build {
+                    config: &self.toolchain_config,
+                    native: &native_graph,
+                    optimize: self.native_opt(),
+                    debug: self.profile.is_debug(),
+                },
+            )?;
+        }
+        #[cfg(not(feature = "native"))]
+        crate::driver::c_imports::replay(&mut acc, arena, diagnostics, main_file_path)?;
         drop(source_phase);
         // Opt-in stdlib packages (`import system.io;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`).

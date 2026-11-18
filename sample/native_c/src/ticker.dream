@@ -2,14 +2,12 @@
 // `native/` sources and uses the Dream name as the C symbol.
 module ticker;
 import system.interop;
-
 import system;
+cimport "ticker.h" as native_ticker;
 
 @c
-extern fun ticker_new(name: string): CPtr;
-
-@c
-extern fun ticker_free(t: CPtr): void;
+@owned("ticker_free")
+extern fun ticker_new(name: string): OwnedCPtr;
 
 @c
 extern fun ticker_name(t: CPtr): string;
@@ -18,16 +16,13 @@ extern fun ticker_name(t: CPtr): string;
 extern fun ticker_on_tick(t: CPtr, cb: NativeCallback<fun(int): int>): void;
 
 @c
-extern fun ticker_run(t: CPtr, ticks: int): int;
-
-@c
 extern fun ticker_label(t: CPtr, tick: int): Option<string>;
 
 @c
 extern fun checksum(data: byte[], len: usize): int;
 
 public class Ticker {
-    handle: CPtr;
+    handle: OwnedCPtr;
 
     // C holds the callback between calls, so the Ticker keeps it alive.
     listener: Option<NativeCallback<fun(int): int>>;
@@ -38,25 +33,31 @@ public class Ticker {
     }
 
     public fun name(): string {
-        return ticker_name(this.handle);
+        return ticker_name(this.handle.get());
     }
 
     public fun on_tick(f: fun(int): int): void {
+        this.clear_listener();
         let cb = NativeCallback<fun(int): int>(f);
-        ticker_on_tick(this.handle, cb);
+        ticker_on_tick(this.handle.get(), cb);
         this.listener = Option.Some(cb);
     }
 
+    public fun clear_listener(): void {
+        native_ticker.ticker_clear_callback(this.handle.get());
+        this.listener = Option.None;
+    }
+
     public fun run(ticks: int): int {
-        return ticker_run(this.handle, ticks);
+        return native_ticker.ticker_run(this.handle.get(), ticks);
     }
 
     public fun label(tick: int): Option<string> {
-        return ticker_label(this.handle, tick);
+        return ticker_label(this.handle.get(), tick);
     }
 
     del() {
-        ticker_free(this.handle);
+        this.clear_listener();
     }
 }
 

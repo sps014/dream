@@ -243,6 +243,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             nesting_reported: self.nesting_reported,
             cfg: self.cfg,
             inactive_spans: Vec::new(),
+            c_import_scope: self.c_import_scope.clone(),
+            c_import_names: self.c_import_names.clone(),
+            c_import_uses: Default::default(),
         };
         let expr = sub.parse_expression(0)?;
         if sub.current_token().kind != EndOfFileToken {
@@ -256,6 +259,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             );
         }
         self.nesting_reported = sub.nesting_reported;
+        for (alias, uses) in sub.c_import_uses {
+            self.c_import_uses.entry(alias).or_default().extend(uses);
+        }
         self.node_spans.extend(std::mem::take(&mut sub.node_spans));
         Ok(expr)
     }

@@ -79,6 +79,8 @@ public class Ticker {
 }
 ```
 
+When unregistering a callback, ask C to stop calling it before clearing the Dream field that owns it. If C can call concurrently, wait for any active calls to return before releasing the field.
+
 The callback's lifetime is ordinary ARC. Keep the `NativeCallback` in a field for as long as C may
 call it. Pass a temporary when C only calls it during the call (`qsort_r`, `sqlite3_exec`).
 

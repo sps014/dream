@@ -39,6 +39,7 @@ pub struct ImportNode {
     pub alias: Option<SyntaxToken>,
     /// JavaScript module specifiers are opaque strings, not Dream module paths.
     pub is_js: bool,
+    pub c: Option<CImport>,
 }
 
 impl ImportNode {
@@ -48,6 +49,7 @@ impl ImportNode {
             module_name,
             alias: None,
             is_js: false,
+            c: None,
         }
     }
 
@@ -57,8 +59,16 @@ impl ImportNode {
             module_name,
             alias: Some(alias),
             is_js: false,
+            c: None,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct CImport {
+    pub library: Option<SyntaxToken>,
+    pub prefix: String,
+    pub uses: Vec<SyntaxToken>,
 }
 
 /// A file-scoped `module a.b.c;` declaration: names the current file's own module, independent of

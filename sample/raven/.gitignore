@@ -1,0 +1,5 @@
+/dream.lock
+/native/*.dll
+/native/*.dylib
+/native/*.lib
+/native/*.so*

@@ -1,0 +1,91 @@
+module sqlite;
+
+import system;
+import system.interop;
+cimport "sqlite3.h" from "sqlite3" as sqlite_raw;
+
+@c("sqlite3")
+extern fun sqlite3_open(path: string, ref db: CPtr): int;
+
+@c("sqlite3")
+extern fun sqlite3_exec(
+    db: CPtr,
+    sql: string,
+    callback: Option<NativeCallback<fun(int, CPtr, CPtr): int>>,
+    ref errmsg: CPtr
+): int;
+
+fun print_row(argc: int, argv: CPtr, _columns: CPtr): int {
+    let line = "";
+    for (let i = 0; i < argc; i = i + 1) {
+        if i > 0 {
+            line = line + "|";
+        }
+        line = line + Ffi.read_cstring(Ffi.read_ptr(argv, i)).unwrap_or("NULL");
+    }
+    System.println(line);
+    return 0;
+}
+
+public class Database {
+    handle: CPtr;
+
+    constructor(handle: CPtr) {
+        this.handle = handle;
+    }
+
+    public static fun open(path: string): Option<Database> {
+        let handle = CPtr.null();
+        let status = sqlite3_open(path, ref handle);
+        if status != 0 {
+            if !handle.is_null() {
+                let close_status = sqlite_raw.sqlite3_close(handle);
+                if close_status != 0 {
+                    System.println("SQLite cleanup failed with status " + close_status);
+                }
+            }
+            System.println("SQLite open failed with status " + status);
+            return Option.None;
+        }
+        return Option.Some(Database(handle));
+    }
+
+    fun execute(sql: string, callback: Option<NativeCallback<fun(int, CPtr, CPtr): int>>): bool {
+        if this.handle.is_null() {
+            return false;
+        }
+        let error = CPtr.null();
+        let status = sqlite3_exec(this.handle, sql, callback, ref error);
+        if !error.is_null() {
+            let message = Ffi.read_cstring(error).unwrap_or("unknown error");
+            sqlite_raw.sqlite3_free(error);
+            System.println("SQLite: " + message);
+        }
+        return status == 0;
+    }
+
+    public fun exec(sql: string): bool {
+        return this.execute(sql, Option.None);
+    }
+
+    public fun query(sql: string): bool {
+        return this.execute(sql, Option.Some(NativeCallback<fun(int, CPtr, CPtr): int>(print_row)));
+    }
+
+    public fun close(): bool {
+        if this.handle.is_null() {
+            return true;
+        }
+        let status = sqlite_raw.sqlite3_close(this.handle);
+        if status != 0 {
+            System.println("SQLite close failed with status " + status);
+            return false;
+        }
+        this.handle = CPtr.null();
+        return true;
+    }
+
+    del() {
+        this.close();
+    }
+}

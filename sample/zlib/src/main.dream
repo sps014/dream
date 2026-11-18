@@ -1,0 +1,61 @@
+import system;
+import system.interop;
+cimport "zlib.h" from "z" as zlib;
+
+@unsafe
+fun round_trip(text: string): int {
+    let input = Encoding.utf8_encode(text);
+    let input_size = (ulong)input.length;
+    let capacity = zlib.compressBound(input_size);
+    let data = RawPtr<byte>.alloc((usize)input_size);
+    let compressed = RawPtr<byte>.alloc((usize)capacity);
+    let size = RawPtr<ulong>.alloc(1);
+    for (let i = 0; i < input.length; i = i + 1) {
+        data[i] = input[i];
+    }
+
+    let data_ptr = CPtr(data.address());
+    let compressed_ptr = CPtr(compressed.address());
+    let size_ptr = CPtr(size.address());
+    size.write(capacity);
+    let status = zlib.compress2(
+        compressed_ptr,
+        size_ptr,
+        data_ptr,
+        input_size,
+        zlib.Z_DEFAULT_COMPRESSION
+    );
+    if status == zlib.Z_OK {
+        let compressed_size = size.read();
+        size.write(input_size);
+        status = zlib.uncompress(data_ptr, size_ptr, compressed_ptr, compressed_size);
+        if status == zlib.Z_OK {
+            let restored = Ffi.read_bytes(data_ptr, (isize)size.read());
+            if Encoding.utf8_decode(restored) == text {
+                System.println(
+                    "Compressed " + input_size + " bytes to " + compressed_size + " bytes"
+                );
+                System.println("Round trip verified");
+            } else {
+                status = zlib.Z_DATA_ERROR;
+            }
+        }
+    }
+
+    size.free();
+    compressed.free();
+    data.free();
+    return status;
+}
+
+@unsafe
+fun main(): int {
+    let line = "Dream uses zlib to compress bytes.\n";
+    let text = line + line + line + line;
+    let status = round_trip(text);
+    if status != zlib.Z_OK {
+        System.println("zlib round trip failed with status " + status);
+        return 1;
+    }
+    return 0;
+}

@@ -39,7 +39,7 @@ class DreamLexer(RegexLexer):
         "let", "const", "class", "struct", "interface", "enum", "type", "extend", "fun",
         "constructor", "del",
     )
-    _modifiers = ("static", "public", "extern", "import", "override", "sealed", "unmanaged")
+    _modifiers = ("static", "public", "extern", "import", "cimport", "override", "sealed", "unmanaged")
     _builtin_types = (
         "int", "float", "double", "string", "bool", "char", "void", "object",
     )

@@ -48,6 +48,9 @@ pub const SORTED_MAP: &str = "system.collections::SortedMap";
 
 pub const VECTOR: &str = "system.simd::Vector";
 
+/// The core package that declares the native interop attributes.
+pub const C_INTEROP_PACKAGE: &str = "system.interop";
+
 pub const C_PTR: &str = "system::CPtr";
 pub const OWNED_C_PTR: &str = "system::OwnedCPtr";
 pub const NATIVE_CALLBACK: &str = "system::NativeCallback";

@@ -58,6 +58,8 @@ pub fn prepare_project_dir(cwd: &Path, name: Option<&str>, dir: Option<&Path>) -
 pub enum Scaffold {
     /// A runnable program (`type = "bin"`, `src/main.dream`).
     Bin,
+    /// A runnable program that imports a bundled C header.
+    Ffi,
     /// A GPU canvas program with application identity and platform minimums.
     Canvas,
     /// A library (`type = "lib"`, `src/<name>.dream`) built as this native library kind.
@@ -132,6 +134,8 @@ pub fn run(
             )
         } else if scaffold == Scaffold::Canvas {
             include_str!("templates/canvas.dream").to_string()
+        } else if scaffold == Scaffold::Ffi {
+            include_str!("templates/ffi.dream").to_string()
         } else {
             HELLO_MAIN.to_string()
         };
@@ -163,6 +167,22 @@ pub fn run(
     manifest.save(&manifest_path)?;
 
     write_gitignore(dir)?;
+
+    if scaffold == Scaffold::Ffi {
+        let native = dir.join("native");
+        std::fs::create_dir_all(native.join("include"))?;
+        for (path, source) in [
+            (
+                native.join("include/add.h"),
+                include_str!("templates/ffi.h"),
+            ),
+            (native.join("add.c"), include_str!("templates/ffi.c")),
+        ] {
+            if !path.exists() {
+                std::fs::write(&path, source)?;
+            }
+        }
+    }
 
     if targets.contains(&RunTarget::Web) {
         write_index_html(dir)?;

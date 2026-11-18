@@ -1,4 +1,4 @@
-//! Persisted typed bodies of non-generic functions and methods in named source modules.
+//! Persisted typed bodies of non-generic functions and methods.
 //!
 //! A body is stored only when it reported nothing and every program-wide change its analysis
 //! made is accounted for by the [`journal`]: the types it interned and the generic types and

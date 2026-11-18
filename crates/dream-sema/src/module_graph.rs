@@ -189,10 +189,33 @@ impl<'a> ModuleGraph<'a> {
             .iter()
             .map(|module| hash::module_hashes(module, &self.files))
             .collect();
+        let library: Vec<bool> = self
+            .modules
+            .iter()
+            .map(|module| {
+                module
+                    .files
+                    .iter()
+                    .all(|&index| dream_stdlib::is_std_source(&self.files[index].path))
+            })
+            .collect();
+        let names: Vec<_> = self
+            .modules
+            .iter()
+            .map(|module| hash::module_names(module, &self.files))
+            .collect();
         self.modules
             .iter()
             .zip(&own)
             .map(|(module, &(content, interface))| {
+                let observed = |id: ModuleId| {
+                    let index = id.0 as usize;
+                    if library[module.id.0 as usize] && !library[index] {
+                        names[index]
+                    } else {
+                        own[index].1
+                    }
+                };
                 let mut seen = IndexSet::new();
                 seen.insert(module.id);
                 let mut pending = module.imports.clone();
@@ -202,7 +225,7 @@ impl<'a> ModuleGraph<'a> {
                         continue;
                     }
                     let dependency = &self.modules[id.0 as usize];
-                    dependency_interfaces.push((dependency.path.clone(), own[id.0 as usize].1));
+                    dependency_interfaces.push((dependency.path.clone(), observed(id)));
                     pending.extend(dependency.imports.iter().copied());
                 }
                 dependency_interfaces.sort_by(|a, b| a.0.cmp(&b.0));

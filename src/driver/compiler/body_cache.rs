@@ -9,7 +9,8 @@ use std::path::PathBuf;
 
 pub(super) struct BodyCache {
     directory: PathBuf,
-    modules: Vec<(ModuleId, PathBuf)>,
+    /// Each module's cache file and how many typed bodies it held when loaded.
+    modules: Vec<(ModuleId, PathBuf, usize)>,
 }
 
 impl BodyCache {
@@ -25,7 +26,7 @@ impl BodyCache {
             &config.tool_identity_cache_root(),
         )?;
         let mut partition = blake3::Hasher::new();
-        partition.update(b"dream-body-checks-v3");
+        partition.update(b"dream-body-checks-v4");
         partition.update(compiler.as_bytes());
         partition.update(loaded.acc.cfg.key().as_bytes());
         partition.update(format!("{analysis_options:?}").as_bytes());
@@ -34,32 +35,28 @@ impl BodyCache {
             .modules
             .iter()
             .zip(hashes)
-            .filter(|(module, _)| {
-                !module.path.is_empty()
-                    && module.files.iter().any(|&index| {
-                        let file = &loaded.graph.files[index];
-                        !file.path.starts_with('<')
-                            && file.program.functions.iter().any(|function| {
-                                !function.is_extern && function.generic_parameters.is_none()
-                            })
-                    })
-            })
+            .filter(|(module, _)| !module.files.is_empty())
             .map(|(module, hashes)| {
                 let mut key = partition.clone();
                 key.update(&hashes.cache_key());
-                (module.id, directory.join(key.finalize().to_hex().as_str()))
+                (
+                    module.id,
+                    directory.join(key.finalize().to_hex().as_str()),
+                    0,
+                )
             })
             .collect();
         Some(Self { directory, modules })
     }
 
-    pub(super) fn load(&self) -> (IndexSet<ModuleId>, IndexMap<ModuleId, TypedBodies>) {
+    pub(super) fn load(&mut self) -> (IndexSet<ModuleId>, IndexMap<ModuleId, TypedBodies>) {
         let mut hits = IndexSet::new();
         let mut modules = IndexMap::new();
-        for (module, path) in &self.modules {
-            let bodies = read_bodies(path).inspect(|_| {
+        for (module, path, loaded) in &mut self.modules {
+            let bodies = read_bodies(path).inspect(|bodies| {
                 cache_budget::touch(path);
                 hits.insert(*module);
+                *loaded = bodies.len();
             });
             modules.insert(*module, bodies.unwrap_or_default());
         }
@@ -74,11 +71,15 @@ impl BodyCache {
         if self.modules.is_empty() || std::fs::create_dir_all(&self.directory).is_err() {
             return;
         }
-        for (module, path) in &self.modules {
-            if with_diagnostics.contains(module) || path.is_file() {
+        for (module, path, loaded) in &self.modules {
+            if with_diagnostics.contains(module) {
                 continue;
             }
-            let Some(bodies) = typed.get(module) else {
+            // Library reach depends on the importing program, so a hit may still add bodies.
+            let Some(bodies) = typed
+                .get(module)
+                .filter(|bodies| bodies.len() > *loaded || !path.is_file())
+            else {
                 continue;
             };
             let Ok(bytes) = serde_json::to_vec(&bodies.iter().collect::<Vec<_>>()) else {

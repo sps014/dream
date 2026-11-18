@@ -416,7 +416,7 @@ public fun describe(n: int): string {
     let cold = objects();
     assert_eq!(cold.len(), 3);
     write_dependency("int", "43");
-    link("84", 1, 6);
+    link("84", 9, 29);
     let edited = objects();
     assert_eq!(edited.difference(&cold).count(), 1);
     let incremental = std::fs::read(&bin).unwrap();
@@ -430,7 +430,7 @@ public fun describe(n: int): string {
     std::fs::rename(saved, &body_cache).unwrap();
 
     write_dependency("long", "44L");
-    link("85", 0, 0);
+    link("85", 7, 23);
     let interface_edit = objects();
     assert!(interface_edit.difference(&edited).count() >= 2);
     let cached = std::fs::read(&bin).unwrap();

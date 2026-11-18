@@ -137,15 +137,20 @@ concept" rule. Each one gets `///` documentation, a reference page and assertion
 
 - [x] **Cache syntax-only body validation.** Named modules reuse successful return-path and
   await-placement checks for ordinary functions, keyed by module and dependency interfaces.
-- [x] **Persist typed HIR for named-module bodies.** The module cache keeps the typed HIR of
-  ordinary functions, methods and constructors in named user modules, including bodies that
-  use classes, interfaces, globals and generic instances. Type, declaration, global and
-  interface ids are stored as structural keys and resolved in the current compilation.
-  Generic struct, union, interface, array and function instances requested by a body are
-  journaled and replayed on a hit, so the later tables match a fresh analysis. A body is
-  stored only when the journal accounts for every table it grew and it produced no
-  diagnostics. Generic templates, generator and `main` bodies, lambdas created inside a
-  generic instantiation, the root module and the stdlib are analyzed every time.
+- [x] **Persist typed HIR for non-generic bodies.** The module cache keeps the typed HIR of
+  ordinary functions, methods and constructors in user modules, the root module and the
+  reached stdlib, including bodies that use classes, interfaces, globals and generic
+  instances. Type, declaration, global and interface ids are stored as structural keys and
+  resolved in the current compilation. Generic struct, union, interface, array and function
+  instances requested by a body are journaled and replayed on a hit, so the later tables
+  match a fresh analysis. A body is stored only when the journal accounts for every table it
+  grew and it produced no diagnostics. A stdlib module's key observes only the declared names
+  of user modules, so user body and signature edits keep it; a stdlib module that holds
+  generated user code keys on full interfaces. A stdlib module's cache file grows as other
+  programs reach more of its bodies.
+- [ ] **Typed reuse of generic instance bodies, lambdas and generators.** Bodies of generic
+  instances (including the lambdas written inside them), lambdas, generator bodies, and
+  `main` are analyzed every time, and a body that creates a lambda is not stored.
 - [x] **Native Debug executable codegen units.** See [Codegen units](#codegen-units).
 - [ ] **Release split after optimization.** See [Codegen units](#codegen-units).
 - [ ] **Parallel compiler phases.** Function passes run in parallel (see

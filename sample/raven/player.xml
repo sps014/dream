@@ -1,57 +1,65 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Window Title="Afterglow" Width="1120" Height="690" MinWidth="1060" MinHeight="620"
-    Theme="GlassDark" ClearColor="#100D24" Hidden="true">
+<Window Title="Afterglow" Width="1120" Height="720" MinWidth="1040" MinHeight="680"
+    Theme="GlassDark" ClearColor="#100F19" Hidden="true">
     <Overlay>
-        <Border Effect="mesh" EffectColor="#5E327C" EffectColor2="#176B82"
-            EffectAnimate="false" EffectPointer="false"/>
-        <VBox Spacing="16" Slot.Padding="24">
-            <HBox Spacing="16" Slot.Fill="1">
-                <Border Width="252" Material="FrostedGlass" CornerRadius="24" Padding="20" Shadow="22">
-                    <VBox Spacing="14">
-                        <Label Text="Afterglow" TextSize="28"/>
-                        <Label Text="Library" TextSize="16" Opacity="0.65"/>
-                        <Separator/>
-                        <Button Text="01    Violet Hour" Style="Flat" OnClicked="track.0"/>
-                        <Button Text="02    Glass Tides" Style="Flat" OnClicked="track.1"/>
-                        <Button Text="03    Signal Bloom" Style="Flat" OnClicked="track.2"/>
-                    </VBox>
-                </Border>
-                <Border Material="TintedGlass" CornerRadius="24" Padding="22" Shadow="22" Slot.Fill="1">
-                    <VBox Spacing="12">
-                        <Label Text="Now playing" TextSize="16" Opacity="0.7"/>
-                        <Border Name="art" Effect="aurora" EffectColor="#A878FF" EffectColor2="#244C84"
-                            EffectAnimate="false" EffectPointer="false" CornerRadius="18" Slot.Fill="1"/>
-                        <Label Name="title" TextSize="34"/>
-                        <Label Name="detail" TextSize="17" Opacity="0.7"/>
-                    </VBox>
-                </Border>
-                <Border Width="226" Material="FrostedGlass" CornerRadius="24" Padding="20" Shadow="22">
-                    <VBox Spacing="12">
-                        <Label Text="Up next" TextSize="21"/>
-                        <Label Name="next" TextSize="18" Wrap="true"/>
-                        <Separator/>
-                        <Label Text="Volume" Opacity="0.75"/>
-                        <Slider Name="volume" Min="0" Max="1" Value="0.6" OnChanged="player.volume"/>
-                        <Label Name="status" Wrap="true" Opacity="0.8"/>
-                    </VBox>
-                </Border>
-            </HBox>
-            <Border Material="Glass" CornerRadius="24" Padding="18,12" Shadow="26">
-                <VBox Spacing="8">
-                    <HBox Spacing="10">
-                        <Label Name="elapsed" Font="monospace" Width="44" Slot.VAlign="Center"/>
-                        <Slider Name="seek" Min="0" Max="1" Slot.Fill="1" OnChanged="player.seek"/>
-                        <Label Name="duration" Font="monospace" Width="44" Slot.VAlign="Center"/>
-                    </HBox>
-                    <HBox Spacing="10" Slot.HAlign="Center">
-                        <Button Text="Previous" Style="Flat" OnClicked="player.previous"/>
-                        <Button Name="play" Text="Play" Style="Primary" MinWidth="86" OnClicked="player.toggle"/>
-                        <Button Text="Next" Style="Flat" OnClicked="player.next"/>
-                        <Button Name="repeat" Text="Repeat off" Style="Flat" MinWidth="100"
-                            OnClicked="player.repeat"/>
-                    </HBox>
+        <Border Effect="aurora" EffectColor="#342844" EffectColor2="#131525"
+            EffectAnimate="false" EffectPointer="false" Opacity="0.5"/>
+        <HBox Spacing="0" Color.Accent="#D4C0FF" Color.AccentHovered="#E2D4FF"
+            Color.AccentText="#191225" Color.Text="#F4F0FA" Color.Track="#FFFFFF18"
+            Color.Control="#FFFFFF0A" Color.ControlBorder="#FFFFFF12" Metric.FontSize="14">
+            <Border Width="214" Material="FrostedGlass" CornerRadius="0" Padding="24,30"
+                Background="#191622B8" BorderWidth="0">
+                <VBox Spacing="18">
+                    <Label Text="afterglow" TextSize="25"/>
+                    <Separator Slot.Padding="0,12"/>
+                    <Label Text="Your library" TextSize="12" Opacity="0.5"/>
+                    <Button Text="Violet Hour" Style="Flat" OnClicked="track.0" Height="38"/>
+                    <Button Text="Glass Tides" Style="Flat" OnClicked="track.1" Height="38"/>
+                    <Button Text="Signal Bloom" Style="Flat" OnClicked="track.2" Height="38"/>
+                    <Spacer Slot.Fill="1"/>
+                    <Label Text="Volume" TextSize="12" Opacity="0.55"/>
+                    <Slider Name="volume" Min="0" Max="1" Value="0.6" OnChanged="player.volume"/>
+                    <Label Name="status" Wrap="true" Opacity="0.8"/>
                 </VBox>
             </Border>
-        </VBox>
+            <VBox Spacing="26" Slot.Fill="1" Slot.Padding="36,30">
+                <Label Text="Now playing" TextSize="16" Opacity="0.65"/>
+                <HBox Spacing="30" Slot.Fill="1">
+                    <Border Name="art" Width="330" Height="330" Slot.VAlign="Center"
+                        Effect="aurora" EffectColor="#A878FF" EffectColor2="#244C84"
+                        EffectAnimate="false" EffectPointer="false" CornerRadius="12" Shadow="28"/>
+                    <VBox Spacing="16" Slot.Fill="1" Slot.VAlign="Center">
+                        <Label Name="title" TextSize="38" Wrap="true"/>
+                        <Label Name="detail" TextSize="15" Opacity="0.55" Wrap="true"/>
+                        <Spacer Height="12"/>
+                        <HBox Spacing="10">
+                            <Button Text="Previous" Style="Flat" OnClicked="player.previous" Height="42"/>
+                            <Button Name="play" Text="Play" Style="Primary" Width="100" Height="42" OnClicked="player.toggle"/>
+                            <Button Text="Next" Style="Flat" OnClicked="player.next" Height="42"/>
+                        </HBox>
+                    </VBox>
+                </HBox>
+                <Border Material="FrostedGlass" CornerRadius="12" Padding="18,14"
+                    Background="#211C2C70" BorderColor="#FFFFFF12" BorderWidth="1">
+                    <HBox Spacing="20">
+                        <VBox Spacing="6" Slot.Fill="1">
+                            <Label Text="Up next" TextSize="11" Opacity="0.45"/>
+                            <Label Name="next" TextSize="16"/>
+                        </VBox>
+                        <Button Text="Play next" Style="Flat" OnClicked="player.next"
+                            Slot.VAlign="Center"/>
+                    </HBox>
+                </Border>
+                <VBox Spacing="12">
+                    <HBox Spacing="12">
+                        <Label Name="elapsed" Font="monospace" TextSize="12" Width="40" Slot.VAlign="Center" Opacity="0.55"/>
+                        <Slider Name="seek" Min="0" Max="1" Slot.Fill="1" OnChanged="player.seek"/>
+                        <Label Name="duration" Font="monospace" TextSize="12" Width="40" Slot.VAlign="Center" Opacity="0.55"/>
+                    </HBox>
+                    <Button Name="repeat" Text="Repeat off" Style="Flat" MinWidth="100"
+                        Slot.HAlign="Right" OnClicked="player.repeat"/>
+                </VBox>
+            </VBox>
+        </HBox>
     </Overlay>
 </Window>

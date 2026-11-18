@@ -26,6 +26,9 @@ pub struct ModuleHashes {
     pub path: String,
     pub content: [u8; 32],
     pub interface: [u8; 32],
+    /// Exported signatures and layouts only, without the bodies the interface may conservatively
+    /// include. Suits consumers that read declarations, not analyzed facts.
+    pub declared: [u8; 32],
     pub dependency_interfaces: Vec<(String, [u8; 32])>,
 }
 
@@ -207,7 +210,7 @@ impl<'a> ModuleGraph<'a> {
         self.modules
             .iter()
             .zip(&own)
-            .map(|(module, &(content, interface))| {
+            .map(|(module, &(content, interface, declared))| {
                 let observed = |id: ModuleId| {
                     let index = id.0 as usize;
                     if library[module.id.0 as usize] && !library[index] {
@@ -233,6 +236,7 @@ impl<'a> ModuleGraph<'a> {
                     path: module.path.clone(),
                     content,
                     interface,
+                    declared,
                     dependency_interfaces,
                 }
             })

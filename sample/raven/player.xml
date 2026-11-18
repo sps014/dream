@@ -33,9 +33,21 @@
                         <Label Name="detail" TextSize="15" Opacity="0.55" Wrap="true"/>
                         <Spacer Height="12"/>
                         <HBox Spacing="10">
-                            <Button Text="Previous" Style="Flat" OnClicked="player.previous" Height="42"/>
-                            <Button Name="play" Text="Play" Style="Primary" Width="100" Height="42" OnClicked="player.toggle"/>
-                            <Button Text="Next" Style="Flat" OnClicked="player.next" Height="42"/>
+                            <Button Name="previous" Style="Flat" OnClicked="player.previous" Width="44" Height="52"
+                                Tooltip="Previous track" AccessibleName="Previous track" Cursor="Hand">
+                                <Image Source="icons/previous.svg" Width="22" Height="22"
+                                    Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
+                            </Button>
+                            <Button Name="play" Style="Primary" Width="56" Height="56" OnClicked="player.toggle"
+                                Tooltip="Play" AccessibleName="Play" Cursor="Hand">
+                                <Image Name="play_icon" Source="icons/play.svg" Width="26" Height="26"
+                                    Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
+                            </Button>
+                            <Button Name="skip" Style="Flat" OnClicked="player.next" Width="44" Height="52"
+                                Tooltip="Next track" AccessibleName="Next track" Cursor="Hand">
+                                <Image Source="icons/next.svg" Width="22" Height="22"
+                                    Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
+                            </Button>
                         </HBox>
                     </VBox>
                 </HBox>
@@ -56,8 +68,12 @@
                         <Slider Name="seek" Min="0" Max="1" Slot.Fill="1" OnChanged="player.seek"/>
                         <Label Name="duration" Font="monospace" TextSize="12" Width="40" Slot.VAlign="Center" Opacity="0.55"/>
                     </HBox>
-                    <Button Name="repeat" Text="Repeat off" Style="Flat" MinWidth="100"
-                        Slot.HAlign="Right" OnClicked="player.repeat"/>
+                    <Button Name="repeat" Style="Flat" Width="40" Height="36"
+                        Slot.HAlign="Right" OnClicked="player.repeat" Cursor="Hand"
+                        Tooltip="Repeat off" AccessibleName="Repeat off">
+                        <Image Name="repeat_icon" Source="icons/repeat.svg" Width="20" Height="20"
+                            Tint="#FFFFFF70" Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
+                    </Button>
                 </VBox>
             </VBox>
         </HBox>

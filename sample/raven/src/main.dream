@@ -42,16 +42,9 @@ fun label(widget: uint, value: string): void {
 }
 
 @unsafe
-fun button_text(widget: uint, value: string): void {
-    let text = c_text(value);
-    controls.Rbutton_set_text(widget, CPtr(text.address()));
-    text.free();
-}
-
-@unsafe
-fun artwork(widget: uint, color: string): void {
-    let key = c_text("EffectColor");
-    let value = c_text(color);
+fun attribute(widget: uint, name: string, text: string): void {
+    let key = c_text(name);
+    let value = c_text(text);
     xml.Rwidget_set_attribute(widget, CPtr(key.address()), CPtr(value.address()));
     value.free();
     key.free();
@@ -92,7 +85,9 @@ async fun main(): int {
     let seek = find_widget(window, "seek");
     let volume = find_widget(window, "volume");
     let play = find_widget(window, "play");
+    let play_icon = find_widget(window, "play_icon");
     let repeat_button = find_widget(window, "repeat");
+    let repeat_icon = find_widget(window, "repeat_icon");
     let status = find_widget(window, "status");
     let names = [
         "track.0",
@@ -186,7 +181,7 @@ async fun main(): int {
             label(title, titles[track]);
             label(detail, details[track]);
             label(next, titles[(track + 1) % titles.length]);
-            artwork(art, colors[track]);
+            attribute(art, "EffectColor", colors[track]);
             let length = audio.duration.unwrap_or(0.0d);
             controls.Rslider_set_range(seek, 0.0f, (float)length);
             label(duration, timestamp(length));
@@ -197,11 +192,15 @@ async fun main(): int {
         }
         let paused = audio.paused;
         if shown_paused != paused {
-            button_text(play, paused ? "Play" : "Pause");
+            attribute(play_icon, "Source", paused ? "icons/play.svg" : "icons/pause.svg");
+            attribute(play, "Tooltip", paused ? "Play" : "Pause");
+            attribute(play, "AccessibleName", paused ? "Play" : "Pause");
             shown_paused = paused;
         }
         if shown_repeat != repeat {
-            button_text(repeat_button, repeat ? "Repeat on" : "Repeat off");
+            attribute(repeat_icon, "Tint", repeat ? "#D4C0FF" : "#FFFFFF70");
+            attribute(repeat_button, "Tooltip", repeat ? "Repeat on" : "Repeat off");
+            attribute(repeat_button, "AccessibleName", repeat ? "Repeat on" : "Repeat off");
             shown_repeat = repeat;
         }
         let time = audio.current_time;

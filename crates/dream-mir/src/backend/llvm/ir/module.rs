@@ -27,6 +27,10 @@ pub struct Decl {
     pub cc: CallConv,
 }
 
+#[path = "units.rs"]
+mod units;
+use units::{Definition, Units};
+
 pub struct ModuleWriter {
     pub source_name: String,
     pub triple: String,
@@ -36,6 +40,7 @@ pub struct ModuleWriter {
     decls: IndexMap<String, Decl>,
     defined: IndexSet<String>,
     bodies: String,
+    units: Option<Units>,
     pub md: Metadata,
     /// Applied to definitions, including compiler-generated glue.
     pub definition_attrs: Vec<FnAttr>,
@@ -52,6 +57,7 @@ impl ModuleWriter {
             decls: IndexMap::new(),
             defined: IndexSet::new(),
             bodies: String::new(),
+            units: None,
             md: Metadata::default(),
             definition_attrs: Vec::new(),
         }
@@ -90,16 +96,55 @@ impl ModuleWriter {
             f.name()
         );
         f.attrs.extend(self.definition_attrs.iter().cloned());
+        let start = self.bodies.len();
         f.write(&mut self.bodies);
+        if let Some(units) = &mut self.units {
+            units.definitions.push(Definition {
+                group: units.current,
+                name: f.name().to_owned(),
+                linkage: f.linkage,
+                declaration: f.declaration(),
+                range: start..self.bodies.len(),
+            });
+        }
     }
 
     pub fn finish(self) -> String {
-        let mut out = String::new();
-        out.push_str(&format!(
+        self.finish_with_units().0
+    }
+
+    pub fn finish_with_units(self) -> (String, Vec<String>) {
+        let header = self.header();
+        let mut out = header.clone();
+        for (name, g) in &self.globals {
+            write_global(&mut out, name, g, g.linkage, g.init.as_deref());
+        }
+        if !self.globals.is_empty() {
+            out.push('\n');
+        }
+        for (name, d) in &self.decls {
+            if !self.defined.contains(name) {
+                write_declaration(&mut out, name, d);
+            }
+        }
+        if !self.decls.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&self.bodies);
+        self.md.write(&mut out);
+        let units = self
+            .units
+            .as_ref()
+            .map_or_else(Vec::new, |units| units.render(&self, &header));
+        (out, units)
+    }
+
+    fn header(&self) -> String {
+        let mut out = format!(
             "; ModuleID = '{}'\nsource_filename = \"{}\"\n",
             self.source_name,
             self.source_name.replace('\\', "\\5C").replace('"', "\\22")
-        ));
+        );
         if !self.datalayout.is_empty() {
             out.push_str(&format!("target datalayout = \"{}\"\n", self.datalayout));
         }
@@ -113,64 +158,48 @@ impl ModuleWriter {
         if !self.types.is_empty() {
             out.push('\n');
         }
-        for (name, g) in &self.globals {
-            let init = match &g.init {
-                Some(i) => format!(" {i}"),
-                None => String::new(),
-            };
-            let linkage = if g.init.is_none() {
-                "external ".to_string()
-            } else {
-                g.linkage.prefix().to_string()
-            };
-            out.push_str(&format!(
-                "{} = {linkage}{}{}{} {}{init}, align {}\n",
-                fmt::global(name),
-                if g.thread_local { "thread_local " } else { "" },
-                if g.unnamed_addr { "unnamed_addr " } else { "" },
-                if g.constant { "constant" } else { "global" },
-                g.ty,
-                g.align
-            ));
-        }
-        if !self.globals.is_empty() {
-            out.push('\n');
-        }
-        for (name, d) in &self.decls {
-            if self.defined.contains(name) {
-                continue;
-            }
-            let params = d
-                .fty
-                .params
-                .iter()
-                .enumerate()
-                .map(|(i, t)| {
-                    let a = d.param_attrs.get(i).map(|a| join(a)).unwrap_or_default();
-                    format!("{t}{a}")
-                })
-                .chain(d.fty.varargs.then(|| "...".to_string()))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let ret = if d.ret_attrs.is_empty() {
-                d.fty.ret.to_string()
-            } else {
-                format!("{} {}", join(&d.ret_attrs).trim_start(), d.fty.ret)
-            };
-            out.push_str(&format!(
-                "declare {}{ret} {}({params}){}\n",
-                d.cc.prefix(),
-                fmt::global(name),
-                join(&d.attrs)
-            ));
-        }
-        if !self.decls.is_empty() {
-            out.push('\n');
-        }
-        out.push_str(&self.bodies);
-        self.md.write(&mut out);
         out
     }
+}
+
+fn write_global(out: &mut String, name: &str, g: &GlobalDef, linkage: Linkage, init: Option<&str>) {
+    let linkage = init.map_or("external ", |_| linkage.prefix());
+    let init = init.map(|i| format!(" {i}")).unwrap_or_default();
+    out.push_str(&format!(
+        "{} = {linkage}{}{}{} {}{init}, align {}\n",
+        fmt::global(name),
+        if g.thread_local { "thread_local " } else { "" },
+        if g.unnamed_addr { "unnamed_addr " } else { "" },
+        if g.constant { "constant" } else { "global" },
+        g.ty,
+        g.align
+    ));
+}
+
+fn write_declaration(out: &mut String, name: &str, d: &Decl) {
+    let params = d
+        .fty
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let a = d.param_attrs.get(i).map(|a| join(a)).unwrap_or_default();
+            format!("{t}{a}")
+        })
+        .chain(d.fty.varargs.then(|| "...".to_string()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let ret = if d.ret_attrs.is_empty() {
+        d.fty.ret.to_string()
+    } else {
+        format!("{} {}", join(&d.ret_attrs).trim_start(), d.fty.ret)
+    };
+    out.push_str(&format!(
+        "declare {}{ret} {}({params}){}\n",
+        d.cc.prefix(),
+        fmt::global(name),
+        join(&d.attrs)
+    ));
 }
 
 #[cfg(test)]

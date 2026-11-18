@@ -152,11 +152,13 @@ fun main() {
 }
 '''
 
-def generated_source(functions):
-    """Mirrors `scripts/benchmarks/go_baseline.py`: one allocation, one loop and a branch per function."""
-    parts = [SOURCE.split("fun main()")[0]]
+def generated_source(functions, modules=0):
+    """Mirrors the Go workload with one allocation, loop and branch per function."""
+    node = SOURCE.split("fun main()")[0]
+    groups = [[] for _ in range(modules or 1)]
+    visibility = "public " if modules else ""
     for i in range(functions):
-        parts.append(f'''fun work_{i}(seed: int): int {{
+        groups[i * len(groups) // functions].append(f'''{visibility}fun work_{i}(seed: int): int {{
     let node = Node(seed);
     let value = node.value;
     for (let i = 0; i < 32; i++) {{
@@ -170,22 +172,32 @@ def generated_source(functions):
 }}
 ''')
     calls = "\n".join(f"    total += work_{i}({i});" for i in range(functions))
-    parts.append(f"fun main() {{\n    let total = Node(42).value;\n{calls}\n    System.println(total);\n}}\n")
-    return "".join(parts)
+    main = f"fun main() {{\n    let total = Node(42).value;\n{calls}\n    System.println(total);\n}}\n"
+    if not modules:
+        return {"main.dream": node + "".join(groups[0]) + main}
+    files = {
+        "main.dream": "import system;\nimport node;\n"
+        + "".join(f"import work_{i};\n" for i in range(modules))
+        + main,
+        "node.dream": "module node;\n" + node.replace("class Node", "public class Node"),
+    }
+    for i, group in enumerate(groups):
+        files[f"work_{i}.dream"] = f"module work_{i};\nimport node;\n" + "".join(group)
+    return files
 
 
 def workload(name):
-    """Returns `(source, marker)`; the edited build changes the single `42` inside `marker`."""
+    """Returns `(source files, marker)`; the edited build changes the single `42` inside `marker`."""
     if name == "hello":
-        return SOURCE, "Node(42)"
+        return {"main.dream": SOURCE}, "Node(42)"
     if name == "stdlib":
-        return STDLIB_SOURCE, '\\"seed\\": 42'
+        return {"main.dream": STDLIB_SOURCE}, '\\"seed\\": 42'
     if name == "webapi":
-        return (ROOT / "sample/webapi/app.dream").read_text().replace("8000", "8042"), "8042"
+        return {"main.dream": (ROOT / "sample/webapi/app.dream").read_text().replace("8000", "8042")}, "8042"
     # A large generated program standing in for the compiler, so cold, edited and unchanged
     # times are recorded before a self-hosted build exists.
     if name == "selfhost":
-        return generated_source(8000), "Node(42)"
+        return generated_source(8000, modules=8), "Node(42)"
     match = re.fullmatch(r"gen(\d+)", name)
     if match and int(match[1]) > 0:
         return generated_source(int(match[1])), "Node(42)"
@@ -326,7 +338,8 @@ def main():
     if args.repeat < 1:
         parser.error("repeat must be positive")
     try:
-        source_text, marker = workload(args.workload)
+        sources, marker = workload(args.workload)
+        source_text = sources["main.dream"]
     except argparse.ArgumentTypeError as error:
         parser.error(str(error))
     edited_text = source_text.replace(marker, marker.replace("42", "43"), 1)
@@ -335,10 +348,10 @@ def main():
         "binary": str(with_exe(args.binary).resolve()),
         "binary_sha256": file_digest(with_exe(args.binary).resolve()),
         "runtime_sha256": runtime_digest(args.runtime.resolve()),
-        "source_sha256": hashlib.sha256(source_text.encode()).hexdigest(),
+        "source_sha256": hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest(),
         "llvm": str(args.llvm.resolve()),
         "workload": args.workload,
-        "source_lines": source_text.count("\n"),
+        "source_lines": sum(text.count("\n") for text in sources.values()),
         "plain": args.plain,
     }
     destination = args.output.resolve()
@@ -358,7 +371,8 @@ def main():
                     project.mkdir()
                     source = project / "main.dream"
                     output = project / "out/main.ll"
-                    source.write_text(source_text)
+                    for name, text in sources.items():
+                        (project / name).write_text(text)
                     env = dict(os.environ, DREAM_PREFIX=str(project / "prefix"),
                                DREAM_RUNTIME_C=str(args.runtime.resolve()))
                     if args.plain:

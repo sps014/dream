@@ -59,9 +59,10 @@ remain JavaScript because they invoke browser APIs.
 - [x] Qualify both previews with real C ABI calls, timers, filesystem, HTTP, TCP/UDP echo, UTF-8, EOF, and denied filesystem access.
 - [x] Compare freshly emitted component WASM, WAT, and ABI metadata for deterministic output.
 
-See [Standalone WASI commands](../language/interop/wasi.md). Component networking currently
-waits synchronously within a Dream poll; it does not yet interleave pending network work
-with other Dream tasks. Command components are experimental.
+See [Standalone WASI commands](../language/interop/wasi.md). The command scheduler checks
+HTTP readiness, socket operations, and hostname resolution between Dream polls. Preview 2
+uses a pollable address stream. Preview 3 polls the asynchronous name lookup subtask and
+keeps its result buffer alive until completion or cancellation. Command components are experimental.
 
 ## Completion checks
 

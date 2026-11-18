@@ -115,6 +115,133 @@ extern void __wasm_import_wasi_http_types_static_response_consume_body(int32_t, 
 __attribute__((__import_module__("wasi:http/client@0.3.0"), __import_name__("[async-lower]send")))
 extern int32_t __wasm_import_wasi_http_client_send(int32_t, uint8_t *);
 
+// Imported Functions from `wasi:sockets/types@0.3.0`
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[static]tcp-socket.create")))
+extern void __wasm_import_wasi_sockets_types_static_tcp_socket_create(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.bind")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_bind(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][method]tcp-socket.connect")))
+extern int32_t __wasm_import_wasi_sockets_types_method_tcp_socket_connect(uint8_t *, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.listen")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_listen(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.send")))
+extern int32_t __wasm_import_wasi_sockets_types_method_tcp_socket_send(int32_t, int32_t);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.receive")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_receive(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-local-address")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_local_address(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-remote-address")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_remote_address(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-is-listening")))
+extern int32_t __wasm_import_wasi_sockets_types_method_tcp_socket_get_is_listening(int32_t);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-address-family")))
+extern int32_t __wasm_import_wasi_sockets_types_method_tcp_socket_get_address_family(int32_t);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.set-listen-backlog-size")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_set_listen_backlog_size(int32_t, int64_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-keep-alive-enabled")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_keep_alive_enabled(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.set-keep-alive-enabled")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_set_keep_alive_enabled(int32_t, int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-keep-alive-idle-time")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_keep_alive_idle_time(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.set-keep-alive-idle-time")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_set_keep_alive_idle_time(int32_t, int64_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-keep-alive-interval")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_keep_alive_interval(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.set-keep-alive-interval")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_set_keep_alive_interval(int32_t, int64_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-keep-alive-count")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_keep_alive_count(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.set-keep-alive-count")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_set_keep_alive_count(int32_t, int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-hop-limit")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_hop_limit(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.set-hop-limit")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_set_hop_limit(int32_t, int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-receive-buffer-size")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_receive_buffer_size(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.set-receive-buffer-size")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_set_receive_buffer_size(int32_t, int64_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.get-send-buffer-size")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_get_send_buffer_size(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]tcp-socket.set-send-buffer-size")))
+extern void __wasm_import_wasi_sockets_types_method_tcp_socket_set_send_buffer_size(int32_t, int64_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[static]udp-socket.create")))
+extern void __wasm_import_wasi_sockets_types_static_udp_socket_create(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.bind")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_bind(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.connect")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_connect(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.disconnect")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_disconnect(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][method]udp-socket.send")))
+extern int32_t __wasm_import_wasi_sockets_types_method_udp_socket_send(uint8_t *, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][method]udp-socket.receive")))
+extern int32_t __wasm_import_wasi_sockets_types_method_udp_socket_receive(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.get-local-address")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_get_local_address(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.get-remote-address")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_get_remote_address(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.get-address-family")))
+extern int32_t __wasm_import_wasi_sockets_types_method_udp_socket_get_address_family(int32_t);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.get-unicast-hop-limit")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_get_unicast_hop_limit(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.set-unicast-hop-limit")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_set_unicast_hop_limit(int32_t, int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.get-receive-buffer-size")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_get_receive_buffer_size(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.set-receive-buffer-size")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_set_receive_buffer_size(int32_t, int64_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.get-send-buffer-size")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_get_send_buffer_size(int32_t, uint8_t *);
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[method]udp-socket.set-send-buffer-size")))
+extern void __wasm_import_wasi_sockets_types_method_udp_socket_set_send_buffer_size(int32_t, int64_t, uint8_t *);
+
+// Imported Functions from `wasi:sockets/ip-name-lookup@0.3.0`
+
+__attribute__((__import_module__("wasi:sockets/ip-name-lookup@0.3.0"), __import_name__("[async-lower]resolve-addresses")))
+extern int32_t __wasm_import_wasi_sockets_ip_name_lookup_resolve_addresses(uint8_t *, size_t, uint8_t *);
+
 // Canonical ABI intrinsics
 
 __attribute__((__weak__, __export_name__("cabi_realloc")))
@@ -598,6 +725,335 @@ void wasi_http_client_result_own_response_error_code_free(wasi_http_client_resul
   if (!ptr->is_err) {
   } else {
     wasi_http_client_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_error_code_free(wasi_sockets_types_error_code_t *ptr) {
+  switch ((int32_t) ptr->tag) {
+    case 14: {
+      break;
+    }
+  }
+}
+
+void wasi_sockets_types_ip_address_free(wasi_sockets_types_ip_address_t *ptr) {
+  switch ((int32_t) ptr->tag) {
+    case 0: {
+      break;
+    }
+    case 1: {
+      break;
+    }
+  }
+}
+
+void wasi_sockets_types_ip_socket_address_free(wasi_sockets_types_ip_socket_address_t *ptr) {
+  switch ((int32_t) ptr->tag) {
+    case 0: {
+      break;
+    }
+    case 1: {
+      break;
+    }
+  }
+}
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[resource-drop]tcp-socket")))
+extern void __wasm_import_wasi_sockets_types_tcp_socket_drop(int32_t handle);
+
+void wasi_sockets_types_tcp_socket_drop_own(wasi_sockets_types_own_tcp_socket_t handle) {
+  __wasm_import_wasi_sockets_types_tcp_socket_drop(handle.__handle);
+}
+
+void wasi_sockets_types_tcp_socket_drop_borrow(wasi_sockets_types_borrow_tcp_socket_t handle) {
+  __wasm_import_wasi_sockets_types_tcp_socket_drop(handle.__handle);
+}
+
+wasi_sockets_types_borrow_tcp_socket_t wasi_sockets_types_borrow_tcp_socket(wasi_sockets_types_own_tcp_socket_t arg) {
+  return (wasi_sockets_types_borrow_tcp_socket_t) { arg.__handle };
+}
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[resource-drop]udp-socket")))
+extern void __wasm_import_wasi_sockets_types_udp_socket_drop(int32_t handle);
+
+void wasi_sockets_types_udp_socket_drop_own(wasi_sockets_types_own_udp_socket_t handle) {
+  __wasm_import_wasi_sockets_types_udp_socket_drop(handle.__handle);
+}
+
+void wasi_sockets_types_udp_socket_drop_borrow(wasi_sockets_types_borrow_udp_socket_t handle) {
+  __wasm_import_wasi_sockets_types_udp_socket_drop(handle.__handle);
+}
+
+wasi_sockets_types_borrow_udp_socket_t wasi_sockets_types_borrow_udp_socket(wasi_sockets_types_own_udp_socket_t arg) {
+  return (wasi_sockets_types_borrow_udp_socket_t) { arg.__handle };
+}
+
+void wasi_sockets_types_result_own_tcp_socket_error_code_free(wasi_sockets_types_result_own_tcp_socket_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_void_error_code_free(wasi_sockets_types_result_void_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_stream_own_tcp_socket_error_code_free(wasi_sockets_types_result_stream_own_tcp_socket_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_ip_socket_address_error_code_free(wasi_sockets_types_result_ip_socket_address_error_code_t *ptr) {
+  if (!ptr->is_err) {
+    wasi_sockets_types_ip_socket_address_free(&ptr->val.ok);
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_bool_error_code_free(wasi_sockets_types_result_bool_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_duration_error_code_free(wasi_sockets_types_result_duration_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_u32_error_code_free(wasi_sockets_types_result_u32_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_u8_error_code_free(wasi_sockets_types_result_u8_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_u64_error_code_free(wasi_sockets_types_result_u64_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void wasi_sockets_types_result_own_udp_socket_error_code_free(wasi_sockets_types_result_own_udp_socket_error_code_t *ptr) {
+  if (!ptr->is_err) {
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+void dream_http_p3_list_u8_free(dream_http_p3_list_u8_t *ptr) {
+  size_t list_len = ptr->len;
+  if (list_len > 0) {
+    uint8_t *list_ptr = ptr->ptr;
+    for (size_t i = 0; i < list_len; i++) {
+    }
+    free(list_ptr);
+  }
+}
+
+void wasi_sockets_types_option_ip_socket_address_free(wasi_sockets_types_option_ip_socket_address_t *ptr) {
+  if (ptr->is_some) {
+    wasi_sockets_types_ip_socket_address_free(&ptr->val);
+  }
+}
+
+void wasi_sockets_types_tuple2_list_u8_ip_socket_address_free(wasi_sockets_types_tuple2_list_u8_ip_socket_address_t *ptr) {
+  dream_http_p3_list_u8_free(&ptr->f0);
+  wasi_sockets_types_ip_socket_address_free(&ptr->f1);
+}
+
+void wasi_sockets_types_result_tuple2_list_u8_ip_socket_address_error_code_free(wasi_sockets_types_result_tuple2_list_u8_ip_socket_address_error_code_t *ptr) {
+  if (!ptr->is_err) {
+    wasi_sockets_types_tuple2_list_u8_ip_socket_address_free(&ptr->val.ok);
+  } else {
+    wasi_sockets_types_error_code_free(&ptr->val.err);
+  }
+}
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-new-0][method]tcp-socket.listen")))
+extern uint64_t wasi_sockets_types_stream_own_tcp_socket__new(void);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][stream-read-0][method]tcp-socket.listen")))
+extern uint32_t wasi_sockets_types_stream_own_tcp_socket__read(uint32_t, uint8_t*, size_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][stream-write-0][method]tcp-socket.listen")))
+extern uint32_t wasi_sockets_types_stream_own_tcp_socket__write(uint32_t, const uint8_t*, size_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-cancel-read-0][method]tcp-socket.listen")))
+extern uint32_t wasi_sockets_types_stream_own_tcp_socket__cancel_read(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-cancel-write-0][method]tcp-socket.listen")))
+extern uint32_t wasi_sockets_types_stream_own_tcp_socket__cancel_write(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-drop-readable-0][method]tcp-socket.listen")))
+extern void wasi_sockets_types_stream_own_tcp_socket__drop_readable(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-drop-writable-0][method]tcp-socket.listen")))
+extern void wasi_sockets_types_stream_own_tcp_socket__drop_writable(uint32_t);
+
+wasi_sockets_types_stream_own_tcp_socket_t wasi_sockets_types_stream_own_tcp_socket_new(wasi_sockets_types_stream_own_tcp_socket_writer_t *writer) {
+  uint64_t packed = wasi_sockets_types_stream_own_tcp_socket__new();
+  *writer = (uint32_t) (packed >> 32);
+  return (uint32_t) packed;
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_own_tcp_socket_read(wasi_sockets_types_stream_own_tcp_socket_t reader, wasi_sockets_types_own_tcp_socket_t *buf, size_t amt) {
+  return wasi_sockets_types_stream_own_tcp_socket__read(reader, (uint8_t*) buf, amt);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_own_tcp_socket_write(wasi_sockets_types_stream_own_tcp_socket_writer_t writer, const wasi_sockets_types_own_tcp_socket_t *buf, size_t amt) {
+  return wasi_sockets_types_stream_own_tcp_socket__write(writer, (const uint8_t*) buf, amt);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_own_tcp_socket_cancel_read(wasi_sockets_types_stream_own_tcp_socket_t reader){
+  return wasi_sockets_types_stream_own_tcp_socket__cancel_read(reader);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_own_tcp_socket_cancel_write(wasi_sockets_types_stream_own_tcp_socket_writer_t writer) {
+  return wasi_sockets_types_stream_own_tcp_socket__cancel_write(writer);
+}
+
+void wasi_sockets_types_stream_own_tcp_socket_drop_readable(wasi_sockets_types_stream_own_tcp_socket_t reader){
+  wasi_sockets_types_stream_own_tcp_socket__drop_readable(reader);
+}
+
+void wasi_sockets_types_stream_own_tcp_socket_drop_writable(wasi_sockets_types_stream_own_tcp_socket_writer_t writer) {
+  wasi_sockets_types_stream_own_tcp_socket__drop_writable(writer);
+}
+
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-new-0][method]tcp-socket.send")))
+extern uint64_t wasi_sockets_types_stream_u8__new(void);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][stream-read-0][method]tcp-socket.send")))
+extern uint32_t wasi_sockets_types_stream_u8__read(uint32_t, uint8_t*, size_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][stream-write-0][method]tcp-socket.send")))
+extern uint32_t wasi_sockets_types_stream_u8__write(uint32_t, const uint8_t*, size_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-cancel-read-0][method]tcp-socket.send")))
+extern uint32_t wasi_sockets_types_stream_u8__cancel_read(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-cancel-write-0][method]tcp-socket.send")))
+extern uint32_t wasi_sockets_types_stream_u8__cancel_write(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-drop-readable-0][method]tcp-socket.send")))
+extern void wasi_sockets_types_stream_u8__drop_readable(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[stream-drop-writable-0][method]tcp-socket.send")))
+extern void wasi_sockets_types_stream_u8__drop_writable(uint32_t);
+
+wasi_sockets_types_stream_u8_t wasi_sockets_types_stream_u8_new(wasi_sockets_types_stream_u8_writer_t *writer) {
+  uint64_t packed = wasi_sockets_types_stream_u8__new();
+  *writer = (uint32_t) (packed >> 32);
+  return (uint32_t) packed;
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_u8_read(wasi_sockets_types_stream_u8_t reader, uint8_t *buf, size_t amt) {
+  return wasi_sockets_types_stream_u8__read(reader, (uint8_t*) buf, amt);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_u8_write(wasi_sockets_types_stream_u8_writer_t writer, const uint8_t *buf, size_t amt) {
+  return wasi_sockets_types_stream_u8__write(writer, (const uint8_t*) buf, amt);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_u8_cancel_read(wasi_sockets_types_stream_u8_t reader){
+  return wasi_sockets_types_stream_u8__cancel_read(reader);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_u8_cancel_write(wasi_sockets_types_stream_u8_writer_t writer) {
+  return wasi_sockets_types_stream_u8__cancel_write(writer);
+}
+
+void wasi_sockets_types_stream_u8_drop_readable(wasi_sockets_types_stream_u8_t reader){
+  wasi_sockets_types_stream_u8__drop_readable(reader);
+}
+
+void wasi_sockets_types_stream_u8_drop_writable(wasi_sockets_types_stream_u8_writer_t writer) {
+  wasi_sockets_types_stream_u8__drop_writable(writer);
+}
+
+
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[future-new-1][method]tcp-socket.send")))
+extern uint64_t wasi_sockets_types_future_result_void_error_code__new(void);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][future-read-1][method]tcp-socket.send")))
+extern uint32_t wasi_sockets_types_future_result_void_error_code__read(uint32_t, uint8_t*);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[async-lower][future-write-1][method]tcp-socket.send")))
+extern uint32_t wasi_sockets_types_future_result_void_error_code__write(uint32_t, const uint8_t*);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[future-cancel-read-1][method]tcp-socket.send")))
+extern uint32_t wasi_sockets_types_future_result_void_error_code__cancel_read(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[future-cancel-write-1][method]tcp-socket.send")))
+extern uint32_t wasi_sockets_types_future_result_void_error_code__cancel_write(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[future-drop-readable-1][method]tcp-socket.send")))
+extern void wasi_sockets_types_future_result_void_error_code__drop_readable(uint32_t);
+__attribute__((__import_module__("wasi:sockets/types@0.3.0"), __import_name__("[future-drop-writable-1][method]tcp-socket.send")))
+extern void wasi_sockets_types_future_result_void_error_code__drop_writable(uint32_t);
+
+wasi_sockets_types_future_result_void_error_code_t wasi_sockets_types_future_result_void_error_code_new(wasi_sockets_types_future_result_void_error_code_writer_t *writer) {
+  uint64_t packed = wasi_sockets_types_future_result_void_error_code__new();
+  *writer = (uint32_t) (packed >> 32);
+  return (uint32_t) packed;
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_future_result_void_error_code_read(wasi_sockets_types_future_result_void_error_code_t reader, wasi_sockets_types_result_void_error_code_t *buf) {
+  return wasi_sockets_types_future_result_void_error_code__read(reader, (uint8_t*) buf);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_future_result_void_error_code_write(wasi_sockets_types_future_result_void_error_code_writer_t writer, const wasi_sockets_types_result_void_error_code_t *buf) {
+  return wasi_sockets_types_future_result_void_error_code__write(writer, (const uint8_t*) buf);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_future_result_void_error_code_cancel_read(wasi_sockets_types_future_result_void_error_code_t reader){
+  return wasi_sockets_types_future_result_void_error_code__cancel_read(reader);
+}
+
+dream_http_p3_waitable_status_t wasi_sockets_types_future_result_void_error_code_cancel_write(wasi_sockets_types_future_result_void_error_code_writer_t writer) {
+  return wasi_sockets_types_future_result_void_error_code__cancel_write(writer);
+}
+
+void wasi_sockets_types_future_result_void_error_code_drop_readable(wasi_sockets_types_future_result_void_error_code_t reader){
+  wasi_sockets_types_future_result_void_error_code__drop_readable(reader);
+}
+
+void wasi_sockets_types_future_result_void_error_code_drop_writable(wasi_sockets_types_future_result_void_error_code_writer_t writer) {
+  wasi_sockets_types_future_result_void_error_code__drop_writable(writer);
+}
+
+
+void wasi_sockets_ip_name_lookup_ip_address_free(wasi_sockets_ip_name_lookup_ip_address_t *ptr) {
+  wasi_sockets_types_ip_address_free(ptr);
+}
+
+void wasi_sockets_ip_name_lookup_error_code_free(wasi_sockets_ip_name_lookup_error_code_t *ptr) {
+  switch ((int32_t) ptr->tag) {
+    case 5: {
+      break;
+    }
+  }
+}
+
+void wasi_sockets_ip_name_lookup_list_ip_address_free(wasi_sockets_ip_name_lookup_list_ip_address_t *ptr) {
+  size_t list_len = ptr->len;
+  if (list_len > 0) {
+    wasi_sockets_ip_name_lookup_ip_address_t *list_ptr = ptr->ptr;
+    for (size_t i = 0; i < list_len; i++) {
+      wasi_sockets_ip_name_lookup_ip_address_free(&list_ptr[i]);
+    }
+    free(list_ptr);
+  }
+}
+
+void wasi_sockets_ip_name_lookup_result_list_ip_address_error_code_free(wasi_sockets_ip_name_lookup_result_list_ip_address_error_code_t *ptr) {
+  if (!ptr->is_err) {
+    wasi_sockets_ip_name_lookup_list_ip_address_free(&ptr->val.ok);
+  } else {
+    wasi_sockets_ip_name_lookup_error_code_free(&ptr->val.err);
   }
 }
 
@@ -1808,6 +2264,3181 @@ void wasi_http_types_static_response_consume_body(wasi_http_types_own_response_t
 
 dream_http_p3_subtask_status_t wasi_http_client_send(wasi_http_client_own_request_t request, wasi_http_client_result_own_response_error_code_t *result) {
   return __wasm_import_wasi_http_client_send((request).__handle, (uint8_t*) result);
+}
+
+bool wasi_sockets_types_static_tcp_socket_create(wasi_sockets_types_ip_address_family_t address_family, wasi_sockets_types_own_tcp_socket_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_static_tcp_socket_create((int32_t) address_family, ptr);
+  wasi_sockets_types_result_own_tcp_socket_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (wasi_sockets_types_own_tcp_socket_t) { *((int32_t*) (ptr + sizeof(void*))) };
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_bind(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_ip_socket_address_t *local_address, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  int32_t variant;
+  int32_t variant1;
+  int32_t variant2;
+  int32_t variant3;
+  int32_t variant4;
+  int32_t variant5;
+  int32_t variant6;
+  int32_t variant7;
+  int32_t variant8;
+  int32_t variant9;
+  int32_t variant10;
+  int32_t variant11;
+  switch ((int32_t) (*local_address).tag) {
+    case 0: {
+      const wasi_sockets_types_ipv4_socket_address_t *payload = &(*local_address).val.ipv4;
+      variant = 0;
+      variant1 = (int32_t) ((*payload).port);
+      variant2 = (int32_t) (((*payload).address).f0);
+      variant3 = (int32_t) (((*payload).address).f1);
+      variant4 = (int32_t) (((*payload).address).f2);
+      variant5 = (int32_t) (((*payload).address).f3);
+      variant6 = 0;
+      variant7 = 0;
+      variant8 = 0;
+      variant9 = 0;
+      variant10 = 0;
+      variant11 = 0;
+      break;
+    }
+    case 1: {
+      const wasi_sockets_types_ipv6_socket_address_t *payload0 = &(*local_address).val.ipv6;
+      variant = 1;
+      variant1 = (int32_t) ((*payload0).port);
+      variant2 = (int32_t) ((*payload0).flow_info);
+      variant3 = (int32_t) (((*payload0).address).f0);
+      variant4 = (int32_t) (((*payload0).address).f1);
+      variant5 = (int32_t) (((*payload0).address).f2);
+      variant6 = (int32_t) (((*payload0).address).f3);
+      variant7 = (int32_t) (((*payload0).address).f4);
+      variant8 = (int32_t) (((*payload0).address).f5);
+      variant9 = (int32_t) (((*payload0).address).f6);
+      variant10 = (int32_t) (((*payload0).address).f7);
+      variant11 = (int32_t) ((*payload0).scope_id);
+      break;
+    }
+  }
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_bind((self).__handle, variant, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, variant9, variant10, variant11, ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant12;
+      variant12.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant12.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant12.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant12;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+dream_http_p3_subtask_status_t wasi_sockets_types_method_tcp_socket_connect(wasi_sockets_types_method_tcp_socket_connect_args_t *args, wasi_sockets_types_result_void_error_code_t *result) {
+  return __wasm_import_wasi_sockets_types_method_tcp_socket_connect((uint8_t*) args, (uint8_t*) result);
+}
+
+bool wasi_sockets_types_method_tcp_socket_listen(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_stream_own_tcp_socket_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_listen((self).__handle, ptr);
+  wasi_sockets_types_result_stream_own_tcp_socket_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = ((uint32_t) *((int32_t*) (ptr + sizeof(void*))));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+wasi_sockets_types_future_result_void_error_code_t wasi_sockets_types_method_tcp_socket_send(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_stream_u8_t data) {
+  int32_t ret = __wasm_import_wasi_sockets_types_method_tcp_socket_send((self).__handle, ((int32_t) data));
+  return ((uint32_t) ret);
+}
+
+void wasi_sockets_types_method_tcp_socket_receive(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_tuple2_stream_u8_future_result_void_error_code_t *ret) {
+  __attribute__((__aligned__(4)))
+  uint8_t ret_area[8];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_receive((self).__handle, ptr);
+  *ret = (wasi_sockets_types_tuple2_stream_u8_future_result_void_error_code_t) {
+    (wasi_sockets_types_stream_u8_t) ((uint32_t) *((int32_t*) (ptr + 0))),
+    (wasi_sockets_types_future_result_void_error_code_t) ((uint32_t) *((int32_t*) (ptr + 4))),
+  };
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_local_address(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_ip_socket_address_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(32+1*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_local_address((self).__handle, ptr);
+  wasi_sockets_types_result_ip_socket_address_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      wasi_sockets_types_ip_socket_address_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          variant.val.ipv4 = (wasi_sockets_types_ipv4_socket_address_t) {
+            (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (4+1*sizeof(void*))))),
+            (wasi_sockets_types_ipv4_address_t) (wasi_sockets_types_ipv4_address_t) {
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (6+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (7+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (9+1*sizeof(void*))))),
+            },
+          };
+          break;
+        }
+        case 1: {
+          variant.val.ipv6 = (wasi_sockets_types_ipv6_socket_address_t) {
+            (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (4+1*sizeof(void*))))),
+            (uint32_t) (uint32_t) (*((int32_t*) (ptr + (8+1*sizeof(void*))))),
+            (wasi_sockets_types_ipv6_address_t) (wasi_sockets_types_ipv6_address_t) {
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (12+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (14+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (16+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (18+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (20+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (22+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (24+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (26+1*sizeof(void*))))),
+            },
+            (uint32_t) (uint32_t) (*((int32_t*) (ptr + (28+1*sizeof(void*))))),
+          };
+          break;
+        }
+      }
+
+      result.val.ok = variant;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant0;
+      variant0.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant0.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant0.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant0;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_remote_address(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_ip_socket_address_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(32+1*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_remote_address((self).__handle, ptr);
+  wasi_sockets_types_result_ip_socket_address_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      wasi_sockets_types_ip_socket_address_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          variant.val.ipv4 = (wasi_sockets_types_ipv4_socket_address_t) {
+            (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (4+1*sizeof(void*))))),
+            (wasi_sockets_types_ipv4_address_t) (wasi_sockets_types_ipv4_address_t) {
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (6+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (7+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (9+1*sizeof(void*))))),
+            },
+          };
+          break;
+        }
+        case 1: {
+          variant.val.ipv6 = (wasi_sockets_types_ipv6_socket_address_t) {
+            (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (4+1*sizeof(void*))))),
+            (uint32_t) (uint32_t) (*((int32_t*) (ptr + (8+1*sizeof(void*))))),
+            (wasi_sockets_types_ipv6_address_t) (wasi_sockets_types_ipv6_address_t) {
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (12+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (14+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (16+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (18+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (20+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (22+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (24+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (26+1*sizeof(void*))))),
+            },
+            (uint32_t) (uint32_t) (*((int32_t*) (ptr + (28+1*sizeof(void*))))),
+          };
+          break;
+        }
+      }
+
+      result.val.ok = variant;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant0;
+      variant0.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant0.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant0.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant0;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_is_listening(wasi_sockets_types_borrow_tcp_socket_t self) {
+  int32_t ret = __wasm_import_wasi_sockets_types_method_tcp_socket_get_is_listening((self).__handle);
+  return ret;
+}
+
+wasi_sockets_types_ip_address_family_t wasi_sockets_types_method_tcp_socket_get_address_family(wasi_sockets_types_borrow_tcp_socket_t self) {
+  int32_t ret = __wasm_import_wasi_sockets_types_method_tcp_socket_get_address_family((self).__handle);
+  return ret;
+}
+
+bool wasi_sockets_types_method_tcp_socket_set_listen_backlog_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_set_listen_backlog_size((self).__handle, (int64_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_keep_alive_enabled(wasi_sockets_types_borrow_tcp_socket_t self, bool *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_keep_alive_enabled((self).__handle, ptr);
+  wasi_sockets_types_result_bool_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_set_keep_alive_enabled(wasi_sockets_types_borrow_tcp_socket_t self, bool value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_set_keep_alive_enabled((self).__handle, value, ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_keep_alive_idle_time(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_duration_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[(8+4*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_keep_alive_idle_time((self).__handle, ptr);
+  wasi_sockets_types_result_duration_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint64_t) (*((int64_t*) (ptr + 8)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (8+2*sizeof(void*))))), (*((size_t*) (ptr + (8+3*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_set_keep_alive_idle_time(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_duration_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_set_keep_alive_idle_time((self).__handle, (int64_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_keep_alive_interval(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_duration_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[(8+4*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_keep_alive_interval((self).__handle, ptr);
+  wasi_sockets_types_result_duration_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint64_t) (*((int64_t*) (ptr + 8)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (8+2*sizeof(void*))))), (*((size_t*) (ptr + (8+3*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_set_keep_alive_interval(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_duration_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_set_keep_alive_interval((self).__handle, (int64_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_keep_alive_count(wasi_sockets_types_borrow_tcp_socket_t self, uint32_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_keep_alive_count((self).__handle, ptr);
+  wasi_sockets_types_result_u32_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint32_t) (*((int32_t*) (ptr + sizeof(void*))));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_set_keep_alive_count(wasi_sockets_types_borrow_tcp_socket_t self, uint32_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_set_keep_alive_count((self).__handle, (int32_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_hop_limit(wasi_sockets_types_borrow_tcp_socket_t self, uint8_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_hop_limit((self).__handle, ptr);
+  wasi_sockets_types_result_u8_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint8_t) ((int32_t) *((uint8_t*) (ptr + sizeof(void*))));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_set_hop_limit(wasi_sockets_types_borrow_tcp_socket_t self, uint8_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_set_hop_limit((self).__handle, (int32_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_receive_buffer_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[(8+4*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_receive_buffer_size((self).__handle, ptr);
+  wasi_sockets_types_result_u64_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint64_t) (*((int64_t*) (ptr + 8)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (8+2*sizeof(void*))))), (*((size_t*) (ptr + (8+3*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_set_receive_buffer_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_set_receive_buffer_size((self).__handle, (int64_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_get_send_buffer_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[(8+4*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_get_send_buffer_size((self).__handle, ptr);
+  wasi_sockets_types_result_u64_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint64_t) (*((int64_t*) (ptr + 8)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (8+2*sizeof(void*))))), (*((size_t*) (ptr + (8+3*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_tcp_socket_set_send_buffer_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_tcp_socket_set_send_buffer_size((self).__handle, (int64_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_static_udp_socket_create(wasi_sockets_types_ip_address_family_t address_family, wasi_sockets_types_own_udp_socket_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_static_udp_socket_create((int32_t) address_family, ptr);
+  wasi_sockets_types_result_own_udp_socket_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (wasi_sockets_types_own_udp_socket_t) { *((int32_t*) (ptr + sizeof(void*))) };
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_bind(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_ip_socket_address_t *local_address, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  int32_t variant;
+  int32_t variant1;
+  int32_t variant2;
+  int32_t variant3;
+  int32_t variant4;
+  int32_t variant5;
+  int32_t variant6;
+  int32_t variant7;
+  int32_t variant8;
+  int32_t variant9;
+  int32_t variant10;
+  int32_t variant11;
+  switch ((int32_t) (*local_address).tag) {
+    case 0: {
+      const wasi_sockets_types_ipv4_socket_address_t *payload = &(*local_address).val.ipv4;
+      variant = 0;
+      variant1 = (int32_t) ((*payload).port);
+      variant2 = (int32_t) (((*payload).address).f0);
+      variant3 = (int32_t) (((*payload).address).f1);
+      variant4 = (int32_t) (((*payload).address).f2);
+      variant5 = (int32_t) (((*payload).address).f3);
+      variant6 = 0;
+      variant7 = 0;
+      variant8 = 0;
+      variant9 = 0;
+      variant10 = 0;
+      variant11 = 0;
+      break;
+    }
+    case 1: {
+      const wasi_sockets_types_ipv6_socket_address_t *payload0 = &(*local_address).val.ipv6;
+      variant = 1;
+      variant1 = (int32_t) ((*payload0).port);
+      variant2 = (int32_t) ((*payload0).flow_info);
+      variant3 = (int32_t) (((*payload0).address).f0);
+      variant4 = (int32_t) (((*payload0).address).f1);
+      variant5 = (int32_t) (((*payload0).address).f2);
+      variant6 = (int32_t) (((*payload0).address).f3);
+      variant7 = (int32_t) (((*payload0).address).f4);
+      variant8 = (int32_t) (((*payload0).address).f5);
+      variant9 = (int32_t) (((*payload0).address).f6);
+      variant10 = (int32_t) (((*payload0).address).f7);
+      variant11 = (int32_t) ((*payload0).scope_id);
+      break;
+    }
+  }
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_bind((self).__handle, variant, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, variant9, variant10, variant11, ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant12;
+      variant12.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant12.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant12.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant12;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_connect(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_ip_socket_address_t *remote_address, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  int32_t variant;
+  int32_t variant1;
+  int32_t variant2;
+  int32_t variant3;
+  int32_t variant4;
+  int32_t variant5;
+  int32_t variant6;
+  int32_t variant7;
+  int32_t variant8;
+  int32_t variant9;
+  int32_t variant10;
+  int32_t variant11;
+  switch ((int32_t) (*remote_address).tag) {
+    case 0: {
+      const wasi_sockets_types_ipv4_socket_address_t *payload = &(*remote_address).val.ipv4;
+      variant = 0;
+      variant1 = (int32_t) ((*payload).port);
+      variant2 = (int32_t) (((*payload).address).f0);
+      variant3 = (int32_t) (((*payload).address).f1);
+      variant4 = (int32_t) (((*payload).address).f2);
+      variant5 = (int32_t) (((*payload).address).f3);
+      variant6 = 0;
+      variant7 = 0;
+      variant8 = 0;
+      variant9 = 0;
+      variant10 = 0;
+      variant11 = 0;
+      break;
+    }
+    case 1: {
+      const wasi_sockets_types_ipv6_socket_address_t *payload0 = &(*remote_address).val.ipv6;
+      variant = 1;
+      variant1 = (int32_t) ((*payload0).port);
+      variant2 = (int32_t) ((*payload0).flow_info);
+      variant3 = (int32_t) (((*payload0).address).f0);
+      variant4 = (int32_t) (((*payload0).address).f1);
+      variant5 = (int32_t) (((*payload0).address).f2);
+      variant6 = (int32_t) (((*payload0).address).f3);
+      variant7 = (int32_t) (((*payload0).address).f4);
+      variant8 = (int32_t) (((*payload0).address).f5);
+      variant9 = (int32_t) (((*payload0).address).f6);
+      variant10 = (int32_t) (((*payload0).address).f7);
+      variant11 = (int32_t) ((*payload0).scope_id);
+      break;
+    }
+  }
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_connect((self).__handle, variant, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, variant9, variant10, variant11, ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant12;
+      variant12.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant12.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant12.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant12;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_disconnect(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_disconnect((self).__handle, ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+dream_http_p3_subtask_status_t wasi_sockets_types_method_udp_socket_send(wasi_sockets_types_method_udp_socket_send_args_t *args, wasi_sockets_types_result_void_error_code_t *result) {
+  return __wasm_import_wasi_sockets_types_method_udp_socket_send((uint8_t*) args, (uint8_t*) result);
+}
+
+dream_http_p3_subtask_status_t wasi_sockets_types_method_udp_socket_receive(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_result_tuple2_list_u8_ip_socket_address_error_code_t *result) {
+  return __wasm_import_wasi_sockets_types_method_udp_socket_receive((self).__handle, (uint8_t*) result);
+}
+
+bool wasi_sockets_types_method_udp_socket_get_local_address(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_ip_socket_address_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(32+1*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_get_local_address((self).__handle, ptr);
+  wasi_sockets_types_result_ip_socket_address_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      wasi_sockets_types_ip_socket_address_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          variant.val.ipv4 = (wasi_sockets_types_ipv4_socket_address_t) {
+            (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (4+1*sizeof(void*))))),
+            (wasi_sockets_types_ipv4_address_t) (wasi_sockets_types_ipv4_address_t) {
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (6+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (7+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (9+1*sizeof(void*))))),
+            },
+          };
+          break;
+        }
+        case 1: {
+          variant.val.ipv6 = (wasi_sockets_types_ipv6_socket_address_t) {
+            (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (4+1*sizeof(void*))))),
+            (uint32_t) (uint32_t) (*((int32_t*) (ptr + (8+1*sizeof(void*))))),
+            (wasi_sockets_types_ipv6_address_t) (wasi_sockets_types_ipv6_address_t) {
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (12+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (14+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (16+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (18+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (20+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (22+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (24+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (26+1*sizeof(void*))))),
+            },
+            (uint32_t) (uint32_t) (*((int32_t*) (ptr + (28+1*sizeof(void*))))),
+          };
+          break;
+        }
+      }
+
+      result.val.ok = variant;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant0;
+      variant0.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant0.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant0.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant0;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_get_remote_address(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_ip_socket_address_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(32+1*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_get_remote_address((self).__handle, ptr);
+  wasi_sockets_types_result_ip_socket_address_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      wasi_sockets_types_ip_socket_address_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          variant.val.ipv4 = (wasi_sockets_types_ipv4_socket_address_t) {
+            (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (4+1*sizeof(void*))))),
+            (wasi_sockets_types_ipv4_address_t) (wasi_sockets_types_ipv4_address_t) {
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (6+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (7+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))),
+              (uint8_t) (uint8_t) ((int32_t) *((uint8_t*) (ptr + (9+1*sizeof(void*))))),
+            },
+          };
+          break;
+        }
+        case 1: {
+          variant.val.ipv6 = (wasi_sockets_types_ipv6_socket_address_t) {
+            (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (4+1*sizeof(void*))))),
+            (uint32_t) (uint32_t) (*((int32_t*) (ptr + (8+1*sizeof(void*))))),
+            (wasi_sockets_types_ipv6_address_t) (wasi_sockets_types_ipv6_address_t) {
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (12+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (14+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (16+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (18+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (20+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (22+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (24+1*sizeof(void*))))),
+              (uint16_t) (uint16_t) ((int32_t) *((uint16_t*) (ptr + (26+1*sizeof(void*))))),
+            },
+            (uint32_t) (uint32_t) (*((int32_t*) (ptr + (28+1*sizeof(void*))))),
+          };
+          break;
+        }
+      }
+
+      result.val.ok = variant;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant0;
+      variant0.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant0.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant0.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant0;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+wasi_sockets_types_ip_address_family_t wasi_sockets_types_method_udp_socket_get_address_family(wasi_sockets_types_borrow_udp_socket_t self) {
+  int32_t ret = __wasm_import_wasi_sockets_types_method_udp_socket_get_address_family((self).__handle);
+  return ret;
+}
+
+bool wasi_sockets_types_method_udp_socket_get_unicast_hop_limit(wasi_sockets_types_borrow_udp_socket_t self, uint8_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_get_unicast_hop_limit((self).__handle, ptr);
+  wasi_sockets_types_result_u8_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint8_t) ((int32_t) *((uint8_t*) (ptr + sizeof(void*))));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_set_unicast_hop_limit(wasi_sockets_types_borrow_udp_socket_t self, uint8_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_set_unicast_hop_limit((self).__handle, (int32_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_get_receive_buffer_size(wasi_sockets_types_borrow_udp_socket_t self, uint64_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[(8+4*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_get_receive_buffer_size((self).__handle, ptr);
+  wasi_sockets_types_result_u64_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint64_t) (*((int64_t*) (ptr + 8)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (8+2*sizeof(void*))))), (*((size_t*) (ptr + (8+3*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_set_receive_buffer_size(wasi_sockets_types_borrow_udp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_set_receive_buffer_size((self).__handle, (int64_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_get_send_buffer_size(wasi_sockets_types_borrow_udp_socket_t self, uint64_t *ret, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(8)))
+  uint8_t ret_area[(8+4*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_get_send_buffer_size((self).__handle, ptr);
+  wasi_sockets_types_result_u64_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      result.val.ok = (uint64_t) (*((int64_t*) (ptr + 8)));
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + 8));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (8+1*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (8+2*sizeof(void*))))), (*((size_t*) (ptr + (8+3*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    *ret = result.val.ok;
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+bool wasi_sockets_types_method_udp_socket_set_send_buffer_size(wasi_sockets_types_borrow_udp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err) {
+  __attribute__((__aligned__(sizeof(void*))))
+  uint8_t ret_area[(5*sizeof(void*))];
+  uint8_t *ptr = (uint8_t *) &ret_area;
+  __wasm_import_wasi_sockets_types_method_udp_socket_set_send_buffer_size((self).__handle, (int64_t) (value), ptr);
+  wasi_sockets_types_result_void_error_code_t result;
+  switch ((int32_t) *((uint8_t*) (ptr + 0))) {
+    case 0: {
+      result.is_err = false;
+      break;
+    }
+    case 1: {
+      result.is_err = true;
+      wasi_sockets_types_error_code_t variant;
+      variant.tag = (int32_t) *((uint8_t*) (ptr + sizeof(void*)));
+      switch ((int32_t) variant.tag) {
+        case 0: {
+          break;
+        }
+        case 1: {
+          break;
+        }
+        case 2: {
+          break;
+        }
+        case 3: {
+          break;
+        }
+        case 4: {
+          break;
+        }
+        case 5: {
+          break;
+        }
+        case 6: {
+          break;
+        }
+        case 7: {
+          break;
+        }
+        case 8: {
+          break;
+        }
+        case 9: {
+          break;
+        }
+        case 10: {
+          break;
+        }
+        case 11: {
+          break;
+        }
+        case 12: {
+          break;
+        }
+        case 13: {
+          break;
+        }
+        case 14: {
+          dream_http_p3_option_string_t option;
+          switch ((int32_t) *((uint8_t*) (ptr + (2*sizeof(void*))))) {
+            case 0: {
+              option.is_some = false;
+              break;
+            }
+            case 1: {
+              option.is_some = true;
+              option.val = (dream_http_p3_string_t) { (uint8_t*)(*((uint8_t **) (ptr + (3*sizeof(void*))))), (*((size_t*) (ptr + (4*sizeof(void*))))) };
+              break;
+            }
+          }
+          variant.val.other = option;
+          break;
+        }
+      }
+
+      result.val.err = variant;
+      break;
+    }
+  }
+  if (!result.is_err) {
+    return 1;
+  } else {
+    *err = result.val.err;
+    return 0;
+  }
+}
+
+dream_http_p3_subtask_status_t wasi_sockets_ip_name_lookup_resolve_addresses(dream_http_p3_string_t name, wasi_sockets_ip_name_lookup_result_list_ip_address_error_code_t *result) {
+  return __wasm_import_wasi_sockets_ip_name_lookup_resolve_addresses((uint8_t *) (name).ptr, (name).len, (uint8_t*) result);
 }
 
 // Ensure that the *_component_type.o object is linked in

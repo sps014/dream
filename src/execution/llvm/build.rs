@@ -20,6 +20,8 @@ use crate::execution::native::{Pgo, host_library_dir, native_bin_fresh, read_hos
 mod library;
 #[path = "build_policy.rs"]
 mod policy;
+#[path = "program_objects.rs"]
+mod program_objects;
 use dream_mir::runtime::runtime_need_from_module_text;
 use policy::{cpu_args, dead_strip_args, section_args};
 pub(super) use policy::{llc_level, pipeline};
@@ -115,7 +117,7 @@ fn link_and_optimize(
     optimized
 }
 
-fn run_llc(
+pub(super) fn run_llc(
     tools: &LlvmTools,
     input: &Path,
     opt: OptLevel,
@@ -242,6 +244,7 @@ pub fn emit_llvm_artifacts(
 /// Links `ll_path` into `<stem>.bin`. With `opt_ll`, also writes the optimized whole-program module
 /// there as text. `icon` is a PNG compiled in as the app icon.
 pub struct NativeBuildOptions<'a> {
+    pub codegen_units: &'a [String],
     pub target: dream_abi::target::TargetSpec,
     pub opt_ll: Option<&'a Path>,
     pub opt_remarks: Option<&'a Path>,
@@ -260,6 +263,7 @@ pub fn compile_llvm(
     options: NativeBuildOptions<'_>,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let NativeBuildOptions {
+        codegen_units,
         target: spec,
         opt_ll,
         opt_remarks,
@@ -522,8 +526,22 @@ pub fn compile_llvm(
             write_ir(&tools, &optimized, out)?;
         }
     }
-    let obj = ll_path.with_extension("o");
-    run_llc(&tools, &optimized, opt, debug, "obj", &obj, &spec)?;
+    let incremental = separate_runtime
+        && opt == OptLevel::O0
+        && !debug
+        && optimized == ll_path
+        && output_kind == OutputKind::Executable
+        && !codegen_units.is_empty();
+    let mut units = if incremental {
+        program_objects::compile(&tools, &spec, codegen_units)?
+    } else {
+        let object = ll_path.with_extension("o");
+        run_llc(&tools, &optimized, opt, debug, "obj", &object, &spec)?;
+        vec![object]
+    };
+    let obj = units.remove(0);
+    units.extend(debug_objects);
+    let debug_objects = units;
 
     if output_kind == OutputKind::Staticlib {
         let mut objects = native.objects.clone();
@@ -634,7 +652,7 @@ pub fn compile_llvm(
     if optimized != ll_path {
         let _ = std::fs::remove_file(&optimized);
     }
-    if !debug {
+    if !debug && !incremental {
         let _ = std::fs::remove_file(&obj);
     }
     Ok(bin)

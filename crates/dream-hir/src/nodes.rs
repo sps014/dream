@@ -5,7 +5,7 @@ use crate::ops::{BinOp, Overflow, UnOp};
 use dream_types::{DefId, TypeId};
 
 /// A resolved reference to a variable or function.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Binding {
     Local(LocalId),
     Global(GlobalId),
@@ -15,7 +15,7 @@ pub enum Binding {
 /// A fully resolved call target: the def, the monomorphization type-args (empty when non-generic),
 /// and the concrete return type at this call site. The backend derives the emitted symbol from
 /// `(def, instance)`, matching the instance function's own `(def, instance)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Callee {
     pub def: DefId,
     pub instance: Vec<TypeId>,
@@ -25,7 +25,7 @@ pub struct Callee {
 }
 
 /// Structured statements. Control flow is preserved (lowered to a CFG only in MIR).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum HStmt {
     /// `let name: ty = value;`
     Let {
@@ -122,14 +122,14 @@ pub enum HStmt {
 }
 
 /// One arm of a `switch`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HArm {
     pub pattern: HPattern,
     pub body: Vec<HStmt>,
 }
 
 /// Switch patterns. Union-variant patterns bind their payload to fresh locals.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum HPattern {
     /// A constant value (enum member, integer, etc.).
     Const(HExpr),
@@ -144,7 +144,7 @@ pub enum HPattern {
 }
 
 /// An assignable location.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum HPlace {
     Local(LocalId),
     Global(GlobalId),
@@ -161,13 +161,13 @@ pub enum HPlace {
 }
 
 /// A typed expression: `kind` is the shape, `ty` is its interned result type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct HExpr {
     pub ty: TypeId,
     pub kind: HExprKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum HExprKind {
     IntLit(i64),
     /// Target-specific byte size of a resolved type, folded while lowering with the final layout.
@@ -217,6 +217,7 @@ pub enum HExprKind {
     /// function type `fun(this, params...): ret` used for the indirect call.
     InterfaceCall {
         receiver: Box<HExpr>,
+        #[serde(with = "crate::module::interface_index")]
         iface_id: usize,
         method_slot: usize,
         sig: TypeId,
@@ -498,6 +499,7 @@ mod tests {
             instances: vec![],
             layouts: LayoutTable::default(),
             imports: vec![],
+            c_pointer: None,
             platform_main: None,
             intrinsics: vec![],
             interfaces: InterfaceTable::default(),

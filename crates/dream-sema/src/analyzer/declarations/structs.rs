@@ -402,6 +402,21 @@ impl<'a> Analyzer<'a> {
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
+        let request = crate::analyzer::typed_hir_cache::Request::Struct(def, concrete_ids.clone());
+        self.journaled(
+            |_| Some(request),
+            |s| s.instantiate_struct(def, base_name, concrete_ids, position, diagnostics),
+        );
+    }
+
+    fn instantiate_struct(
+        &mut self,
+        def: dream_types::DefId,
+        base_name: &str,
+        concrete_ids: Vec<dream_types::TypeId>,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
         let instance = self.type_ctx.instantiate(def, concrete_ids.clone());
         if self.struct_info(instance).is_some() {
             return;

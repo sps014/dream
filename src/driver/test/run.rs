@@ -56,6 +56,11 @@ pub fn run_tests(
         let cfg = crate::driver::target::resolve(host == TestHost::Node, None)?
             .spec()
             .cfg_symbols(opts.release);
+        let cfg = if host == TestHost::Node {
+            cfg.for_node()
+        } else {
+            cfg
+        };
         plans.push(RunnerPlan::discover(
             &project,
             opts.filter.as_deref(),

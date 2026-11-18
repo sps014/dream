@@ -1394,6 +1394,7 @@ version = "0.1.0"
 dependencies = [
  "dream-types",
  "indexmap 2.14.0",
+ "serde",
 ]
 
 [[package]]
@@ -1584,6 +1585,7 @@ dependencies = [
 name = "dream-lsp"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "bumpalo",
  "dashmap",
  "dream",
@@ -1657,6 +1659,8 @@ dependencies = [
  "indexmap 2.14.0",
  "petgraph 0.8.3",
  "pretty_assertions",
+ "serde",
+ "serde_json",
  "smallvec",
  "tracing",
 ]
@@ -1696,6 +1700,8 @@ dependencies = [
  "dream-syntax",
  "dream-text",
  "indexmap 2.14.0",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

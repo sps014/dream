@@ -141,41 +141,41 @@ impl<'a, 'b> Parser<'a, 'b> {
             return None;
         }
         self.next_token();
-        value
+        value.map(|value| value == self.cfg.active_mask())
     }
 
-    fn parse_cfg_or(&mut self) -> Option<bool> {
+    fn parse_cfg_or(&mut self) -> Option<u8> {
         let mut value = self.parse_cfg_and();
         while self.current_token().kind == TokenKind::PipePipeToken {
             let iter = self.current_token_index;
             self.next_token();
             let right = self.parse_cfg_and();
-            value = value.zip(right).map(|(l, r)| l || r);
+            value = value.zip(right).map(|(l, r)| l | r);
             self.ensure_progress(iter);
         }
         value
     }
 
-    fn parse_cfg_and(&mut self) -> Option<bool> {
+    fn parse_cfg_and(&mut self) -> Option<u8> {
         let mut value = self.parse_cfg_unary();
         while self.current_token().kind == TokenKind::AmpersandAmpersandToken {
             let iter = self.current_token_index;
             self.next_token();
             let right = self.parse_cfg_unary();
-            value = value.zip(right).map(|(l, r)| l && r);
+            value = value.zip(right).map(|(l, r)| l & r);
             self.ensure_progress(iter);
         }
         value
     }
 
-    fn parse_cfg_unary(&mut self) -> Option<bool> {
+    fn parse_cfg_unary(&mut self) -> Option<u8> {
         if !self.enter_nesting() {
             return None;
         }
         let value = match self.current_token().kind {
             TokenKind::BangToken => {
                 self.next_token();
-                self.parse_cfg_unary().map(|v| !v)
+                self.parse_cfg_unary().map(|v| self.cfg.active_mask() ^ v)
             }
             TokenKind::OpenParenthesisToken => {
                 self.next_token();
@@ -194,7 +194,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         value
     }
 
-    fn parse_cfg_symbol(&mut self) -> Option<bool> {
+    fn parse_cfg_symbol(&mut self) -> Option<u8> {
         let namespace = self.current_token();
         if namespace.kind != TokenKind::IdentifierToken {
             self.diagnostics.report_error(
@@ -233,7 +233,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             return None;
         }
         match TargetSymbol::from_name(&name.text) {
-            Some(symbol) => Some(self.cfg.defines(symbol)),
+            Some(symbol) => Some(self.cfg.truth(symbol)),
             None => {
                 let known = TargetSymbol::ALL
                     .iter()

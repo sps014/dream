@@ -41,6 +41,16 @@ pub fn enforce_shared(config: &crate::driver::toolchain::ToolchainConfig) {
     let units = config.native_rt_cache_root().join("units");
     enforce(&units.join("versions"), RUNTIME_VERSIONS, &[]);
     enforce(&units, RUNTIME_UNITS, &["versions"]);
+    enforce(
+        &config.native_rt_cache_root().join("program-objects"),
+        512 * 1024 * 1024,
+        &[],
+    );
+    enforce(
+        &config.prefix.join("cache").join("body-checks"),
+        128 * 1024 * 1024,
+        &[],
+    );
     enforce(&config.std_sources_root(), STD_SOURCES, &[]);
     enforce(&config.tool_identity_cache_root(), TOOL_IDENTITIES, &[]);
 }

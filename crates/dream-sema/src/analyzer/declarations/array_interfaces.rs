@@ -7,6 +7,13 @@ impl<'a> Analyzer<'a> {
         ty: TypeId,
         diagnostics: &mut DiagnosticBag,
     ) {
+        self.journaled(
+            |_| Some(crate::analyzer::typed_hir_cache::Request::Array(ty)),
+            |s| s.attach_array_collection(ty, diagnostics),
+        );
+    }
+
+    fn attach_array_collection(&mut self, ty: TypeId, diagnostics: &mut DiagnosticBag) {
         let TyKind::Array(elem) = self.type_ctx.interner.kind(ty) else {
             return;
         };

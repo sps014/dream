@@ -36,9 +36,22 @@ impl Compiler {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<FrontEnd<'a>, CompileError> {
         let mut acc = ProgramAccumulator {
-            cfg: self.target.spec().cfg_symbols(!self.profile.is_debug()),
+            cfg: self.cfg_symbols(),
+            track_build_inputs: self.build_cache.is_some(),
             ..ProgramAccumulator::default()
         };
+        if acc.track_build_inputs
+            && let Some(directory) = Path::new(main_file_path).parent()
+        {
+            for ancestor in directory.ancestors() {
+                let manifest = ancestor.join("dream.toml");
+                acc.observe_resolution_input(ancestor.join("dream.lock"));
+                acc.observe_resolution_input(manifest.clone());
+                if manifest.is_file() {
+                    break;
+                }
+            }
+        }
         let source_phase = tracing::info_span!("compile_phase", phase = "source_load").entered();
         match &self.virtual_entry {
             Some(source) => {
@@ -94,13 +107,23 @@ impl Compiler {
                 crate::driver::c_imports::Build {
                     config: &self.toolchain_config,
                     native: &native_graph,
-                    optimize: self.native_opt(),
+                    optimize: if self.target.spec().capabilities.linear_memory {
+                        self.effective_optimize().unwrap_or(OptLevel::O0)
+                    } else {
+                        self.native_opt()
+                    },
                     debug: self.profile.is_debug(),
                 },
             )?;
         }
         #[cfg(not(feature = "native"))]
-        crate::driver::c_imports::replay(&mut acc, arena, diagnostics, main_file_path)?;
+        crate::driver::c_imports::replay(
+            &mut acc,
+            arena,
+            diagnostics,
+            main_file_path,
+            self.target.spec(),
+        )?;
         drop(source_phase);
         // Opt-in stdlib packages (`import system.io;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`).

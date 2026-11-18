@@ -37,6 +37,35 @@ impl<'a> Analyzer<'a> {
             .map(|ty| self.type_ctx.lower(ty))
             .collect();
         let identity = (def, args);
+        let request = |s: &Self| {
+            let template_matches = s
+                .generic_functions
+                .get(&def)
+                .is_some_and(|stored| std::ptr::eq(*stored, template));
+            template_matches.then(|| {
+                crate::analyzer::typed_hir_cache::Request::Function(
+                    def,
+                    bindings.keys().cloned().zip(identity.1.iter().copied()).collect(),
+                )
+            })
+        };
+        self.journaled(request, |s| {
+            s.instantiate_generic_function(template, bindings, &identity)
+        });
+        self.type_ctx.set_scope(old_scope);
+        identity
+    }
+
+    /// Registers the instance `identity` of `template` unless it exists. The type scope must be
+    /// the template's module.
+    pub(in crate::analyzer) fn instantiate_generic_function(
+        &mut self,
+        template: &'a FunctionNode<'a>,
+        bindings: &GenericBindings,
+        identity: &crate::function_table::FunctionIdentity,
+    ) {
+        let def = identity.0;
+        let identity = identity.clone();
         if !self.function_table.functions.contains_key(&identity) {
             let mut specialized = template.clone();
             Self::substitute_generic_signature(&mut specialized, bindings);
@@ -76,8 +105,6 @@ impl<'a> Analyzer<'a> {
                     .push(identity.clone());
             }
         }
-        self.type_ctx.set_scope(old_scope);
-        identity
     }
 
     /// Instantiates a generic free function used as a first-class *value* (`let cmp: fun(T, T): int =

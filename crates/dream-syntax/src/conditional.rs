@@ -21,11 +21,12 @@ pub enum TargetSymbol {
     Native,
     Wasm,
     Browser,
+    Node,
     Wasi,
 }
 
 impl TargetSymbol {
-    pub const ALL: [TargetSymbol; 11] = [
+    pub const ALL: [TargetSymbol; 12] = [
         TargetSymbol::Debug,
         TargetSymbol::Release,
         TargetSymbol::Windows,
@@ -36,6 +37,7 @@ impl TargetSymbol {
         TargetSymbol::Native,
         TargetSymbol::Wasm,
         TargetSymbol::Browser,
+        TargetSymbol::Node,
         TargetSymbol::Wasi,
     ];
 
@@ -52,6 +54,7 @@ impl TargetSymbol {
             TargetSymbol::Native => "Native",
             TargetSymbol::Wasm => "Wasm",
             TargetSymbol::Browser => "Browser",
+            TargetSymbol::Node => "Node",
             TargetSymbol::Wasi => "Wasi",
         }
     }
@@ -69,20 +72,51 @@ impl TargetSymbol {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CfgSymbols {
     bits: u16,
+    second: Option<u16>,
 }
 
 impl CfgSymbols {
     pub const fn empty() -> CfgSymbols {
-        CfgSymbols { bits: 0 }
+        CfgSymbols {
+            bits: 0,
+            second: None,
+        }
     }
 
     pub fn with(mut self, symbol: TargetSymbol) -> CfgSymbols {
         self.bits |= symbol.bit();
+        if let Some(second) = &mut self.second {
+            *second |= symbol.bit();
+        }
         self
     }
 
     pub fn defines(self, symbol: TargetSymbol) -> bool {
-        self.bits & symbol.bit() != 0
+        self.truth(symbol) == self.active_mask()
+    }
+
+    /// Uses Node's host symbols for an existing JavaScript WebAssembly target.
+    pub fn for_node(self) -> Self {
+        Self {
+            bits: (self.bits & !TargetSymbol::Browser.bit()) | TargetSymbol::Node.bit(),
+            second: None,
+        }
+    }
+
+    /// A shared WebAssembly artifact keeps conditions that hold on both JS hosts.
+    pub fn for_browser_and_node(mut self) -> Self {
+        self.second = Some(self.for_node().bits);
+        self
+    }
+
+    pub(crate) fn active_mask(self) -> u8 {
+        if self.second.is_some() { 3 } else { 1 }
+    }
+
+    pub(crate) fn truth(self, symbol: TargetSymbol) -> u8 {
+        let first = u8::from(self.bits & symbol.bit() != 0);
+        let second = u8::from(self.second.is_some_and(|bits| bits & symbol.bit() != 0));
+        first | (second << 1)
     }
 
     /// A debug build for the machine running the compiler. Editors and tools without a selected
@@ -109,12 +143,19 @@ impl CfgSymbols {
     /// The defined names in declaration order, joined by `,`. Stable across runs, so it can key
     /// caches.
     pub fn key(self) -> String {
-        TargetSymbol::ALL
-            .into_iter()
-            .filter(|symbol| self.defines(*symbol))
-            .map(TargetSymbol::name)
-            .collect::<Vec<_>>()
-            .join(",")
+        let names = |bits| {
+            TargetSymbol::ALL
+                .into_iter()
+                .filter(|symbol| bits & symbol.bit() != 0)
+                .map(TargetSymbol::name)
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        let first = names(self.bits);
+        self.second.map_or_else(
+            || first.clone(),
+            |second| format!("{first}/{}", names(second)),
+        )
     }
 }
 

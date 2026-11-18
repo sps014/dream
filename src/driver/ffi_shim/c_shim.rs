@@ -123,10 +123,19 @@ impl Render<'_> {
                         CScalar::Char.from_carrier(&format!("c{j}"))
                     );
                 }
-                CField::Scalar(_) => {
+                CField::Scalar(_) | CField::Ptr => {
                     let _ = writeln!(
                         out,
                         "    __builtin_memcpy(&v->f{j}, p + {off}, sizeof v->f{j});"
+                    );
+                }
+                CField::Struct(k) if s.packed => {
+                    let nested = struct_name(*k);
+                    let _ = writeln!(out, "    {nested} nested{j};");
+                    let _ = writeln!(out, "    {SHIM_PREFIX}load{k}(&nested{j}, p + {off});");
+                    let _ = writeln!(
+                        out,
+                        "    __builtin_memcpy(&v->f{j}, &nested{j}, sizeof nested{j});"
                     );
                 }
                 CField::Struct(k) => {
@@ -148,11 +157,20 @@ impl Render<'_> {
                         "    int32_t c{j} = {value}; __builtin_memcpy(p + {off}, &c{j}, sizeof c{j});"
                     );
                 }
-                CField::Scalar(_) => {
+                CField::Scalar(_) | CField::Ptr => {
                     let _ = writeln!(
                         out,
                         "    __builtin_memcpy(p + {off}, &v->f{j}, sizeof v->f{j});"
                     );
+                }
+                CField::Struct(k) if s.packed => {
+                    let nested = struct_name(*k);
+                    let _ = writeln!(out, "    {nested} nested{j};");
+                    let _ = writeln!(
+                        out,
+                        "    __builtin_memcpy(&nested{j}, &v->f{j}, sizeof nested{j});"
+                    );
+                    let _ = writeln!(out, "    {SHIM_PREFIX}store{k}(p + {off}, &nested{j});");
                 }
                 CField::Struct(k) => {
                     let _ = writeln!(out, "    {SHIM_PREFIX}store{k}(p + {off}, &v->f{j});");
@@ -297,6 +315,7 @@ impl Render<'_> {
     fn field_ty(&self, f: CField) -> String {
         match f {
             CField::Scalar(s) => s.c_name().into(),
+            CField::Ptr => "void*".into(),
             CField::Struct(i) => struct_name(i),
         }
     }

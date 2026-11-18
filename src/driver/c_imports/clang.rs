@@ -1,7 +1,7 @@
-use super::{Binding, Request, model};
+use super::{Binding, Request, header_hash, model};
 use crate::driver::native_sets::NativeGraph;
 use crate::driver::toolchain::ToolchainConfig;
-use crate::execution::llvm::{bundle, resolve_llvm, runtime, wasm};
+use crate::execution::llvm::{bundle, component, component_sources, resolve_llvm, runtime, wasm};
 use dream_abi::c_abi::{is_c_identifier, is_link_name};
 use dream_abi::target::TargetSpec;
 use serde_json::Value;
@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::Arc;
 
-const CACHE_VERSION: &str = "cimport-v4";
+const CACHE_VERSION: &str = "cimport-v6";
 
 pub(in crate::driver) struct Build<'a> {
     pub config: &'a Arc<ToolchainConfig>,
@@ -48,10 +48,18 @@ impl Build<'_> {
         }) {
             return Err("invalid C library name".into());
         }
-        let tools = resolve_llvm(config)?;
-        let clang = tools.clang()?;
+        let environment = target.execution_environment.component();
+        let clang = if let Some(environment) = environment {
+            component::clang(config, environment)?
+        } else {
+            resolve_llvm(config)?.clang()?
+        };
         let mut args = vec!["-std=gnu11".into()];
-        if target.capabilities.linear_memory {
+        if environment.is_some() {
+            args = component_sources::language_flags(false, self.optimize)
+                .map(str::to_owned)
+                .to_vec();
+        } else if target.capabilities.linear_memory {
             args.push(self.optimize.wasm_clang_opt_flag().into());
             let sysroot = config.sysroot.clone().map(Ok).unwrap_or_else(|| {
                 bundle::prebuilt_rt(config)
@@ -95,6 +103,10 @@ impl Build<'_> {
                     ));
                 }
                 args.extend(set.include.iter().map(|p| format!("-I{}", p.display())));
+                if environment.is_some() {
+                    let include = dream_mir::runtime::runtime_abi_include_dir(&config.runtime_c);
+                    args.push(format!("-I{}", include.display()));
+                }
                 args.extend(set.defines.iter().map(|d| format!("-D{d}")));
                 args.extend(set.cflags.iter().cloned());
                 name.to_owned()
@@ -120,7 +132,20 @@ impl Build<'_> {
         }
 
         tracing::debug!(header, "generating C import bindings");
-        let (path, macros, mut omissions) = header_macros(&preprocessed)?;
+        let HeaderScan {
+            path,
+            macros,
+            mut omissions,
+            headers,
+        } = scan_header(&preprocessed)?;
+        let headers: BTreeMap<_, _> = headers
+            .into_iter()
+            .map(|path| {
+                let hash = header_hash(&path)
+                    .ok_or_else(|| format!("cannot read included C header '{}'", path.display()))?;
+                Ok((path, hash))
+            })
+            .collect::<Result<_, String>>()?;
         let mut command = Command::new(&clang);
         let output = command
             .args(&args)
@@ -185,7 +210,15 @@ impl Build<'_> {
             fingerprint,
             source: api.render(&c.prefix, &library),
             omissions,
+            headers,
         };
+        if binding
+            .headers
+            .iter()
+            .any(|(path, hash)| header_hash(path).as_ref() != Some(hash))
+        {
+            return Err("a C header changed while generating bindings; rebuild the project".into());
+        }
         publish(&metadata.with_extension("dream"), binding.source.as_bytes())?;
         let json = serde_json::to_vec(&binding).map_err(|e| e.to_string())?;
         publish(metadata, &json)?;
@@ -243,10 +276,16 @@ fn fingerprint(
     Ok(hash.finalize().to_hex().to_string())
 }
 
-type HeaderMacros = (PathBuf, Vec<String>, BTreeMap<String, String>);
+struct HeaderScan {
+    path: PathBuf,
+    macros: Vec<String>,
+    omissions: BTreeMap<String, String>,
+    headers: BTreeSet<PathBuf>,
+}
 
-fn header_macros(text: &str) -> Result<HeaderMacros, String> {
+fn scan_header(text: &str) -> Result<HeaderScan, String> {
     let mut source = None;
+    let mut headers = BTreeSet::new();
     let mut current = String::new();
     let mut macros = BTreeSet::new();
     let mut omissions = BTreeMap::new();
@@ -257,8 +296,14 @@ fn header_macros(text: &str) -> Result<HeaderMacros, String> {
         {
             current.clear();
             current.push_str(path);
-            if source.is_none() && !path.starts_with('<') {
-                source = Some(path.to_owned());
+            if !path.starts_with('<') {
+                if source.is_none() {
+                    source = Some(path.to_owned());
+                }
+                let path = line_marker_path(path);
+                if path.is_file() {
+                    headers.insert(std::path::absolute(path).map_err(|error| error.to_string())?);
+                }
             }
             continue;
         }
@@ -289,7 +334,12 @@ fn header_macros(text: &str) -> Result<HeaderMacros, String> {
         }
     }
     let path = source.ok_or("clang did not resolve the requested header")?;
-    Ok((PathBuf::from(path), macros.into_iter().collect(), omissions))
+    Ok(HeaderScan {
+        path: line_marker_path(&path),
+        macros: macros.into_iter().collect(),
+        omissions,
+        headers,
+    })
 }
 
 fn publish(path: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -302,4 +352,10 @@ fn publish(path: &Path, bytes: &[u8]) -> Result<(), String> {
     file.write_all(bytes).map_err(|e| e.to_string())?;
     file.persist(path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn line_marker_path(path: &str) -> PathBuf {
+    let decoded: String =
+        serde_json::from_str(&format!("\"{path}\"")).unwrap_or_else(|_| path.to_owned());
+    PathBuf::from(decoded)
 }

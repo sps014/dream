@@ -1,11 +1,18 @@
 //! Standalone WASI command components, linked by the pinned SDK's Canonical ABI linker.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::driver::compiler::LlvmRuntimeRequest;
 use crate::driver::toolchain::ToolchainConfig;
 use crate::driver::wasi::run_captured;
+
+pub(crate) fn clang(config: &ToolchainConfig, environment: &str) -> Result<PathBuf, String> {
+    let sdk = config.locate_tool(
+        dream_abi::toolchain::compiler_tool("wasi-sdk").ok_or("missing WASI SDK registry")?,
+    )?;
+    Ok(sdk.executable(&format!("bin/wasm32-{environment}-clang")))
+}
 
 pub(super) fn link(
     config: &ToolchainConfig,
@@ -19,17 +26,25 @@ pub(super) fn link(
         .execution_environment
         .component()
         .ok_or("expected a component target")?;
-    let sdk = config.locate_tool(
-        dream_abi::toolchain::compiler_tool("wasi-sdk").ok_or("missing WASI SDK registry")?,
-    )?;
-    let clang = sdk.executable(&format!("bin/wasm32-{environment}-clang"));
+    let clang = clang(config, environment)?;
     let mut paths = dream_mir::runtime::component_runtime_c_files(&config.runtime_c);
     let transport = config.runtime_c.join("sys/wasi/component");
     paths.extend(
-        ["domain.c", "http.c", "http_transport.c", "sockets.c"]
-            .into_iter()
-            .map(|name| transport.join(name)),
+        [
+            "domain.c",
+            "http.c",
+            "http_transport.c",
+            "sockets.c",
+            "socket_lookup.c",
+        ]
+        .into_iter()
+        .map(|name| transport.join(name)),
     );
+    paths.push(transport.join(if environment == "wasip3" {
+        "http_p3.c"
+    } else {
+        "http_p2.c"
+    }));
     let bindings = transport.join(if environment == "wasip3" {
         "p3/dream_http_p3"
     } else {

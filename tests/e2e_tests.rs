@@ -178,10 +178,28 @@ fn native_asan_focused_goldens() {
 /// nondeterminism. Both runs write the same path: the output name is part of the module.
 #[test]
 fn codegen_is_deterministic() {
-    for name in ["arc_cycles", "arc_cycles_dynamic"] {
+    for name in ["arc_cycles", "arc_cycles_dynamic", "json_derive"] {
         let src = crate::common::compiler_fixture(name);
         assert_deterministic("dream_det", name, &src, None);
     }
+}
+
+#[test]
+fn cross_module_generic_codegen_is_deterministic() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    fs::write(
+        root.join("helper.dream"),
+        "module helper; public fun identity<T>(value: T): T { return value; }",
+    )
+    .unwrap();
+    let main = root.join("main.dream");
+    fs::write(
+        &main,
+        "import system; import helper; fun main() { System.println(identity(42)); System.println(identity(\"answer\")); }",
+    )
+    .unwrap();
+    assert_deterministic("dream_det", "module_generics", &main, None);
 }
 
 /// The native link is part of the build: relinking the same program to the same path must give a
@@ -293,13 +311,7 @@ fn assert_deterministic(prefix: &str, name: &str, src: &Path, source: Option<&st
             .with_release(true)
             .with_runtimes(vec![runtime]);
         if let Some(source) = source {
-            compiler = compiler
-                .with_virtual_entry(source.to_string())
-                .with_compile_targets(dream_abi::attributes::CompileTargets {
-                    native: false,
-                    node: true,
-                    web: false,
-                });
+            compiler = compiler.with_virtual_entry(source.to_string());
         }
         compiler
             .compile(&src_str, &out_str)

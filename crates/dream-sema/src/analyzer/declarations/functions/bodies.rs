@@ -19,7 +19,7 @@ impl<'a> Analyzer<'a> {
                 continue;
             }
             diagnostics.file_path = file_path_string(&function.file_path);
-            self.analyze_function(function, diagnostics)?;
+            self.analyze_cacheable_body(function, diagnostics)?;
         }
         Ok(())
     }
@@ -115,7 +115,7 @@ impl<'a> Analyzer<'a> {
                 }
                 diagnostics.file_path = file_path_string(&method.file_path);
                 self.with_generic_bindings(bindings.clone(), |s| {
-                    s.analyze_function(method, diagnostics)
+                    s.analyze_cacheable_body(method, diagnostics)
                 })?;
                 let Some(identity) = self.function_declaration(method) else {
                     continue;

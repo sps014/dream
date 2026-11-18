@@ -167,7 +167,12 @@ fn host_cfg(host: TestHost, release_build: bool) -> CfgSymbols {
     } else {
         TargetSpec::host()
     };
-    target.cfg_symbols(release_build)
+    let cfg = target.cfg_symbols(release_build);
+    if host == TestHost::Node {
+        cfg.for_node()
+    } else {
+        cfg
+    }
 }
 
 pub(super) fn project_tests(case: &Case, cfg: CfgSymbols) -> Vec<String> {
@@ -213,11 +218,7 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
         .with_release(release_build)
         .with_debug_info(std::env::var_os("DREAM_CORPUS_DEBUG_INFO").is_some());
     if host == TestHost::Node {
-        compiler = compiler.with_compile_targets(dream_abi::attributes::CompileTargets {
-            native: false,
-            node: true,
-            web: false,
-        });
+        compiler = compiler.with_runtimes(vec![dream::driver::js_runtime::JsRuntimeTarget::Node]);
     }
     let result = compiler.compile(
         &case.source().to_string_lossy().into_owned(),
@@ -257,6 +258,7 @@ fn run_fixture(case: Case, host: TestHost, release_build: bool) -> Option<String
             &config,
             &output,
             dream::execution::llvm::NativeBuildOptions {
+                codegen_units: &[],
                 target: dream_abi::target::TargetSpec::host(),
                 opt_ll: None,
                 opt_remarks: None,

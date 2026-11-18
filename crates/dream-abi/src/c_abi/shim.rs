@@ -45,6 +45,7 @@ pub enum CTy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CField {
     Scalar(CScalar),
+    Ptr,
     Struct(usize),
 }
 

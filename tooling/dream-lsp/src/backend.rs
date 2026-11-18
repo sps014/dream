@@ -6,7 +6,9 @@
 //! navigation requests on an unchanged document are free, and `publishDiagnostics` is
 //! **debounced** so a burst of keystrokes only triggers one analysis pass.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+use dream_abi::target::TargetSpec;
 use std::time::Duration;
 
 use dashmap::DashMap;
@@ -48,6 +50,7 @@ struct CachedIndex {
 #[derive(Debug)]
 pub struct Backend {
     client: Client,
+    target: OnceLock<TargetSpec>,
     documents: Arc<DashMap<String, Document>>,
     index_cache: Arc<DashMap<String, CachedIndex>>,
     /// The most recently scheduled diagnostics version per document, used to debounce/cancel
@@ -122,11 +125,16 @@ impl Backend {
     pub fn new(client: Client) -> Backend {
         Backend {
             client,
+            target: OnceLock::new(),
             documents: Arc::new(DashMap::new()),
             index_cache: Arc::new(DashMap::new()),
             pending_diagnostics: Arc::new(DashMap::new()),
             workspace_cache: Arc::new(tokio::sync::Mutex::new(None)),
         }
+    }
+
+    fn target(&self) -> &TargetSpec {
+        self.target.get_or_init(TargetSpec::host)
     }
 
     fn file_path_of(uri: &Url) -> Option<String> {
@@ -237,7 +245,15 @@ impl Backend {
             (doc.text.clone(), doc.version)
         };
 
-        let cached = shared_models(&self.index_cache, uri, file_path, &text, version, false);
+        let cached = shared_models(
+            &self.index_cache,
+            uri,
+            file_path,
+            &text,
+            version,
+            false,
+            self.target(),
+        );
         Some((cached.index, cached.sema))
     }
 
@@ -271,6 +287,7 @@ impl Backend {
         let pending = self.pending_diagnostics.clone();
         let cache = self.index_cache.clone();
         let file_path = Self::file_path_of(&uri);
+        let target = self.target().clone();
 
         tokio::spawn(async move {
             tokio::time::sleep(DIAGNOSTIC_DEBOUNCE).await;
@@ -287,6 +304,7 @@ impl Backend {
                     &text,
                     version,
                     true,
+                    &target,
                 )
                 .diagnostics
             })
@@ -315,6 +333,7 @@ fn shared_models(
     text: &str,
     version: i32,
     already_blocking: bool,
+    target: &TargetSpec,
 ) -> CachedIndex {
     if let Some(cached) = cache.get(uri)
         && cached.version == version
@@ -324,9 +343,9 @@ fn shared_models(
     let file_path = file_path.map(str::to_string);
     let text = text.to_string();
     let built = if already_blocking {
-        build_models(file_path.as_deref(), &text, version)
+        build_models(file_path.as_deref(), &text, version, target)
     } else {
-        tokio::task::block_in_place(|| build_models(file_path.as_deref(), &text, version))
+        tokio::task::block_in_place(|| build_models(file_path.as_deref(), &text, version, target))
     };
     match cache.entry(uri.to_string()) {
         dashmap::mapref::entry::Entry::Occupied(mut occupied) => {
@@ -342,9 +361,14 @@ fn shared_models(
     built
 }
 
-fn build_models(file_path: Option<&str>, text: &str, version: i32) -> CachedIndex {
-    let index = Arc::new(Index::build(file_path, text));
-    let outcome = analysis::analyze_document(file_path, text);
+fn build_models(
+    file_path: Option<&str>,
+    text: &str,
+    version: i32,
+    target: &TargetSpec,
+) -> CachedIndex {
+    let index = Arc::new(Index::build_for_target(file_path, text, target));
+    let outcome = analysis::analyze_document_for_target(file_path, text, target);
     let diagnostics = Arc::new(lsp_diagnostics(&outcome.diagnostics));
     CachedIndex {
         version,

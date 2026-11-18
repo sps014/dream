@@ -3,7 +3,7 @@
 
 /// Binary operators. Comparison and logical operators always produce `bool`; arithmetic/bitwise
 /// operators produce the (already type-checked) operand type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BinOp {
     Add,
     Sub,
@@ -43,7 +43,7 @@ impl BinOp {
 
 /// Integer overflow behavior of an arithmetic node, fixed lexically by the enclosing
 /// `checked { }` / `unchecked { }` block (wrapping outside any block). Non-integer operands ignore it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Overflow {
     /// Overflow panics.
     Checked,
@@ -52,7 +52,7 @@ pub enum Overflow {
 }
 
 /// Unary operators.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum UnOp {
     /// Arithmetic negation (`-x`).
     Neg,

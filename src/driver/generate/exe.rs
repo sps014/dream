@@ -320,6 +320,7 @@ fn build_into(config: &Arc<ToolchainConfig>, plan: &ExePlan, dir: &Path) -> Resu
         config,
         &ll,
         crate::execution::llvm::NativeBuildOptions {
+            codegen_units: &[],
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
             opt_remarks: None,

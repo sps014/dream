@@ -1,7 +1,24 @@
 use super::*;
 
 impl Backend {
-    pub(super) async fn handle_initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    pub(super) async fn handle_initialize(
+        &self,
+        params: InitializeParams,
+    ) -> Result<InitializeResult> {
+        if let Some(triple) = params
+            .initialization_options
+            .as_ref()
+            .and_then(|options| options.get("target"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|triple| !triple.is_empty())
+        {
+            let target = if triple == "node" {
+                TargetSpec::node()
+            } else {
+                TargetSpec::parse(triple).map_err(jsonrpc::Error::invalid_params)?
+            };
+            let _ = self.target.set(target);
+        }
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
@@ -66,7 +83,7 @@ impl Backend {
                 id: "dream-watch-dream-files".to_string(),
                 method: "workspace/didChangeWatchedFiles".to_string(),
                 register_options: Some(serde_json::json!({ "watchers": [
-                        { "globPattern": "**/*.{dream,js,mjs,cjs,ts,mts,cts}" },
+                        { "globPattern": "**/*.{dream,js,mjs,cjs,ts,mts,cts,h,hh,hpp,hxx,inc}" },
                         { "globPattern": "**/dream.toml" },
                         { "globPattern": "**/package.json" },
                         { "globPattern": "**/dream.npm.lock" },
@@ -143,7 +160,20 @@ impl Backend {
                 let path = std::path::Path::new(p);
                 matches!(
                     path.extension().and_then(|extension| extension.to_str()),
-                    Some("dream" | "js" | "mjs" | "cjs" | "ts" | "mts" | "cts")
+                    Some(
+                        "dream"
+                            | "js"
+                            | "mjs"
+                            | "cjs"
+                            | "ts"
+                            | "mts"
+                            | "cts"
+                            | "h"
+                            | "hh"
+                            | "hpp"
+                            | "hxx"
+                            | "inc"
+                    )
                 ) || matches!(
                     path.file_name().and_then(|name| name.to_str()),
                     Some("dream.toml" | "package.json" | "dream.npm.lock" | "dream.js.lock")

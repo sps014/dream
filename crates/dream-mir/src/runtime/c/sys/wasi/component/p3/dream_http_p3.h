@@ -464,6 +464,338 @@ typedef struct {
   } val;
 } wasi_http_client_result_own_response_error_code_t;
 
+typedef wasi_clocks_types_duration_t wasi_sockets_types_duration_t;
+
+// Error codes.
+//
+// In theory, every API can return any error code.
+// In practice, API's typically only return the errors documented per API
+// combined with a couple of errors that are always possible:
+// - `other`
+// - `access-denied`
+// - `not-supported`
+// - `out-of-memory`
+//
+// See each individual API for what the POSIX equivalents are. They sometimes differ per API.
+typedef struct wasi_sockets_types_error_code_t {
+  uint8_t tag;
+  union {
+    dream_http_p3_option_string_t     other;
+  } val;
+} wasi_sockets_types_error_code_t;
+
+// Access denied.
+//
+// POSIX equivalent: EACCES, EPERM
+#define WASI_SOCKETS_TYPES_ERROR_CODE_ACCESS_DENIED 0
+// The operation is not supported.
+//
+// POSIX equivalent: EOPNOTSUPP, ENOPROTOOPT, EPFNOSUPPORT, EPROTONOSUPPORT, ESOCKTNOSUPPORT
+#define WASI_SOCKETS_TYPES_ERROR_CODE_NOT_SUPPORTED 1
+// One of the arguments is invalid.
+//
+// POSIX equivalent: EINVAL, EDESTADDRREQ, EAFNOSUPPORT
+#define WASI_SOCKETS_TYPES_ERROR_CODE_INVALID_ARGUMENT 2
+// Not enough memory to complete the operation.
+//
+// POSIX equivalent: ENOMEM, ENOBUFS
+#define WASI_SOCKETS_TYPES_ERROR_CODE_OUT_OF_MEMORY 3
+// The operation timed out before it could finish completely.
+//
+// POSIX equivalent: ETIMEDOUT
+#define WASI_SOCKETS_TYPES_ERROR_CODE_TIMEOUT 4
+// The operation is not valid in the socket's current state.
+#define WASI_SOCKETS_TYPES_ERROR_CODE_INVALID_STATE 5
+// The local address is not available.
+//
+// POSIX equivalent: EADDRNOTAVAIL
+#define WASI_SOCKETS_TYPES_ERROR_CODE_ADDRESS_NOT_BINDABLE 6
+// A bind operation failed because the provided address is already in
+// use or because there are no ephemeral ports available.
+//
+// POSIX equivalent: EADDRINUSE
+#define WASI_SOCKETS_TYPES_ERROR_CODE_ADDRESS_IN_USE 7
+// The remote address is not reachable.
+//
+// POSIX equivalent: EHOSTUNREACH, EHOSTDOWN, ENETDOWN, ENETUNREACH, ENONET
+#define WASI_SOCKETS_TYPES_ERROR_CODE_REMOTE_UNREACHABLE 8
+// The connection was forcefully rejected.
+//
+// POSIX equivalent: ECONNREFUSED
+#define WASI_SOCKETS_TYPES_ERROR_CODE_CONNECTION_REFUSED 9
+// A write failed because the connection was broken.
+//
+// POSIX equivalent: EPIPE
+#define WASI_SOCKETS_TYPES_ERROR_CODE_CONNECTION_BROKEN 10
+// The connection was reset.
+//
+// POSIX equivalent: ECONNRESET
+#define WASI_SOCKETS_TYPES_ERROR_CODE_CONNECTION_RESET 11
+// The connection was aborted.
+//
+// POSIX equivalent: ECONNABORTED
+#define WASI_SOCKETS_TYPES_ERROR_CODE_CONNECTION_ABORTED 12
+// The size of a datagram sent to a UDP socket exceeded the maximum
+// supported size.
+//
+// POSIX equivalent: EMSGSIZE
+#define WASI_SOCKETS_TYPES_ERROR_CODE_DATAGRAM_TOO_LARGE 13
+// A catch-all for errors not captured by the existing variants.
+// Implementations can use this to extend the error type without
+// breaking existing code.
+#define WASI_SOCKETS_TYPES_ERROR_CODE_OTHER 14
+
+typedef uint8_t wasi_sockets_types_ip_address_family_t;
+
+// Similar to `AF_INET` in POSIX.
+#define WASI_SOCKETS_TYPES_IP_ADDRESS_FAMILY_IPV4 0
+// Similar to `AF_INET6` in POSIX.
+#define WASI_SOCKETS_TYPES_IP_ADDRESS_FAMILY_IPV6 1
+
+typedef struct wasi_sockets_types_ipv4_address_t {
+  uint8_t   f0;
+  uint8_t   f1;
+  uint8_t   f2;
+  uint8_t   f3;
+} wasi_sockets_types_ipv4_address_t;
+
+typedef struct wasi_sockets_types_ipv6_address_t {
+  uint16_t   f0;
+  uint16_t   f1;
+  uint16_t   f2;
+  uint16_t   f3;
+  uint16_t   f4;
+  uint16_t   f5;
+  uint16_t   f6;
+  uint16_t   f7;
+} wasi_sockets_types_ipv6_address_t;
+
+typedef struct wasi_sockets_types_ip_address_t {
+  uint8_t tag;
+  union {
+    wasi_sockets_types_ipv4_address_t     ipv4;
+    wasi_sockets_types_ipv6_address_t     ipv6;
+  } val;
+} wasi_sockets_types_ip_address_t;
+
+#define WASI_SOCKETS_TYPES_IP_ADDRESS_IPV4 0
+#define WASI_SOCKETS_TYPES_IP_ADDRESS_IPV6 1
+
+typedef struct wasi_sockets_types_ipv4_socket_address_t {
+  // sin_port
+  uint16_t   port;
+  // sin_addr
+  wasi_sockets_types_ipv4_address_t   address;
+} wasi_sockets_types_ipv4_socket_address_t;
+
+typedef struct wasi_sockets_types_ipv6_socket_address_t {
+  // sin6_port
+  uint16_t   port;
+  // sin6_flowinfo
+  uint32_t   flow_info;
+  // sin6_addr
+  wasi_sockets_types_ipv6_address_t   address;
+  // sin6_scope_id
+  uint32_t   scope_id;
+} wasi_sockets_types_ipv6_socket_address_t;
+
+typedef struct wasi_sockets_types_ip_socket_address_t {
+  uint8_t tag;
+  union {
+    wasi_sockets_types_ipv4_socket_address_t     ipv4;
+    wasi_sockets_types_ipv6_socket_address_t     ipv6;
+  } val;
+} wasi_sockets_types_ip_socket_address_t;
+
+#define WASI_SOCKETS_TYPES_IP_SOCKET_ADDRESS_IPV4 0
+#define WASI_SOCKETS_TYPES_IP_SOCKET_ADDRESS_IPV6 1
+
+typedef struct wasi_sockets_types_own_tcp_socket_t {
+  int32_t __handle;
+} wasi_sockets_types_own_tcp_socket_t;
+
+typedef struct wasi_sockets_types_borrow_tcp_socket_t {
+  int32_t __handle;
+} wasi_sockets_types_borrow_tcp_socket_t;
+
+typedef struct wasi_sockets_types_own_udp_socket_t {
+  int32_t __handle;
+} wasi_sockets_types_own_udp_socket_t;
+
+typedef struct wasi_sockets_types_borrow_udp_socket_t {
+  int32_t __handle;
+} wasi_sockets_types_borrow_udp_socket_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    wasi_sockets_types_own_tcp_socket_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_own_tcp_socket_error_code_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_void_error_code_t;
+
+typedef uint32_t wasi_sockets_types_stream_own_tcp_socket_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    wasi_sockets_types_stream_own_tcp_socket_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_stream_own_tcp_socket_error_code_t;
+
+typedef uint32_t wasi_sockets_types_stream_u8_t;
+
+typedef uint32_t wasi_sockets_types_future_result_void_error_code_t;
+
+typedef struct {
+  wasi_sockets_types_stream_u8_t f0;
+  wasi_sockets_types_future_result_void_error_code_t f1;
+} wasi_sockets_types_tuple2_stream_u8_future_result_void_error_code_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    wasi_sockets_types_ip_socket_address_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_ip_socket_address_error_code_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    bool ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_bool_error_code_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    wasi_sockets_types_duration_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_duration_error_code_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    uint32_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_u32_error_code_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    uint8_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_u8_error_code_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    uint64_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_u64_error_code_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    wasi_sockets_types_own_udp_socket_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_own_udp_socket_error_code_t;
+
+typedef struct {
+  uint8_t *ptr;
+  size_t len;
+} dream_http_p3_list_u8_t;
+
+typedef struct {
+  bool is_some;
+  wasi_sockets_types_ip_socket_address_t val;
+} wasi_sockets_types_option_ip_socket_address_t;
+
+typedef struct {
+  dream_http_p3_list_u8_t f0;
+  wasi_sockets_types_ip_socket_address_t f1;
+} wasi_sockets_types_tuple2_list_u8_ip_socket_address_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    wasi_sockets_types_tuple2_list_u8_ip_socket_address_t ok;
+    wasi_sockets_types_error_code_t err;
+  } val;
+} wasi_sockets_types_result_tuple2_list_u8_ip_socket_address_error_code_t;
+typedef struct wasi_sockets_types_method_tcp_socket_connect_args {
+  wasi_sockets_types_borrow_tcp_socket_t self;
+  wasi_sockets_types_ip_socket_address_t remote_address;
+} wasi_sockets_types_method_tcp_socket_connect_args_t;
+typedef struct wasi_sockets_types_method_udp_socket_send_args {
+  wasi_sockets_types_borrow_udp_socket_t self;
+  dream_http_p3_list_u8_t data;
+  wasi_sockets_types_option_ip_socket_address_t remote_address;
+} wasi_sockets_types_method_udp_socket_send_args_t;
+
+typedef wasi_sockets_types_ip_address_t wasi_sockets_ip_name_lookup_ip_address_t;
+
+// Lookup error codes.
+typedef struct wasi_sockets_ip_name_lookup_error_code_t {
+  uint8_t tag;
+  union {
+    dream_http_p3_option_string_t     other;
+  } val;
+} wasi_sockets_ip_name_lookup_error_code_t;
+
+// Access denied.
+//
+// POSIX equivalent: EACCES, EPERM
+#define WASI_SOCKETS_IP_NAME_LOOKUP_ERROR_CODE_ACCESS_DENIED 0
+// `name` is a syntactically invalid domain name or IP address.
+//
+// POSIX equivalent: EINVAL
+#define WASI_SOCKETS_IP_NAME_LOOKUP_ERROR_CODE_INVALID_ARGUMENT 1
+// Name does not exist or has no suitable associated IP addresses.
+//
+// POSIX equivalent: EAI_NONAME, EAI_NODATA, EAI_ADDRFAMILY
+#define WASI_SOCKETS_IP_NAME_LOOKUP_ERROR_CODE_NAME_UNRESOLVABLE 2
+// A temporary failure in name resolution occurred.
+//
+// POSIX equivalent: EAI_AGAIN
+#define WASI_SOCKETS_IP_NAME_LOOKUP_ERROR_CODE_TEMPORARY_RESOLVER_FAILURE 3
+// A permanent failure in name resolution occurred.
+//
+// POSIX equivalent: EAI_FAIL
+#define WASI_SOCKETS_IP_NAME_LOOKUP_ERROR_CODE_PERMANENT_RESOLVER_FAILURE 4
+// A catch-all for errors not captured by the existing variants.
+// Implementations can use this to extend the error type without
+// breaking existing code.
+#define WASI_SOCKETS_IP_NAME_LOOKUP_ERROR_CODE_OTHER 5
+
+typedef struct {
+  wasi_sockets_ip_name_lookup_ip_address_t *ptr;
+  size_t len;
+} wasi_sockets_ip_name_lookup_list_ip_address_t;
+
+typedef struct {
+  bool is_err;
+  union {
+    wasi_sockets_ip_name_lookup_list_ip_address_t ok;
+    wasi_sockets_ip_name_lookup_error_code_t err;
+  } val;
+} wasi_sockets_ip_name_lookup_result_list_ip_address_error_code_t;
+
 // Imported Functions from `wasi:http/types@0.3.0`
 // Construct an empty HTTP Fields.
 //
@@ -680,6 +1012,593 @@ extern void wasi_http_types_static_response_consume_body(wasi_http_types_own_res
 // network or to forward it to another component.
 extern dream_http_p3_subtask_status_t wasi_http_client_send(wasi_http_client_own_request_t request, wasi_http_client_result_own_response_error_code_t *result);
 
+// Imported Functions from `wasi:sockets/types@0.3.0`
+// Create a new TCP socket.
+//
+// Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)`
+// in POSIX. On IPv6 sockets, IPV6_V6ONLY is enabled by default and
+// can't be configured otherwise.
+//
+// Unlike POSIX, WASI sockets have no notion of a socket-level
+// `O_NONBLOCK` flag. Instead they fully rely on the Component Model's
+// async support.
+//
+// # Typical errors
+// - `not-supported`: The `address-family` is not supported. (EAFNOSUPPORT)
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
+// - <https://man7.org/linux/man-pages/man2/socket.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
+// - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
+extern bool wasi_sockets_types_static_tcp_socket_create(wasi_sockets_types_ip_address_family_t address_family, wasi_sockets_types_own_tcp_socket_t *ret, wasi_sockets_types_error_code_t *err);
+// Bind the socket to the provided IP address and port.
+//
+// If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is
+// left to the implementation to decide which network interface(s) to
+// bind to. If the TCP/UDP port is zero, the socket will be bound to a
+// random free port.
+//
+// Bind can be attempted multiple times on the same socket, even with
+// different arguments on each iteration. But never concurrently and
+// only as long as the previous bind failed. Once a bind succeeds, the
+// binding can't be changed anymore.
+//
+// # Typical errors
+// - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
+// - `invalid-argument`:          `local-address` is not a unicast address. (EINVAL)
+// - `invalid-argument`:          `local-address` is an IPv4-mapped IPv6 address. (EINVAL)
+// - `invalid-state`:             The socket is already bound. (EINVAL)
+// - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
+// - `address-in-use`:            Address is already in use. (EADDRINUSE)
+// - `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
+//
+// # Implementors note
+// The bind operation shouldn't be affected by the TIME_WAIT state of a
+// recently closed socket on the same local address. In practice this
+// means that the SO_REUSEADDR socket option should be set implicitly
+// on all platforms, except on Windows where this is the default
+// behavior and SO_REUSEADDR performs something different.
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
+// - <https://man7.org/linux/man-pages/man2/bind.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
+// - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
+extern bool wasi_sockets_types_method_tcp_socket_bind(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_ip_socket_address_t *local_address, wasi_sockets_types_error_code_t *err);
+// Connect to a remote endpoint.
+//
+// On success, the socket is transitioned into the `connected` state
+// and the `remote-address` of the socket is updated.
+// The `local-address` may be updated as well, based on the best network
+// path to `remote-address`. If the socket was not already explicitly
+// bound, this function will implicitly bind the socket to a random
+// free port.
+//
+// After a failed connection attempt, the socket will be in the `closed`
+// state and the only valid action left is to `drop` the socket. A single
+// socket can not be used to connect more than once.
+//
+// # Typical errors
+// - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+// - `invalid-argument`:          `remote-address` is not a unicast address. (EINVAL, ENETUNREACH on Linux, EAFNOSUPPORT on MacOS)
+// - `invalid-argument`:          `remote-address` is an IPv4-mapped IPv6 address. (EINVAL, EADDRNOTAVAIL on Illumos)
+// - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EADDRNOTAVAIL on Windows)
+// - `invalid-argument`:          The port in `remote-address` is set to 0. (EADDRNOTAVAIL on Windows)
+// - `invalid-state`:             The socket is already in the `connecting` state. (EALREADY)
+// - `invalid-state`:             The socket is already in the `connected` state. (EISCONN)
+// - `invalid-state`:             The socket is already in the `listening` state. (EOPNOTSUPP, EINVAL on Windows)
+// - `timeout`:                   Connection timed out. (ETIMEDOUT)
+// - `connection-refused`:        The connection was forcefully rejected. (ECONNREFUSED)
+// - `connection-reset`:          The connection was reset. (ECONNRESET)
+// - `connection-aborted`:        The connection was aborted. (ECONNABORTED)
+// - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+// - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
+// - <https://man7.org/linux/man-pages/man2/connect.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
+// - <https://man.freebsd.org/cgi/man.cgi?connect>
+extern dream_http_p3_subtask_status_t wasi_sockets_types_method_tcp_socket_connect(wasi_sockets_types_method_tcp_socket_connect_args_t *args, wasi_sockets_types_result_void_error_code_t *result);
+// Start listening and return a stream of new inbound connections.
+//
+// Transitions the socket into the `listening` state. This can be called
+// at most once per socket.
+//
+// If the socket is not already explicitly bound, this function will
+// implicitly bind the socket to a random free port.
+//
+// Normally, the returned sockets are bound, in the `connected` state
+// and immediately ready for I/O. Though, depending on exact timing and
+// circumstances, a newly accepted connection may already be `closed`
+// by the time the server attempts to perform its first I/O on it. This
+// is true regardless of whether the WASI implementation uses
+// "synthesized" sockets or not (see Implementors Notes below).
+//
+// The following properties are inherited from the listener socket:
+// - `address-family`
+// - `keep-alive-enabled`
+// - `keep-alive-idle-time`
+// - `keep-alive-interval`
+// - `keep-alive-count`
+// - `hop-limit`
+// - `receive-buffer-size`
+// - `send-buffer-size`
+//
+// # Typical errors
+// - `invalid-state`:             The socket is already in the `connected` state. (EISCONN, EINVAL on BSD)
+// - `invalid-state`:             The socket is already in the `listening` state.
+// - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
+//
+// # Implementors note
+// This method returns a single perpetual stream that should only close
+// on fatal errors (if any). Yet, the POSIX' `accept` function may also
+// return transient errors (e.g. ECONNABORTED). The exact details differ
+// per operation system. For example, the Linux manual mentions:
+//
+// > Linux accept() passes already-pending network errors on the new
+// > socket as an error code from accept(). This behavior differs from
+// > other BSD socket implementations. For reliable operation the
+// > application should detect the network errors defined for the
+// > protocol after accept() and treat them like EAGAIN by retrying.
+// > In the case of TCP/IP, these are ENETDOWN, EPROTO, ENOPROTOOPT,
+// > EHOSTDOWN, ENONET, EHOSTUNREACH, EOPNOTSUPP, and ENETUNREACH.
+// Source: https://man7.org/linux/man-pages/man2/accept.2.html
+//
+// WASI implementations have two options to handle this:
+// - Optionally log it and then skip over non-fatal errors returned by
+//   `accept`. Guest code never gets to see these failures. Or:
+// - Synthesize a `tcp-socket` resource that exposes the error when
+//   attempting to send or receive on it. Guest code then sees these
+//   failures as regular I/O errors.
+//
+// In either case, the stream returned by this `listen` method remains
+// operational.
+//
+// WASI requires `listen` to perform an implicit bind if the socket
+// has not already been bound. Not all platforms (notably Windows)
+// exhibit this behavior out of the box. On platforms that require it,
+// the WASI implementation can emulate this behavior by performing
+// the bind itself if the guest hasn't already done so.
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html>
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/accept.html>
+// - <https://man7.org/linux/man-pages/man2/listen.2.html>
+// - <https://man7.org/linux/man-pages/man2/accept.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-listen>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept>
+// - <https://man.freebsd.org/cgi/man.cgi?query=listen&sektion=2>
+// - <https://man.freebsd.org/cgi/man.cgi?query=accept&sektion=2>
+extern bool wasi_sockets_types_method_tcp_socket_listen(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_stream_own_tcp_socket_t *ret, wasi_sockets_types_error_code_t *err);
+// Transmit data to peer.
+//
+// The caller should close the stream when it has no more data to send
+// to the peer. Under normal circumstances this will cause a FIN packet
+// to be sent out. Closing the stream is equivalent to calling
+// `shutdown(SHUT_WR)` in POSIX.
+//
+// This function may be called at most once and returns once the full
+// contents of the stream are transmitted or an error is encountered.
+//
+// # Typical errors
+// - `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
+// - `invalid-state`:             `send` has already been called on this socket.
+// - `connection-broken`:         The connection is not writable anymore. (EPIPE, ECONNABORTED on Windows)
+// - `connection-reset`:          The connection was reset. (ECONNRESET)
+// - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+//
+//  # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/send.html>
+// - <https://man7.org/linux/man-pages/man2/send.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
+// - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
+extern wasi_sockets_types_future_result_void_error_code_t wasi_sockets_types_method_tcp_socket_send(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_stream_u8_t data);
+// Read data from peer.
+//
+// Returns a `stream` of data sent by the peer. The implementation
+// drops the stream once no more data is available. At that point, the
+// returned `future` resolves to:
+// - `ok` after a graceful shutdown from the peer (i.e. a FIN packet), or
+// - `err` if the socket was closed abnormally.
+//
+// `receive` may be called only once per socket. Subsequent calls return
+// a closed stream and a future resolved to `err(invalid-state)`.
+//
+// If the caller is not expecting to receive any more data from the peer,
+// they should drop the stream. Any data still in the receive queue
+// will be discarded. This is equivalent to calling `shutdown(SHUT_RD)`
+// in POSIX.
+//
+// # Typical errors
+// - `invalid-state`:             The socket is not in the `connected` state. (ENOTCONN)
+// - `invalid-state`:             `receive` has already been called on this socket.
+// - `connection-reset`:          The connection was reset. (ECONNRESET)
+// - `remote-unreachable`:        The remote address is not reachable. (EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recv.html>
+// - <https://man7.org/linux/man-pages/man2/recv.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv>
+// - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
+extern void wasi_sockets_types_method_tcp_socket_receive(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_tuple2_stream_u8_future_result_void_error_code_t *ret);
+// Get the bound local address.
+//
+// POSIX mentions:
+// > If the socket has not been bound to a local name, the value
+// > stored in the object pointed to by `address` is unspecified.
+//
+// WASI is stricter and requires `get-local-address` to return
+// `invalid-state` when the socket hasn't been bound yet.
+//
+// # Typical errors
+// - `invalid-state`: The socket is not bound to any local address.
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
+// - <https://man7.org/linux/man-pages/man2/getsockname.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
+// - <https://man.freebsd.org/cgi/man.cgi?getsockname>
+extern bool wasi_sockets_types_method_tcp_socket_get_local_address(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_ip_socket_address_t *ret, wasi_sockets_types_error_code_t *err);
+// Get the remote address.
+//
+// # Typical errors
+// - `invalid-state`: The socket is not connected to a remote address. (ENOTCONN)
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
+// - <https://man7.org/linux/man-pages/man2/getpeername.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
+// - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
+extern bool wasi_sockets_types_method_tcp_socket_get_remote_address(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_ip_socket_address_t *ret, wasi_sockets_types_error_code_t *err);
+// Whether the socket is in the `listening` state.
+//
+// Equivalent to the SO_ACCEPTCONN socket option.
+extern bool wasi_sockets_types_method_tcp_socket_get_is_listening(wasi_sockets_types_borrow_tcp_socket_t self);
+// Whether this is a IPv4 or IPv6 socket.
+//
+// This is the value passed to the constructor.
+//
+// Equivalent to the SO_DOMAIN socket option.
+extern wasi_sockets_types_ip_address_family_t wasi_sockets_types_method_tcp_socket_get_address_family(wasi_sockets_types_borrow_tcp_socket_t self);
+// Hints the desired listen queue size. Implementations are free to
+// ignore this.
+//
+// If the provided value is 0, an `invalid-argument` error is returned.
+// Any other value will never cause an error, but it might be silently
+// clamped and/or rounded.
+//
+// # Typical errors
+// - `not-supported`:        (set) The platform does not support changing the backlog size after the initial listen.
+// - `invalid-argument`:     (set) The provided value was 0.
+// - `invalid-state`:        (set) The socket is in the `connecting` or `connected` state.
+extern bool wasi_sockets_types_method_tcp_socket_set_listen_backlog_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err);
+// Enables or disables keepalive.
+//
+// The keepalive behavior can be adjusted using:
+// - `keep-alive-idle-time`
+// - `keep-alive-interval`
+// - `keep-alive-count`
+// These properties can be configured while `keep-alive-enabled` is
+// false, but only come into effect when `keep-alive-enabled` is true.
+//
+// Equivalent to the SO_KEEPALIVE socket option.
+extern bool wasi_sockets_types_method_tcp_socket_get_keep_alive_enabled(wasi_sockets_types_borrow_tcp_socket_t self, bool *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_tcp_socket_set_keep_alive_enabled(wasi_sockets_types_borrow_tcp_socket_t self, bool value, wasi_sockets_types_error_code_t *err);
+// Amount of time the connection has to be idle before TCP starts
+// sending keepalive packets.
+//
+// If the provided value is 0, an `invalid-argument` error is returned.
+// All other values are accepted without error, but may be
+// clamped or rounded. As a result, the value read back from
+// this setting may differ from the value that was set.
+//
+// Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
+//
+// # Typical errors
+// - `invalid-argument`:     (set) The provided value was 0.
+extern bool wasi_sockets_types_method_tcp_socket_get_keep_alive_idle_time(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_duration_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_tcp_socket_set_keep_alive_idle_time(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_duration_t value, wasi_sockets_types_error_code_t *err);
+// The time between keepalive packets.
+//
+// If the provided value is 0, an `invalid-argument` error is returned.
+// All other values are accepted without error, but may be
+// clamped or rounded. As a result, the value read back from
+// this setting may differ from the value that was set.
+//
+// Equivalent to the TCP_KEEPINTVL socket option.
+//
+// # Typical errors
+// - `invalid-argument`:     (set) The provided value was 0.
+extern bool wasi_sockets_types_method_tcp_socket_get_keep_alive_interval(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_duration_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_tcp_socket_set_keep_alive_interval(wasi_sockets_types_borrow_tcp_socket_t self, wasi_sockets_types_duration_t value, wasi_sockets_types_error_code_t *err);
+// The maximum amount of keepalive packets TCP should send before
+// aborting the connection.
+//
+// If the provided value is 0, an `invalid-argument` error is returned.
+// All other values are accepted without error, but may be
+// clamped or rounded. As a result, the value read back from
+// this setting may differ from the value that was set.
+//
+// Equivalent to the TCP_KEEPCNT socket option.
+//
+// # Typical errors
+// - `invalid-argument`:     (set) The provided value was 0.
+extern bool wasi_sockets_types_method_tcp_socket_get_keep_alive_count(wasi_sockets_types_borrow_tcp_socket_t self, uint32_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_tcp_socket_set_keep_alive_count(wasi_sockets_types_borrow_tcp_socket_t self, uint32_t value, wasi_sockets_types_error_code_t *err);
+// Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
+//
+// If the provided value is 0, an `invalid-argument` error is returned.
+//
+// # Typical errors
+// - `invalid-argument`:     (set) The TTL value must be 1 or higher.
+extern bool wasi_sockets_types_method_tcp_socket_get_hop_limit(wasi_sockets_types_borrow_tcp_socket_t self, uint8_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_tcp_socket_set_hop_limit(wasi_sockets_types_borrow_tcp_socket_t self, uint8_t value, wasi_sockets_types_error_code_t *err);
+// Kernel buffer space reserved for sending/receiving on this socket.
+// Implementations usually treat this as a cap the buffer can grow to,
+// rather than allocating the full amount immediately.
+//
+// If the provided value is 0, an `invalid-argument` error is returned.
+// All other values are accepted without error, but may be
+// clamped or rounded. As a result, the value read back from
+// this setting may differ from the value that was set.
+//
+// This is only a performance hint. The implementation may ignore it or
+// tweak it based on real traffic patterns.
+// Linux and macOS appear to behave differently depending on whether a
+// buffer size was explicitly set. When set, they tend to honor it; when
+// not set, they dynamically adjust the buffer size as the connection
+// progresses. This is especially noticeable when comparing the values
+// from before and after connection establishment.
+//
+// Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
+//
+// # Typical errors
+// - `invalid-argument`:     (set) The provided value was 0.
+extern bool wasi_sockets_types_method_tcp_socket_get_receive_buffer_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_tcp_socket_set_receive_buffer_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_tcp_socket_get_send_buffer_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_tcp_socket_set_send_buffer_size(wasi_sockets_types_borrow_tcp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err);
+// Create a new UDP socket.
+//
+// Similar to `socket(AF_INET or AF_INET6, SOCK_DGRAM, IPPROTO_UDP)`
+// in POSIX. On IPv6 sockets, IPV6_V6ONLY is enabled by default and
+// can't be configured otherwise.
+//
+// Unlike POSIX, WASI sockets have no notion of a socket-level
+// `O_NONBLOCK` flag. Instead they fully rely on the Component Model's
+// async support.
+//
+// # References:
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html>
+// - <https://man7.org/linux/man-pages/man2/socket.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketw>
+// - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
+extern bool wasi_sockets_types_static_udp_socket_create(wasi_sockets_types_ip_address_family_t address_family, wasi_sockets_types_own_udp_socket_t *ret, wasi_sockets_types_error_code_t *err);
+// Bind the socket to the provided IP address and port.
+//
+// If the IP address is zero (`0.0.0.0` in IPv4, `::` in IPv6), it is
+// left to the implementation to decide which network interface(s) to
+// bind to. If the port is zero, the socket will be bound to a random
+// free port.
+//
+// # Typical errors
+// - `invalid-argument`:          The `local-address` has the wrong address family. (EAFNOSUPPORT, EFAULT on Windows)
+// - `invalid-state`:             The socket is already bound. (EINVAL)
+// - `address-in-use`:            No ephemeral ports available. (EADDRINUSE, ENOBUFS on Windows)
+// - `address-in-use`:            Address is already in use. (EADDRINUSE)
+// - `address-not-bindable`:      `local-address` is not an address that can be bound to. (EADDRNOTAVAIL)
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html>
+// - <https://man7.org/linux/man-pages/man2/bind.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind>
+// - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
+extern bool wasi_sockets_types_method_udp_socket_bind(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_ip_socket_address_t *local_address, wasi_sockets_types_error_code_t *err);
+// Associate this socket with a specific peer address.
+//
+// On success, the `remote-address` of the socket is updated.
+// The `local-address` may be updated as well, based on the best network
+// path to `remote-address`. If the socket was not already explicitly
+// bound, this function will implicitly bind the socket to a random
+// free port.
+//
+// When a UDP socket is "connected", the `send` and `receive` methods
+// are limited to communicating with that peer only:
+// - `send` can only be used to send to this destination.
+// - `receive` will only return datagrams sent from the provided `remote-address`.
+//
+// The name "connect" was kept to align with the existing POSIX
+// terminology. Other than that, this function only changes the local
+// socket configuration and does not generate any network traffic.
+// The peer is not aware of this "connection".
+//
+// This method may be called multiple times on the same socket to change
+// its association, but only the most recent one will be effective.
+//
+// # Typical errors
+// - `invalid-argument`:          The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+// - `invalid-argument`:          The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+// - `invalid-argument`:          The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+// - `address-in-use`:            Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE, EADDRNOTAVAIL on Linux, EAGAIN on BSD)
+//
+// # Implementors note
+// If the socket is already connected, some platforms (e.g. Linux)
+// require a disconnect before connecting to a different peer address.
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
+// - <https://man7.org/linux/man-pages/man2/connect.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
+// - <https://man.freebsd.org/cgi/man.cgi?connect>
+extern bool wasi_sockets_types_method_udp_socket_connect(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_ip_socket_address_t *remote_address, wasi_sockets_types_error_code_t *err);
+// Dissociate this socket from its peer address.
+//
+// After calling this method, `send` & `receive` are free to communicate
+// with any remote address again.
+//
+// The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
+//
+// # Typical errors
+// - `invalid-state`:           The socket is not connected.
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html>
+// - <https://man7.org/linux/man-pages/man2/connect.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
+// - <https://man.freebsd.org/cgi/man.cgi?connect>
+extern bool wasi_sockets_types_method_udp_socket_disconnect(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_error_code_t *err);
+// Send a message on the socket to a particular peer.
+//
+// If the socket is connected, the peer address may be left empty. In
+// that case this is equivalent to `send` in POSIX. Otherwise it is
+// equivalent to `sendto`.
+//
+// Additionally, if the socket is connected, a `remote-address` argument
+// _may_ be provided but then it must be identical to the address
+// passed to `connect`.
+//
+// If the socket has not been explicitly bound, it will be
+// implicitly bound to a random free port.
+//
+// Implementations may trap if the `data` length exceeds 64 KiB.
+//
+// # Typical errors
+// - `invalid-argument`:        The `remote-address` has the wrong address family. (EAFNOSUPPORT)
+// - `invalid-argument`:        The IP address in `remote-address` is set to INADDR_ANY (`0.0.0.0` / `::`). (EDESTADDRREQ, EADDRNOTAVAIL)
+// - `invalid-argument`:        The port in `remote-address` is set to 0. (EDESTADDRREQ, EADDRNOTAVAIL)
+// - `invalid-argument`:        The socket is in "connected" mode and `remote-address` is `some` value that does not match the address passed to `connect`. (EISCONN)
+// - `invalid-argument`:        The socket is not "connected" and no value for `remote-address` was provided. (EDESTADDRREQ)
+// - `remote-unreachable`:      The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+// - `connection-refused`:      The connection was refused. (ECONNREFUSED)
+// - `datagram-too-large`:      The datagram is too large. (EMSGSIZE)
+// - `address-in-use`:          Tried to perform an implicit bind, but there were no ephemeral ports available. (EADDRINUSE)
+//
+// # Implementors note
+// WASI requires `send` to perform an implicit bind if the socket
+// has not been bound. Not all platforms (notably Windows) exhibit
+// this behavior natively. On such platforms, the WASI implementation
+// should emulate it by performing the bind if the guest has not
+// already done so.
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html>
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendmsg.html>
+// - <https://man7.org/linux/man-pages/man2/send.2.html>
+// - <https://man7.org/linux/man-pages/man2/sendmmsg.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
+// - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
+extern dream_http_p3_subtask_status_t wasi_sockets_types_method_udp_socket_send(wasi_sockets_types_method_udp_socket_send_args_t *args, wasi_sockets_types_result_void_error_code_t *result);
+// Receive a message on the socket.
+//
+// On success, the return value contains a tuple of the received data
+// and the address of the sender. Theoretical maximum length of the
+// data is 64 KiB. Though in practice, it will typically be less than
+// 1500 bytes.
+//
+// If the socket is connected, the sender address is guaranteed to
+// match the remote address passed to `connect`.
+//
+// # Typical errors
+// - `invalid-state`:        The socket has not been bound yet.
+// - `remote-unreachable`:   The remote address is not reachable. (ECONNRESET, ENETRESET on Windows, EHOSTUNREACH, EHOSTDOWN, ENETUNREACH, ENETDOWN, ENONET)
+// - `connection-refused`:   The connection was refused. (ECONNREFUSED)
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html>
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvmsg.html>
+// - <https://man7.org/linux/man-pages/man2/recv.2.html>
+// - <https://man7.org/linux/man-pages/man2/recvmmsg.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recvfrom>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_wsarecvmsg>
+// - <https://man.freebsd.org/cgi/man.cgi?query=recv&sektion=2>
+extern dream_http_p3_subtask_status_t wasi_sockets_types_method_udp_socket_receive(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_result_tuple2_list_u8_ip_socket_address_error_code_t *result);
+// Get the current bound address.
+//
+// POSIX mentions:
+// > If the socket has not been bound to a local name, the value
+// > stored in the object pointed to by `address` is unspecified.
+//
+// WASI is stricter and requires `get-local-address` to return
+// `invalid-state` when the socket hasn't been bound yet.
+//
+// # Typical errors
+// - `invalid-state`: The socket is not bound to any local address.
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html>
+// - <https://man7.org/linux/man-pages/man2/getsockname.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getsockname>
+// - <https://man.freebsd.org/cgi/man.cgi?getsockname>
+extern bool wasi_sockets_types_method_udp_socket_get_local_address(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_ip_socket_address_t *ret, wasi_sockets_types_error_code_t *err);
+// Get the address the socket is currently "connected" to.
+//
+// # Typical errors
+// - `invalid-state`: The socket is not "connected" to a specific remote address. (ENOTCONN)
+//
+// # References
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getpeername.html>
+// - <https://man7.org/linux/man-pages/man2/getpeername.2.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-getpeername>
+// - <https://man.freebsd.org/cgi/man.cgi?query=getpeername&sektion=2&n=1>
+extern bool wasi_sockets_types_method_udp_socket_get_remote_address(wasi_sockets_types_borrow_udp_socket_t self, wasi_sockets_types_ip_socket_address_t *ret, wasi_sockets_types_error_code_t *err);
+// Whether this is a IPv4 or IPv6 socket.
+//
+// This is the value passed to the constructor.
+//
+// Equivalent to the SO_DOMAIN socket option.
+extern wasi_sockets_types_ip_address_family_t wasi_sockets_types_method_udp_socket_get_address_family(wasi_sockets_types_borrow_udp_socket_t self);
+// Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
+//
+// If the provided value is 0, an `invalid-argument` error is returned.
+//
+// # Typical errors
+// - `invalid-argument`:     (set) The TTL value must be 1 or higher.
+extern bool wasi_sockets_types_method_udp_socket_get_unicast_hop_limit(wasi_sockets_types_borrow_udp_socket_t self, uint8_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_udp_socket_set_unicast_hop_limit(wasi_sockets_types_borrow_udp_socket_t self, uint8_t value, wasi_sockets_types_error_code_t *err);
+// Kernel buffer space reserved for sending/receiving on this socket.
+// Implementations usually treat this as a cap the buffer can grow to,
+// rather than allocating the full amount immediately.
+//
+// If the provided value is 0, an `invalid-argument` error is returned.
+// All other values are accepted without error, but may be
+// clamped or rounded. As a result, the value read back from
+// this setting may differ from the value that was set.
+//
+// Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
+//
+// # Typical errors
+// - `invalid-argument`:     (set) The provided value was 0.
+extern bool wasi_sockets_types_method_udp_socket_get_receive_buffer_size(wasi_sockets_types_borrow_udp_socket_t self, uint64_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_udp_socket_set_receive_buffer_size(wasi_sockets_types_borrow_udp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_udp_socket_get_send_buffer_size(wasi_sockets_types_borrow_udp_socket_t self, uint64_t *ret, wasi_sockets_types_error_code_t *err);
+extern bool wasi_sockets_types_method_udp_socket_set_send_buffer_size(wasi_sockets_types_borrow_udp_socket_t self, uint64_t value, wasi_sockets_types_error_code_t *err);
+
+// Imported Functions from `wasi:sockets/ip-name-lookup@0.3.0`
+// Resolve an internet host name to a list of IP addresses.
+//
+// Unicode domain names are automatically converted to ASCII using IDNA
+// encoding. If the input is an IP address string, the address is parsed
+// and returned as-is without making any external requests.
+//
+// See the wasi-socket proposal README.md for a comparison with getaddrinfo.
+//
+// The results are returned in connection order preference.
+//
+// This function never succeeds with 0 results. It either fails or succeeds
+// with at least one address. Additionally, this function never returns
+// IPv4-mapped IPv6 addresses.
+//
+// # References:
+// - <https://pubs.opengroup.org/onlinepubs/9699919799/functions/getaddrinfo.html>
+// - <https://man7.org/linux/man-pages/man3/getaddrinfo.3.html>
+// - <https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo>
+// - <https://man.freebsd.org/cgi/man.cgi?query=getaddrinfo&sektion=3>
+extern dream_http_p3_subtask_status_t wasi_sockets_ip_name_lookup_resolve_addresses(dream_http_p3_string_t name, wasi_sockets_ip_name_lookup_result_list_ip_address_error_code_t *result);
+
 // Helper Functions
 
 void wasi_http_types_method_free(wasi_http_types_method_t *ptr);
@@ -804,6 +1723,93 @@ void wasi_http_types_future_result_void_error_code_drop_writable(wasi_http_types
 void wasi_http_client_error_code_free(wasi_http_client_error_code_t *ptr);
 
 void wasi_http_client_result_own_response_error_code_free(wasi_http_client_result_own_response_error_code_t *ptr);
+
+void wasi_sockets_types_error_code_free(wasi_sockets_types_error_code_t *ptr);
+
+void wasi_sockets_types_ip_address_free(wasi_sockets_types_ip_address_t *ptr);
+
+void wasi_sockets_types_ip_socket_address_free(wasi_sockets_types_ip_socket_address_t *ptr);
+
+extern void wasi_sockets_types_tcp_socket_drop_own(wasi_sockets_types_own_tcp_socket_t handle);
+
+extern void wasi_sockets_types_tcp_socket_drop_borrow(wasi_sockets_types_borrow_tcp_socket_t handle);
+
+extern wasi_sockets_types_borrow_tcp_socket_t wasi_sockets_types_borrow_tcp_socket(wasi_sockets_types_own_tcp_socket_t handle);
+
+extern void wasi_sockets_types_udp_socket_drop_own(wasi_sockets_types_own_udp_socket_t handle);
+
+extern void wasi_sockets_types_udp_socket_drop_borrow(wasi_sockets_types_borrow_udp_socket_t handle);
+
+extern wasi_sockets_types_borrow_udp_socket_t wasi_sockets_types_borrow_udp_socket(wasi_sockets_types_own_udp_socket_t handle);
+
+void wasi_sockets_types_result_own_tcp_socket_error_code_free(wasi_sockets_types_result_own_tcp_socket_error_code_t *ptr);
+
+void wasi_sockets_types_result_void_error_code_free(wasi_sockets_types_result_void_error_code_t *ptr);
+
+void wasi_sockets_types_result_stream_own_tcp_socket_error_code_free(wasi_sockets_types_result_stream_own_tcp_socket_error_code_t *ptr);
+
+void wasi_sockets_types_result_ip_socket_address_error_code_free(wasi_sockets_types_result_ip_socket_address_error_code_t *ptr);
+
+void wasi_sockets_types_result_bool_error_code_free(wasi_sockets_types_result_bool_error_code_t *ptr);
+
+void wasi_sockets_types_result_duration_error_code_free(wasi_sockets_types_result_duration_error_code_t *ptr);
+
+void wasi_sockets_types_result_u32_error_code_free(wasi_sockets_types_result_u32_error_code_t *ptr);
+
+void wasi_sockets_types_result_u8_error_code_free(wasi_sockets_types_result_u8_error_code_t *ptr);
+
+void wasi_sockets_types_result_u64_error_code_free(wasi_sockets_types_result_u64_error_code_t *ptr);
+
+void wasi_sockets_types_result_own_udp_socket_error_code_free(wasi_sockets_types_result_own_udp_socket_error_code_t *ptr);
+
+void dream_http_p3_list_u8_free(dream_http_p3_list_u8_t *ptr);
+
+void wasi_sockets_types_option_ip_socket_address_free(wasi_sockets_types_option_ip_socket_address_t *ptr);
+
+void wasi_sockets_types_tuple2_list_u8_ip_socket_address_free(wasi_sockets_types_tuple2_list_u8_ip_socket_address_t *ptr);
+
+void wasi_sockets_types_result_tuple2_list_u8_ip_socket_address_error_code_free(wasi_sockets_types_result_tuple2_list_u8_ip_socket_address_error_code_t *ptr);
+
+typedef uint32_t wasi_sockets_types_stream_own_tcp_socket_writer_t;
+
+wasi_sockets_types_stream_own_tcp_socket_t wasi_sockets_types_stream_own_tcp_socket_new(wasi_sockets_types_stream_own_tcp_socket_writer_t *writer);
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_own_tcp_socket_read(wasi_sockets_types_stream_own_tcp_socket_t reader, wasi_sockets_types_own_tcp_socket_t *buf, size_t amt);
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_own_tcp_socket_write(wasi_sockets_types_stream_own_tcp_socket_writer_t writer, const wasi_sockets_types_own_tcp_socket_t *buf, size_t amt);
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_own_tcp_socket_cancel_read(wasi_sockets_types_stream_own_tcp_socket_t reader);
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_own_tcp_socket_cancel_write(wasi_sockets_types_stream_own_tcp_socket_writer_t writer);
+void wasi_sockets_types_stream_own_tcp_socket_drop_readable(wasi_sockets_types_stream_own_tcp_socket_t reader);
+void wasi_sockets_types_stream_own_tcp_socket_drop_writable(wasi_sockets_types_stream_own_tcp_socket_writer_t writer);
+
+
+typedef uint32_t wasi_sockets_types_stream_u8_writer_t;
+
+wasi_sockets_types_stream_u8_t wasi_sockets_types_stream_u8_new(wasi_sockets_types_stream_u8_writer_t *writer);
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_u8_read(wasi_sockets_types_stream_u8_t reader, uint8_t *buf, size_t amt);
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_u8_write(wasi_sockets_types_stream_u8_writer_t writer, const uint8_t *buf, size_t amt);
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_u8_cancel_read(wasi_sockets_types_stream_u8_t reader);
+dream_http_p3_waitable_status_t wasi_sockets_types_stream_u8_cancel_write(wasi_sockets_types_stream_u8_writer_t writer);
+void wasi_sockets_types_stream_u8_drop_readable(wasi_sockets_types_stream_u8_t reader);
+void wasi_sockets_types_stream_u8_drop_writable(wasi_sockets_types_stream_u8_writer_t writer);
+
+
+typedef uint32_t wasi_sockets_types_future_result_void_error_code_writer_t;
+
+wasi_sockets_types_future_result_void_error_code_t wasi_sockets_types_future_result_void_error_code_new(wasi_sockets_types_future_result_void_error_code_writer_t *writer);
+dream_http_p3_waitable_status_t wasi_sockets_types_future_result_void_error_code_read(wasi_sockets_types_future_result_void_error_code_t reader, wasi_sockets_types_result_void_error_code_t *buf);
+dream_http_p3_waitable_status_t wasi_sockets_types_future_result_void_error_code_write(wasi_sockets_types_future_result_void_error_code_writer_t writer, const wasi_sockets_types_result_void_error_code_t *buf);
+dream_http_p3_waitable_status_t wasi_sockets_types_future_result_void_error_code_cancel_read(wasi_sockets_types_future_result_void_error_code_t reader);
+dream_http_p3_waitable_status_t wasi_sockets_types_future_result_void_error_code_cancel_write(wasi_sockets_types_future_result_void_error_code_writer_t writer);
+void wasi_sockets_types_future_result_void_error_code_drop_readable(wasi_sockets_types_future_result_void_error_code_t reader);
+void wasi_sockets_types_future_result_void_error_code_drop_writable(wasi_sockets_types_future_result_void_error_code_writer_t writer);
+
+
+void wasi_sockets_ip_name_lookup_ip_address_free(wasi_sockets_ip_name_lookup_ip_address_t *ptr);
+
+void wasi_sockets_ip_name_lookup_error_code_free(wasi_sockets_ip_name_lookup_error_code_t *ptr);
+
+void wasi_sockets_ip_name_lookup_list_ip_address_free(wasi_sockets_ip_name_lookup_list_ip_address_t *ptr);
+
+void wasi_sockets_ip_name_lookup_result_list_ip_address_error_code_free(wasi_sockets_ip_name_lookup_result_list_ip_address_error_code_t *ptr);
 
 // Sets the string `ret` to reference the input string `s` without copying it
 void dream_http_p3_string_set(dream_http_p3_string_t *ret, const char*s);

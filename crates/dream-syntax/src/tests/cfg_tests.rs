@@ -331,3 +331,34 @@ fn fuzz_cfg_conditions_never_panic() {
         parse_with(&format!("fun main() {{ {code} }}"), browser());
     }
 }
+
+#[test]
+fn shared_js_artifacts_evaluate_whole_conditions_on_each_host() {
+    let browser = CfgSymbols::empty()
+        .with(TargetSymbol::Wasm)
+        .with(TargetSymbol::Browser);
+    let source = r#"
+@cfg(Target.Browser)
+fun browser() {}
+@cfg(Target.Node)
+fun node() {}
+@cfg(Target.Browser || Target.Node)
+fun shared() {}
+@cfg(!Target.Browser)
+fun not_browser() {}
+@cfg(!(Target.Browser && Target.Node))
+fun distinct() {}
+"#;
+    for (target, expected) in [
+        (browser, vec!["browser", "shared", "distinct"]),
+        (
+            browser.for_node(),
+            vec!["node", "shared", "not_browser", "distinct"],
+        ),
+        (browser.for_browser_and_node(), vec!["shared", "distinct"]),
+    ] {
+        let parsed = parse_with(source, target);
+        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+        assert_eq!(parsed.functions, expected);
+    }
+}

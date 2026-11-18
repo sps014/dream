@@ -28,8 +28,6 @@ impl<'a> Analyzer<'a> {
             .type_ctx
             .lower(&Type::Struct(name.clone(), generic_args.clone()));
         let ctor_member = dream_syntax::nodes::types::CONSTRUCTOR_NAME;
-        let mut params_types = vec![];
-        let mut arg_hirs = vec![];
         // A named argument (`f(x, y: 2)`) must be reordered to its positional slot, and a
         // non-overloaded variadic call's trailing loose arguments collected into an array, *before*
         // any argument is analyzed below (analysis is index-driven). Overloaded positional
@@ -60,43 +58,59 @@ impl<'a> Analyzer<'a> {
                 None
             }
         };
-        let normalized_params: Vec<ExpressionNode<'a>>;
-        let params: &[ExpressionNode<'a>] = if has_named_arg {
-            if is_ctor_call && self.method_overloaded(nominal_type, ctor_member) {
-                normalized_params = self.normalize_named_for_candidates(
-                    &ctor_key,
-                    self.function_table
-                        .method_candidates(nominal_type, ctor_member),
-                    params,
-                    name.position,
-                    1,
-                    diagnostics,
-                )?;
-            } else if self.function_overloaded(&function_name) {
-                normalized_params = self.normalize_named_for_overloads(
-                    &function_name,
-                    params,
-                    name.position,
-                    0,
-                    diagnostics,
-                )?;
-            } else {
-                let Some((param_names, defaults, is_variadic)) = callee_signature(self) else {
-                    return Err(report(
+        let named_call =
+            if has_named_arg && is_ctor_call && self.method_overloaded(nominal_type, ctor_member) {
+                Some(
+                    self.resolve_named_call(
+                        (&ctor_key, name.position),
+                        self.function_table
+                            .method_candidates(nominal_type, ctor_member),
+                        params,
+                        1,
+                        &AnalyzerContext {
+                            parent_function,
+                            symbol_table,
+                        },
                         diagnostics,
-                        format!("named arguments are not supported for '{}'", function_name),
-                        Some(name.position),
-                    ));
-                };
-                normalized_params = self.normalize_named_arguments(
-                    &param_names,
-                    &defaults,
+                    )?,
+                )
+            } else if has_named_arg && self.function_overloaded(&function_name) {
+                Some(self.resolve_named_call(
+                    (&function_name, name.position),
+                    self.function_candidates(&function_name),
                     params,
-                    name.position,
+                    0,
+                    &AnalyzerContext {
+                        parent_function,
+                        symbol_table,
+                    },
                     diagnostics,
-                    is_variadic,
-                )?;
-            }
+                )?)
+            } else {
+                None
+            };
+        let (named_signature, named_args, named_expressions) = named_call
+            .map(|call| (Some(call.signature), Some(call.arguments), call.expressions))
+            .unwrap_or_default();
+        let normalized_params: Vec<ExpressionNode<'a>>;
+        let params: &[ExpressionNode<'a>] = if named_signature.is_some() {
+            &named_expressions
+        } else if has_named_arg {
+            let Some((param_names, defaults, is_variadic)) = callee_signature(self) else {
+                return Err(report(
+                    diagnostics,
+                    format!("named arguments are not supported for '{}'", function_name),
+                    Some(name.position),
+                ));
+            };
+            normalized_params = self.normalize_named_arguments(
+                &param_names,
+                &defaults,
+                params,
+                name.position,
+                diagnostics,
+                is_variadic,
+            )?;
             &normalized_params
         } else if !(self.function_overloaded(&function_name)
             || (is_ctor_call && self.method_overloaded(nominal_type, ctor_member)))
@@ -246,35 +260,20 @@ impl<'a> Analyzer<'a> {
         } else {
             None
         };
-        let mut arg_is_ref: Vec<bool> = Vec::with_capacity(params.len());
-        let saved_call_target = self.current_call_target_name.take();
-        self.current_call_target_name = Some(function_name.clone());
-        for (i, param) in params.iter().enumerate() {
-            let saved_expected = self.current_expected_type.take();
-            self.current_expected_type = expected_params.as_ref().and_then(|ps| ps.get(i).cloned());
-            if let ExpressionNode::RefArgument(_, inner) = param {
-                arg_is_ref.push(true);
-                self.current_expected_type = saved_expected;
-                match self.analyze_ref_argument(inner, parent_function, symbol_table, diagnostics) {
-                    Some((t, hir)) => {
-                        self.record_generator_type(param, t.clone());
-                        arg_hirs.push(hir);
-                        params_types.push(self.type_ctx.lower(&t));
-                    }
-                    None => {
-                        arg_hirs.push(None);
-                        params_types.push(self.type_ctx.interner.error());
-                    }
-                }
-                continue;
-            }
-            arg_is_ref.push(false);
-            let t = self.analyze_expression(param, parent_function, symbol_table, diagnostics)?;
-            self.current_expected_type = saved_expected;
-            arg_hirs.push(self.hir_take());
-            params_types.push(self.type_ctx.lower(&t));
-        }
-        self.current_call_target_name = saved_call_target;
+        let (mut params_types, mut arg_hirs, mut arg_is_ref) = if let Some(args) = named_args {
+            args
+        } else {
+            let saved_target = self.current_call_target_name.replace(function_name.clone());
+            let result = self.analyze_call_arguments_expecting_ref(
+                params,
+                expected_params.as_deref(),
+                parent_function,
+                symbol_table,
+                diagnostics,
+            );
+            self.current_call_target_name = saved_target;
+            result?
+        };
         // Calling a `js`-typed local (`cb(a, b)`) invokes the underlying JS value dynamically.
         let name_sym = (*symbol_table).as_ref().borrow().get_symbol(name);
         if let Ok(sym_ty) = name_sym
@@ -411,7 +410,7 @@ impl<'a> Analyzer<'a> {
             }
             let (t, resolved_ctor_name) = self.analyze_constructor_call(
                 name,
-                &concrete_generic_args,
+                (&concrete_generic_args, named_signature),
                 &mut params_types,
                 &mut arg_hirs,
                 parent_function,
@@ -523,6 +522,8 @@ impl<'a> Analyzer<'a> {
             self.function_table
                 .get_function(identity)
                 .map_err(|error| report(diagnostics, error.to_string(), Some(name.position)))?
+        } else if let Some(signature) = named_signature {
+            signature
         } else if self.function_overloaded(&function_name) {
             match self.select_function_overload(&function_name, &params_types) {
                 Ok(sig) => sig,
@@ -576,12 +577,6 @@ impl<'a> Analyzer<'a> {
         }
 
         self.check_unsafe_call(&store_sig, name.position, diagnostics);
-        self.check_runtime_call(
-            &function_name,
-            store_sig.runtime_support,
-            name.position,
-            diagnostics,
-        );
         self.check_c_fun_args(store_sig.identity.0, params, 0, symbol_table, diagnostics);
 
         self.validate_ref_arguments(

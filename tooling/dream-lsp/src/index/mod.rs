@@ -10,6 +10,7 @@ use bumpalo::Bump;
 use dream::diagnostics::DiagnosticBag;
 use dream::syntax::lexer::Lexer;
 use dream::syntax::parser::Parser;
+use dream_abi::target::{ExecutionEnvironment, TargetSpec};
 use std::collections::HashMap;
 
 mod attr_ide;
@@ -44,10 +45,15 @@ impl Index {
     /// Parses `text` and builds the symbol model. Tolerates parse errors by indexing whatever
     /// AST the parser manages to produce.
     pub fn build(file_path: Option<&str>, text: &str) -> Index {
+        Self::build_for_target(file_path, text, &TargetSpec::host())
+    }
+
+    pub fn build_for_target(file_path: Option<&str>, text: &str, target: &TargetSpec) -> Index {
+        let cfg = target.cfg_symbols(false);
         let arena = Bump::new();
         let mut scratch = DiagnosticBag::new(None);
         let lexer = Lexer::new(text.to_string());
-        let mut parser = Parser::new(lexer, &arena, &mut scratch);
+        let mut parser = Parser::new(lexer, &arena, &mut scratch).with_cfg(cfg);
 
         let mut builder = Builder {
             type_ctx: std::cell::RefCell::new(dream_types::TypeCtx::new()),
@@ -103,6 +109,7 @@ impl Index {
             builder.walk_program_for_imports(program);
 
             let mut acc = dream::driver::source_loader::ProgramAccumulator::default();
+            acc.cfg = cfg;
 
             // Collect std + file imports before prelude merge so opt-in packages load.
             for import in &program.imports {
@@ -154,7 +161,11 @@ impl Index {
                 &arena,
                 &mut acc,
                 file_path.unwrap_or("main.dream"),
-                "web",
+                if target.execution_environment == ExecutionEnvironment::Node {
+                    "node"
+                } else {
+                    "web"
+                },
                 false,
                 &mut scratch,
             );

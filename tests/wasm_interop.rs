@@ -511,7 +511,7 @@ fn wrong_pointer_width_is_diagnosed_before_llvm_can_turn_it_into_a_trap() {
 }
 
 #[test]
-fn node_links_cimport_value_types_and_constants() {
+fn native_and_node_link_cimport_value_types_and_constants() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     std::fs::create_dir_all(root.join("native/include")).unwrap();
@@ -524,6 +524,24 @@ fn node_links_cimport_value_types_and_constants() {
         enum Mode { UP = 1, ALSO_UP = UP, DOWN = 2 };
         #define FLAGS (UP | DOWN)
         Bundle make_bundle(int amount);
+        struct Item { int code; };
+        typedef struct { double value; } Item;
+        struct Item increment_tag(struct Item item);
+        Item increment_alias(Item item);
+        struct Item tagged_item(void);
+        Item aliased_item(void);
+        typedef struct { int amount; const void *address; } WithPointer;
+        WithPointer make_pointer(void);
+        int read_pointer(WithPointer value);
+        typedef float Row[2];
+        typedef struct { Row rows[2]; } Matrix;
+        typedef struct __attribute__((packed)) {
+            char labels[3]; Part parts[2]; void *pointers[2];
+        } ArrayBundle;
+        Matrix make_matrix(void);
+        Matrix flip_matrix(Matrix value);
+        ArrayBundle make_array_bundle(void);
+        int read_array_bundle(ArrayBundle value);
     "#,
     )
     .unwrap();
@@ -532,6 +550,25 @@ fn node_links_cimport_value_types_and_constants() {
         r#"
         #include "compound.h"
         Bundle make_bundle(int amount) { return (Bundle){{'X', amount}, 39}; }
+        struct Item increment_tag(struct Item item) { return (struct Item){item.code + 1}; }
+        Item increment_alias(Item item) { return (Item){item.value + 1}; }
+        struct Item tagged_item(void) { return (struct Item){41}; }
+        Item aliased_item(void) { return (Item){41}; }
+        static const int answer = 41;
+        WithPointer make_pointer(void) { return (WithPointer){1, &answer}; }
+        int read_pointer(WithPointer value) { return value.amount + *(const int *)value.address; }
+        Matrix make_matrix(void) { return (Matrix){{{1, 2}, {3, 4}}}; }
+        Matrix flip_matrix(Matrix value) {
+            return (Matrix){{{value.rows[1][1], value.rows[1][0]}, {value.rows[0][1], value.rows[0][0]}}};
+        }
+        ArrayBundle make_array_bundle(void) {
+            static int value = 10;
+            return (ArrayBundle){{'B', 'C', 'D'}, {{'X', 11}, {'Y', 20}}, {&value, 0}};
+        }
+        int read_array_bundle(ArrayBundle value) {
+            return value.labels[1] == 'Z' && value.parts[0].amount == 12 && !value.pointers[1]
+                ? value.parts[1].amount + *(int *)value.pointers[0] + value.parts[0].amount : 0;
+        }
     "#,
     )
     .unwrap();
@@ -545,14 +582,49 @@ fn node_links_cimport_value_types_and_constants() {
             let bundle: compound.Bundle = compound.make_bundle(compound.FLAGS);
             System.println(bundle.part.amount + bundle.extra);
             System.println(compound.ALSO_UP);
+            let tag = compound.increment_tag(compound.tagged_item());
+            System.println(tag.code);
+            let alias: compound.Item = compound.increment_alias(compound.aliased_item());
+            System.println((int)alias.value);
+            let pointer = compound.make_pointer();
+            if pointer.address.is_null() {
+                System.println(0);
+            } else {
+                System.println(compound.read_pointer(pointer));
+            }
+            let matrix = compound.flip_matrix(compound.make_matrix());
+            System.println((int)matrix.rows.item0.item0);
+            System.println((int)matrix.rows.item1.item0);
+            let arrays = compound.make_array_bundle();
+            arrays.labels.item1 = 'Z';
+            arrays.parts.item0.amount = 12;
+            System.println(compound.read_array_bundle(arrays));
         }
     "#,
     )
     .unwrap();
     let output = root.join("main.wasm");
     compile(&entry, &output, None).unwrap();
+    let expected = "42\n1\n42\n42\n42\n4\n2\n42\n";
     assert_eq!(
         run_with_runtime(&output, &output.with_extension("node.runtime.js")),
-        "42\n1\n"
+        expected
+    );
+
+    let native = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+        .current_dir(root)
+        .args(["-o", root.join("native-probe.ll").to_str().unwrap(), "run"])
+        .arg(&entry)
+        .output()
+        .unwrap();
+    assert!(
+        native.status.success(),
+        "{}",
+        String::from_utf8_lossy(&native.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&native.stdout)
+            .replace("\r\n", "\n")
+            .contains(expected)
     );
 }

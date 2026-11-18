@@ -5,6 +5,13 @@ use crate::driver::wasm_opt::OptLevel;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub(crate) fn language_flags(cxx: bool, opt: OptLevel) -> [&'static str; 2] {
+    [
+        opt.wasm_clang_opt_flag(),
+        if cxx { "-std=gnu++20" } else { "-std=gnu11" },
+    ]
+}
+
 pub(super) fn compile(
     config: &ToolchainConfig,
     clang: &Path,
@@ -32,8 +39,7 @@ pub(super) fn compile(
             let mut command = Command::new(clang);
             command
                 .args(["-c", "-g0", "-flto", "-fno-ident", "-frandom-seed=0"])
-                .arg(opt.wasm_clang_opt_flag())
-                .arg(if cpp { "-std=gnu++20" } else { "-std=gnu11" })
+                .args(language_flags(cpp, opt))
                 .arg(format!(
                     "-ffile-prefix-map={source}=package/{set_index}/{index}"
                 ));

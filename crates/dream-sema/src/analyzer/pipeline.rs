@@ -140,6 +140,7 @@ impl<'a> Analyzer<'a> {
                 interfaces,
                 enums: hir_enums,
                 type_names,
+                c_pointer: self.type_ctx.resolved_type(dream_abi::core_items::C_PTR),
                 type_symbols,
                 object_methods,
             },

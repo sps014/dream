@@ -11,28 +11,28 @@ internal class WebOperation {
         return WebOperation(WebOperation.start_host(request.finish(), bytes));
     }
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerStart", "net")
     static extern fun start_host(request: byte[], bytes: byte[]): int;
 
-    @native
+    @cfg(Target.Native)
     @async_host
     @runtime("httpServerWait", "net")
     static extern async fun wait_host(id: int): int;
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerResult", "net")
     static extern fun result_host(id: int): byte[];
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerCancel", "net")
     static extern fun cancel_host(id: int): void;
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerRelease", "net")
     static extern fun release_host(id: int): void;
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerClaim", "net")
     static extern fun claim_host(id: int): void;
 

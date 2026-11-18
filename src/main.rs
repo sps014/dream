@@ -6,7 +6,6 @@ use dream::driver::wasm_opt::OptLevel;
 use dream::execution::llvm::build::emit_llvm_artifacts;
 use dream::execution::llvm::compile_llvm;
 use dream::execution::native::{GuestAborted, Pgo, run_native_bin};
-use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -31,13 +30,6 @@ Examples:
 Artifacts land under the enclosing project's target/: native builds (.ll + binary) in
 target/debug (or target/release with --release), wasm32 modules in target/web/. Prefer `dreamer run`
 for packages (deps, web/node hosts). Use `dream run <file>` for a one-off source file.";
-
-#[derive(Copy, Clone, ValueEnum)]
-enum TargetArg {
-    Native,
-    Node,
-    Web,
-}
 
 #[derive(Copy, Clone, ValueEnum)]
 enum CrateTypeArg {
@@ -128,16 +120,6 @@ struct Cli {
     /// Stop at an unlinked target object (SDK and capability libraries are not required)
     #[arg(long, global = true, conflicts_with_all = ["wasm", "web", "node", "emit_llvm", "relocatable", "profile", "use_profile", "icon"])]
     object: bool,
-
-    /// Runtime availability target for semantic checks (default: native)
-    #[arg(
-        long = "runtime-target",
-        value_name = "TARGET",
-        value_enum,
-        ignore_case = true,
-        global = true
-    )]
-    runtime_target: Option<TargetArg>,
 
     /// Minimum macOS or iOS version encoded in the LLVM target triple
     #[arg(long, value_name = "VERSION", global = true)]
@@ -512,25 +494,6 @@ fn main() -> ExitCode {
         CrateTypeArg::Bin => CrateType::Bin,
     };
 
-    let compile_targets = match cli.runtime_target {
-        Some(TargetArg::Native) => CompileTargets::native_only(),
-        Some(TargetArg::Node) => CompileTargets {
-            native: false,
-            node: true,
-            web: false,
-        },
-        Some(TargetArg::Web) => CompileTargets {
-            native: false,
-            node: false,
-            web: true,
-        },
-        None => CompileTargets {
-            native,
-            node: cli.node,
-            web: cli.web || cli.wasm || component,
-        },
-    };
-
     if let Some(Command::Fmt { files, check }) = &cli.command {
         return run_fmt(&ui, files, *check);
     }
@@ -627,7 +590,7 @@ fn main() -> ExitCode {
 
     let inspector = || {
         Compiler::new_with_toolchain_config(target.clone(), config.clone())
-            .with_compile_targets(compile_targets)
+            .with_runtimes(runtimes.clone())
             .with_crate_type(crate_type)
     };
     match &cli.command {
@@ -754,7 +717,6 @@ fn main() -> ExitCode {
         .with_debug_info(debug_info)
         .with_perf_symbols(cli.perf_symbols)
         .with_runtimes(runtimes)
-        .with_compile_targets(compile_targets)
         .with_crate_type(crate_type)
         .with_output_kind(output_kind)
         .with_emit_mir(emit_mir)
@@ -798,8 +760,11 @@ fn main() -> ExitCode {
         run_after_compile,
         run_dir: run_dir.as_deref(),
     };
-    let stamp = match outcome {
-        BuildOutcome::Built(stamp) => stamp,
+    let (stamp, codegen_units) = match outcome {
+        BuildOutcome::Built {
+            stamp,
+            codegen_units,
+        } => (stamp, codegen_units),
         BuildOutcome::Cached(artifacts) => {
             ui.finish(start.elapsed().as_secs_f64(), "cached", &artifacts);
             let linked = native && !cli.object && !cli.emit_llvm && !output_kind.is_library();
@@ -898,6 +863,7 @@ fn main() -> ExitCode {
             &config,
             raw_ll,
             dream::execution::llvm::NativeBuildOptions {
+                codegen_units: &codegen_units,
                 target: target.spec().clone(),
                 opt_ll: cli.emit_opt_ir.then_some(opt_ll.as_path()),
                 opt_remarks: remarks.as_deref(),

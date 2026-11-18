@@ -107,13 +107,41 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ids = args.iter().map(|arg| self.type_ctx.lower(arg)).collect();
+        self.ensure_interface_instance(def, base_name, ids, position, diagnostics);
+    }
+
+    /// [`Self::ensure_interface_instantiated`] for an already resolved definition.
+    pub(in crate::analyzer) fn ensure_interface_instance(
+        &mut self,
+        def: dream_types::DefId,
+        base_name: &str,
+        ids: Vec<dream_types::TypeId>,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let request = crate::analyzer::typed_hir_cache::Request::Interface(def, ids.clone());
+        self.journaled(
+            |_| Some(request),
+            |s| s.instantiate_interface(def, base_name, ids, position, diagnostics),
+        );
+    }
+
+    fn instantiate_interface(
+        &mut self,
+        def: dream_types::DefId,
+        base_name: &str,
+        ids: Vec<dream_types::TypeId>,
+        position: &TextSpan,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        let arity = ids.len();
         let ty = self.type_ctx.instantiate(def, ids);
         if let Some(template) = self.interface_decl(def) {
             Self::check_generic_arity(
                 "interface",
                 base_name,
                 template.generic_parameters.as_deref().unwrap_or(&[]).len(),
-                args.len(),
+                arity,
                 position,
                 diagnostics,
             );

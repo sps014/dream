@@ -244,11 +244,12 @@ export function emitBindings(rootType, id, global = false) {
     }
     return out;
   }
+  const gate = "@cfg(Target.Node || Target.Browser)";
   const files = [], header = `module ${namespace};\n\nimport system.js;\n\n`;
-  if (global) files.push({ name: "globals.dream", source: header + members(rootType, "js.global", false, true).join("\n\n") + "\n" });
+  if (global) files.push({ name: "globals.dream", source: header + members(rootType, "js.global", false, true).map(member => `${gate}\n${member}`).join("\n\n") + "\n" });
   else {
-    const load = `@node\n@web\n@js(${quote(`dream.js.${id}`)}, "namespace")\ninternal static extern fun __module(): js;`;
-    files.push({ name: "bindings.dream", source: `${header}import dream.js.types;\n\n/// JavaScript exports resolved from the imported module.\n@js_type(${quote(rootType.namespace ?? "JavaScript")})\npublic static class ${rootName} {\n${indent([load, ...members(rootType, `${rootName}.__module()`, true)].join("\n\n"))}\n}\n` });
+    const load = `@js(${quote(`dream.js.${id}`)}, "namespace")\ninternal static extern fun __module(): js;`;
+    files.push({ name: "bindings.dream", source: `${header}import dream.js.types;\n\n/// JavaScript exports resolved from the imported module.\n${gate}\n@js_type(${quote(rootType.namespace ?? "JavaScript")})\npublic static class ${rootName} {\n${indent([load, ...members(rootType, `${rootName}.__module()`, true)].join("\n\n"))}\n}\n` });
   }
   for (const entry of types.values()) {
     const body = ["internal __handle: js;", "internal constructor(value: js) {\n    this.__handle = value;\n}"];
@@ -259,10 +260,10 @@ export function emitBindings(rootType, id, global = false) {
       const mapped = map(index);
       body.push(`public fun this[index: int]: ${mapped.name} {\n    let value = this.__handle[index];\n    return ${mapped.read("value")};\n}`);
     }
-    const shared = (helperSources.get(entry.type.key) ?? []).join("\n\n");
-    files.push({ name: `${entry.name.toLowerCase()}.dream`, source: `${header.replace(`module ${namespace};`, "module dream.js.types;")}/// Live JavaScript reference to ${entry.type.name}.\n@js_type(${quote(entry.type.namespace ?? rootType.namespace ?? "JavaScript")})\npublic struct ${entry.name} {\n${indent(body.join("\n\n"))}\n}\n${shared ? `\n${shared}\n` : ""}` });
+    const shared = (helperSources.get(entry.type.key) ?? []).map(helper => `${gate}\n${helper}`).join("\n\n");
+    files.push({ name: `${entry.name.toLowerCase()}.dream`, source: `${header.replace(`module ${namespace};`, "module dream.js.types;")}/// Live JavaScript reference to ${entry.type.name}.\n${gate}\n@js_type(${quote(entry.type.namespace ?? rootType.namespace ?? "JavaScript")})\npublic struct ${entry.name} {\n${indent(body.join("\n\n"))}\n}\n${shared ? `\n${shared}\n` : ""}` });
   }
-  for (const [name, contents] of converters) files.push({ name: `${name}.dream`, source: "module dream.js.types;\n\nimport system.js;\n\n" + contents + "\n" });
+  for (const [name, contents] of converters) files.push({ name: `${name}.dream`, source: `module dream.js.types;\n\nimport system.js;\n\n${gate}\n${contents}\n` });
   files.push({ name: "types.dream", source: "module dream.js.types;\n" });
   return { namespace, rootName, files, warnings: [...warnings].sort() };
 }

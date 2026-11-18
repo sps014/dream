@@ -112,6 +112,6 @@ public fun subcommand(command: Command): Command
 Parses explicit arguments; pass System.args to parse the process arguments. Returns errors for invalid definitions, arguments, or conversions. Does not exit the process.
 
 ```dream
-@native
+@cfg(Target.Native)
 public fun parse(arguments: string[]): Result<ParsedArguments, CliError>
 ```

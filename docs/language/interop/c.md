@@ -48,8 +48,18 @@ Functions, value structs, and supported integer constants use their C names.
 Pointers arrive as `CPtr`. Use a handwritten `@c` declaration when a C
 pointer's contract calls for Dream marshalling, such as copying a UTF-8
 string or owning a result. Unsupported declarations only produce a
-diagnostic when referenced. The editor reads generated declarations after
-the first successful native build.
+diagnostic when referenced. A pointer field in an imported C struct has type
+`CPtr`. Fixed-size array fields expose inline elements as `item0`, `item1`,
+and so on. For example, read the second element of a C field named `samples`
+with `value.samples.item1`. For multidimensional fields, use one member per
+dimension, such as `value.samples.item0.item1`. The importer supports up to
+256 elements per array field and checks the layout and by-value ABI for the
+selected target.
+
+Build for the target selected in the editor to generate its bindings.
+In VS Code, Dream follows the runtime target by default. Set
+`dream.analysisTarget` to an LLVM target triple to select a specific target.
+When a header changes, rebuild to update the editor's bindings.
 
 ## Where the C lives
 

@@ -4,7 +4,7 @@ use super::{DefId, ModuleId};
 use indexmap::IndexMap;
 
 /// What a [`DefId`] names.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DefKind {
     Struct,
     Union,
@@ -112,6 +112,15 @@ impl DefTable {
 
     pub fn len(&self) -> usize {
         self.defs.len()
+    }
+
+    /// Definitions in allocation order, starting at the `skip`th.
+    pub fn iter_from(&self, skip: usize) -> impl Iterator<Item = (DefId, &DefInfo)> {
+        self.defs
+            .get_range(skip..)
+            .into_iter()
+            .flat_map(|defs| defs.iter())
+            .map(|(&id, info)| (id, info))
     }
 
     pub fn is_empty(&self) -> bool {

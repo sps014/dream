@@ -5,7 +5,6 @@ use crate::struct_table::StructTable;
 use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionTable;
 use bumpalo::Bump;
-use dream_abi::attributes::{CompileTargets, RuntimeSupport};
 use dream_diagnostics::{Diagnostic, DiagnosticBag};
 use dream_syntax::nodes::types::FUTURE_TYPE;
 use dream_syntax::nodes::{EnumDeclarationNode, ExtendNode};
@@ -28,17 +27,19 @@ mod declarations;
 mod expressions;
 mod generics;
 mod hir_emit;
-mod member_requirements;
 pub mod ide;
 mod iterators;
 mod js_interop;
+mod member_requirements;
 mod ownership;
 mod receiver_modes;
 mod statements;
 mod switch_unions;
 mod type_checker;
+mod typed_hir_cache;
 
 pub use ide::{IdeSnapshot, TypeSummary};
+pub use typed_hir_cache::{CachedBody, TypedBodies};
 
 mod source;
 use source::file_path_string;
@@ -205,6 +206,12 @@ pub(super) enum MemberField {
 pub struct Analyzer<'a> {
     graph: &'a ModuleGraph<'a>,
     generator_facts: Option<crate::gen_facts::GenFacts>,
+    cached_typed_bodies: HashMap<dream_types::ModuleId, TypedBodies>,
+    reused_typed_bodies: usize,
+    def_index: typed_hir_cache::DefIndex,
+    journal: Option<typed_hir_cache::Journal>,
+    cached_body_checks: HashSet<dream_types::ModuleId>,
+    body_checks_with_diagnostics: HashSet<dream_types::ModuleId>,
     program: &'a ProgramView<'a>,
     function_table: FunctionTable,
     struct_table: StructTable,
@@ -390,11 +397,6 @@ pub struct Analyzer<'a> {
     /// True while analyzing the body of an `@unsafe fun`/method. Gates calling another `@unsafe`
     /// function/method — see `Analyzer::check_unsafe_call`.
     current_function_is_unsafe: bool,
-    /// Runtime availability of the function whose body is currently being analyzed. Gates
-    /// `check_runtime_call` on nested calls — see `Analyzer::check_runtime_call`.
-    current_function_runtime: RuntimeSupport,
-    /// Active compile-time runtime target(s) from the driver/CLI. Defaults to native-only.
-    compile_targets: CompileTargets,
     /// Pointer facts used by the single HIR layout table.
     target_layout: dream_hir::TargetLayout,
     deferred_case_labels: Vec<Vec<(dream_hir::HExpr, Option<TextSpan>)>>,
@@ -517,13 +519,17 @@ impl<'a> Analyzer<'a> {
             ref_struct_escape_muted: false,
             current_function_is_async: false,
             current_function_is_unsafe: false,
-            current_function_runtime: RuntimeSupport::ALL,
-            compile_targets: CompileTargets::native_only(),
             target_layout: dream_hir::TargetLayout::default(),
             deferred_case_labels: Vec::new(),
             overflow: dream_hir::Overflow::Wrapping,
             current_file: None,
             generator_facts: None,
+            cached_typed_bodies: HashMap::new(),
+            reused_typed_bodies: 0,
+            def_index: Default::default(),
+            journal: None,
+            cached_body_checks: HashSet::new(),
+            body_checks_with_diagnostics: HashSet::new(),
             file_modules: graph
                 .files
                 .iter()
@@ -563,6 +569,35 @@ impl<'a> Analyzer<'a> {
         &self.type_ctx.interner
     }
 
+    /// Reuses successful syntax-only body checks for exact snapshots of named source modules.
+    pub fn set_cached_body_checks(&mut self, modules: HashSet<dream_types::ModuleId>) {
+        self.cached_body_checks = modules;
+    }
+
+    /// Modules whose bodies reported a diagnostic, so their body checks must not be persisted.
+    pub fn body_checks_with_diagnostics(&self) -> &HashSet<dream_types::ModuleId> {
+        &self.body_checks_with_diagnostics
+    }
+
+    /// Persisted typed bodies of the modules whose cache key matched. Modules without an entry
+    /// neither reuse nor record bodies.
+    pub fn set_cached_typed_bodies(
+        &mut self,
+        modules: HashMap<dream_types::ModuleId, TypedBodies>,
+    ) {
+        self.cached_typed_bodies = modules;
+    }
+
+    /// The reused and newly recorded typed bodies, by module.
+    pub fn take_typed_bodies(&mut self) -> HashMap<dream_types::ModuleId, TypedBodies> {
+        std::mem::take(&mut self.cached_typed_bodies)
+    }
+
+    /// Number of bodies taken from the persisted cache instead of analyzed.
+    pub fn reused_typed_bodies(&self) -> usize {
+        self.reused_typed_bodies
+    }
+
     /// Enables debug-info instrumentation so HIR emission interleaves [`dream_hir::HStmt::DebugLine`]
     /// source-line markers. Call before [`Self::analyze`].
     pub fn set_debug_info(&mut self, on: bool) {
@@ -583,12 +618,6 @@ impl<'a> Analyzer<'a> {
     /// Library vs binary compilation unit. Call before [`Self::analyze`].
     pub fn with_crate_type(mut self, crate_type: CrateType) -> Self {
         self.crate_type = crate_type;
-        self
-    }
-
-    /// Active compile-time runtime target(s). Call before [`Self::analyze`].
-    pub fn with_compile_targets(mut self, targets: CompileTargets) -> Self {
-        self.compile_targets = targets;
         self
     }
 

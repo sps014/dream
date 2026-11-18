@@ -7,7 +7,6 @@ use crate::driver::compiler::{BuildOutcome, Compiler};
 use crate::driver::js_runtime::JsRuntimeTarget;
 use crate::driver::output::OutputKind;
 use crate::driver::wasm_opt::OptLevel;
-use dream_abi::attributes::CompileTargets;
 use dream_sema::analyzer::CrateType;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -94,11 +93,16 @@ impl BuildRequest<'_> {
             )?
             .with_raw_ll_intermediate(true);
         let bin = OutputKind::Executable.artifact_path(&ll, &spec);
-        if let BuildOutcome::Built(stamp) = self.compile(compiler, &ll)? {
+        if let BuildOutcome::Built {
+            stamp,
+            codegen_units,
+        } = self.compile(compiler, &ll)?
+        {
             crate::execution::llvm::compile_llvm(
                 self.config,
                 &ll,
                 crate::execution::llvm::NativeBuildOptions {
+                    codegen_units: &codegen_units,
                     target: spec,
                     opt_ll: None,
                     opt_remarks: None,
@@ -132,18 +136,16 @@ impl BuildRequest<'_> {
         let compiler = self
             .compiler(true, "test|node".into())?
             .with_runtimes(vec![JsRuntimeTarget::Node])
-            .with_compile_targets(CompileTargets {
-                native: false,
-                node: true,
-                web: false,
-            })
             .with_output_kind(OutputKind::Wasm);
         let wasm = wat.with_extension("wasm");
         let js = out_dir.join(format!(
             "runner.{}",
             JsRuntimeTarget::Node.runtime_extension()
         ));
-        if let BuildOutcome::Built(Some(stamp)) = self.compile(compiler, &wat)? {
+        if let BuildOutcome::Built {
+            stamp: Some(stamp), ..
+        } = self.compile(compiler, &wat)?
+        {
             let outputs: Vec<PathBuf> = [wasm.clone(), js.clone(), wat.with_extension("abi.json")]
                 .into_iter()
                 .chain(

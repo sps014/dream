@@ -95,11 +95,18 @@ impl Api {
                 c,
                 "__attribute__((used)) const unsigned char __dream_layout_{name} = sizeof({ty}) == sizeof({original}) && _Alignof({ty}) == _Alignof({original})"
             );
-            for (field, _) in &record.fields {
-                let _ = write!(
-                    c,
-                    " && offsetof({ty}, {field}) == offsetof({original}, {field})"
-                );
+            for (index, (field, _)) in record.fields.iter().enumerate() {
+                if record.inline_array {
+                    let _ = write!(
+                        c,
+                        " && offsetof({ty}, {field}) == {index} * sizeof((*({original} *)0)[0])"
+                    );
+                } else {
+                    let _ = write!(
+                        c,
+                        " && offsetof({ty}, {field}) == offsetof({original}, {field})"
+                    );
+                }
             }
             c.push_str(";\n");
         }
@@ -226,8 +233,18 @@ fn signature(line: &str) -> Option<(&str, String)> {
     let (prefix, rest) = line.split_once('@')?;
     let (name, signature) = rest.split_once('(')?;
     let signature = signature.split(" #").next()?;
+    Some((
+        name.strip_prefix(char::from(1)).unwrap_or(name),
+        format!(
+            "{}({}",
+            normalize_nominal_names(prefix),
+            normalize_nominal_names(signature)
+        ),
+    ))
+}
+
+fn normalize_nominal_names(mut tail: &str) -> String {
     let mut normalized = String::new();
-    let mut tail = signature;
     while let Some((before, after)) = tail.split_once('%') {
         normalized.push_str(before);
         normalized.push('%');
@@ -237,8 +254,5 @@ fn signature(line: &str) -> Option<(&str, String)> {
         tail = &after[end..];
     }
     normalized.push_str(tail);
-    Some((
-        name.strip_prefix(char::from(1)).unwrap_or(name),
-        format!("{prefix}({normalized}"),
-    ))
+    normalized
 }

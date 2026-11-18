@@ -1,14 +1,18 @@
 use super::*;
+use crate::driver::source_loader::input_hash;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-const STAMP_HEADER: &str = "dream-build-cache-v5";
+const STAMP_HEADER: &str = "dream-build-cache-v7";
 
 /// What a cached compile produced: either fresh output whose artifacts the caller records once its
 /// own post-processing (native link, object emission) succeeds, or a verified earlier build.
 #[derive(Debug)]
 pub enum BuildOutcome {
-    Built(Option<BuildStamp>),
+    Built {
+        stamp: Option<BuildStamp>,
+        codegen_units: Vec<String>,
+    },
     Cached(Vec<PathBuf>),
 }
 
@@ -51,37 +55,6 @@ struct StoredBuild {
     early: bool,
     warnings: Warnings,
     artifacts: Vec<(PathBuf, String)>,
-}
-
-fn input_hash(path: &Path) -> Option<String> {
-    if path.is_dir() {
-        let mut entries = fs::read_dir(path)
-            .ok()?
-            .map(|entry| {
-                let entry = entry.ok()?;
-                let name = entry.file_name().to_string_lossy().into_owned();
-                let kind = entry.file_type().ok()?;
-                Some((name, kind.is_dir(), kind.is_symlink()))
-            })
-            .collect::<Option<Vec<_>>>()?;
-        entries.retain(|(name, directory, symlink)| {
-            *directory
-                || *symlink
-                || name.ends_with(".dream")
-                || matches!(name.as_str(), "dream.toml" | "dream.lock")
-        });
-        entries.sort();
-        Some(format!(
-            "dir:{}",
-            blake3::hash(&serde_json::to_vec(&entries).ok()?)
-        ))
-    } else {
-        match fs::read(path) {
-            Ok(bytes) => Some(format!("file:{}", blake3::hash(&bytes))),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some("missing".into()),
-            Err(_) => None,
-        }
-    }
 }
 
 fn reuse(stored: &StoredBuild) -> Option<Vec<PathBuf>> {
@@ -274,7 +247,7 @@ impl Compiler {
             self.optimize,
             self.generator_stage,
             self.runtimes,
-            self.compile_targets,
+            self.cfg_symbols().key(),
             self.crate_type,
             self.opt_ir,
             self.output_kind,
@@ -362,6 +335,7 @@ impl Compiler {
         &self,
         link_key: &str,
         loaded: &load::LoadedProgram<'_>,
+        modules: &[dream_sema::module_graph::ModuleHashes],
         main_file_path: &str,
         out_path: &str,
     ) -> Option<BuildStamp> {
@@ -386,7 +360,7 @@ impl Compiler {
             field("file", file.path.as_bytes());
             field("source", file.source.as_bytes());
         }
-        for module in loaded.graph.module_hashes() {
+        for module in modules {
             field("module", &module.cache_key());
         }
         for (name, bytes) in &loaded.graph.embedded_assets {
@@ -403,6 +377,7 @@ impl Compiler {
         }
 
         let mut inputs = loaded.acc.resolution_inputs.clone();
+        inputs.extend(loaded.acc.input_snapshots.keys().cloned());
         if !self.runtimes.is_empty() {
             let mut packages: Vec<&dream_stdlib::StdPackage> = Vec::new();
             for file in &loaded.graph.files {
@@ -437,7 +412,15 @@ impl Compiler {
         }
         let inputs = inputs
             .into_iter()
-            .map(|path| Some((path.clone(), input_hash(&path)?)))
+            .map(|path| {
+                let hash = input_hash(&path)?;
+                if let Some(snapshot) = loaded.acc.input_snapshots.get(&path)
+                    && snapshot.as_ref() != Some(&hash)
+                {
+                    return None;
+                }
+                Some((path, hash))
+            })
             .collect::<Option<Vec<_>>>()?;
         Some(BuildStamp {
             path: Path::new(out_path).with_extension("dream-cache"),
@@ -449,5 +432,37 @@ impl Compiler {
                 && self.toolchain_config.compiler_environment.is_empty(),
             warnings: Warnings::default(),
         })
+    }
+}
+
+#[cfg(all(test, feature = "native"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edit_after_source_load_cannot_publish_an_early_cache_hit() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.dream");
+        let source = path.to_str().unwrap().to_owned();
+        let output = directory.path().join("main.ll");
+        let out = output.to_str().unwrap();
+        let compiler = Compiler::new(Target::native()).with_build_cache(Some("test".into()));
+        fs::write(&path, "fun main(): int { return 1; }").unwrap();
+        let arena = Bump::new();
+        let loaded = compiler
+            .load_program(&source, &arena, &mut DiagnosticBag::new(None))
+            .unwrap();
+        assert!(
+            compiler
+                .build_stamp("test", &loaded, &loaded.graph.module_hashes(), &source, out)
+                .is_some()
+        );
+
+        fs::write(&path, "fun main(): int { return 2; }").unwrap();
+        assert!(
+            compiler
+                .build_stamp("test", &loaded, &loaded.graph.module_hashes(), &source, out)
+                .is_none()
+        );
     }
 }

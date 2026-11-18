@@ -1025,7 +1025,14 @@ export async function activate(context: vscode.ExtensionContext) {
             { scheme: 'file', language: 'dream' },
             { scheme: 'untitled', language: 'dream' }
         ],
-        outputChannel: outputChannel
+        outputChannel: outputChannel,
+        initializationOptions: () => {
+            const runtime = readBuildSettings().runtimeTarget;
+            const target = { native: '', web: 'wasm32-unknown-unknown', node: 'node' }[runtime];
+            return {
+                target: vscode.workspace.getConfiguration('dream').get<string>('analysisTarget') || target
+            };
+        }
     };
 
     client = new LanguageClient(
@@ -1036,6 +1043,14 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(client);
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration('dream.analysisTarget') ||
+            event.affectsConfiguration('dream.runtimeTarget')) {
+            void client?.restart().catch((error: unknown) =>
+                outputChannel.appendLine(`Failed to restart Dream language server: ${error}`)
+            );
+        }
+    }));
 
     try {
         outputChannel.appendLine('Starting client...');

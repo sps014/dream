@@ -182,6 +182,20 @@ jobs:
           npm ci --prefix tooling/js-bindings
           npm test --prefix tooling/js-bindings
       - run: cargo test --workspace --no-fail-fast --timings
+      - name: Cache WASI component tools
+        if: runner.os == 'Linux'
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.dream/toolchains/wasi-sdk-34.0
+            ~/.dream/toolchains/wasmtime-49.0.4
+          key: wasi-components-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('crates/dream-abi/src/toolchain.rs') }}
+      - name: Qualify and compare WASI components
+        if: runner.os == 'Linux'
+        run: |
+          cargo run --locked -p dreamer -- toolchain install wasi-sdk
+          cargo run --locked -p dreamer -- toolchain install wasmtime
+          python3 scripts/qualify-wasi.py
       # Dependencies are already built. This lints workspace crates only.
       - run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
       - name: X11 windows and GPU presentation under a real display server

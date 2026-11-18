@@ -312,8 +312,9 @@ pub fn run_generators<'a>(
                 );
                 acc.untracked_generator_inputs |= !registered.incremental;
                 for file in &built.snapshot.additional_files {
-                    acc.resolution_inputs
-                        .insert(inputs.paths.root.join(&file.path));
+                    let path = inputs.paths.root.join(&file.path);
+                    acc.record_file_input(path.clone(), file.contents.as_bytes());
+                    acc.resolution_inputs.insert(path);
                 }
                 #[cfg(feature = "native")]
                 let job = {
@@ -429,6 +430,7 @@ pub fn run_generators<'a>(
         }
     };
     for ((path, text), generated) in files.into_iter().zip(&applied.files) {
+        acc.record_file_input(path.clone(), text.as_bytes());
         acc.resolution_inputs.insert(path.clone());
         if runs
             .iter()

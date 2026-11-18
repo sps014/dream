@@ -94,7 +94,6 @@ and a `tests/` test project that depends on it.
 |---|---|---|
 | `[package].targets`, `dreamer run --target` | `native`, `web`, `node`, `android`, `ios` | Which host runs the app; mobile canvas execution is pending |
 | `dreamer pack --target` | `linux-x64`, `macos-arm64`, … or `all` | Which OS/arch executable to package; see [CLI packaging](../deploy/desktop.md) |
-| `dream --runtime-target` | `native`, `web`, `node` | Which runtime's API availability is checked |
 | `dream --target` | An LLVM target triple, such as `aarch64-unknown-linux-gnu` | What the compiler compiles and links for |
 | `dream --object` (with `--target`) | — | Stop at an unlinked object; no platform SDK needed |
 

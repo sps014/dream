@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the pinned WASI HTTP Canonical ABI bindings."""
+"""Regenerate the pinned WASI transport Canonical ABI bindings."""
 import argparse
 import os
 from pathlib import Path
@@ -34,7 +34,7 @@ def main():
                         raise SystemExit(str(target) + " is stale; run python scripts/generate-wasi-bindings.py")
                 else:
                     target.write_bytes(data)
-    print("WASI HTTP bindings match pinned WIT and wit-bindgen.")
+    print("WASI transport bindings match pinned WIT and wit-bindgen.")
 
 
 if __name__ == "__main__":

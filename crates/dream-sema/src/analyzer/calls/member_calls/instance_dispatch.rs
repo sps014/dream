@@ -183,42 +183,49 @@ impl<'a> Analyzer<'a> {
         let method_info = self.method_info(owner, &method.text).ok();
         let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
         let is_overloaded = self.method_overloaded(owner, &method.text);
+        let call_target = format!("{}.{}", effective_struct, method.text);
+        let named_call = if has_named_arg && is_overloaded {
+            Some(self.resolve_named_call(
+                (&call_target, method.position),
+                self.function_table.method_candidates(owner, &method.text),
+                params,
+                1,
+                ctx,
+                diagnostics,
+            )?)
+        } else {
+            None
+        };
+        let (named_signature, named_args, named_expressions) = named_call
+            .map(|call| (Some(call.signature), Some(call.arguments), call.expressions))
+            .unwrap_or_default();
         let normalized_params: Vec<ExpressionNode<'a>>;
-        let params: &[ExpressionNode<'a>] = if has_named_arg {
-            if is_overloaded {
-                normalized_params = self.normalize_named_for_candidates(
-                    &mangled_name,
-                    self.function_table.method_candidates(owner, &method.text),
-                    params,
-                    method.position,
-                    1,
+        let params: &[ExpressionNode<'a>] = if named_signature.is_some() {
+            &named_expressions
+        } else if has_named_arg {
+            let Some(info) = method_info.as_ref() else {
+                let owner_name = self.type_id_display(owner);
+                let notes = suggest_methods(&self.function_table, owner, &method.text)
+                    .iter()
+                    .map(|m| format!("similar method exists: '{}.{}'", owner_name, m))
+                    .collect();
+                return Err(report_with_notes(
                     diagnostics,
-                )?;
-            } else {
-                let Some(info) = method_info.as_ref() else {
-                    let owner_name = self.type_id_display(owner);
-                    let notes = suggest_methods(&self.function_table, owner, &method.text)
-                        .iter()
-                        .map(|m| format!("similar method exists: '{}.{}'", owner_name, m))
-                        .collect();
-                    return Err(report_with_notes(
-                        diagnostics,
-                        format!("Type '{}' has no method '{}'", owner_name, method.text),
-                        Some(method.position),
-                        notes,
-                    ));
-                };
-                let param_names: Vec<String> = info.param_names.iter().skip(1).cloned().collect();
-                let defaults: Vec<Option<Type>> = info.defaults.iter().skip(1).cloned().collect();
-                normalized_params = self.normalize_named_arguments(
-                    &param_names,
-                    &defaults,
-                    params,
-                    method.position,
-                    diagnostics,
-                    info.is_variadic,
-                )?;
-            }
+                    format!("Type '{}' has no method '{}'", owner_name, method.text),
+                    Some(method.position),
+                    notes,
+                ));
+            };
+            let param_names: Vec<String> = info.param_names.iter().skip(1).cloned().collect();
+            let defaults: Vec<Option<Type>> = info.defaults.iter().skip(1).cloned().collect();
+            normalized_params = self.normalize_named_arguments(
+                &param_names,
+                &defaults,
+                params,
+                method.position,
+                diagnostics,
+                info.is_variadic,
+            )?;
             &normalized_params
         } else if is_variadic && !is_overloaded {
             let Some(info) = method_info.as_ref() else {
@@ -252,24 +259,30 @@ impl<'a> Analyzer<'a> {
             })
         };
 
-        let call_target = format!("{}.{}", effective_struct, method.text);
-        let saved_call_target = self.current_call_target_name.take();
-        self.current_call_target_name = Some(call_target);
+        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = if let Some(args) = named_args {
+            args
+        } else {
+            let saved_call_target = self.current_call_target_name.take();
+            self.current_call_target_name = Some(call_target);
 
-        // Analyze the explicit arguments once, then resolve the method (overloaded methods select
-        // by argument types, with the receiver supplied as the implicit `this` argument).
-        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self
-            .analyze_call_arguments_expecting_ref(
+            // Analyze the explicit arguments once, then resolve the method (overloaded methods select
+            // by argument types, with the receiver supplied as the implicit `this` argument).
+            let result = self.analyze_call_arguments_expecting_ref(
                 params,
                 expected_params.as_deref(),
                 ctx.parent_function,
                 ctx.symbol_table,
                 diagnostics,
-            )?;
+            );
 
-        self.current_call_target_name = saved_call_target;
+            self.current_call_target_name = saved_call_target;
 
-        let store_sig = if is_overloaded {
+            result?
+        };
+
+        let store_sig = if let Some(signature) = named_signature {
+            signature
+        } else if is_overloaded {
             let mut selection_args = Vec::with_capacity(arg_types.len() + 1);
             selection_args.push(owner);
             selection_args.extend(arg_types.iter().cloned());
@@ -336,12 +349,6 @@ impl<'a> Analyzer<'a> {
             params,
             1,
             ctx.symbol_table,
-            diagnostics,
-        );
-        self.check_runtime_call(
-            &format!("{}.{}", effective_struct, method.text),
-            store_sig.runtime_support,
-            method.position,
             diagnostics,
         );
 

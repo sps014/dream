@@ -35,6 +35,7 @@ struct Binding {
     fingerprint: String,
     source: String,
     omissions: BTreeMap<String, String>,
+    headers: BTreeMap<PathBuf, String>,
 }
 
 struct Request {
@@ -58,10 +59,17 @@ fn requests(acc: &ProgramAccumulator<'_>) -> Vec<Request> {
         .collect()
 }
 
+fn cache_target(target: &TargetSpec) -> String {
+    match target.execution_environment.component() {
+        Some(environment) => format!("wasm32-{environment}"),
+        None => target.llvm_triple(),
+    }
+}
+
 fn cache_root(entry: &str, target: &TargetSpec) -> PathBuf {
     PathBuf::from(source_scope(Path::new(entry)))
         .join("target/obj/cimport")
-        .join(target.llvm_triple())
+        .join(cache_target(target))
 }
 
 fn attach<'a>(
@@ -153,31 +161,50 @@ pub fn replay<'a>(
     arena: &'a Bump,
     diagnostics: &mut DiagnosticBag,
     entry: &str,
+    target: &TargetSpec,
 ) -> io::Result<()> {
-    let root = cache_root(entry, &TargetSpec::host());
+    let root = cache_root(entry, target);
     for request in requests(acc) {
         acc.requested_std_packages.insert(C_INTEROP_PACKAGE.into());
         let c = request.import.c.as_ref().expect("C import request");
         let metadata = root.join(format!("{}.json", c.prefix.trim_end_matches('_')));
-        if let Some(binding) = std::fs::read(&metadata)
+        let binding: Option<Binding> = std::fs::read(&metadata)
             .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        {
-            attach(
-                &request,
-                &metadata.with_extension("dream"),
-                &binding,
-                acc,
-                arena,
-                diagnostics,
-            )?;
-        } else {
-            diagnostics.file_path = Some(request.source.clone());
-            diagnostics.report_error(
-                "build this project to make the C header bindings available in the editor".into(),
-                Some(request.import.module_name.position),
-            );
-        }
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+        let reason = match binding {
+            Some(binding)
+                if binding
+                    .headers
+                    .iter()
+                    .all(|(path, hash)| header_hash(path).as_ref() == Some(hash)) =>
+            {
+                attach(
+                    &request,
+                    &metadata.with_extension("dream"),
+                    &binding,
+                    acc,
+                    arena,
+                    diagnostics,
+                )?;
+                continue;
+            }
+            Some(_) => "C header bindings are stale",
+            None => "C header bindings are missing",
+        };
+        diagnostics.file_path = Some(request.source.clone());
+        diagnostics.report_error(
+            format!(
+                "{reason} for {}; build the project for this target",
+                cache_target(target)
+            ),
+            Some(request.import.module_name.position),
+        );
     }
     Ok(())
+}
+
+fn header_hash(path: &Path) -> Option<String> {
+    std::fs::read(path)
+        .ok()
+        .map(|bytes| blake3::hash(&bytes).to_hex().to_string())
 }

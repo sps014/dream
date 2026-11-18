@@ -33,37 +33,46 @@ impl<'a> Analyzer<'a> {
             return self.analyze_asset_bytes(params, method, diagnostics);
         }
         let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
+        let named_call = if has_named_arg && is_overloaded {
+            Some(self.resolve_named_call(
+                (&base, method.position),
+                self.function_table.method_candidates(owner, &method.text),
+                params,
+                0,
+                &AnalyzerContext {
+                    parent_function,
+                    symbol_table,
+                },
+                diagnostics,
+            )?)
+        } else {
+            None
+        };
+        let (named_signature, named_args, named_expressions) = named_call
+            .map(|call| (Some(call.signature), Some(call.arguments), call.expressions))
+            .unwrap_or_default();
         let normalized_params: Vec<ExpressionNode<'a>>;
-        let params: &[ExpressionNode<'a>] = if has_named_arg {
-            if is_overloaded {
-                normalized_params = self.normalize_named_for_candidates(
-                    &base,
-                    self.function_table.method_candidates(owner, &method.text),
-                    params,
-                    method.position,
-                    0,
+        let params: &[ExpressionNode<'a>] = if named_signature.is_some() {
+            &named_expressions
+        } else if has_named_arg {
+            let Some(info) = method_info.as_ref() else {
+                return Err(report(
                     diagnostics,
-                )?;
-            } else {
-                let Some(info) = method_info.as_ref() else {
-                    return Err(report(
-                        diagnostics,
-                        format!(
-                            "Type '{}' has no static method '{}'",
-                            type_name, method.text
-                        ),
-                        Some(method.position),
-                    ));
-                };
-                normalized_params = self.normalize_named_arguments(
-                    &info.param_names,
-                    &info.defaults,
-                    params,
-                    method.position,
-                    diagnostics,
-                    info.is_variadic,
-                )?;
-            }
+                    format!(
+                        "Type '{}' has no static method '{}'",
+                        type_name, method.text
+                    ),
+                    Some(method.position),
+                ));
+            };
+            normalized_params = self.normalize_named_arguments(
+                &info.param_names,
+                &info.defaults,
+                params,
+                method.position,
+                diagnostics,
+                info.is_variadic,
+            )?;
             &normalized_params
         } else if is_variadic && !is_overloaded {
             let Some(info) = method_info.as_ref() else {
@@ -93,22 +102,29 @@ impl<'a> Analyzer<'a> {
                 .map(|s| Self::expected_param_types(&s))
         };
 
-        let call_target = format!("{}.{}", type_name, method.text);
-        let saved_call_target = self.current_call_target_name.take();
-        self.current_call_target_name = Some(call_target);
+        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = if let Some(args) = named_args {
+            args
+        } else {
+            let call_target = format!("{}.{}", type_name, method.text);
+            let saved_call_target = self.current_call_target_name.take();
+            self.current_call_target_name = Some(call_target);
 
-        let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self
-            .analyze_call_arguments_expecting_ref(
+            let result = self.analyze_call_arguments_expecting_ref(
                 params,
                 expected_params.as_deref(),
                 parent_function,
                 symbol_table,
                 diagnostics,
-            )?;
+            );
 
-        self.current_call_target_name = saved_call_target;
+            self.current_call_target_name = saved_call_target;
 
-        let store_sig = if is_overloaded {
+            result?
+        };
+
+        let store_sig = if let Some(signature) = named_signature {
+            signature
+        } else if is_overloaded {
             match self.select_method_overload(owner, &method.text, &arg_types) {
                 Ok(sig) => sig,
                 Err(message) => {
@@ -168,12 +184,6 @@ impl<'a> Analyzer<'a> {
 
         self.check_unsafe_call(&store_sig, method.position, diagnostics);
         self.check_c_fun_args(store_sig.identity.0, params, 0, symbol_table, diagnostics);
-        self.check_runtime_call(
-            &format!("{}.{}", type_name, method.text),
-            store_sig.runtime_support,
-            method.position,
-            diagnostics,
-        );
 
         self.validate_ref_arguments(
             &format!("static method '{}'", base),

@@ -53,11 +53,11 @@ public class WebApp {
         this.state = Map<string, string>();
     }
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerClose", "net")
     static extern fun close_host(id: int): void;
 
-    @native
+    @cfg(Target.Native)
     @runtime("httpServerShutdown", "net")
     static extern fun shutdown_host(id: int): void;
 
@@ -143,7 +143,7 @@ public class WebApp {
     }
 
     /// Stops accepting traffic and cancels active transport operations on this app.
-    @native
+    @cfg(Target.Native)
     public fun shutdown(): void {
         if this.server_handle > 0 {
             WebApp.shutdown_host(this.server_handle);
@@ -151,7 +151,7 @@ public class WebApp {
     }
 
     /// Drains this application's requests and releases its listener.
-    @native
+    @cfg(Target.Native)
     public fun wait(token: Option<CancellationToken> = Option.None): Future<void> {
         return WebApp.wait_owned(this, token);
     }
@@ -351,7 +351,7 @@ public class WebApp {
 
     /// Binds this app with the default `ServerConfig` and returns the bound port; port zero
     /// selects an ephemeral port.
-    @native
+    @cfg(Target.Native)
     public fun listen(
         host: string,
         port: int,
@@ -362,7 +362,7 @@ public class WebApp {
 
     /// Binds this app with the transport settings in `config` and returns the bound port;
     /// port zero selects an ephemeral port. Negative settings fail with `EINVAL`.
-    @native
+    @cfg(Target.Native)
     public fun listen(
         host: string,
         port: int,
@@ -415,7 +415,7 @@ public class WebApp {
     /// Listens with the default `ServerConfig` and waits until shutdown or cancellation.
     /// Without a `token` (explicit or inherited from the current task) the server stops
     /// gracefully when `App.stopping` is cancelled.
-    @native
+    @cfg(Target.Native)
     public fun run(
         host: string,
         port: int,
@@ -427,7 +427,7 @@ public class WebApp {
     /// Listens with `config` and waits until shutdown or cancellation, like `uvicorn.run`.
     /// Without a `token` (explicit or inherited from the current task) the server stops
     /// gracefully when `App.stopping` is cancelled.
-    @native
+    @cfg(Target.Native)
     public fun run(
         host: string,
         port: int,

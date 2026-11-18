@@ -78,6 +78,7 @@ impl Type {
 pub(super) struct Record {
     pub(super) c_name: String,
     pub(super) packed: bool,
+    pub(super) inline_array: bool,
     pub(super) fields: Vec<(String, Type)>,
 }
 
@@ -90,72 +91,79 @@ pub(super) struct Function {
 pub(super) struct Header<'a> {
     nodes: &'a Value,
     typedefs: BTreeMap<&'a str, &'a str>,
-    tags: BTreeMap<&'a str, (&'a Value, &'a str)>,
+    records_by_spelling: BTreeMap<String, String>,
+    tags: BTreeMap<String, (&'a Value, String)>,
     long64: bool,
+    declared_names: std::collections::BTreeSet<String>,
 }
 
 impl<'a> Header<'a> {
     pub(super) fn new(nodes: &'a Value, long64: bool) -> Self {
-        let typedefs = children(nodes)
+        let typedefs: BTreeMap<_, _> = children(nodes)
             .filter(|n| kind(n) == "TypedefDecl")
             .map(|n| (name(n), spelling(n)))
             .collect();
-        let mut tags = BTreeMap::new();
-        let anonymous: BTreeMap<_, _> = children(nodes)
+        let by_id: BTreeMap<_, _> = children(nodes)
             .filter(|n| matches!(kind(n), "RecordDecl" | "EnumDecl") && name(n).is_empty())
             .filter_map(|n| Some((n["id"].as_str()?, n)))
             .collect();
+        let anonymous: BTreeMap<_, _> = children(nodes)
+            .filter(|n| kind(n) == "TypedefDecl")
+            .filter_map(|n| {
+                let id = children(n).find_map(|ty| {
+                    ty["decl"]["id"]
+                        .as_str()
+                        .or_else(|| ty["ownedTagDecl"]["id"].as_str())
+                })?;
+                Some((name(n), *by_id.get(id)?))
+            })
+            .collect();
+
+        let mut used: std::collections::BTreeSet<_> =
+            children(nodes).map(|n| name(n).to_owned()).collect();
+        let mut records_by_spelling = BTreeMap::new();
+        let mut tags = BTreeMap::new();
+        for (alias, node) in &anonymous {
+            records_by_spelling.insert((*alias).to_owned(), (*alias).to_owned());
+            tags.insert((*alias).to_owned(), (*node, (*alias).to_owned()));
+        }
         for node in children(nodes) {
-            match kind(node) {
-                "RecordDecl" if node["completeDefinition"] == true && !name(node).is_empty() => {
-                    tags.insert(
-                        name(node),
-                        (
-                            node,
-                            if node["tagUsed"] == "union" {
-                                "union"
-                            } else {
-                                "struct"
-                            },
-                        ),
-                    );
+            let tag = match kind(node) {
+                "RecordDecl" if node["completeDefinition"] == true => {
+                    node["tagUsed"].as_str().unwrap_or("struct")
                 }
-                "EnumDecl"
-                    if !name(node).is_empty()
-                        && children(node).any(|n| kind(n) == "EnumConstantDecl") =>
-                {
-                    tags.insert(name(node), (node, "enum"));
-                }
-                "TypedefDecl" => {
-                    if let Some(id) = children(node).find_map(|n| n["decl"]["id"].as_str())
-                        && let Some(&tag) = anonymous.get(id)
-                    {
-                        tags.insert(name(node), (tag, ""));
-                    }
-                }
-                _ => {}
+                "EnumDecl" if children(node).any(|n| kind(n) == "EnumConstantDecl") => "enum",
+                _ => continue,
+            };
+            let name = name(node);
+            if name.is_empty() {
+                continue;
             }
+            let c_name = format!("{tag} {name}");
+            let mut binding = name.to_owned();
+            if anonymous.contains_key(name) || typedefs.get(name).is_some_and(|ty| *ty != c_name) {
+                binding = format!("__dream_tag_{name}");
+                while !used.insert(binding.clone()) {
+                    binding.push('_');
+                }
+            }
+            records_by_spelling.insert(c_name.clone(), binding.clone());
+            tags.insert(binding, (node, c_name));
         }
         Self {
             nodes,
             typedefs,
+            records_by_spelling,
             tags,
             long64,
-        }
-    }
-
-    fn c_tag(&self, name: &str) -> String {
-        match self.tags.get(name) {
-            Some((_, tag)) if !tag.is_empty() => format!("{tag} {name}"),
-            _ => name.to_owned(),
+            declared_names: used,
         }
     }
 
     pub(super) fn enum_probes(&self) -> impl Iterator<Item = (&str, String)> {
-        self.tags.iter().filter(|(n, (node, _))| kind(node) == "EnumDecl" && is_c_identifier(n))
-            .enumerate().map(|(i, (name, _))| {
-                let c = self.c_tag(name);
-                (*name, format!("enum {{ __dream_enum_{i} = _Generic(({c})0, signed char: 1, unsigned char: 2, short: 3, unsigned short: 4, int: 5, unsigned int: 6, long: 7, unsigned long: 8, long long: 9, unsigned long long: 10, default: 0) }};"))
+        self.tags.iter().filter(|(name, (node, _))| kind(node) == "EnumDecl" && is_c_identifier(name))
+            .enumerate().map(|(i, (name, (_, c)))| {
+                (name.as_str(), format!("enum {{ __dream_enum_{i} = _Generic(({c})0, signed char: 1, unsigned char: 2, short: 3, unsigned short: 4, int: 5, unsigned int: 6, long: 7, unsigned long: 8, long long: 9, unsigned long long: 10, default: 0) }};"))
             })
     }
 
@@ -243,11 +251,7 @@ impl<'a> Header<'a> {
         if text.ends_with('*') {
             return Ok(Type::Pointer);
         }
-        if let Some(tag) = text
-            .strip_prefix("struct ")
-            .or_else(|| text.strip_prefix("enum "))
-            && self.tags.contains_key(tag)
-        {
+        if let Some(tag) = self.records_by_spelling.get(text) {
             return self.tag_type(tag, enums);
         }
         if let Some(aliased) = self.typedefs.get(text)
@@ -259,7 +263,7 @@ impl<'a> Header<'a> {
     }
 
     fn tag_type(&self, name: &str, enums: &BTreeMap<String, CScalar>) -> Result<Type, String> {
-        let (node, tag) = self.tags[name];
+        let (node, _) = &self.tags[name];
         if kind(node) == "EnumDecl" {
             return enums
                 .get(name)
@@ -267,7 +271,7 @@ impl<'a> Header<'a> {
                 .map(Type::Scalar)
                 .ok_or_else(|| format!("unsupported C enum representation for '{name}'"));
         }
-        if tag == "union" || node["tagUsed"] != "struct" {
+        if node["tagUsed"] != "struct" {
             return Err(format!(
                 "C union '{name}' has no Dream value representation"
             ));
@@ -275,8 +279,12 @@ impl<'a> Header<'a> {
         Ok(Type::Record(name.to_owned()))
     }
 
-    fn record(&self, name: &str, enums: &BTreeMap<String, CScalar>) -> Result<Record, String> {
-        let (node, _) = self.tags[name];
+    fn record(
+        &self,
+        name: &str,
+        enums: &BTreeMap<String, CScalar>,
+    ) -> Result<(Record, BTreeMap<String, Record>), String> {
+        let (node, c_name) = &self.tags[name];
         self.tag_type(name, enums)?;
         let invalid = children(node).any(|f| {
             let k = kind(f);
@@ -287,34 +295,105 @@ impl<'a> Header<'a> {
                 "unsupported layout attributes on C record '{name}'"
             ));
         }
-        let fields = children(node)
+        let mut fields = Vec::new();
+        let mut arrays = BTreeMap::new();
+        for (index, field) in children(node)
             .filter(|n| kind(n) == "FieldDecl")
-            .map(|field| {
-                let field_name = self::name(field);
-                if field["isBitfield"] == true
-                    || !dream_identifier(field_name)
-                    || children(field).any(|n| kind(n).ends_with("Attr"))
-                {
-                    return Err(format!(
-                        "unsupported field '{field_name}' in C record '{name}'"
-                    ));
+            .enumerate()
+        {
+            let field_name = self::name(field);
+            if field["isBitfield"] == true
+                || !dream_identifier(field_name)
+                || children(field).any(|n| kind(n).ends_with("Attr"))
+            {
+                return Err(format!(
+                    "unsupported field '{field_name}' in C record '{name}'"
+                ));
+            }
+            let (element, dimensions) = self.array_shape(spelling(field))?;
+            let mut ty = self.ty(element, enums, 0)?;
+            if !matches!(ty, Type::Scalar(_) | Type::Record(_) | Type::Pointer) {
+                return Err(format!(
+                    "unsupported field type for '{field_name}' in C record '{name}'"
+                ));
+            }
+            if !dimensions.is_empty() {
+                let mut c_array = format!("(({c_name} *)0)->{field_name}");
+                let mut layers = Vec::new();
+                for (depth, count) in dimensions.into_iter().enumerate() {
+                    let mut binding =
+                        format!("__dream_array_{}_{name}_{index}_{depth}", name.len());
+                    while self.declared_names.contains(&binding) {
+                        binding.push('_');
+                    }
+                    layers.push((binding, format!("__typeof__({c_array})"), count));
+                    c_array.push_str("[0]");
                 }
-                match self.ty(spelling(field), enums, 0)? {
-                    ty @ (Type::Scalar(_) | Type::Record(_)) => Ok((field_name.to_string(), ty)),
-                    _ => Err(format!(
-                        "unsupported field type for '{field_name}' in C record '{name}'"
-                    )),
+                for (binding, c_name, count) in layers.into_iter().rev() {
+                    arrays.insert(
+                        binding.clone(),
+                        Record {
+                            c_name,
+                            packed: false,
+                            inline_array: true,
+                            fields: (0..count)
+                                .map(|i| (format!("item{i}"), ty.clone()))
+                                .collect(),
+                        },
+                    );
+                    ty = Type::Record(binding);
                 }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            }
+            fields.push((field_name.to_owned(), ty));
+        }
         if fields.is_empty() {
             return Err(format!("C record '{name}' has no supported fields"));
         }
-        Ok(Record {
-            c_name: self.c_tag(name),
-            packed: children(node).any(|n| kind(n) == "PackedAttr"),
-            fields,
-        })
+        Ok((
+            Record {
+                c_name: c_name.clone(),
+                packed: children(node).any(|n| kind(n) == "PackedAttr"),
+                inline_array: false,
+                fields,
+            },
+            arrays,
+        ))
+    }
+
+    fn array_shape<'b>(&'b self, mut text: &'b str) -> Result<(&'b str, Vec<usize>), String> {
+        let mut dimensions = Vec::new();
+        let mut capacity = 1_usize;
+        for _ in 0..32 {
+            text = unqualified(text);
+            if let Some(start) = text.find('[')
+                && text.ends_with(']')
+                && !text[..start].contains('(')
+            {
+                for dimension in text[start..].split_inclusive(']') {
+                    let count = dimension
+                        .trim()
+                        .strip_prefix('[')
+                        .and_then(|value| value.strip_suffix(']'))
+                        .and_then(|value| value.trim().parse::<usize>().ok())
+                        .filter(|&count| count > 0)
+                        .ok_or_else(|| format!("unsupported C array bound in '{text}'"))?;
+                    capacity = capacity
+                        .checked_mul(count)
+                        .filter(|&size| size <= 256)
+                        .ok_or_else(|| format!("C array '{text}' exceeds 256 inline elements"))?;
+                    dimensions.push(count);
+                }
+                text = unqualified(&text[..start]);
+            }
+            if self.scalar(text).is_some() || self.records_by_spelling.contains_key(text) {
+                return Ok((text, dimensions));
+            }
+            let Some(alias) = self.typedefs.get(text).filter(|alias| **alias != text) else {
+                return Ok((text, dimensions));
+            };
+            text = alias;
+        }
+        Err("C field type is nested too deeply".into())
     }
 
     fn function(
@@ -524,22 +603,23 @@ impl Header<'_> {
             return false;
         }
         match self.record(name, enums) {
-            Ok(record)
-                if record
-                    .fields
-                    .iter()
-                    .filter_map(|(_, t)| record_name(t))
-                    .all(|nested| self.require_record(nested, enums, api, depth + 1)) =>
-            {
-                api.records.insert(name.into(), record);
-                true
-            }
-            Ok(_) => {
-                api.omissions.insert(
-                    name.into(),
-                    "contains an unsupported nested C record".into(),
-                );
-                false
+            Ok((record, arrays)) => {
+                let supported = std::iter::once(&record)
+                    .chain(arrays.values())
+                    .flat_map(|record| &record.fields)
+                    .filter_map(|(_, ty)| record_name(ty))
+                    .filter(|nested| !arrays.contains_key(*nested))
+                    .all(|nested| self.require_record(nested, enums, api, depth + 1));
+                if supported {
+                    api.records.extend(arrays);
+                    api.records.insert(name.into(), record);
+                } else {
+                    api.omissions.insert(
+                        name.into(),
+                        "contains an unsupported nested C record".into(),
+                    );
+                }
+                supported
             }
             Err(reason) => {
                 api.omissions.insert(name.into(), reason);

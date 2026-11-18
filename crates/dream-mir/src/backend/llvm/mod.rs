@@ -62,6 +62,7 @@ pub fn native_header_function_names() -> Vec<String> {
 /// compiled for the same target and linked beside it (empty when the program calls no C).
 pub struct LlvmModule {
     pub ir: String,
+    pub codegen_units: Vec<String>,
     pub c_shim: dream_abi::c_abi::shim::CShim,
     pub header: String,
     pub exports: Vec<dream_abi::exports::ExportFunction>,
@@ -72,6 +73,13 @@ pub struct LlvmModule {
 pub enum Sanitizer {
     Address,
     Thread,
+}
+
+#[derive(Default)]
+pub struct EmitOptions<'a> {
+    pub std_sources: Option<&'a std::path::Path>,
+    pub sanitizer: Option<Sanitizer>,
+    pub codegen_units: Option<&'a std::collections::BTreeMap<&'a str, usize>>,
 }
 
 /// Lowers optimized MIR to one `.ll` module typed against the runtime's signature table.
@@ -85,19 +93,10 @@ pub fn emit_llvm_module(
     sigs: &RuntimeSigs,
     leak_checks: bool,
     target: crate::backend::Target,
-    std_sources: Option<&std::path::Path>,
-    sanitizer: Option<Sanitizer>,
+    options: EmitOptions<'_>,
 ) -> Result<LlvmModule, EmitError> {
     let result = catch_unwind(AssertUnwindSafe(|| {
-        emit_llvm_module_unchecked(
-            mir,
-            interner,
-            sigs,
-            leak_checks,
-            target,
-            std_sources,
-            sanitizer,
-        )
+        emit_llvm_module_unchecked(mir, interner, sigs, leak_checks, target, options)
     }));
     match result {
         Ok(ir) => Ok(ir),
@@ -114,17 +113,19 @@ fn emit_llvm_module_unchecked(
     sigs: &RuntimeSigs,
     leak_checks: bool,
     target: crate::backend::Target,
-    std_sources: Option<&std::path::Path>,
-    sanitizer: Option<Sanitizer>,
+    options: EmitOptions<'_>,
 ) -> LlvmModule {
     let mut l = Lcx::new(mir, interner, sigs, leak_checks, target);
-    if let Some(sanitizer) = sanitizer {
+    if options.codegen_units.is_some() {
+        l.m.enable_units();
+    }
+    if let Some(sanitizer) = options.sanitizer {
         l.m.definition_attrs.push(match sanitizer {
             Sanitizer::Address => ir::FnAttr::SanitizeAddress,
             Sanitizer::Thread => ir::FnAttr::SanitizeThread,
         });
     }
-    l.std_sources = std_sources.map(std::path::Path::to_path_buf);
+    l.std_sources = options.std_sources.map(std::path::Path::to_path_buf);
     // Objects are built `-relocation-model=pic`; without a PIE level LLVM assumes a shared
     // object and routes every runtime thread-local through `__tls_get_addr`/TLSDESC.
     // Mach-O always uses the TLV thunk and COFF ignores the flag.
@@ -192,6 +193,10 @@ fn emit_llvm_module_unchecked(
     glue::tables::emit_globals(&mut l);
     let mut async_i = 0usize;
     for f in &mir.functions {
+        if let Some(files) = options.codegen_units {
+            let unit = f.file.as_deref().and_then(|path| files.get(path)).copied();
+            l.m.set_unit(unit.unwrap_or(0));
+        }
         if !f.is_async {
             body::build_sync(&mut l, f, construction::InitMode::Ordinary);
             if fresh_initializers.contains(&f.def) {
@@ -227,6 +232,7 @@ fn emit_llvm_module_unchecked(
         body::build_poll(&mut l, f, pre_lowered, &offs, environment);
         body::build_future_drop(&mut l, f, pre_lowered, &offs, environment);
     }
+    l.m.set_unit(0);
     glue::release::emit_all(&mut l);
     glue::ownership::emit_all(&mut l);
     glue::protocol::emit_all(&mut l, &protocol);
@@ -242,10 +248,12 @@ fn emit_llvm_module_unchecked(
         Default::default()
     };
     let exports = types::export_functions(&l);
+    let (ir, codegen_units) = l.m.finish_with_units();
     LlvmModule {
         header: types::export_header(&exports),
         exports,
-        ir: l.m.finish(),
+        ir,
+        codegen_units,
         c_shim,
     }
 }

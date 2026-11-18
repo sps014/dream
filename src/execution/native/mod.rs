@@ -51,6 +51,7 @@ pub fn compile_and_capture_ex(
         config,
         Path::new(ll_path),
         crate::execution::llvm::NativeBuildOptions {
+            codegen_units: &[],
             target: dream_abi::target::TargetSpec::host(),
             opt_ll: None,
             opt_remarks: None,

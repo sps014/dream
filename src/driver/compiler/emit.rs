@@ -2,6 +2,7 @@ use super::*;
 
 pub(super) struct EmittedModule {
     bytes: Vec<u8>,
+    pub(super) codegen_units: Vec<String>,
     header: String,
     exports: Vec<String>,
     export_functions: Vec<dream_abi::exports::ExportFunction>,
@@ -22,6 +23,7 @@ impl Compiler {
         mir: &dream_mir::Mir,
         interner: &dream_types::TypeInterner,
         live_imports: Vec<(String, String)>,
+        loaded: &load::LoadedProgram<'_>,
         llvm: Option<&dyn LlvmToolchain>,
     ) -> Result<EmittedModule, CompileError> {
         info!("starting code generation");
@@ -93,14 +95,35 @@ impl Compiler {
                     None
                 }
             });
+        let codegen_units = (self.profile.is_debug()
+            && self.build_cache.is_some()
+            && self.raw_ir_intermediate
+            && !self.target.spec().capabilities.linear_memory
+            && self.output_kind == crate::driver::output::OutputKind::Executable
+            && !self.debug_info
+            && !self.perf_symbols
+            && sanitizer.is_none())
+        .then(|| {
+            loaded
+                .graph
+                .files
+                .iter()
+                .filter(|file| file.module.0 > 0 && !file.path.starts_with('<'))
+                .map(|file| (file.path.as_str(), file.module.0 as usize))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        })
+        .filter(|files| !files.is_empty());
         let module = dream_mir::backend::llvm::emit_llvm_module(
             mir,
             interner,
             &sigs,
             self.profile.is_debug(),
             self.target.clone(),
-            std_sources.as_deref(),
-            sanitizer,
+            dream_mir::backend::llvm::EmitOptions {
+                std_sources: std_sources.as_deref(),
+                sanitizer,
+                codegen_units: codegen_units.as_ref(),
+            },
         )
         .map_err(|error| stale(error.to_string()))?;
         let c_shim = (!module.c_shim.is_empty())
@@ -117,6 +140,7 @@ impl Compiler {
         }
         Ok(EmittedModule {
             bytes: module.ir.into_bytes(),
+            codegen_units: module.codegen_units,
             header: module.header,
             export_functions: module.exports,
             exports: mir
@@ -152,7 +176,7 @@ impl Compiler {
         &self,
         out_path: &str,
         loaded: &load::LoadedProgram<'_>,
-        emitted: EmittedModule,
+        emitted: &EmittedModule,
         layouts: dream_hir::LayoutTable,
         llvm: Option<&dyn LlvmToolchain>,
     ) -> Result<(), CompileError> {

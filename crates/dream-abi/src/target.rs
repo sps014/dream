@@ -9,6 +9,7 @@ pub const ANDROID_MIN_API: u32 = 26;
 pub enum ExecutionEnvironment {
     Native,
     Browser,
+    Node,
     WasiP2,
     WasiP3,
 }
@@ -82,6 +83,12 @@ pub struct TargetSpec {
 }
 
 impl TargetSpec {
+    pub fn node() -> Self {
+        let mut spec = Self::wasm32();
+        spec.execution_environment = ExecutionEnvironment::Node;
+        spec
+    }
+
     pub fn parse(triple: &str) -> Result<Self, String> {
         // Components share a core-module machine ABI; their WASI version belongs to the
         // execution environment, independently of LLVM's core-module target triple.
@@ -282,6 +289,7 @@ impl TargetSpec {
             ExecutionEnvironment::Browser => {
                 symbols.with(TargetSymbol::Wasm).with(TargetSymbol::Browser)
             }
+            ExecutionEnvironment::Node => symbols.with(TargetSymbol::Wasm).with(TargetSymbol::Node),
             ExecutionEnvironment::WasiP2 | ExecutionEnvironment::WasiP3 => {
                 symbols.with(TargetSymbol::Wasm).with(TargetSymbol::Wasi)
             }

@@ -98,6 +98,7 @@ impl<'a> Analyzer<'a> {
                         taken_index = Some(index);
                         break;
                     } else {
+                        self.check_is_possible(&left_t, right_type, left.position(), diagnostics);
                         if check_type_test_dead {
                             self.check_dead_branch(
                                 None,

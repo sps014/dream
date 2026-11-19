@@ -93,3 +93,16 @@ fun timezone_basic(): void {
     Assert.eq(TimeZone.utc.offset_minutes_at(0L), 0);
     Assert.is_false(TimeZone.local.name.is_empty());
 }
+
+@test
+fun datetime_parse_rejects_impossible_dates(): void {
+    Assert.is_true(DateTime.parse("2024-02-29T00:00:00Z").is_ok());
+    Assert.is_true(DateTime.parse("2000-02-29T00:00:00Z").is_ok());
+    Assert.is_true(DateTime.parse("2024-12-31T23:59:59Z").is_ok());
+    Assert.is_true(DateTime.parse("2024-01-31T00:00:00Z").is_ok());
+
+    Assert.is_true(DateTime.parse("2023-02-29T00:00:00Z").is_err());
+    Assert.is_true(DateTime.parse("1900-02-29T00:00:00Z").is_err());
+    Assert.is_true(DateTime.parse("2024-04-31T00:00:00Z").is_err());
+    Assert.is_true(DateTime.parse("2024-02-30T00:00:00Z").is_err());
+}

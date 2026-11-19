@@ -181,7 +181,7 @@ fn same_named_fields_do_not_collide_in_references() {
     let src = "class Point {\n    x: int;\n}\nclass Size {\n    x: int;\n}\nfun main(): void {\n    let p = Point(1);\n    let s = Size(2);\n    let a = p.x;\n    let b = s.x;\n    let t = a + b;\n}\n";
     let snapshot = common::snapshot_of(src).expect("snapshot");
 
-    // Query the `s.x` access directly: only that use may match. The legacy bare-name match
+    // Query the `s.x` access directly: only that use may match. A bare-name match
     // would also return `a` (p.x).
     let sx_pos = src.find("s.x").unwrap() + "s.".len();
     let r = snapshot

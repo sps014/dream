@@ -4,7 +4,7 @@ module system.collections;
 ///
 /// Invariant: `items.length > 0`, `0 <= head < items.length`, `0 <= count <= items.length`, so any
 /// `(head + k) % items.length` with `k >= 0` is a valid index for `Buffer.get_unchecked`.
-@slot_walk("length", "at_offset", "")
+@slot_walk("length", "at_offset", "", "length", "walk_guard")
 public class Queue<T>: Collection<T> {
     items: T[];
     head: int;
@@ -20,6 +20,14 @@ public class Queue<T>: Collection<T> {
     /// Number of elements currently stored.
     public get length(): int {
         return this.count;
+    }
+
+    // Element-shifting or rehashing under a `for-in` walk would skip or repeat elements.
+    @inline
+    internal fun walk_guard(stamp: int): void {
+        if this.count != stamp {
+            System.panic("Queue modified during for-in iteration");
+        }
     }
 
     /// Current element capacity of the ring buffer.

@@ -43,3 +43,8 @@ jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 rsa = "0.9"
 rand = "0.8"
 sha2 = "0.10"
+
+# `dream-host-core` is a link-time dependency: this cdylib calls core's C ABI through the shared
+# library, so no Rust item is imported and a Rust import would duplicate core's state.
+[lints.cargo]
+unused_dependencies = "allow"

@@ -11,4 +11,11 @@ internal struct SlotWalkAttribute {
 
     /// Optional occupancy predicate; an empty name means every slot is live.
     public live: string;
+
+    /// Property read once before the walk and passed to `guard`; empty for fixed-size views.
+    public stamp: string;
+
+    /// Method called with the `stamp` value before every step. It panics when the collection
+    /// changed length during the walk.
+    public guard: string;
 }

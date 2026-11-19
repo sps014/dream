@@ -198,7 +198,7 @@ class Counter {
 
 ## What is *not* a move
 
-- A last read does not free the value early. It is freed at the end of the function.
+- A last read does not consume the value. Dream may free it right after that read or at the end of the block. A `weak` or `unowned` reference does not keep it alive, so keep a strong reference (a field, a collection entry, or a later use) for as long as the target must exist.
 - Assigning or passing a `struct` always copies it.
 - Reading `obj.field` or `xs[i]` into a sink: always a copy; the object or array still owns that element.
 - `borrow` / `ref` arguments: never consumed.

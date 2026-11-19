@@ -254,14 +254,85 @@ impl<'a> Analyzer<'a> {
         arg_is_ref.push(false);
     }
 
+    /// True for an expression that names storage: a variable, or a field or element of one.
+    pub(in crate::analyzer) fn is_place_expression(expr: &ExpressionNode<'a>) -> bool {
+        match expr {
+            ExpressionNode::Identifier(_) => true,
+            ExpressionNode::MemberAccess(obj, _) | ExpressionNode::IndexAccess(obj, _) => {
+                Self::is_place_expression(obj)
+            }
+            ExpressionNode::Parenthesized(_, inner) => Self::is_place_expression(inner),
+            _ => false,
+        }
+    }
+
     /// Resolves a `ref` call argument's inner place (`f(ref x)` / `f(ref obj.field)` /
     /// `f(ref arr[i])`) to its declared type and the HIR for the shared box pointer backing it.
     /// Locals/parameters reuse `CaptureCell`/`RefBox` slots; fields and array elements are copy-in/
     /// copy-out through a fresh temporary `RefBox` (writeback flushed after the call statement).
-    /// Resolves a `ref` call argument's inner place (`f(ref x)` / `f(ref obj.field)` /
-    /// `f(ref arr[i])`) to its declared type and the HIR for the shared box pointer backing it.
-    /// Locals/parameters reuse `CaptureCell`/`RefBox` slots; fields and array elements are copy-in/
-    /// copy-out through a fresh temporary `RefBox` (writeback flushed after the call statement).
+    /// Field and element `ref` arguments are copied in before the call and written back after
+    /// it, so two of them naming overlapping storage would silently lose one write. Such calls
+    /// are rejected; refs to distinct locals, fields, or constant indices are fine.
+    fn check_ref_argument_overlap(params: &[ExpressionNode<'a>], diagnostics: &mut DiagnosticBag) {
+        let places: Vec<(usize, &ExpressionNode<'a>, Vec<RefSegment<'_>>)> = params
+            .iter()
+            .enumerate()
+            .filter_map(|(i, param)| match param {
+                ExpressionNode::RefArgument(_, inner) => {
+                    Self::ref_place_path(inner).map(|path| (i, *inner, path))
+                }
+                _ => None,
+            })
+            .collect();
+        for (a, (first_index, _, first)) in places.iter().enumerate() {
+            for (second_index, second_expr, second) in &places[a + 1..] {
+                if first.len() == 1 && second.len() == 1 {
+                    continue;
+                }
+                if Self::ref_paths_overlap(first, second) {
+                    diagnostics.report_error(
+                        format!(
+                            "'ref' arguments {} and {} may name the same storage; a field or element passed by 'ref' is copied back after the call, so one of the writes would be lost",
+                            first_index + 1,
+                            second_index + 1
+                        ),
+                        second_expr.position(),
+                    );
+                }
+            }
+        }
+    }
+
+    fn ref_place_path<'e>(expr: &'e ExpressionNode<'a>) -> Option<Vec<RefSegment<'e>>> {
+        match expr {
+            ExpressionNode::Identifier(tok) => Some(vec![RefSegment::Name(&tok.text)]),
+            ExpressionNode::MemberAccess(obj, member) => {
+                let mut path = Self::ref_place_path(obj)?;
+                path.push(RefSegment::Name(&member.text));
+                Some(path)
+            }
+            ExpressionNode::IndexAccess(array, index) => {
+                let mut path = Self::ref_place_path(array)?;
+                path.push(match index {
+                    ExpressionNode::Literal(Type::Integer(tok)) => RefSegment::Constant(&tok.text),
+                    _ => RefSegment::Dynamic,
+                });
+                Some(path)
+            }
+            ExpressionNode::Parenthesized(_, inner) => Self::ref_place_path(inner),
+            _ => None,
+        }
+    }
+
+    fn ref_paths_overlap(first: &[RefSegment<'_>], second: &[RefSegment<'_>]) -> bool {
+        first.iter().zip(second).all(|pair| match pair {
+            (RefSegment::Name(a), RefSegment::Name(b)) => a == b,
+            (RefSegment::Constant(a), RefSegment::Constant(b)) => a == b,
+            (RefSegment::Name(_), _) | (_, RefSegment::Name(_)) => false,
+            _ => true,
+        })
+    }
+
     pub(crate) fn analyze_ref_argument(
         &mut self,
         inner: &'a ExpressionNode<'a>,
@@ -280,6 +351,14 @@ impl<'a> Analyzer<'a> {
                     }
                 };
                 (**symbol_table).borrow_mut().mark_used(&tok.text);
+                if (**symbol_table).borrow().is_const(&tok.text) {
+                    diagnostics.report_error(
+                        format!("cannot pass const '{}' by 'ref'", tok.text),
+                        Some(tok.position),
+                    );
+                    self.hir_none();
+                    return None;
+                }
                 let summary = self.ide_summary(&ty);
                 self.record_ide_ref(
                     tok.position,
@@ -299,28 +378,48 @@ impl<'a> Analyzer<'a> {
                 let obj_ty = self
                     .analyze_expression(obj, parent_function, symbol_table, diagnostics)
                     .ok()?;
-                let obj_hir = self.hir_take()?;
+                let obj_hir = self.hir_take();
                 let owner = self.type_ctx.lower(&obj_ty);
-                let Some(field_idx) = self.struct_field_index(owner, &member.text) else {
+                if obj_ty.is_unknown() {
+                    self.hir_none();
+                    return None;
+                }
+                if !Self::is_place_expression(obj) {
                     diagnostics.report_error(
                         format!(
-                            "'{}' has no field '{}'",
-                            self.type_id_display(owner),
+                            "'ref' needs a variable, field or element, but '{}' is a temporary value",
                             member.text
                         ),
                         Some(member.position),
                     );
                     self.hir_none();
                     return None;
+                }
+                let field_ty = match self.resolve_member_field(
+                    &obj_ty,
+                    member,
+                    parent_function,
+                    diagnostics,
+                ) {
+                    MemberField::Field { field_type, .. } => field_type,
+                    _ => {
+                        diagnostics.report_error(
+                            format!(
+                                "'{}' has no field '{}'",
+                                self.type_id_display(owner),
+                                member.text
+                            ),
+                            Some(member.position),
+                        );
+                        self.hir_none();
+                        return None;
+                    }
                 };
-                let field_ty = self
-                    .struct_info(owner)
-                    .and_then(|s| {
-                        s.fields
-                            .get(&member.text)
-                            .map(|f| self.type_ctx.syntax_type(f.ty))
-                    })
-                    .unwrap_or(Type::Unknown);
+                let Some(field_idx) = self.struct_field_index(owner, &member.text) else {
+                    self.hir_none();
+                    return None;
+                };
+                let obj_hir = obj_hir?;
                 self.hir_set_field(Some(obj_hir.clone()), field_idx, &field_ty);
                 let value = self.hir_take()?;
                 self.hir_box_ref_place(
@@ -336,11 +435,25 @@ impl<'a> Analyzer<'a> {
                 let array_ty = self
                     .analyze_expression(array, parent_function, symbol_table, diagnostics)
                     .ok()?;
-                let array_hir = self.hir_take()?;
-                let _index_ty = self
+                let array_hir = self.hir_take();
+                let index_ty = self
                     .analyze_expression(index, parent_function, symbol_table, diagnostics)
                     .ok()?;
-                let index_hir = self.hir_take()?;
+                let index_hir = self.hir_take();
+                if !self.check_array_index(&index_ty, index.position(), diagnostics)
+                    || array_ty.is_unknown()
+                {
+                    self.hir_none();
+                    return None;
+                }
+                if !Self::is_place_expression(array) {
+                    diagnostics.report_error(
+                        "'ref' needs a variable, field or element, but this element belongs to a temporary value".to_string(),
+                        array.position(),
+                    );
+                    self.hir_none();
+                    return None;
+                }
                 let elem_ty = match &array_ty {
                     Type::Array(inner) => (**inner).clone(),
                     _ => {
@@ -355,6 +468,7 @@ impl<'a> Analyzer<'a> {
                         return None;
                     }
                 };
+                let (array_hir, index_hir) = (array_hir?, index_hir?);
                 self.hir_set_index(Some(array_hir.clone()), Some(index_hir.clone()), &elem_ty);
                 let value = self.hir_take()?;
                 self.hir_box_ref_place(
@@ -480,11 +594,6 @@ impl<'a> Analyzer<'a> {
     /// can validate each one against the resolved callee's `is_ref` parameter flags (mismatches are
     /// the caller's diagnostic, not this helper's — the callee's signature isn't always known yet
     /// at the point arguments are analyzed, e.g. before overload resolution).
-    /// Like [`analyze_call_arguments_expecting`](Self::analyze_call_arguments_expecting), but also
-    /// returns which argument slots were written as a `ref` argument (`f(ref x)`), so the caller
-    /// can validate each one against the resolved callee's `is_ref` parameter flags (mismatches are
-    /// the caller's diagnostic, not this helper's — the callee's signature isn't always known yet
-    /// at the point arguments are analyzed, e.g. before overload resolution).
     pub(crate) fn analyze_call_arguments_expecting_ref(
         &mut self,
         params: &[ExpressionNode<'a>],
@@ -493,6 +602,7 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<CallArgAnalysis, SemanticError> {
+        Self::check_ref_argument_overlap(params, diagnostics);
         let mut arg_types = Vec::new();
         let mut arg_hirs = Vec::new();
         let mut arg_is_ref = Vec::new();
@@ -517,7 +627,7 @@ impl<'a> Analyzer<'a> {
             }
             arg_is_ref.push(false);
             let analyzed =
-                self.analyze_expression(param, parent_function, symbol_table, diagnostics);
+                self.analyze_value_expression(param, parent_function, symbol_table, diagnostics);
             self.current_expected_type = saved_expected;
             let t = analyzed?;
             arg_hirs.push(self.hir_take());
@@ -526,9 +636,6 @@ impl<'a> Analyzer<'a> {
         Ok((arg_types, arg_hirs, arg_is_ref))
     }
 
-    /// Reports a diagnostic for every argument slot whose `ref`-ness (`given_is_ref`) disagrees
-    /// with the resolved callee's declared parameter (`expected_is_ref`) — either a plain value was
-    /// passed where `ref` is required, or `ref` was written for a parameter that isn't one.
     /// Reports a diagnostic for every argument slot whose `ref`-ness (`given_is_ref`) disagrees
     /// with the resolved callee's declared parameter (`expected_is_ref`) — either a plain value was
     /// passed where `ref` is required, or `ref` was written for a parameter that isn't one.
@@ -563,4 +670,11 @@ impl<'a> Analyzer<'a> {
             }
         }
     }
+}
+
+/// One step of a `ref` argument's place: a variable or field name, or an element index.
+enum RefSegment<'e> {
+    Name(&'e str),
+    Constant(&'e str),
+    Dynamic,
 }

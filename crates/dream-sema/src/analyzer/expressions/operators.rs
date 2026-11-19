@@ -43,7 +43,7 @@ impl<'a> Analyzer<'a> {
             self.current_expected_type = Some(Type::Integer(opr.clone()));
         }
         let left_value =
-            self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
+            self.analyze_value_expression(left, parent_function, symbol_table, diagnostics)?;
         let left_hir = self.hir_take();
 
         // `x is T t && t.ok()`: every `is`-binding guaranteed by `left` (a bare `is`, or reachable
@@ -63,17 +63,22 @@ impl<'a> Analyzer<'a> {
         // parser's `x++` / `x += 1` desugaring (`x = x + 1`) type-checks for `byte`/`uint`/`ulong`.
         // A bare decimal next to a `double` is a `double` too, so `d == 0.1` compares 0.1 itself
         // rather than the widened `float` nearest to it.
+        let left_id = self.type_ctx.lower(&left_value);
+        let left_is_integer_prim = matches!(
+            self.type_ctx.interner.kind(left_id),
+            dream_types::TyKind::Prim(p) if p.is_numeric() && !p.is_float()
+        );
         if opr.kind == TokenKind::DotDotToken {
             self.current_expected_type = Some(Type::Integer(opr.clone()));
         } else if (matches!(right, ExpressionNode::Literal(Type::Integer(_)))
-            && left_value.is_integer())
+            && left_is_integer_prim)
             || (matches!(right, ExpressionNode::Literal(Type::Float(_)))
                 && matches!(left_value, Type::Double(_)))
         {
             self.current_expected_type = Some(left_value.clone());
         }
         let right_value =
-            self.analyze_expression(right, parent_function, symbol_table, diagnostics)?;
+            self.analyze_value_expression(right, parent_function, symbol_table, diagnostics)?;
         let right_hir = self.hir_take();
         self.current_expected_type = None;
         self.is_binding_aliases.truncate(alias_mark);
@@ -142,8 +147,12 @@ impl<'a> Analyzer<'a> {
             }
             self.ensure_union_instantiated(&base, &args, &opr.position, diagnostics);
             let inner = args[0].clone();
+            let errors_before = diagnostics.diagnostics.len();
             self.compare_data_type(&inner, &right_value, &opr.position, diagnostics)?;
-            if diagnostics.has_errors() {
+            if diagnostics.diagnostics[errors_before..]
+                .iter()
+                .any(|d| d.is_error())
+            {
                 self.hir_none();
                 return Ok(Type::Unknown);
             }
@@ -225,7 +234,7 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        // User-defined ordering: `@operator`-free structs implementing `Comparable<Self>` get
+        // User-defined ordering: operator-free structs implementing `Comparable<Self>` get
         // `<`/`<=`/`>`/`>=` for free, lowered to `a.compare(b) <op> 0`.
         if matches!(
             opr.kind,
@@ -241,20 +250,6 @@ impl<'a> Analyzer<'a> {
             self.hir_set_method_call(left_hir, &compare_fn, vec![right_hir], &int_ty);
             self.hir_compare_last_to_zero(opr.kind);
             return Ok(bool_ty);
-        }
-
-        let left_ty = self.type_ctx.lower(&left_value);
-        let right_ty = self.type_ctx.lower(&right_value);
-        if !self.value_type_assignable(left_ty, right_ty, diagnostics) {
-            diagnostics.report_error(
-                format!(
-                    "cannot convert from {} to {}",
-                    self.ty_display(&right_value),
-                    self.ty_display(&left_value)
-                ),
-                Some(opr.position),
-            );
-            return Ok(Type::Unknown);
         }
 
         // Bitwise ops (`&`/`|`/`^`/`<<`/`>>`) are only meaningful on integer operands
@@ -283,20 +278,48 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        match (&left_value, &opr.kind) {
-            (Type::String(_), TokenKind::PlusToken) => {}
-            // Reference (identity) equality is allowed on strings and objects.
-            (Type::String(_), TokenKind::EqualEqualToken)
-            | (Type::String(_), TokenKind::NotEqualToken) => {}
-            (Type::String(_), _) => {
-                diagnostics.report_error(
-                    format!("Cannot perform operation {} on string", opr.text),
-                    Some(opr.position),
-                );
-                return Ok(Type::Unknown);
+        let left_ty = self.type_ctx.lower(&left_value);
+        let right_ty = self.type_ctx.lower(&right_value);
+        if !self.value_type_assignable(left_ty, right_ty, diagnostics) {
+            diagnostics.report_error(
+                format!(
+                    "operator '{}' cannot combine {} and {}",
+                    opr.text,
+                    self.ty_display(&left_value),
+                    self.ty_display(&right_value)
+                ),
+                Some(opr.position),
+            );
+            return Ok(Type::Unknown);
+        }
+
+        let operands_ok = match opr.kind {
+            TokenKind::PlusToken
+            | TokenKind::MinusToken
+            | TokenKind::StarToken
+            | TokenKind::SlashToken
+            | TokenKind::ModulusToken => left_value.is_numeric(),
+            TokenKind::GreaterThanToken
+            | TokenKind::GreaterThanEqualToken
+            | TokenKind::SmallerThanToken
+            | TokenKind::SmallerThanEqualToken => {
+                left_value.is_numeric()
+                    || matches!(left_value, Type::Char(_))
+                    || matches!(self.type_ctx.interner.kind(left_ty), TyKind::Enum(_))
             }
-            (_, _) => {}
+            _ => true,
         };
+        if !operands_ok {
+            diagnostics.report_error(
+                format!(
+                    "operator '{}' cannot be applied to {}",
+                    opr.text,
+                    self.ty_display(&left_value)
+                ),
+                Some(opr.position),
+            );
+            return Ok(Type::Unknown);
+        }
 
         // User-defined value equality: for `==`/`!=` where the operand's static type is a user type
         // that implements `Equatable<Self>`, dispatch to its `equals` method (a static call),
@@ -355,11 +378,11 @@ impl<'a> Analyzer<'a> {
     }
 
     fn equatable_equals_fn(&mut self, left: &Type) -> Option<FunctionIdentity> {
-        self.comparison_method(left, "Equatable", "equals")
+        self.comparison_method(left, dream_abi::core_items::EQUATABLE, "equals")
     }
 
     fn comparable_compare_fn(&mut self, left: &Type) -> Option<FunctionIdentity> {
-        self.comparison_method(left, "Comparable", "compare")
+        self.comparison_method(left, dream_abi::core_items::COMPARABLE, "compare")
     }
 
     fn comparison_method(

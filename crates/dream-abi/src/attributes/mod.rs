@@ -15,6 +15,7 @@ mod collect;
 mod cpp;
 mod ownership;
 mod spec;
+mod task;
 mod testing;
 #[cfg(test)]
 mod tests;
@@ -27,6 +28,7 @@ pub use codegen::*;
 pub use cpp::*;
 pub use ownership::*;
 pub use spec::*;
+pub use task::*;
 pub use testing::*;
 pub use user::*;
 pub use validate::{validate_attributes, validate_program_attributes};

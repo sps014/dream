@@ -1,7 +1,6 @@
 use super::super::Parser;
 use crate::nodes::Visibility;
 use crate::token::token_kind::TokenKind;
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Parses an enum declaration. Two forms share this parser:
@@ -13,9 +12,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     ///
     /// Methods may be declared in the body alongside variants (`public fun is_some(): bool { ... }`),
     /// using the same member classification as classes (look past `public`/`static`/`async` for `fun`).
-    pub(crate) fn parse_enum_declaration(
-        &mut self,
-    ) -> Result<crate::nodes::EnumDeclarationNode<'a>, Error> {
+    pub(crate) fn parse_enum_declaration(&mut self) -> crate::nodes::EnumDeclarationNode<'a> {
         let first_trivia = self.current_token().leading_trivia.clone();
         let attributes = self.parse_attributes();
 
@@ -60,7 +57,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         let mut variants = Vec::new();
         let mut methods = Vec::new();
-        let mut next_value: i32 = 0;
+        let mut next_value: i64 = 0;
         while self.current_token().kind != TokenKind::CurlyCloseBracketToken
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
@@ -103,7 +100,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                         Some(core.position),
                     );
                 }
-                methods.push(self.parse_function(Some(member_attributes))?);
+                methods.push(self.parse_function(Some(member_attributes)));
             } else {
                 let variant_name = self.match_token(TokenKind::IdentifierToken);
 
@@ -113,7 +110,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     self.match_token(TokenKind::OpenParenthesisToken);
                     fields = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
                         p.parse_variant_field()
-                    })?;
+                    });
                     let mut pos_i = 0usize;
                     for f in &mut fields {
                         if f.name.text == "_" {
@@ -125,16 +122,57 @@ impl<'a, 'b> Parser<'a, 'b> {
 
                 // C-style explicit value (`Green = 5`); only meaningful for payload-less variants.
                 let value = if self.current_token().kind == TokenKind::EqualToken {
+                    if !fields.is_empty() {
+                        self.diagnostics.report_error(
+                            format!(
+                                "variant '{}' carries a payload and cannot have an explicit value",
+                                variant_name.text
+                            ),
+                            Some(self.current_token().position),
+                        );
+                    }
                     self.match_token(TokenKind::EqualToken);
+                    let negative = self.current_token().kind == TokenKind::MinusToken;
+                    if negative {
+                        self.match_token(TokenKind::MinusToken);
+                    }
+                    let is_number = self.current_token().kind == TokenKind::NumberToken;
                     let num = self.match_token(TokenKind::NumberToken);
-                    crate::number::parse_int_literal(&num.text)
-                        .filter(|&v| v >= i32::MIN as i64 && v <= i32::MAX as i64)
-                        .map(|v| v as i32)
-                        .unwrap_or(next_value)
+                    let parsed = crate::number::parse_int_literal(&num.text)
+                        .map(|v| if negative { -v } else { v })
+                        .and_then(|v| i32::try_from(v).ok());
+                    match parsed {
+                        Some(v) => v,
+                        None => {
+                            if is_number {
+                                self.diagnostics.report_error(
+                                    format!(
+                                        "enum value '{}{}' must be an integer in the int range",
+                                        if negative { "-" } else { "" },
+                                        num.text
+                                    ),
+                                    Some(num.position),
+                                );
+                            }
+                            0
+                        }
+                    }
                 } else {
-                    next_value
+                    match i32::try_from(next_value) {
+                        Ok(v) => v,
+                        Err(_) => {
+                            self.diagnostics.report_error(
+                                format!(
+                                    "enum value of '{}' overflows int; give it an explicit value",
+                                    variant_name.text
+                                ),
+                                Some(variant_name.position),
+                            );
+                            0
+                        }
+                    }
                 };
-                next_value = value + 1;
+                next_value = i64::from(value) + 1;
                 variants.push(crate::nodes::EnumVariantNode {
                     name: variant_name,
                     fields,
@@ -155,6 +193,18 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
         self.match_token(TokenKind::CurlyCloseBracketToken);
+        let mut seen_values = std::collections::BTreeMap::new();
+        for variant in &variants {
+            if let Some(first) = seen_values.insert(variant.value, &variant.name.text) {
+                self.diagnostics.report_error(
+                    format!(
+                        "enum variant '{}' has the same value {} as '{}'",
+                        variant.name.text, variant.value, first
+                    ),
+                    Some(variant.name.position),
+                );
+            }
+        }
         let name_pos = name.position;
         let name_text = name.text.clone();
         let mut decl =
@@ -173,15 +223,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Some(name_pos),
             );
         }
-        Ok(decl)
+        decl
     }
 
     /// Parses a single discriminated-union variant payload field: `name: Type` or a positional
     /// `Type` (named `_0`, `_1`, … by the caller via empty name + later fill). Positional fields
     /// are a type with no preceding `name:`.
-    pub(crate) fn parse_variant_field(
-        &mut self,
-    ) -> Result<crate::nodes::struct_node::StructFieldNode, Error> {
+    pub(crate) fn parse_variant_field(&mut self) -> crate::nodes::struct_node::StructFieldNode {
         let positional = !(self.current_token().kind == TokenKind::IdentifierToken
             && self.peek_token(1).kind == TokenKind::ColonToken);
         let field_name = if positional {
@@ -196,13 +244,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             n
         };
         let type_position = self.current_token().position;
-        let parsed_type = self.parse_type()?;
+        let parsed_type = self.parse_type();
         let field_type_token = crate::token::syntax_token::SyntaxToken::new(
             TokenKind::IdentifierToken,
             type_position,
             parsed_type.get_type(),
         );
-        Ok(crate::nodes::struct_node::StructFieldNode {
+        crate::nodes::struct_node::StructFieldNode {
             attributes: Vec::new(),
             name: field_name,
             visibility: Visibility::Public,
@@ -210,6 +258,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_unowned: false,
             type_token: field_type_token,
             field_type: parsed_type,
-        })
+        }
     }
 }

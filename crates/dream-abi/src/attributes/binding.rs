@@ -5,8 +5,7 @@ use super::*;
 /// Extracts the `(module, field)` pair from a `@js("module", "field")` attribute, or `None` if the
 /// declaration carries no `@js` attribute. `validate_program_attributes` already guarantees that a
 /// present `@js` has exactly two string arguments, so this never needs to fall back on a partial
-/// match. Single source of truth for the extraction previously duplicated between `driver/abi.rs`
-/// and `semantics::analyzer::hir_emit`.
+/// match.
 pub fn js_import_target(attributes: &[AttributeNode]) -> Option<(String, String)> {
     let js = attributes.iter().find(|a| is_compiler_attribute(a, "js"))?;
     let module = js.args.first()?.as_string()?.to_string();

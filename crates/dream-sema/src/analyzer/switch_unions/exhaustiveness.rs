@@ -1,14 +1,13 @@
-//! Pattern type-checking and exhaustiveness for `switch`: type-checks each pattern against the
-//! subject type and introduces bindings (`check_pattern`), validates variant payload arity/types,
-//! and checks exhaustiveness / redundant arms. These are `impl Analyzer` methods, kept in the
-//! `switch_unions` module alongside union construction, `switch`/`foreach` analysis, and lowering.
+//! Pattern type-checking for `switch`: checks each pattern against the subject type, introduces
+//! its bindings (`check_pattern`), and validates variant payload arity and types. Coverage across
+//! arms lives in `coverage`.
 
 use super::*;
 use crate::errors::SemanticError;
 use crate::symbol_table::SymbolTable;
 use crate::union_table::UnionInfo;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::{PatternNode, SwitchArm, Type};
+use dream_syntax::nodes::{PatternNode, Type};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -36,6 +35,22 @@ impl<'a> Analyzer<'a> {
                     && let Some(v) = info.variant(&name.text)
                     && v.fields.is_empty()
                 {
+                    return Ok(PatternInfo { irrefutable: false });
+                }
+                if union_info.is_some()
+                    && let Some(owner) = self.union_table.values().find(|other| {
+                        other
+                            .variant(&name.text)
+                            .is_some_and(|v| v.fields.is_empty())
+                    })
+                {
+                    diagnostics.report_error(
+                        format!(
+                            "pattern '{}' is a variant of '{}', not of the matched enum '{}'",
+                            name.text, owner.name, expected_base
+                        ),
+                        Some(name.position),
+                    );
                     return Ok(PatternInfo { irrefutable: false });
                 }
                 if let Err(e) = (*scope)
@@ -89,11 +104,15 @@ impl<'a> Analyzer<'a> {
                     if self.type_ctx.resolve(DefKind::Union, &q.text) != expected_def {
                         diagnostics.report_error(
                             format!(
-                                "Variant qualifier '{}' does not match the matched enum '{}'",
-                                q.text, expected_base
+                                "pattern '{}.{}' is a variant of '{}', not of the matched enum '{}'",
+                                q.text, variant.text, q.text, expected_base
                             ),
                             Some(q.position),
                         );
+                        for sub in subs {
+                            self.check_pattern(sub, &Type::Unknown, scope, diagnostics)?;
+                        }
+                        return Ok(PatternInfo { irrefutable: false });
                     }
                 }
 
@@ -179,6 +198,19 @@ impl<'a> Analyzer<'a> {
                 }
             },
             PatternNode::Range(lo, hi) => {
+                let float_subject = matches!(
+                    self.type_ctx.interner.kind(expected_id),
+                    dream_types::TyKind::Prim(primitive) if primitive.is_float()
+                );
+                if float_subject && (lo.is_integer() || hi.is_integer()) {
+                    diagnostics.report_error(
+                        format!(
+                            "an integer range cannot match a '{expected_base}' subject; write the bounds as '{expected_base}' literals"
+                        ),
+                        lo.get_span(),
+                    );
+                    return Ok(PatternInfo { irrefutable: false });
+                }
                 for bound in [lo, hi] {
                     if !bound.is_unknown() && !expected.is_unknown() && {
                         let bound_id = self.type_ctx.lower(bound);
@@ -256,174 +288,9 @@ impl<'a> Analyzer<'a> {
             &expected_strs,
             &given_strs,
             position,
+            &[],
             diagnostics,
         );
-    }
-
-    pub(in crate::analyzer) fn check_exhaustiveness(
-        &self,
-        subject_base: &str,
-        subject_type: &Type,
-        union_info: &Option<UnionInfo>,
-        arms: &[SwitchArm<'a>],
-        position: Option<dream_text::text_span::TextSpan>,
-        diagnostics: &mut DiagnosticBag,
-    ) {
-        // Only unguarded arms contribute to coverage (a guard may fail at runtime).
-        let patterns: Vec<&PatternNode> = arms
-            .iter()
-            .filter(|a| a.guard.is_none())
-            .map(|a| &a.pattern)
-            .collect();
-
-        // An irrefutable pattern (`_` or a whole-subject binding) covers everything.
-        if patterns
-            .iter()
-            .any(|p| self.pattern_is_irrefutable(p, subject_type))
-        {
-            return;
-        }
-
-        // `bool` isn't a union, so coverage is just "both constructors appeared".
-        if subject_base == "bool" {
-            if !self.patterns_exhaustive(subject_type, &patterns) {
-                diagnostics.report_error(
-                    "Non-exhaustive switch on 'bool': cover both `true` and `false`, or add a `_` arm"
-                        .to_string(),
-                    position,
-                );
-            }
-            return;
-        }
-
-        if let Some(info) = union_info {
-            // A variant is covered when a matching arm reaches it and (recursively) its payload
-            // sub-patterns cover the field types — so `Wrap(A(n))` + `Wrap(B)` together cover `Wrap`.
-            let missing: Vec<String> = info
-                .variants
-                .iter()
-                .filter(|v| !self.variant_covered(&v.name, &v.fields, &patterns))
-                .map(|v| v.name.clone())
-                .collect();
-            if !missing.is_empty() {
-                diagnostics.report_error(
-                    format!(
-                        "Non-exhaustive switch on '{}': missing variant(s) {}. Add the missing arm(s) or a `_` arm",
-                        subject_base,
-                        missing.join(", ")
-                    ),
-                    position,
-                );
-            }
-        } else if !subject_type.is_unknown() {
-            diagnostics.report_error(
-                format!(
-                    "Non-exhaustive switch on '{}': add a `_` arm to cover all cases",
-                    subject_base
-                ),
-                position,
-            );
-        }
-    }
-
-    /// True when the set of `patterns` (matched against a value of type `ty`) exhaustively covers
-    /// every value of `ty`. Recurses into a union's variants and their single-field payloads, so a
-    /// nested match like `Wrap(A(n))` + `Wrap(B)` is recognized as complete. Sound but conservative:
-    /// a multi-field variant is only "covered" by an arm whose sub-patterns are all irrefutable
-    /// (cartesian coverage across fields is not attempted), and an un-instantiated / non-union field
-    /// type needs an irrefutable sub-pattern.
-    fn patterns_exhaustive(&self, ty: &Type, patterns: &[&PatternNode]) -> bool {
-        if patterns.iter().any(|p| self.pattern_is_irrefutable(p, ty)) {
-            return true;
-        }
-        // `bool` has exactly two constructors; `true` + `false` arms (possibly combined in
-        // or-patterns) cover it without a `_`.
-        if ty.is_bool() {
-            let alts = patterns.iter().flat_map(|p| p.or_alternatives());
-            let mut saw_true = false;
-            let mut saw_false = false;
-            for p in alts {
-                if let PatternNode::Literal(Type::Boolean(t)) = p {
-                    if t.text == "true" {
-                        saw_true = true;
-                    } else {
-                        saw_false = true;
-                    }
-                }
-            }
-            return saw_true && saw_false;
-        }
-        let Some(info) = self
-            .type_ctx
-            .lookup_type(ty)
-            .and_then(|id| self.union_info(id))
-            .cloned()
-        else {
-            return false;
-        };
-        info.variants
-            .iter()
-            .all(|v| self.variant_covered(&v.name, &v.fields, patterns))
-    }
-
-    /// True when `patterns` cover the union variant named `vname` (with `fields` payload).
-    fn variant_covered(
-        &self,
-        vname: &str,
-        fields: &[crate::union_table::UnionFieldInfo],
-        patterns: &[&PatternNode],
-    ) -> bool {
-        match fields.len() {
-            // Unit variant: covered by a matching unit pattern (`V` or `V()`).
-            0 => patterns
-                .iter()
-                .any(|p| Self::matches_unit_variant(p, vname)),
-            // Single-field variant: covered when the sub-patterns at that field (gathered across all
-            // arms matching this variant) recursively cover the field's type.
-            1 => {
-                let subs: Vec<&PatternNode> = patterns
-                    .iter()
-                    .filter_map(|p| Self::variant_sub(p, vname, 0))
-                    .collect();
-                !subs.is_empty() && self.patterns_exhaustive(&fields[0].type_, &subs)
-            }
-            // Multi-field variant: covered only by an arm binding every field irrefutably.
-            _ => patterns
-                .iter()
-                .any(|p| self.variant_all_irrefutable(p, vname, fields)),
-        }
-    }
-
-    /// True when `p` always matches a value of type `ty`: `_`, or a bare binding that names no unit
-    /// variant of `ty`'s union (a unit-variant binding is refutable — it only matches that variant).
-    fn pattern_is_irrefutable(&self, p: &PatternNode, ty: &Type) -> bool {
-        match p {
-            PatternNode::Wildcard(_) => true,
-            PatternNode::Binding(name) => {
-                if let Some(info) = self
-                    .type_ctx
-                    .lookup_type(ty)
-                    .and_then(|id| self.union_info(id))
-                    && let Some(v) = info.variant(&name.text)
-                    && v.fields.is_empty()
-                {
-                    return false;
-                }
-                true
-            }
-            PatternNode::Tuple(elems) => {
-                if let Type::Tuple(ts) = ty {
-                    ts.len() == elems.len()
-                        && elems
-                            .iter()
-                            .zip(ts.iter())
-                            .all(|(p, t)| self.pattern_is_irrefutable(p, t))
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        }
     }
 
     /// True when `p` would introduce at least one variable binding — recursively, so a variant
@@ -448,52 +315,6 @@ impl<'a> Analyzer<'a> {
             PatternNode::Or(alts) => alts
                 .iter()
                 .any(|a| Self::pattern_introduces_binding(a, union_info)),
-        }
-    }
-
-    /// True when `p` is a unit-variant pattern for `vname` (`V` as a bare binding, or `V()`).
-    /// Recurses into an or-pattern's alternatives, since a `switch` arm's pattern covers `vname` if
-    /// *any* alternative does — equivalent to that alternative having been its own arm.
-    fn matches_unit_variant(p: &PatternNode, vname: &str) -> bool {
-        match p {
-            PatternNode::Binding(name) => name.text == vname,
-            PatternNode::Variant(_, name, subs) => name.text == vname && subs.is_empty(),
-            PatternNode::Or(alts) => alts.iter().any(|a| Self::matches_unit_variant(a, vname)),
-            _ => false,
-        }
-    }
-
-    /// If `p` is a variant pattern for `vname`, returns its `i`-th sub-pattern. Recurses into an
-    /// or-pattern's alternatives (see [`Self::matches_unit_variant`]); or-pattern alternatives are
-    /// validated binding-free, so a variant alternative here can only appear when `fields` is empty
-    /// (a unit variant, with no `i`-th sub-pattern to return anyway).
-    fn variant_sub<'p>(p: &'p PatternNode, vname: &str, i: usize) -> Option<&'p PatternNode> {
-        match p {
-            PatternNode::Variant(_, name, subs) if name.text == vname => subs.get(i),
-            PatternNode::Or(alts) => alts.iter().find_map(|a| Self::variant_sub(a, vname, i)),
-            _ => None,
-        }
-    }
-
-    /// True when `p` matches `vname` binding every field irrefutably (e.g. `Pair(a, b)` / `Pair(_, _)`).
-    fn variant_all_irrefutable(
-        &self,
-        p: &PatternNode,
-        vname: &str,
-        fields: &[crate::union_table::UnionFieldInfo],
-    ) -> bool {
-        match p {
-            PatternNode::Variant(_, name, subs)
-                if name.text == vname && subs.len() == fields.len() =>
-            {
-                subs.iter()
-                    .zip(fields)
-                    .all(|(s, f)| self.pattern_is_irrefutable(s, &f.type_))
-            }
-            PatternNode::Or(alts) => alts
-                .iter()
-                .any(|a| self.variant_all_irrefutable(a, vname, fields)),
-            _ => false,
         }
     }
 }

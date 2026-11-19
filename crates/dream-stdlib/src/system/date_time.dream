@@ -286,6 +286,10 @@ public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
     }
 
     /// Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).
+    ///
+    /// Returns `Err(ParseError)` for malformed text and for dates that do not exist in the
+    /// Gregorian calendar, such as `2023-02-29` or `2024-04-31`; they are never rolled over
+    /// into the next month.
     public static fun parse(text: string): Result<DateTime, ParseError> {
         let n = text.length;
         if n < 19 {
@@ -321,7 +325,9 @@ public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
         let second = second_r.unwrap_or(0);
         if (month < 1)
             || (month > 12)
-            || (day < 1) || (day > 31) || (hour > 23) || (minute > 59) || (second > 59) {
+            || (day < 1)
+            || (day > DateTime._days_in_month(year, month))
+            || (hour > 23) || (minute > 59) || (second > 59) {
             return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
         }
 
@@ -472,6 +478,20 @@ public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
             m = 0 - m;
         }
         return sign + DateTime._pad(m / 60, 2) + ":" + DateTime._pad(m % 60, 2);
+    }
+
+    // Gregorian: leap years are divisible by 4, except centuries not divisible by 400.
+    static fun _days_in_month(year: int, month: int): int {
+        if month == 2 {
+            if ((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0) {
+                return 29;
+            }
+            return 28;
+        }
+        if (month == 4) || (month == 6) || (month == 9) || (month == 11) {
+            return 30;
+        }
+        return 31;
     }
 
     static fun _parse_digits(text: string, start: int, len: int): Option<int> {

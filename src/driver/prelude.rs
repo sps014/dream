@@ -72,42 +72,6 @@ pub fn merge_prelude<'a>(
     Ok(())
 }
 
-/// Merges every stdlib package (full surface). Used by host scans and callers that need the
-/// complete prelude regardless of user imports.
-#[allow(clippy::too_many_arguments)]
-pub fn merge_full_prelude<'a>(
-    arena: &'a Bump,
-    all_functions: &mut Vec<dream_syntax::nodes::FunctionNode<'a>>,
-    all_structs: &mut Vec<dream_syntax::nodes::struct_node::StructDeclarationNode<'a>>,
-    all_interfaces: &mut Vec<dream_syntax::nodes::InterfaceDeclarationNode<'a>>,
-    all_enums: &mut Vec<dream_syntax::nodes::EnumDeclarationNode<'a>>,
-    all_extends: &mut Vec<dream_syntax::nodes::ExtendNode<'a>>,
-    all_globals: &mut Vec<dream_syntax::nodes::GlobalVariableNode<'a>>,
-    diagnostics: &mut DiagnosticBag,
-    file_contents: &mut HashMap<String, String>,
-    file_modules: &mut HashMap<String, Rc<str>>,
-    cfg: CfgSymbols,
-) -> Result<(), Error> {
-    let all: IndexSet<String> = dream_stdlib::STD_PACKAGES
-        .iter()
-        .map(|p| p.name.to_string())
-        .collect();
-    merge_prelude(
-        arena,
-        all_functions,
-        all_structs,
-        all_interfaces,
-        all_enums,
-        all_extends,
-        all_globals,
-        diagnostics,
-        file_contents,
-        file_modules,
-        &all,
-        cfg,
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 fn merge_package<'a>(
     pkg: &StdPackage,
@@ -200,7 +164,7 @@ fn parse_package(
         let mut prelude_diagnostics = DiagnosticBag::new(Some(prelude_name.clone()));
         let lexer = Lexer::new(prelude_src.to_string());
         let mut parser = Parser::new(lexer, arena, &mut prelude_diagnostics).with_cfg(cfg);
-        let ast = parser.parse()?;
+        let ast = parser.parse();
         if prelude_diagnostics.has_errors() {
             let messages: Vec<&str> = prelude_diagnostics
                 .errors()

@@ -2,9 +2,7 @@
 //! angle brackets (`Box<int>`), never the internal monomorphization spelling.
 
 use super::{DefTable, TyKind, TypeId, TypeInterner};
-
-/// The poison type's display spelling, matching the legacy `UNKNOWN_TYPE_NAME`.
-pub const UNKNOWN_TYPE_NAME: &str = "<unknown>";
+use dream_syntax::nodes::types::UNKNOWN_TYPE_NAME;
 
 /// Renders `id` as source-level syntax (`int[]`, `Box<int>`, `fun(int): bool`).
 pub fn display_name(interner: &TypeInterner, defs: &DefTable, id: TypeId) -> String {

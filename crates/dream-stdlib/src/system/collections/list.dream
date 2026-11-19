@@ -6,7 +6,7 @@ module system.collections;
 // what makes the `Buffer.get_unchecked`/`set_unchecked` accesses on `[0, count)` sound.
 /// A growable, ordered sequence with zero-based indexed access. Adding elements may increase
 /// its capacity.
-@slot_walk("length", "at_unchecked", "")
+@slot_walk("length", "at_unchecked", "", "length", "walk_guard")
 public class List<T>: IndexedCollection<T> {
     items: T[];
     count: int;
@@ -26,6 +26,14 @@ public class List<T>: IndexedCollection<T> {
     @inline
     public get length(): int {
         return this.count;
+    }
+
+    // Element-shifting or rehashing under a `for-in` walk would skip or repeat elements.
+    @inline
+    internal fun walk_guard(stamp: int): void {
+        if this.count != stamp {
+            System.panic("List modified during for-in iteration");
+        }
     }
 
     /// True when the list has no elements.

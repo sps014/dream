@@ -46,11 +46,9 @@ pub(super) fn optimize_module_rounds(
         dump.module(ready_await::STAGE, mir, interner);
     }
     prepare_ownership(mir, interner, dump);
-    // Correctness invariant: RC must be inserted (above) *before* any inlining (below), or callee
-    // scope-exit releases won't be baked into bodies for inlining to copy. The `rc_inserted` flag
-    // makes a future reordering that hoists the inliner above this point fail loudly in dev.
-    let _rc_inserted = true;
-    debug_assert!(_rc_inserted, "RcInsertion must run before the inliner");
+    // RC must be inserted before any inlining, or callee scope-exit releases won't be baked into
+    // the bodies the inliner copies.
+    debug_assert!(mir.ownership_prepared, "RcInsertion must run before the inliner");
     if inline {
         let _ = Devirt.run(mir, interner);
         dump.module(Devirt.name(), mir, interner);
@@ -130,6 +128,7 @@ pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirD
         }
     });
     dump.module(MirPass::name(&RcInsertion), mir, interner);
+    mir.ownership_prepared = true;
     if crate::verify::enabled() {
         crate::verify::assert_inserted_tokens(mir, interner);
     }

@@ -72,7 +72,7 @@ public enum GpuError {
 
 fun gpu_backend_name(backend: GpuBackend): string {
     let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
-    let index: int = backend;
+    let index: int = (int)backend;
     return names[index];
 }
 
@@ -103,7 +103,7 @@ fun gpu_feature_name(feature: GpuFeature): string {
         "Float16",
         "Atomics64"
     ];
-    let index: int = feature;
+    let index: int = (int)feature;
     return names[index];
 }
 

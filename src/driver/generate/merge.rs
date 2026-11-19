@@ -28,9 +28,8 @@ pub fn merge_generated_file<'a>(
     let mut local = DiagnosticBag::new(Some(path.to_string()));
     let lexer = dream_syntax::lexer::Lexer::new(text);
     let mut parser = dream_syntax::parser::Parser::new(lexer, arena, &mut local).with_cfg(acc.cfg);
-    let parsed = parser.parse();
+    let ast = parser.parse();
     diagnostics.extend(&local);
-    let ast = parsed?;
     let program = ast.get_root();
     super::collisions::check(acc, program, path, generator, diagnostics);
     super::attribute_refs::merge_imports(acc, program, path, diagnostics);

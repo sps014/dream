@@ -173,7 +173,7 @@ void dream_future_on_cancel(void *future, void (*fn)(void *), void *ud) {
     }
     hook = (CancelHook *)calloc(1, sizeof *hook);
     if (!hook) {
-        DREAM_PANIC_LITERAL(u"panic: out of memory registering a cancel hook");
+        DREAM_PANIC_LITERAL(u"out of memory registering a cancel hook");
     }
     hook->future = DREAM_FROM_PUBLIC(future);
     hook->fn = fn;
@@ -454,7 +454,7 @@ int32_t dream_async_await(dream_ptr future, dream_result *dest, int32_t resume_p
         dream_panic((dream_ptr)*result_at(future));
     }
     if (status_of(future) == 2) {
-        DREAM_PANIC_LITERAL(u"panic: awaited a cancelled future");
+        DREAM_PANIC_LITERAL(u"awaited a cancelled future");
     }
     if (status_of(future)) {
         if (dest) {
@@ -485,7 +485,7 @@ void dream_await(dream_ptr parent, dream_ptr child) {
     if (status_of(child)) {
         /* A cancelled frame never wrote the result the resumed parent would read. */
         if (DREAM_UNLIKELY(status_of(child) == 2)) {
-            DREAM_PANIC_LITERAL(u"panic: awaited a cancelled future");
+            DREAM_PANIC_LITERAL(u"awaited a cancelled future");
         }
         if (DREAM_UNLIKELY(status_of(child) == 3)) {
             dream_panic((dream_ptr)*result_at(child));

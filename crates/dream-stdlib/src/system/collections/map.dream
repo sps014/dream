@@ -2,7 +2,7 @@ module system.collections;
 
 /// A generic open-addressing hash map. Slots are packed `{key, value, state}` records.
 // `state` packs the occupancy stamp with a hash fragment; see `hash_epoch_initial`.
-@slot_walk("capacity", "slot_entry", "slot_occupied")
+@slot_walk("capacity", "slot_entry", "slot_occupied", "length", "walk_guard")
 public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     slots: MapSlot<K, V>[];
     count: int;
@@ -57,6 +57,14 @@ public class Map<K, V>: Collection<KeyValuePair<K, V>> {
     /// Number of elements currently stored.
     public get length(): int {
         return this.count;
+    }
+
+    // Element-shifting or rehashing under a `for-in` walk would skip or repeat elements.
+    @inline
+    internal fun walk_guard(stamp: int): void {
+        if this.count != stamp {
+            System.panic("Map modified during for-in iteration");
+        }
     }
 
     /// Number of elements that fit before storage must grow.

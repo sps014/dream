@@ -34,11 +34,16 @@ impl<'de> serde::Deserialize<'de> for GlobalId {
 pub(crate) mod interface_index {
     use dream_types::portable::{self, IdSpace};
 
-    pub fn serialize<S: serde::Serializer>(index: &usize, serializer: S) -> Result<S::Ok, S::Error> {
+    pub fn serialize<S: serde::Serializer>(
+        index: &usize,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
         portable::serialize_id(IdSpace::Interface, *index as u64, serializer)
     }
 
-    pub fn deserialize<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<usize, D::Error> {
+    pub fn deserialize<'de, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<usize, D::Error> {
         let raw = portable::deserialize_id(IdSpace::Interface, deserializer)?;
         usize::try_from(raw).map_err(serde::de::Error::custom)
     }

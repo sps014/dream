@@ -11,9 +11,7 @@ fn analyze_sources(generated: bool, declaration: &str, caller: &str) -> Diagnost
     let sources = [("library.dream", declaration), ("caller.dream", caller)];
     let mut inputs = Vec::new();
     for (file, source) in sources {
-        let tree = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics)
-            .parse()
-            .unwrap();
+        let tree = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics).parse();
         let mut program = tree.get_root().clone();
         for function in &mut program.functions {
             function.file_path = Some(file.into());
@@ -88,9 +86,7 @@ fn internal_declarations_of_a_generated_root_file_reach_unmoded_user_files() {
             "fun main(): void { let result = Shaders.answer(); }",
         ),
     ] {
-        let tree = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics)
-            .parse()
-            .unwrap();
+        let tree = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics).parse();
         let mut program = tree.get_root().clone();
         for ty in &mut program.structs {
             ty.file_path = Some(file.into());

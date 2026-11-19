@@ -33,6 +33,10 @@ impl<'a> Analyzer<'a> {
             self.ensure_struct_instantiated(&name.text, args, &method.position, diagnostics);
         }
         let owner = self.type_ctx.lower(bound);
+        if self.unsatisfied_instances.contains(&owner) {
+            self.hir_fail();
+            return Ok(Type::Unknown);
+        }
         let type_name = self.type_id_display(owner);
         if let Some(template) = self.generic_static_template(owner, &method.text, params.len()) {
             let base = format!("{type_name}.{}", method.text);
@@ -61,14 +65,11 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
         }
-        Err(report_with_code(
+        Err(report_missing_member(
             diagnostics,
-            format!(
-                "Type '{}' has no static method '{}'",
-                type_name, method.text
-            ),
+            (&type_name, "static method", &method.text),
             Some(method.position),
-            "missing-member",
+            Vec::new(),
         ))
     }
 
@@ -84,7 +85,9 @@ impl<'a> Analyzer<'a> {
             .function_table
             .generic_method_overloads
             .get(&(owner, name.to_string()))?;
-        let templates = defs.iter().filter_map(|def| self.generic_functions.get(def).copied());
+        let templates = defs
+            .iter()
+            .filter_map(|def| self.generic_functions.get(def).copied());
         let accepts = |template: &&'a FunctionNode<'a>| {
             let required = template
                 .parameters
@@ -94,7 +97,10 @@ impl<'a> Analyzer<'a> {
             let variadic = template.parameters.last().is_some_and(|p| p.is_variadic);
             argc >= required && (variadic || argc <= template.parameters.len())
         };
-        templates.clone().find(accepts).or_else(|| templates.into_iter().next())
+        templates
+            .clone()
+            .find(accepts)
+            .or_else(|| templates.into_iter().next())
     }
 
     /// Handles `Type.method(args)` static dispatch when the receiver `id` names a type rather than
@@ -197,10 +203,21 @@ impl<'a> Analyzer<'a> {
             .is_some()
         {
             let args: Vec<Type> = match generic_args {
-                Some(a) if !a.is_empty() => a
-                    .iter()
-                    .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
-                    .collect(),
+                Some(a) if !a.is_empty() => {
+                    let parameters: Vec<String> =
+                        self.current_generic_bindings.keys().cloned().collect();
+                    let mut ok = true;
+                    for t in a {
+                        ok &= self.check_declared_type(t, &parameters, diagnostics);
+                    }
+                    if !ok {
+                        self.hir_none();
+                        return Ok(Some(Type::Unknown));
+                    }
+                    a.iter()
+                        .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings))
+                        .collect()
+                }
                 _ => match self.infer_generic_class_static_type_args(
                     &type_name,
                     method,
@@ -215,6 +232,10 @@ impl<'a> Analyzer<'a> {
             self.ensure_struct_instantiated(&type_name, &args, &id.position, diagnostics);
             let concrete = Type::Struct(id.clone(), Some(args));
             let concrete_id = self.type_ctx.lower(&concrete);
+            if self.unsatisfied_instances.contains(&concrete_id) {
+                self.hir_fail();
+                return Ok(Some(Type::Unknown));
+            }
             let ret = self.analyze_static_call(
                 concrete_id,
                 method,
@@ -280,14 +301,11 @@ impl<'a> Analyzer<'a> {
         // Instance dispatch would analyze the type name as a value and report it as an unknown
         // variable, hiding that only the member is missing.
         if nominal_def.is_some() && self.function_info(&type_name).is_err() {
-            return Err(report_with_code(
+            return Err(report_missing_member(
                 diagnostics,
-                format!(
-                    "Type '{}' has no static method '{}'",
-                    type_name, method.text
-                ),
+                (&type_name, "static method", &method.text),
                 Some(method.position),
-                "missing-member",
+                Vec::new(),
             ));
         }
 

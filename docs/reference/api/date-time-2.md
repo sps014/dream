@@ -88,6 +88,8 @@ public override fun to_string(): string
 
 Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).
 
+Returns `Err(ParseError)` for malformed text and for dates that do not exist in the Gregorian calendar, such as `2023-02-29` or `2024-04-31`; they are never rolled over into the next month.
+
 ```dream
 public static fun parse(text: string): Result<DateTime, ParseError>
 ```

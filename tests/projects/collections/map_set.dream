@@ -156,10 +156,12 @@ fun collections_advanced(): void {
     Assert.eq(class_map.get(u2).unwrap_or("None"), "Editor");
     Assert.eq(class_map.get(u3).unwrap_or("None"), "None");
 
+    // Struct keys compare by field values.
     let pointSet = Set<c8c_Point>();
     let pt = c8c_Point(5, 5);
     Assert.is_true(pointSet.add(pt));
-    Assert.is_false(pointSet.contains(pt));
+    Assert.is_true(pointSet.contains(c8c_Point(5, 5)));
+    Assert.is_false(pointSet.add(c8c_Point(5, 5)));
 }
 
 // Sequential and stride-16 keys used to share a handful of slots. Mixing must keep every key
@@ -199,4 +201,54 @@ fun hash_mix_keeps_clustered_keys() {
     }
     Assert.eq(map.length, 4096 - removed);
     Assert.eq(set.length, 4096 - removed);
+}
+
+struct msv_Point {
+    public x: int;
+    public y: int;
+
+    public constructor(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@test
+fun value_keys_compare_by_contents(): void {
+    Assert.is_true(msv_Point(1, 2) == msv_Point(1, 2));
+    Assert.is_true(msv_Point(1, 2) != msv_Point(2, 1));
+
+    let points = List<msv_Point>();
+    points.push(msv_Point(1, 2));
+    points.push(msv_Point(3, 4));
+    Assert.eq(points.index_of(msv_Point(3, 4)).unwrap(), 1);
+
+    let names = Map<msv_Point, string>();
+    names[msv_Point(1, 2)] = "a";
+    names[msv_Point(1, 2)] = "b";
+    Assert.eq(names.length, 1);
+    Assert.eq(names[msv_Point(1, 2)], "b");
+
+    let zeros = Set<double>();
+    zeros.add(0.0d);
+    zeros.add(-0.0d);
+    Assert.eq(zeros.length, 1);
+}
+
+@test
+fun nested_option_values_survive_collections(): void {
+    let values = Map<string, Option<string>>();
+    values["empty"] = Option<string>.None;
+    switch (values.get("empty")) {
+        Some(inner) => Assert.is_true(inner.is_none()),
+        None => Assert.fail("a stored None read back as a missing key"),
+    }
+    Assert.is_true(values.get("missing").is_none());
+
+    let stack = List<Option<string>>();
+    stack.push(Option<string>.None);
+    Assert.is_true(stack.pop().is_some());
+
+    let nested: Option<Option<string>> = Option.Some(Option.Some("s"));
+    Assert.eq(nested.unwrap().unwrap(), "s");
 }

@@ -1,0 +1,23 @@
+// `name<…>(…)` is always a generic call; a variable in that position gets a hint to parenthesize.
+import system;
+
+fun f(a: bool, b: bool): void {
+    System.println(a);
+    System.println(b);
+}
+
+fun main(): void {
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    let d = 0;
+    f(a < b, c > (d));
+}
+
+fun parenthesized_comparison_is_fine(): void {
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    let d = 0;
+    f((a < b), c > (d));
+}

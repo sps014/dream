@@ -85,6 +85,7 @@ impl<'a> Analyzer<'a> {
             for p in &method.parameters {
                 self.check_declared_type(&p.type_, &parameters, diagnostics);
             }
+            self.check_parameter_defaults(&method.parameters, &parameters, diagnostics);
             diagnostics.file_path = previous_file;
             let member_name = accessor_member_name(method);
             if method.where_constraints.is_empty() {
@@ -128,7 +129,7 @@ impl<'a> Analyzer<'a> {
                 .type_ctx
                 .register_method(target_type, &member_name, &parameters);
 
-            // Register after substitution so generic `@operator` params are `Vector<int>`, not `Vector<T>`.
+            // Register after substitution so generic operator params are `Vector<int>`, not `Vector<T>`.
             let operator_method = new_method.clone();
 
             // Static methods have no implicit receiver; instance methods get `this` at index 0.
@@ -466,7 +467,11 @@ impl<'a> Analyzer<'a> {
                 );
             }
             let return_type = method.return_type.as_ref().map(|t| t.get_type());
-            let expected = if name == "to_string" { "string" } else { "int" };
+            let expected = if name == dream_abi::intrinsics::TO_STRING {
+                "string"
+            } else {
+                "int"
+            };
             if return_type.as_deref() != Some(expected) {
                 diagnostics.report_error(
                     format!("overridden '{}' must return '{}'", name, expected),

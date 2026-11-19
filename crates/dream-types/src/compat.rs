@@ -4,8 +4,8 @@
 
 use super::{PrimTy, TyKind, TypeId, TypeInterner};
 
-/// True if a value of numeric primitive `from` may implicitly widen to `to` without a cast. Mirrors
-/// the legacy `numeric_widen` lattice exactly: `byte -> int -> long -> float -> double`,
+/// True if a value of numeric primitive `from` may implicitly widen to `to` without a cast. The
+/// lattice is `byte -> int -> long -> float -> double`,
 /// `byte -> uint -> ulong`, `float16 -> float -> double`, plus the safe unsigned/float cross-edges.
 /// Integers never widen to `float16` (its 11-bit significand loses most integers). Same-width
 /// opposite-sign pairs are excluded, and `from == to` is false (identity, handled separately by
@@ -65,10 +65,9 @@ pub fn numeric_widen(from: PrimTy, to: PrimTy) -> bool {
     )
 }
 
-/// True if a value of type `value` may be assigned to a binding/parameter of type `target`. Encodes
-/// the same rules as the legacy string checks: `Error` poison is bidirectionally compatible, any
-/// value widens into `object`, enums interconvert with `int`, and numeric primitives widen per the
-/// lattice.
+/// True if a value of type `value` may be assigned to a binding/parameter of type `target`: `Error`
+/// poison is bidirectionally compatible, any value widens into `object`, and numeric primitives
+/// widen per the lattice. Enums and `int` convert only through an explicit cast.
 pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> bool {
     if target == value {
         return true;
@@ -99,11 +98,6 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
         return matches!(tk, TyKind::Prim(_) | TyKind::Struct(..));
     }
 
-    // Enum <-> int both directions.
-    if is_enum_int_pair(tk, vk) {
-        return true;
-    }
-
     // Numeric widening.
     if let (TyKind::Prim(from), TyKind::Prim(to)) = (vk, tk)
         && numeric_widen(*from, *to)
@@ -124,16 +118,8 @@ pub fn assignable(interner: &TypeInterner, target: TypeId, value: TypeId) -> boo
     false
 }
 
-fn is_enum_int_pair(a: &TyKind, b: &TyKind) -> bool {
-    matches!(
-        (a, b),
-        (TyKind::Enum(_), TyKind::Prim(PrimTy::Int)) | (TyKind::Prim(PrimTy::Int), TyKind::Enum(_))
-    )
-}
-
 /// Overload viability: looser than [`assignable`] — any two numeric primitives are compatible
-/// regardless of widening direction (exactness is scored separately by overload ranking). Mirrors
-/// the legacy `overload_arg_compatible`.
+/// regardless of widening direction (exactness is scored separately by overload ranking).
 pub fn overload_compatible(interner: &TypeInterner, param: TypeId, arg: TypeId) -> bool {
     if param == arg {
         return true;
@@ -143,9 +129,6 @@ pub fn overload_compatible(interner: &TypeInterner, param: TypeId, arg: TypeId) 
         return true;
     }
     if matches!(pk, TyKind::Object) {
-        return true;
-    }
-    if is_enum_int_pair(pk, ak) {
         return true;
     }
     if let (TyKind::Prim(p), TyKind::Prim(a)) = (pk, ak)

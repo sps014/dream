@@ -18,7 +18,7 @@ void dream_thread_blocking(int entering) {
     DREAM_PANIC_LITERAL(u##message); \
 } while (0)
 
-#define uthash_fatal(msg) lock_failure("panic: out of memory indexing locks")
+#define uthash_fatal(msg) lock_failure("out of memory indexing locks")
 #include "uthash.h"
 
 typedef struct LockState {
@@ -47,7 +47,7 @@ static LockState *lock_state(dream_ptr target) {
     if (state == NULL) {
         state = calloc(1, sizeof(*state));
         if (state == NULL) {
-            lock_failure("panic: out of memory creating a lock");
+            lock_failure("out of memory creating a lock");
         }
         state->target = target;
         dream_cond_init(&state->changed);
@@ -58,7 +58,7 @@ static LockState *lock_state(dream_ptr target) {
 
 static void lock_take(LockState *state, dream_thread_id self) {
     if (state->depth == INT32_MAX) {
-        lock_failure("panic: lock recursion limit exceeded");
+        lock_failure("lock recursion limit exceeded");
     }
     state->owner = self;
     state->depth += 1;
@@ -70,7 +70,7 @@ void dream_lock_forget(dream_ptr target) {
     if (state != NULL) {
         /* Waiters still reference the condition after releasing locks_mu. */
         if (state->waiters != 0) {
-            lock_failure("panic: destroying a lock with waiting threads");
+            lock_failure("destroying a lock with waiting threads");
         }
         HASH_DEL(locks, state);
         dream_cond_destroy(&state->changed);
@@ -107,7 +107,7 @@ void dream_lock_release(dream_ptr target) {
     LockState *state = lock_find(target);
     if (state == NULL || state->depth == 0
         || !dream_thread_id_eq(state->owner, dream_thread_self())) {
-        lock_failure("panic: lock release requires the owning thread");
+        lock_failure("lock release requires the owning thread");
     }
     state->depth -= 1;
     if (state->depth == 0) {
@@ -212,5 +212,5 @@ int32_t dream_js_call(int32_t target, int32_t via, dream_ptr method, int32_t arg
     (void)via;
     (void)method;
     (void)argc;
-    DREAM_PANIC_LITERAL(u"panic: JavaScript calls are unavailable in the native runtime");
+    DREAM_PANIC_LITERAL(u"JavaScript calls are unavailable in the native runtime");
 }

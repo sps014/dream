@@ -46,8 +46,12 @@ int32_t dream_string_hash_slow(dream_ptr p, int32_t *slot) {
     return (int32_t)hash;
 }
 
-int32_t dream_bitcast_f32(float v) {
+/* `0.0 == -0.0`, so both zeros must hash alike. */
+int32_t dream_hash_float(float v) {
     int32_t bits;
+    if (v == 0.0f) {
+        v = 0.0f;
+    }
     memcpy(&bits, &v, 4);
     return bits;
 }
@@ -58,6 +62,9 @@ int32_t dream_hash_long(int64_t v) {
 
 int32_t dream_hash_double(double v) {
     int64_t bits;
+    if (v == 0.0) {
+        v = 0.0;
+    }
     memcpy(&bits, &v, 8);
     return dream_hash_long(bits);
 }

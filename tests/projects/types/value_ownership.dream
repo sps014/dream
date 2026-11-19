@@ -161,7 +161,7 @@ class c294_Sink {
     public static fun consume(d: c294_Desc): int {
         let bump = 0;
         if d.slot.is_some() {
-            bump = d.slot.unwrap();
+            bump = (int)d.slot.unwrap();
         }
         return d.n + bump + d.label.length;
     }

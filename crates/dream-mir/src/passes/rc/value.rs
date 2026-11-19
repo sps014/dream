@@ -426,7 +426,14 @@ pub(super) fn insert_early_value_drops(
                 if live.after_stmt(bi, si, local) {
                     continue;
                 }
-                drop_at.push((bi, source_line_end(block, si), local));
+                // A re-assignment later on the same line must not be dropped in place of the
+                // value read here, so the drop lands right before it.
+                let line_end = source_line_end(block, si);
+                let at = block.stmts[si + 1..=line_end]
+                    .iter()
+                    .position(|s| assigns_local(s, local))
+                    .map_or(line_end, |r| si + r);
+                drop_at.push((bi, at, local));
             }
         }
     }
@@ -466,9 +473,9 @@ pub(super) fn insert_early_value_drops(
         by_block.entry(bi).or_default().push((si, local));
         func.locals[local as usize].manual_drop = true;
     }
-    for (bi, sites) in by_block {
+    for (bi, mut sites) in by_block {
         let mut out: Vec<Statement> = Vec::with_capacity(func.blocks[bi].stmts.len() + sites.len());
-        // `source_line_end` is monotone in the statement index, so sites are in statement order.
+        sites.sort_by_key(|&(at, _)| at);
         let mut sites = sites.into_iter().peekable();
         for (si, stmt) in func.blocks[bi].stmts.drain(..).enumerate() {
             out.push(stmt);

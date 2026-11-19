@@ -262,7 +262,11 @@ fn substring_slice_holds_its_parent_only_when_code_between_could_drop_it() {
             .filter(|s| matches!(s, Statement::Release(_)))
             .count();
         let held = usize::from(call_between);
-        assert_eq!((retains, releases), (held, held), "call between: {call_between}");
+        assert_eq!(
+            (retains, releases),
+            (held, held),
+            "call between: {call_between}"
+        );
     }
 }
 

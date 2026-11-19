@@ -1,0 +1,11 @@
+// Unknown and malformed backslash escapes are reported instead of dropping the backslash.
+import system;
+
+fun main() {
+    System.println("a\qb");
+    System.println("\uFFFF");
+    System.println("\u{D800}");
+    System.println($"{1}\x");
+    let c = '\u{110000}';
+    System.println(c);
+}

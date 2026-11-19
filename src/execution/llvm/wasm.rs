@@ -459,7 +459,7 @@ pub fn link_wasm(
     let builtins = clang_rt(tools, ClangRt::WasmBuiltins { threads })?;
     let runtime_inputs =
         super::tools::input_response(&runtime_objects).map_err(|error| error.to_string())?;
-    let mut cmd = wasm_ld_command(&tools.optional_tool("wasm-ld")?, threads, opt);
+    let mut cmd = wasm_ld_command(&tools.optional_tool("wasm-ld")?, threads, opt)?;
     for name in dream_mir::runtime::modules::worker_exports(need) {
         cmd.arg(format!("--export={name}"));
     }

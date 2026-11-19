@@ -6543,11 +6543,12 @@ async function resolveAbi(wasmModule, source, options) {
 }
 
 /**
- * Scans the wasm binary's import section for an `env`/`memory` import and reads its limits
- * flags (bit 1 = shared). Engines do not reliably expose `.type.shared` on
- * `WebAssembly.Module.imports()` entries, so this is the dependable signal.
+ * Scans the wasm binary's import section for the `env`/`memory` import and returns its limits
+ * `{ shared, minimum, maximum }` (pages), or `null` when there is none. Engines do not reliably
+ * expose `.type` on `WebAssembly.Module.imports()` entries (Node omits it), so the binary is the
+ * dependable source.
  */
-function memoryImportIsShared(bytes) {
+function memoryImportLimits(bytes) {
   const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let pos = 8; // magic + version
   const leb = () => {
@@ -6562,9 +6563,9 @@ function memoryImportIsShared(bytes) {
   };
   const limits = () => {
     const flags = leb();
-    leb(); // min
-    if (flags & 0x01) leb(); // max
-    return flags;
+    const minimum = leb();
+    const maximum = flags & 0x01 ? leb() : null;
+    return { shared: (flags & 0x02) !== 0, minimum, maximum };
   };
   while (pos < u8.length) {
     const id = u8[pos++];
@@ -6584,7 +6585,7 @@ function memoryImportIsShared(bytes) {
       pos += nameLen;
       const kind = u8[pos++];
       if (kind === 2) {
-        return (limits() & 0x02) !== 0; // shared flag
+        return limits();
       } else if (kind === 0) {
         leb(); // func: type index
       } else if (kind === 1) {
@@ -6596,9 +6597,9 @@ function memoryImportIsShared(bytes) {
         break; // unknown kind — stop scanning rather than desync
       }
     }
-    return false;
+    return null;
   }
-  return false;
+  return null;
 }
 
 function moduleWantsSharedMemory(wasmModule, desc) {
@@ -6631,11 +6632,13 @@ function linearMemoryDescriptor(wasmModule, wasmBytes) {
     (i) => i.module === "env" && i.name === "memory" && i.kind === "memory",
   );
   const desc = memoryImport && memoryImport.type;
+  const limits = memoryImportLimits(wasmBytes);
+  const minimum = limits?.minimum ?? desc?.minimum;
+  const maximum = limits?.maximum ?? desc?.maximum;
   return {
-    initial: desc && desc.minimum != null ? desc.minimum : FALLBACK_INITIAL_MEMORY_PAGES,
-    maximum: desc && desc.maximum != null ? desc.maximum : FALLBACK_MAX_MEMORY_PAGES,
-    shared:
-      moduleWantsSharedMemory(wasmModule, desc) || memoryImportIsShared(wasmBytes),
+    initial: minimum ?? FALLBACK_INITIAL_MEMORY_PAGES,
+    maximum: maximum ?? FALLBACK_MAX_MEMORY_PAGES,
+    shared: moduleWantsSharedMemory(wasmModule, desc) || (limits?.shared ?? false),
   };
 }
 
@@ -6806,7 +6809,16 @@ async function withBootstrapLock(gate, fn) {
  */
 async function run(source, options = {}) {
   const mod = await load(source, options);
-  const code = await mod.run();
+  let code;
+  try {
+    code = await mod.run();
+  } catch (error) {
+    // Engines report guest call-stack exhaustion as a RangeError; native builds print this.
+    if (error instanceof RangeError && /call stack/i.test(error.message)) {
+      console.error("panic: stack overflow");
+    }
+    throw error;
+  }
   if (options.leakReport && typeof mod.exports.__dream_leak_live === "function") {
     console.error(`[dream] leak check: live=${mod.exports.__dream_leak_live()}`);
   }

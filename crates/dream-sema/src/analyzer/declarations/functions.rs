@@ -213,6 +213,7 @@ impl<'a> Analyzer<'a> {
             for p in &function.parameters {
                 self.check_declared_type(&p.type_, &parameters, diagnostics);
             }
+            self.check_parameter_defaults(&function.parameters, &parameters, diagnostics);
             if function.generic_parameters.is_some() {
                 if function.is_extern && dream_abi::attributes::has_c_attr(&function.attributes) {
                     diagnostics.report_error(

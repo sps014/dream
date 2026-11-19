@@ -12,7 +12,7 @@ impl Builder {
                     candidate.and_then(|candidate| {
                         let mut ctx = self.type_ctx.borrow_mut();
                         if let TyKind::Union(def, _) = ctx.interner.kind(candidate)
-                            && ctx.defs.name(*def) == "Option"
+                            && ctx.defs.name(*def) == dream_abi::core_items::OPTION_NAME
                         {
                             return Some(candidate);
                         }

@@ -35,3 +35,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_Accessibility",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+# `dream-host-core` is a link-time dependency: this cdylib calls core's C ABI through the shared
+# library, so no Rust item is imported and a Rust import would duplicate core's state.
+[lints.cargo]
+unused_dependencies = "allow"

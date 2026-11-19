@@ -32,9 +32,7 @@ pub fn discover_tests_in_source(
     let mut diagnostics = DiagnosticBag::new(Some(path.to_string()));
     let lexer = Lexer::new(source.to_string());
     let mut parser = Parser::new(lexer, &arena, &mut diagnostics).with_cfg(cfg);
-    let program = parser
-        .parse()
-        .map_err(|_| format!("failed to parse '{}'", path))?;
+    let program = parser.parse();
     if diagnostics.has_errors() {
         let mut msg = format!("parse errors in '{}'", path);
         for e in diagnostics.errors() {

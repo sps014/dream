@@ -11,12 +11,6 @@ use dream_mir::runtime::RuntimeNeed;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// `lib/dream` of the running executable: `<exe dir>/lib/dream` (unpacked archive) or
-/// `<exe dir>/../lib/dream` (installed `bin/` layout).
-pub fn bundled_llvm_bin(config: &ToolchainConfig) -> Option<PathBuf> {
-    config.bundle_dir().map(|d| d.join("llvm/bin"))
-}
-
 pub fn prebuilt_rt(config: &ToolchainConfig) -> Option<PathBuf> {
     config.bundle_dir().map(|d| d.join("rt"))
 }

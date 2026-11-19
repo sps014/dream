@@ -133,6 +133,7 @@ impl<'a> Analyzer<'a> {
         if let Some(parent_table) = parent_scope {
             (*parent_table).borrow_mut().add_child(symbol_table.clone());
         }
+        let scope = self.hir_push_scope();
         for statement in body.iter() {
             let clone = &symbol_table.clone();
             // Recover at the statement boundary: a short-circuited statement leaves its diagnostic
@@ -146,9 +147,50 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
         }
+        self.hir_pop_scope(scope);
         Ok(())
     }
     pub(super) fn analyze_statement(
+        &mut self,
+        statement: &StatementNode<'a>,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        has_parent_while: bool,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<(), SemanticError> {
+        // Loop variables, `is` bindings, and switch bindings belong to the statement that
+        // introduces them, not to the enclosing block.
+        let scoped = matches!(
+            statement,
+            StatementNode::IfElse(..)
+                | StatementNode::While(..)
+                | StatementNode::DoWhile(..)
+                | StatementNode::For(..)
+                | StatementNode::ForEach(..)
+                | StatementNode::AwaitForEach(..)
+                | StatementNode::Labeled(..)
+                | StatementNode::Switch(..)
+                | StatementNode::Lock(..)
+                | StatementNode::Defer(..)
+                | StatementNode::Overflow(..)
+        );
+        let scope = scoped.then(|| self.hir_push_scope());
+        let result = dream_syntax::stack::grow(|| {
+            self.analyze_statement_unscoped(
+                statement,
+                parent_function,
+                symbol_table,
+                has_parent_while,
+                diagnostics,
+            )
+        });
+        if let Some(scope) = scope {
+            self.hir_pop_scope(scope);
+        }
+        result
+    }
+
+    fn analyze_statement_unscoped(
         &mut self,
         statement: &StatementNode<'a>,
         parent_function: &FunctionNode<'a>,
@@ -164,6 +206,17 @@ impl<'a> Analyzer<'a> {
         // emit a host line-hook at each statement boundary. A no-op unless debug-info is enabled.
         if let Some(line) = super::statement_line(statement) {
             self.hir_mark_line(line as u32);
+        }
+        if let Some(rewritten) = self.single_evaluation_assignment(statement, &ctx, diagnostics)? {
+            return self.analyze_synthetic_assignment(
+                &rewritten,
+                parent_function,
+                symbol_table,
+                diagnostics,
+            );
+        }
+        if self.indexer_writeback_assignment(statement, &ctx, diagnostics)? {
+            return Ok(());
         }
         match statement {
             StatementNode::Declaration(left, type_annotation, right, is_const, is_weak) => self

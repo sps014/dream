@@ -13,7 +13,7 @@ void platform_write(int stream, const void *bytes, size_t size, int encoding) {
         int32_t at = 0;
         while ((size_t)at < size) {
             size_t count;
-            at = dream_utf8_chunk(bytes, (int32_t)size, buffer, sizeof(buffer), at, &count, 1);
+            at = dream_utf8_chunk(bytes, (int32_t)size, buffer, sizeof(buffer), at, &count);
             fwrite(buffer, 1, count, output);
         }
     } else { fwrite(bytes, 1, size, output); }

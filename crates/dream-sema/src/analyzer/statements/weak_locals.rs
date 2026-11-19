@@ -22,7 +22,7 @@ impl<'a> Analyzer<'a> {
     }
 
     pub(in crate::analyzer) fn optional_local_type(target: &Type) -> Type {
-        Self::boxed_type("Option", target)
+        Self::boxed_type(dream_abi::core_items::OPTION_NAME, target)
     }
 
     pub(in crate::analyzer) fn prepare_weak_local(
@@ -33,10 +33,13 @@ impl<'a> Analyzer<'a> {
         name: &SyntaxToken,
         diagnostics: &mut DiagnosticBag,
     ) -> (Type, Option<HExpr>) {
-        let annotated_target = annotation
-            .map(|t| Self::collection_generic_arg(t, "Option").unwrap_or_else(|| t.clone()));
+        let annotated_target = annotation.map(|t| {
+            Self::collection_generic_arg(t, dream_abi::core_items::OPTION_NAME)
+                .unwrap_or_else(|| t.clone())
+        });
         let target = annotated_target.unwrap_or_else(|| {
-            Self::collection_generic_arg(actual, "Option").unwrap_or_else(|| actual.clone())
+            Self::collection_generic_arg(actual, dream_abi::core_items::OPTION_NAME)
+                .unwrap_or_else(|| actual.clone())
         });
         let target_id = self.type_ctx.lower(&target);
         if !target.is_unknown() && self.struct_info(target_id).is_none_or(|info| info.is_value) {
@@ -58,12 +61,13 @@ impl<'a> Analyzer<'a> {
         let optional = Self::optional_local_type(&target);
         let optional_id = self.type_ctx.lower(&optional);
         self.ensure_union_instantiated(
-            "Option",
+            dream_abi::core_items::OPTION_NAME,
             std::slice::from_ref(&target),
             &name.position,
             diagnostics,
         );
-        let actual_target = Self::collection_generic_arg(actual, "Option");
+        let actual_target =
+            Self::collection_generic_arg(actual, dream_abi::core_items::OPTION_NAME);
         let compatible = self.compare_data_type(
             &target,
             actual_target.as_ref().unwrap_or(actual),

@@ -2,14 +2,6 @@
 
 **Import:** `import system.text;`
 
-## `last_index_of`
-
-The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`. Byte-compare scan like `index_of` — allocates nothing per candidate.
-
-```dream
-public fun last_index_of(borrow sub: string): Option<int>
-```
-
 ## `replace_first`
 
 Replaces the first occurrence of `old` with `replacement`.

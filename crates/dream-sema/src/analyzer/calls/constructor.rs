@@ -89,6 +89,9 @@ impl<'a> Analyzer<'a> {
         } else {
             self.type_ctx.lower(&result)
         };
+        if self.unsatisfied_instances.contains(&owner) {
+            return Ok((Type::Unknown, None));
+        }
         let struct_name = self.type_id_display(owner);
         let ctor_member = dream_syntax::nodes::types::CONSTRUCTOR_NAME;
         if generic_args.is_none()
@@ -142,7 +145,12 @@ impl<'a> Analyzer<'a> {
         // declaring type's methods; `internal` from the same module; `public` everywhere the type
         // is reachable. An implicit zero-arg default (no registered `constructor`) is public.
         if let Some(sig) = &resolved_ctor {
-            self.check_unsafe_call(sig, name.position, diagnostics);
+            self.check_unsafe_call(
+                sig,
+                || format!("{}.constructor", self.type_id_display(owner)),
+                name.position,
+                diagnostics,
+            );
             let (base_name, _) =
                 Self::resolve_struct_parts(&Type::Struct(name.clone(), generic_args.clone()))
                     .unwrap_or_else(|| (struct_name.clone(), vec![]));
@@ -217,6 +225,7 @@ impl<'a> Analyzer<'a> {
                     &expected,
                     params_types,
                     name.position,
+                    &[],
                     diagnostics,
                 );
             }

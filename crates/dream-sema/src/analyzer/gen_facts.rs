@@ -274,7 +274,7 @@ mod tests {
             &arena,
             &mut diagnostics,
         );
-        let program = parser.parse().unwrap().get_root().clone();
+        let program = parser.parse().get_root().clone();
         let graph = crate::module_graph::ModuleGraph::single(program);
         let mut analyzer = Analyzer::new(&graph, &arena);
         analyzer.generator_facts = Some(GenFacts::default());

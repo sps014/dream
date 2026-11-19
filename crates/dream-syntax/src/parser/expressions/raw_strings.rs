@@ -1,16 +1,12 @@
 use super::super::Parser;
 use crate::nodes::ExpressionNode;
 use crate::token::syntax_token::SyntaxToken;
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Lowers a raw string literal `"""..."""` to an ordinary string literal. The body has no
     /// escapes, so `\` and `"` are escaped for the literal node and nothing past the parser sees
     /// a raw string.
-    pub(crate) fn parse_raw_string(
-        &mut self,
-        token: SyntaxToken,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_raw_string(&mut self, token: SyntaxToken) -> ExpressionNode<'a> {
         let pos = token.position;
         let chars = self.raw_string_chars(&token, 0);
         let mut text = String::with_capacity(chars.len());
@@ -20,14 +16,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             text.push(c);
         }
-        Ok(self.make_string_literal(text, pos))
+        self.make_string_literal(text, pos)
     }
 
     /// Lowers `$"""...{expr}..."""` through the same `+` chain as `$"..."`.
     pub(crate) fn parse_interpolated_raw_string(
         &mut self,
         token: SyntaxToken,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    ) -> ExpressionNode<'a> {
         let pos = token.position;
         let chars = self.raw_string_chars(&token, 1);
         self.lower_interpolation(&token.text, &chars, pos, true)

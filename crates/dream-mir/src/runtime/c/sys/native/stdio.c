@@ -28,7 +28,7 @@ static void write_string(FILE *stream, dream_ptr s) {
     // One logical write remains indivisible even when conversion requires several chunks.
     while (position < len) {
         size_t written;
-        position = dream_utf8_chunk(units, len, text, sizeof(text), position, &written, 1);
+        position = dream_utf8_chunk(units, len, text, sizeof(text), position, &written);
         fwrite(text, 1, written, stream);
     }
     /* stderr stays unbuffered from the caller's point of view. stdout follows the policy set

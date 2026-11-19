@@ -119,15 +119,15 @@ public class GpuRenderPipelineDesc {
     //  (location, format, offset) per attribute]
     internal fun encode(): int[] {
         let out = List<int>();
-        let color: int = this.desc_color_format;
-        let topology: int = this.desc_topology;
-        let cull: int = this.desc_cull;
-        let blend: int = this.desc_blend;
-        let compare: int = this.desc_depth_compare;
+        let color: int = (int)this.desc_color_format;
+        let topology: int = (int)this.desc_topology;
+        let cull: int = (int)this.desc_cull;
+        let blend: int = (int)this.desc_blend;
+        let compare: int = (int)this.desc_depth_compare;
         out.push_all([color, topology, cull, blend]);
         switch (this.desc_depth_format) {
             Some(format) => {
-                let f: int = format;
+                let f: int = (int)format;
                 out.push(f + 1);
             }
             None => {

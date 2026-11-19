@@ -5,9 +5,7 @@ use dream_syntax::{lexer::Lexer, parser::Parser};
 
 fn parse<'a>(arena: &'a Bump, source: &str) -> ProgramNode<'a> {
     let mut diagnostics = DiagnosticBag::new(None);
-    let tree = Parser::new(Lexer::new(source.into()), arena, &mut diagnostics)
-        .parse()
-        .unwrap();
+    let tree = Parser::new(Lexer::new(source.into()), arena, &mut diagnostics).parse();
     assert!(!diagnostics.has_errors());
     tree.get_root().clone()
 }

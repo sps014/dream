@@ -126,13 +126,33 @@ impl<'a> Analyzer<'a> {
             false,
         )?;
 
+        let expected_args = self.expected_union_args(def);
+        let field_expectations: Vec<Option<Type>> = if !is_generic {
+            field_types.iter().cloned().map(Some).collect()
+        } else if let Some(expected_args) = &expected_args {
+            self.substituted_variant_fields(def, &field_types, expected_args)
+                .into_iter()
+                .map(Some)
+                .collect()
+        } else {
+            vec![None; field_types.len()]
+        };
         let mut arg_types = Vec::new();
         let mut arg_hirs = Vec::new();
-        for arg in &args {
-            let t = self.analyze_expression(arg, parent_function, symbol_table, diagnostics)?;
+        let saved_expected = self.current_expected_type.take();
+        for (i, arg) in args.iter().enumerate() {
+            self.current_expected_type = field_expectations.get(i).cloned().flatten();
+            let t = self.analyze_expression(arg, parent_function, symbol_table, diagnostics);
             arg_hirs.push(self.hir_take());
-            arg_types.push(t);
+            match t {
+                Ok(t) => arg_types.push(t),
+                Err(e) => {
+                    self.current_expected_type = saved_expected;
+                    return Err(e);
+                }
+            }
         }
+        self.current_expected_type = saved_expected;
 
         if !is_generic {
             self.validate_variant_payload(
@@ -173,13 +193,7 @@ impl<'a> Analyzer<'a> {
             .map(|ps| ps.iter().map(|p| p.text.clone()).collect())
             .unwrap_or_default();
 
-        let mut concrete_args: Option<Vec<Type>> = None;
-        if let Some(Type::Struct(b, Some(eargs))) = &self.current_expected_type
-            && self.type_ctx.resolve(DefKind::Union, &b.text) == Some(def)
-            && eargs.len() == params.len()
-        {
-            concrete_args = Some(eargs.clone());
-        }
+        let mut concrete_args = expected_args;
         if concrete_args.is_none() {
             let arg_ids: Vec<_> = arg_types
                 .iter()
@@ -230,22 +244,7 @@ impl<'a> Analyzer<'a> {
                 self.type_ctx.syntax_type(ty)
             })
             .collect();
-        let bindings = generic_bindings(
-            template.generic_parameters.as_deref().unwrap_or(&[]),
-            &concrete_args,
-        );
-        let scope = self.type_ctx.scope();
-        self.type_ctx.set_scope(def.module);
-        let expected_fields: Vec<Type> = field_types
-            .iter()
-            .map(|field| {
-                let ty = self
-                    .type_ctx
-                    .lower(&substitute_generic_type(field, &bindings));
-                self.type_ctx.syntax_type(ty)
-            })
-            .collect();
-        self.type_ctx.set_scope(scope);
+        let expected_fields = self.substituted_variant_fields(def, &field_types, &concrete_args);
         self.validate_variant_payload(
             enum_name,
             &variant.text,
@@ -274,5 +273,53 @@ impl<'a> Analyzer<'a> {
             _ => self.hir_none(),
         }
         Ok(Some(result_ty))
+    }
+
+    /// The type arguments of generic union `def` named by the expected type at this site.
+    fn expected_union_args(&self, def: dream_types::DefId) -> Option<Vec<Type>> {
+        let params = self.generic_union(def)?.generic_parameters.as_ref()?.len();
+        match &self.current_expected_type {
+            Some(Type::Struct(b, Some(args)))
+                if self.type_ctx.resolve(DefKind::Union, &b.text) == Some(def)
+                    && args.len() == params =>
+            {
+                Some(args.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// Payload field types of a generic union variant with `args` substituted for its parameters.
+    fn substituted_variant_fields(
+        &mut self,
+        def: dream_types::DefId,
+        field_types: &[Type],
+        args: &[Type],
+    ) -> Vec<Type> {
+        let args: Vec<Type> = args
+            .iter()
+            .map(|arg| {
+                let ty = self.type_ctx.lower(arg);
+                self.type_ctx.syntax_type(ty)
+            })
+            .collect();
+        let params = self
+            .generic_union(def)
+            .and_then(|template| template.generic_parameters.as_deref())
+            .unwrap_or(&[]);
+        let bindings = generic_bindings(params, &args);
+        let scope = self.type_ctx.scope();
+        self.type_ctx.set_scope(def.module);
+        let fields = field_types
+            .iter()
+            .map(|field| {
+                let ty = self
+                    .type_ctx
+                    .lower(&substitute_generic_type(field, &bindings));
+                self.type_ctx.syntax_type(ty)
+            })
+            .collect();
+        self.type_ctx.set_scope(scope);
+        fields
     }
 }

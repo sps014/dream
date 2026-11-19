@@ -134,7 +134,7 @@ public class GpuCommandEncoder {
     }
 
     internal fun op(code: GpuOp): void {
-        let word: int = code;
+        let word: int = (int)code;
         this.words.push(word);
     }
 
@@ -174,12 +174,12 @@ public class GpuCommandEncoder {
         for (let b in args.data) {
             this.data.push(b);
         }
-        let stage_code: int = stage;
+        let stage_code: int = (int)stage;
         let count = args.items.length / 3;
         for (let i = 0; i < count; i = i + 1) {
             let kind = args.items[i * 3];
             let a = args.items[i * 3 + 1];
-            if kind == GpuArgKind.Value {
+            if kind == (int)GpuArgKind.Value {
                 a = a + base;
             }
             this.op(GpuOp.Bind);

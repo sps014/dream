@@ -313,6 +313,7 @@ fn platform_main_symbol(l: &Lcx<'_>) -> String {
 fn native_main(l: &mut Lcx<'_>) {
     let mut fx = glue(l, "main");
     let (argc, argv) = (fx.arg(0), fx.arg(1));
+    fx.call("dream_install_stack_guard", &[]);
     if fx.l.requirements.process_arguments {
         fx.call("dream_process_capture_args", &[argc, argv]);
     }

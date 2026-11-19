@@ -1,0 +1,11 @@
+// Types keep no static storage: shared state is a module-level `let`.
+import system;
+
+class Counter {
+    public static total: int;
+    count: int;
+}
+
+fun main() {
+    System.println(1);
+}

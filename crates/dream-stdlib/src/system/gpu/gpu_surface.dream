@@ -31,7 +31,7 @@ public class GpuSurface {
         this.surface_height = 0;
         if info.length >= 3 {
             for (let format in formats) {
-                let code: int = format;
+                let code: int = (int)format;
                 if code == info[0] {
                     this.surface_format = format;
                 }

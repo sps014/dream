@@ -3,13 +3,6 @@
 
 pub mod shim;
 
-/// The stdlib opaque pointer struct (`system.CPtr`): one `usize` field, passed to C by value.
-pub use crate::core_items::C_PTR_NAME as C_PTR_TYPE;
-
-/// The stdlib class (`system.OwnedCPtr`) a `@c` extern with `@owned("free_fn")` returns: fields
-/// `ptr: CPtr` then `free: usize` (the C function pointer its destructor calls).
-pub use crate::core_items::OWNED_C_PTR_NAME as OWNED_C_PTR_TYPE;
-
 /// C keywords (C11 through C23) that can never name a C symbol.
 const C_KEYWORDS: &[&str] = &[
     "alignas",
@@ -192,9 +185,6 @@ pub const EMBED_EXPORTS: [&str; 22] = [
     "dream_future_on_cancel",
     "dream_post",
 ];
-
-/// The stdlib callback class (`system.NativeCallback<F>`), passed to C as `(fn, void* user_data)`.
-pub use crate::core_items::NATIVE_CALLBACK_NAME as NATIVE_CALLBACK_TYPE;
 
 /// The generated C++ shim's `extern "C"` symbol for one `@cpp` member. Each component is
 /// length-prefixed and escaped (see [`encode_shim_component`]), and the overload index is its own

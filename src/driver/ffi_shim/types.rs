@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use dream_abi::c_abi::{C_PTR_TYPE, NATIVE_CALLBACK_TYPE};
+use dream_abi::core_items::{C_PTR_NAME, NATIVE_CALLBACK_NAME};
 use dream_syntax::nodes::Type;
 use dream_types::CScalar;
 
@@ -97,7 +97,7 @@ impl Known {
         let Some(ty) = ty.filter(|t| !matches!(t, Type::Void)) else {
             return Ok(Ret::Void);
         };
-        if let Some([ok, err]) = generic_args(ty, "Result") {
+        if let Some([ok, err]) = generic_args(ty, dream_abi::core_items::RESULT_NAME) {
             if !matches!(err, Type::String(_)) {
                 return Err(format!(
                     "a `@cpp` result must be `Result<T, string>`, not '{}'",
@@ -148,7 +148,7 @@ impl Known {
             Type::Function(params, ret) => return self.fun(ty, params, ret),
             _ => {}
         }
-        if let Some([inner]) = generic_args(ty, "Option") {
+        if let Some([inner]) = generic_args(ty, dream_abi::core_items::OPTION_NAME) {
             return match self.value(inner) {
                 Ok(Bridge::Str { .. }) => Ok(Bridge::Str { optional: true }),
                 Ok(Bridge::Ptr { .. }) => Ok(Bridge::Ptr { optional: true }),
@@ -164,7 +164,7 @@ impl Known {
             };
         }
         if let Type::Struct(tok, None) = ty {
-            if tok.text == C_PTR_TYPE {
+            if tok.text == C_PTR_NAME {
                 return Ok(Bridge::Ptr { optional: false });
             }
             if self.classes.contains_key(&tok.text) {
@@ -178,7 +178,7 @@ impl Known {
             }
         }
         if let Type::Struct(tok, _) = ty
-            && tok.text == NATIVE_CALLBACK_TYPE
+            && tok.text == NATIVE_CALLBACK_NAME
         {
             return Err(
                 "a `@cpp` member takes `fun(...)` directly; `NativeCallback` is for `@c`"

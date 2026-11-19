@@ -23,7 +23,7 @@ pub enum SymKind {
     Param,
     Type,
     Keyword,
-    /// An `@attribute` name (`@json`, `@get_indexer`, …).
+    /// An `@attribute` name (`@json`, `@test`, …).
     Decorator,
     /// An importable package or module path (`system.collections`, local `.dream`).
     Module,

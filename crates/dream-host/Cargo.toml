@@ -38,3 +38,7 @@ gpu = ["core", "dep:dream-host-gpu"]
 audio = ["core", "dep:dream-host-audio"]
 drawing = ["core", "dep:dream-host-drawing"]
 app = ["core", "dep:dream-host-app"]
+
+# Each capability dependency only builds its own C ABI library; this crate imports none of them.
+[lints.cargo]
+unused_dependencies = "allow"

@@ -23,11 +23,6 @@ impl SyntaxToken {
         }
     }
 
-    pub fn with_trivia(mut self, leading: Vec<SyntaxTrivia>, trailing: Vec<SyntaxTrivia>) -> Self {
-        self.leading_trivia = leading;
-        self.trailing_trivia = trailing;
-        self
-    }
 }
 
 impl PartialEq for SyntaxToken {

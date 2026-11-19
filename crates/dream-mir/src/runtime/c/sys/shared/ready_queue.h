@@ -48,7 +48,7 @@ static ReadyNode *ready_take(dream_ptr f) {
 #endif
         if (!block) {
             block = dream_platform_current->allocate(sizeof(*block));
-            if (!block) { DREAM_PANIC_LITERAL(u"panic: scheduler allocation failed"); }
+            if (!block) { DREAM_PANIC_LITERAL(u"scheduler allocation failed"); }
             dream_count(DREAM_COUNT_READY_ALLOC, 1);
         }
         block->next = ready_blocks;

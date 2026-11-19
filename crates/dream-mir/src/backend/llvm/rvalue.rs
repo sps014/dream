@@ -65,6 +65,26 @@ impl<'l, 'a> Fx<'l, 'a> {
                     Operand::Const(crate::Const::Str(_)) => true,
                     _ => false,
                 };
+                // Propagation may have replaced one side with a constant, whose own type says
+                // nothing about a niche `Option`; the other side's type decides.
+                let compared_ty = match (a, b) {
+                    (Operand::Const(_), Operand::Const(_)) => None,
+                    (Operand::Const(_), typed) | (typed, _) => Some(self.operand_ty(typed)),
+                };
+                if matches!(*op, crate::BinOp::Eq | crate::BinOp::Ne)
+                    && let Some(ty) = compared_ty
+                    && super::glue::equality::has_structural_eq(self.l, ty)
+                {
+                    let (x, y) = (self.operand(a), self.operand(b));
+                    let eq = self
+                        .structural_eq(ty, &x, &y)
+                        .unwrap_or_else(|| crate::internal_error!("structural == of {ty:?}"));
+                    return if *op == crate::BinOp::Eq {
+                        eq
+                    } else {
+                        self.not_v(&eq)
+                    };
+                }
                 if matches!(*op, crate::BinOp::Eq | crate::BinOp::Ne) && is_string(a) {
                     let (x, y) = (self.operand(a), self.operand(b));
                     let eq = self.call_v("dream_string_eq", &[x, y]);
@@ -804,165 +824,5 @@ impl<'l, 'a> Fx<'l, 'a> {
         let m = mem_ty(&self.l.cx, fld.ty);
         let align = super::fx::align_at(&self.h(), fld.offset as i64).min(PAYLOAD_ALIGN);
         self.load_mem(m, &at, align)
-    }
-
-    pub fn emit_cast(&mut self, v: &Operand, from: TypeId, to: TypeId) -> V {
-        let src = self.operand(v);
-        if from == to {
-            return src;
-        }
-        if let Some(r) = self.js_cast(&src, from, to) {
-            return r;
-        }
-        let fk = self.interner.kind(from).clone();
-        let tk = self.interner.kind(to).clone();
-        if let (TyKind::Prim(from_prim), TyKind::Prim(to_prim)) = (&fk, &tk)
-            && from_prim.is_numeric()
-            && to_prim.is_numeric()
-            && (matches!(from_prim, PrimTy::ISize | PrimTy::USize)
-                || matches!(to_prim, PrimTy::ISize | PrimTy::USize))
-        {
-            let source_ty = super::types::ll_ty(self.interner, from, &self.h(), &self.word());
-            let target_ty = super::types::ll_ty(self.interner, to, &self.h(), &self.word());
-            let source = self.conv_v(&src, &source_ty, from_prim.is_unsigned_integer());
-            return self.conv_v(&source, &target_ty, to_prim.is_unsigned_integer());
-        }
-        if matches!(tk, TyKind::Object | TyKind::Interface(..)) && self.is_value(from) {
-            let size = elem_size(&self.l.cx, from) as i64;
-            let tag = self.l.cx.type_tag(from);
-            let b = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
-            let (bp, sp) = (self.ptr(&b), self.ptr(&src));
-            self.memcpy(&bp, &sp, &Value::i64(size));
-            return b;
-        }
-        let i32s = |fx: &mut Self, x: &V| fx.conv_v(x, &Ty::I32, false);
-        let u32s = |fx: &mut Self, x: &V| fx.conv_v(x, &Ty::I32, true);
-        use PrimTy as P;
-        match (&fk, &tk) {
-            (TyKind::Prim(P::Int), TyKind::Prim(P::Long)) => {
-                let x = i32s(self, &src);
-                self.conv_v(&x, &Ty::I64, false)
-            }
-            (TyKind::Prim(P::Int | P::Byte | P::Char), TyKind::Prim(P::Double)) => {
-                let x = i32s(self, &src);
-                self.conv_v(&x, &Ty::F64, false)
-            }
-            (TyKind::Prim(P::Int | P::Byte | P::Char), TyKind::Prim(P::Float)) => {
-                let x = i32s(self, &src);
-                self.conv_v(&x, &Ty::F32, false)
-            }
-            (TyKind::Prim(P::UInt), TyKind::Prim(P::Double)) => {
-                let x = u32s(self, &src);
-                self.conv_v(&x, &Ty::F64, false)
-            }
-            (TyKind::Prim(P::UInt), TyKind::Prim(P::Float)) => {
-                let x = u32s(self, &src);
-                self.conv_v(&x, &Ty::F32, false)
-            }
-            (TyKind::Prim(P::UInt), TyKind::Prim(P::Long)) => {
-                let x = u32s(self, &src);
-                self.conv_v(&x, &Ty::I64, false)
-            }
-            (TyKind::Prim(P::ULong), TyKind::Prim(P::Double)) => {
-                let x = self.conv_v(&src, &Ty::I64, true);
-                self.conv_v(&x, &Ty::F64, false)
-            }
-            (TyKind::Prim(P::ULong), TyKind::Prim(P::Float)) => {
-                let x = self.conv_v(&src, &Ty::I64, true);
-                self.conv_v(&x, &Ty::F32, false)
-            }
-            (TyKind::Prim(P::Float), TyKind::Prim(P::Double)) => {
-                let x = self.conv_v(&src, &Ty::F32, false);
-                self.conv_v(&x, &Ty::F64, false)
-            }
-            (TyKind::Prim(P::Double), TyKind::Prim(P::Float)) => self.conv_v(&src, &Ty::F32, false),
-            (TyKind::Prim(P::Double | P::Float | P::Long), TyKind::Prim(P::Int)) => {
-                i32s(self, &src)
-            }
-            (_, TyKind::Object) => {
-                if matches!(
-                    fk,
-                    TyKind::Prim(
-                        P::ISize | P::USize | P::Float16 | P::SByte | P::Short | P::UShort
-                    )
-                ) {
-                    let size = elem_size(&self.l.cx, from) as i64;
-                    let tag = runtime_tag(&self.l.cx, from);
-                    let boxed = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
-                    let address = self.ptr(&boxed);
-                    let payload = super::types::ll_ty(self.interner, from, &self.h(), &self.word());
-                    self.store_ty(&payload, &address, &src, size as u32);
-                    return boxed;
-                }
-                let (f, t) = match fk {
-                    TyKind::Prim(P::Int) => ("dream_box_int", Ty::I32),
-                    TyKind::Prim(P::Float) => ("dream_box_float", Ty::F32),
-                    TyKind::Prim(P::Double) => ("dream_box_double", Ty::F64),
-                    TyKind::Prim(P::Bool) => ("dream_box_bool", Ty::I32),
-                    TyKind::Prim(P::Char) => ("dream_box_char", Ty::I32),
-                    TyKind::Prim(P::Long) => ("dream_box_long", Ty::I64),
-                    TyKind::Prim(P::UInt) => ("dream_box_uint", Ty::I32),
-                    TyKind::Prim(P::ULong) => ("dream_box_ulong", Ty::I64),
-                    TyKind::Prim(P::Byte) => ("dream_box_byte", Ty::I32),
-                    _ => return src,
-                };
-                let x = self.conv_v(&src, &t, false);
-                self.call_v(f, &[x])
-            }
-            (TyKind::Object, TyKind::Prim(P::Float16)) => {
-                let boxed = self.check_box_tag(&src, to);
-                let address = self.ptr(&boxed);
-                self.load_ty(Ty::F16, &address, 2, false)
-            }
-            (TyKind::Object, TyKind::Prim(p)) => {
-                let unbox = match p {
-                    P::Int => "dream_unbox_int",
-                    P::Float => "dream_unbox_float",
-                    P::Double => "dream_unbox_double",
-                    P::Bool => "dream_unbox_bool",
-                    P::Char => "dream_unbox_char",
-                    P::Long => "dream_unbox_long",
-                    P::UInt => "dream_unbox_uint",
-                    P::ULong => "dream_unbox_ulong",
-                    P::ISize if self.l.cx.mir.layouts.target.ptr_size == 8 => "dream_unbox_long",
-                    P::USize if self.l.cx.mir.layouts.target.ptr_size == 8 => "dream_unbox_ulong",
-                    P::ISize => "dream_unbox_int",
-                    P::USize => "dream_unbox_uint",
-                    P::Byte => "dream_unbox_byte",
-                    P::SByte | P::Short | P::UShort => {
-                        let boxed = self.check_box_tag(&src, to);
-                        let address = self.ptr(&boxed);
-                        let (ty, align, unsigned) = match p {
-                            P::SByte => (Ty::I8, 1, false),
-                            P::Short => (Ty::I16, 2, false),
-                            _ => (Ty::I16, 2, true),
-                        };
-                        return self.load_ty(ty, &address, align, unsigned);
-                    }
-                    P::String => return src,
-                    P::Float16 => unreachable!("float16 unboxes inline above"),
-                };
-                self.checked_unbox(&src, to, unbox)
-            }
-            _ => src,
-        }
-    }
-
-    fn checked_unbox(&mut self, src: &V, ty: TypeId, unbox: &str) -> V {
-        let boxed = self.check_box_tag(src, ty);
-        self.call_v(unbox, &[boxed])
-    }
-
-    /// Traps unless boxed `src` carries `ty`'s runtime tag; returns it as a reference.
-    fn check_box_tag(&mut self, src: &V, ty: TypeId) -> V {
-        let tag = runtime_tag(&self.l.cx, ty);
-        let boxed = self.as_ref(src);
-        let t = self.call_v("dream_object_kind", std::slice::from_ref(&boxed));
-        let t = self.conv(&t, &Ty::I32);
-        let bad = self.w.icmp("ne", &t, &Value::i32(tag as i64));
-        self.if_then(&bad, |fx| {
-            fx.panic_with(crate::backend::shared::panic_msgs::INVALID_CAST)
-        });
-        boxed
     }
 }

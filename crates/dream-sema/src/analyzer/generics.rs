@@ -225,24 +225,27 @@ impl<'a> Analyzer<'a> {
     /// `constraints` (`T : Comparable<T>` etc.), reporting a clear error otherwise. Each bound is
     /// substituted with the same bindings so `Comparable<T>` becomes `Comparable<int>` before the
     /// `implements` lookup; the concrete argument must implement that (mangled) interface.
+    /// Returns whether every constraint held; a call must not instantiate the body otherwise.
     pub(super) fn verify_generic_constraints(
         &mut self,
         constraints: &[dream_syntax::nodes::GenericConstraint],
         bindings: &GenericBindings,
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
-    ) {
+    ) -> bool {
+        let mut satisfied = true;
         for constraint in constraints {
             let Some(concrete) = bindings.get(&constraint.param.text) else {
                 continue;
             };
             for bound in &constraint.bounds {
                 if !self.type_satisfies_bound(concrete, bound, bindings, diagnostics) {
+                    satisfied = false;
                     diagnostics.report_error(
                         format!(
                             "type '{}' does not satisfy the constraint '{}' on generic parameter '{}' (it does not implement that interface)",
                             self.ty_display(concrete),
-                            self.ty_display(bound),
+                            self.ty_display(&substitute_generic_type(bound, bindings)),
                             constraint.param.text
                         ),
                         Some(*position),
@@ -251,6 +254,7 @@ impl<'a> Analyzer<'a> {
             }
             for kind in &constraint.kinds {
                 if !self.type_satisfies_kind(concrete, *kind) {
+                    satisfied = false;
                     let (want, why) = match kind {
                         dream_syntax::nodes::ConstraintKind::Struct => {
                             ("struct", "it is not a value type")
@@ -280,6 +284,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
         }
+        satisfied
     }
 
     pub(super) fn type_satisfies_kind(

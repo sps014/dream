@@ -1,0 +1,25 @@
+import system;
+
+// A user interface that shares the core protocol's name must not take over `==`.
+interface Equatable<T> {
+    fun equals(other: T): bool;
+}
+
+class Point : Equatable<Point> {
+    public x: int;
+
+    public constructor(x: int) {
+        this.x = x;
+    }
+
+    public fun equals(other: Point): bool {
+        return true;
+    }
+}
+
+fun main() {
+    let a = Point(1);
+    let b = Point(2);
+    System.println(a == b);
+    System.println(a == a);
+}

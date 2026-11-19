@@ -38,6 +38,11 @@ public class ValidationErrors: Error {
         return parts.join("; ");
     }
 
+    /// Returns `message()`, so printing the error shows its explanation.
+    public override fun to_string(): string {
+        return this.message();
+    }
+
     /// Returns validation issues as JSON, including their location, code, and message.
     public fun to_json(): JsonValue {
         let details = JsonValue.array();

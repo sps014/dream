@@ -139,9 +139,10 @@ pub(super) fn link(
             "-Wl,--strip-debug",
         ])
         .args(super::runtime::clang_level_flags(req.wasm_opt));
-    if let Some(stack) = crate::driver::wasi::stack_size_bytes() {
-        command.arg(format!("-Wl,-z,stack-size={stack}"));
-    }
+    command.arg(format!(
+        "-Wl,-z,stack-size={}",
+        crate::driver::wasi::stack_size_bytes()?
+    ));
     let (package_objects, libraries) =
         super::component_sources::compile(config, &clang, ll, req.wasm_opt)?;
     let inputs = super::tools::input_response(objects.iter().chain(&package_objects))

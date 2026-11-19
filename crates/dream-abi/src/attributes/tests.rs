@@ -323,7 +323,7 @@ fn catalog() -> &'static UserAttributes {
                 &arena,
                 &mut diagnostics,
             );
-            let ast = parser.parse().unwrap();
+            let ast = parser.parse();
             modules.insert(file.clone(), module.to_string());
             for s in &ast.get_root().structs {
                 let mut s = s.clone();
@@ -418,7 +418,7 @@ fn declared_registry(source: &str) -> (UserAttributes, DiagnosticBag) {
         &arena,
         &mut diagnostics,
     );
-    let ast = parser.parse().unwrap();
+    let ast = parser.parse();
     let mut registry = UserAttributes::collect(
         &ast.get_root().structs,
         &ast.get_root().enums,

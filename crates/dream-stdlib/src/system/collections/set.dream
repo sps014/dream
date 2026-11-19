@@ -2,7 +2,7 @@ module system.collections;
 
 /// A generic open-addressing hash set.
 // `states` pack the occupancy stamp with a hash fragment; see `hash_epoch_initial`.
-@slot_walk("capacity", "slot_key", "slot_occupied")
+@slot_walk("capacity", "slot_key", "slot_occupied", "length", "walk_guard")
 public class Set<T>: Collection<T> {
     keys: T[];
     states: int[];
@@ -55,6 +55,14 @@ public class Set<T>: Collection<T> {
     /// Number of elements currently stored.
     public get length(): int {
         return this.count;
+    }
+
+    // Element-shifting or rehashing under a `for-in` walk would skip or repeat elements.
+    @inline
+    internal fun walk_guard(stamp: int): void {
+        if this.count != stamp {
+            System.panic("Set modified during for-in iteration");
+        }
     }
 
     /// Current capacity of the backing buffer.

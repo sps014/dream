@@ -49,7 +49,6 @@ impl Compiler {
         let sigs = dream_mir::backend::llvm::RuntimeSigs::parse(&runtime.text)
             .and_then(|sigs| {
                 sigs.validate_target(req.target.spec())?;
-                sigs.validate_reference_abi(req.target.spec())?;
                 Ok(sigs)
             })
             .map_err(stale)?;

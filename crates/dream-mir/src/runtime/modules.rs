@@ -278,6 +278,7 @@ const NATIVE_SYS_C: &[&str] = &[
     "stdio.c",
     "stdout_buffer.c",
     "stdio_streams.c",
+    "stack_guard.c",
     "worker.c",
 ];
 const WASI_SYS_C: &[&str] = &[
@@ -291,7 +292,6 @@ const WASI_SYS_C: &[&str] = &[
     "g0.c",
     "g0.s",
     "sync.c",
-    "interns.c",
     "platform.c",
 ];
 

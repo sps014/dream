@@ -369,14 +369,33 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn validate_value_containment(&self, diagnostics: &mut DiagnosticBag) {
         // An enum can instantiate a generic struct before its own payload table is complete.
         // Recheck once every concrete field graph is available, before computing layouts.
+        let saved_file = diagnostics.file_path.clone();
         for (ty, kind) in self.type_ctx.interner.iter_kinds() {
-            if matches!(kind, dream_types::TyKind::Struct(..))
+            if let dream_types::TyKind::Struct(def, _) = kind
                 && self.type_ctx.interner.is_value_type(ty)
                 && self.value_struct_contains_self(ty)
             {
-                diagnostics.report_error(format!("value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle", self.type_id_display(ty)), None);
+                let (file, span) = match (self.struct_info(ty), self.generic_struct(*def)) {
+                    (Some(info), _) => (info.file_path.clone(), info.name_span),
+                    (None, Some(template)) => {
+                        (template.file_path.clone(), Some(template.name.position))
+                    }
+                    (None, None) => (None, None),
+                };
+                diagnostics.file_path = file
+                    .as_deref()
+                    .map(str::to_string)
+                    .or_else(|| saved_file.clone());
+                diagnostics.report_error(
+                    format!(
+                        "value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle",
+                        self.type_id_display(ty)
+                    ),
+                    span,
+                );
             }
         }
+        diagnostics.file_path = saved_file;
     }
 
     pub(in crate::analyzer) fn ensure_struct_instantiated(
@@ -402,6 +421,12 @@ impl<'a> Analyzer<'a> {
         position: &TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
+        if concrete_ids
+            .iter()
+            .any(|&id| self.type_ctx.interner.contains_error(id))
+        {
+            return;
+        }
         let request = crate::analyzer::typed_hir_cache::Request::Struct(def, concrete_ids.clone());
         self.journaled(
             |_| Some(request),
@@ -524,18 +549,24 @@ impl<'a> Analyzer<'a> {
 
         // Recursive unmanaged records may contain this instance through a phantom wrapper.
         // Bound checking needs its resolved fields, not an absent or incomplete instance.
-        self.verify_generic_constraints(
+        if !self.verify_generic_constraints(
             &template.generic_constraints,
             &bindings,
             position,
             diagnostics,
-        );
+        ) {
+            // Its method bodies would only repeat the failure from inside the template's file.
+            self.unsatisfied_instances.insert(instance);
+            self.ref_struct_escape_muted = muted;
+            self.type_ctx.set_scope(scope);
+            return;
+        }
 
         // The closed-graph rule runs per monomorphization for generic `@shared class`es: whether a
         // field like `payload: T` is shared, transfer-only (`Option<T>`), or rejected is only
         // decidable once `T` is concrete.
         if template.is_shared {
-            let owner = mangled_name.clone();
+            let owner = self.type_id_display(instance);
             for field in &new_decl_ref.fields {
                 self.check_shared_field(&owner, field, diagnostics);
             }
@@ -548,7 +579,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                     format!(
                         "value struct '{}' cannot contain itself by value; use a reference type ('class') or an array to break the cycle",
-                        mangled_name
+                        self.type_id_display(instance)
                     ),
                     Some(*position),
                 );

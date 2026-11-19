@@ -60,6 +60,14 @@ Returns each issue as `location: message`, joined with `; `, with location parts
 public fun message(): string
 ```
 
+## `to_string`
+
+Returns `message()`, so printing the error shows its explanation.
+
+```dream
+public override fun to_string(): string
+```
+
 ## `to_json`
 
 Returns validation issues as JSON, including their location, code, and message.

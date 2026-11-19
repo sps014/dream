@@ -358,9 +358,6 @@ impl LayoutTable {
     pub fn union(&self, ty: TypeId) -> Option<&UnionLayout> {
         self.unions.get(&ty)
     }
-    pub fn insert_union(&mut self, ty: TypeId, layout: UnionLayout) {
-        self.unions.insert(ty, layout);
-    }
 }
 
 fn scalar(interner: &TypeInterner, target: TargetLayout, ty: TypeId) -> (u32, u32) {

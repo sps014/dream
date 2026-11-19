@@ -191,7 +191,7 @@ DREAM_ALWAYS_INLINE dream_ptr activate_block(int32_t block, int32_t tag, int32_t
 
 static int32_t block_need(int32_t size) {
     if (size < 0 || size > INT32_MAX - (int32_t)HEAP_HEADER_SIZE - DREAM_LARGE_PREFIX - 15) {
-        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+        DREAM_PANIC_LITERAL(u"allocation size exceeds the WASI heap limit");
     }
     return (int32_t)dream_block_need((size_t)size);
 }

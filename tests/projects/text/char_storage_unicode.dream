@@ -74,4 +74,24 @@ fun char_parse(): void {
     Assert.eq((int)accented, 233);
     Assert.eq(char.parse("ab").unwrap_err().code(), "EPARSE");
     Assert.eq(char.parse("").unwrap_err().code(), "EPARSE");
+    let emoji = char.parse("😀").unwrap();
+    Assert.eq((int)emoji, 128512);
+    Assert.eq(emoji.to_string(), "😀");
+    Assert.eq(char.parse("😀a").unwrap_err().code(), "EPARSE");
+}
+
+@test
+fun supplementary_char_to_string(): void {
+    let emoji = (char)0x1F600;
+    Assert.eq(emoji.to_string(), "😀");
+    Assert.eq(emoji.to_string().length, 2);
+    Assert.eq($"{emoji}!", "😀!");
+}
+
+@test
+fun unicode_escapes_decode_scalars(): void {
+    let smile = '\u{1F600}';
+    Assert.eq((int)smile, 128512);
+    Assert.eq("x\u{1F600}y\u{41}", "x😀yA");
+    Assert.eq($"{1}\u{263A}", "1☺");
 }

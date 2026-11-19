@@ -42,7 +42,7 @@ public class Logger {
     }
 
     fun emit(level: LogLevel, msg: string): void {
-        if level < this._level {
+        if (int)level < (int)this._level {
             return;
         }
         let record = LogRecord(level, this.name, msg, DateTime.utc_now().epoch_millis);

@@ -25,7 +25,7 @@ public class DrawingSurface {
         height: int,
         backend: DrawingBackend = DrawingBackend.Auto
     ): Result<DrawingSurface, DrawingError> {
-        let code: int = backend;
+        let code: int = (int)backend;
         let handle = DrawingHost.create(width, height, code).await;
         if handle <= 0 {
             return Result.Err(DrawingError(DrawingHost.error()));

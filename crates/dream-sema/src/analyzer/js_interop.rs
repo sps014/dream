@@ -33,7 +33,7 @@ use dream_types::{DefId, PrimTy, TyKind, TypeId};
 mod conversions;
 mod slots;
 impl<'a> Analyzer<'a> {
-    /// The legacy AST `Type` for the dynamic `js` type (a bare nominal name the type context lowers
+    /// The AST `Type` for the dynamic `js` type (a bare nominal name the type context lowers
     /// to `TyKind::Js`).
     pub(super) fn js_type() -> Type {
         Type::Struct(
@@ -63,7 +63,10 @@ impl<'a> Analyzer<'a> {
         match &e.kind {
             HExprKind::Cast(inner) => self.func_expr_is_capturing(inner),
             HExprKind::Call { callee, args } => {
-                if self.closure_intrinsic("funcbox_new") == Some(callee.def) && args.len() >= 2 {
+                if self.closure_intrinsic(dream_abi::intrinsics::ATTR_FUNCBOX_NEW)
+                    == Some(callee.def)
+                    && args.len() >= 2
+                {
                     let env_nonzero = !matches!(args[1].kind, HExprKind::IntLit(0));
                     if env_nonzero {
                         return true;
@@ -135,7 +138,10 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         let foreign = file.is_some_and(|file| {
-            file.starts_with("<js>/") || file.starts_with("<std>/generated/system.js")
+            file.starts_with("<js>/")
+                || file
+                    .strip_prefix(dream_abi::core_items::GENERATED_PREFIX)
+                    .is_some_and(|rest| rest.starts_with(dream_abi::core_items::JS_PACKAGE))
         });
         for (index, argument) in args.iter().enumerate() {
             if let Some(argument) = argument
@@ -284,7 +290,10 @@ impl<'a> Analyzer<'a> {
     /// Await preserves successful nullish values and the original rejection reason.
     pub(super) fn result_js_type() -> Type {
         Type::Struct(
-            synthetic_token(TokenKind::IdentifierToken, "Result"),
+            synthetic_token(
+                TokenKind::IdentifierToken,
+                dream_abi::core_items::RESULT_NAME,
+            ),
             Some(vec![
                 Self::js_type(),
                 Type::Struct(synthetic_token(TokenKind::IdentifierToken, "JsError"), None),
@@ -319,9 +328,17 @@ impl<'a> Analyzer<'a> {
             col_no: 0,
         };
         let args = std::slice::from_ref(inner);
-        self.ensure_union_instantiated("Option", args, &no_span, &mut throwaway);
+        self.ensure_union_instantiated(
+            dream_abi::core_items::OPTION_NAME,
+            args,
+            &no_span,
+            &mut throwaway,
+        );
         let ty = self.type_ctx.lower(&Type::Struct(
-            synthetic_token(TokenKind::IdentifierToken, "Option"),
+            synthetic_token(
+                TokenKind::IdentifierToken,
+                dream_abi::core_items::OPTION_NAME,
+            ),
             Some(vec![inner.clone()]),
         ));
         let TyKind::Union(def, _) = *self.type_ctx.interner.kind(ty) else {

@@ -14,6 +14,11 @@ public class RegexError: Error {
         return "invalid regular expression: " + this.pattern;
     }
 
+    /// Returns `message()`, so printing the error shows its explanation.
+    public override fun to_string(): string {
+        return this.message();
+    }
+
     /// Stable compilation-failure code.
     public fun code(): string {
         return "EREGEX";

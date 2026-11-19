@@ -4,7 +4,7 @@
 
 #define uthash_fatal(message) do { \
     dream_platform_current->unlock(DREAM_LOCK_WEAK); \
-    DREAM_PANIC_LITERAL(u"panic: out of memory indexing C callbacks"); \
+    DREAM_PANIC_LITERAL(u"out of memory indexing C callbacks"); \
 } while (0)
 #include "uthash.h"
 
@@ -22,7 +22,7 @@ void dream_thread_detach(void) {}
 
 void dream_callback_register(dream_ptr object) {
     Callback *entry = calloc(1, sizeof(*entry));
-    if (!entry) { DREAM_PANIC_LITERAL(u"panic: out of memory registering a C callback"); }
+    if (!entry) { DREAM_PANIC_LITERAL(u"out of memory registering a C callback"); }
     entry->object = object;
     entry->owner = dream_instance_tid();
     dream_platform_current->lock(DREAM_LOCK_WEAK);
@@ -35,7 +35,7 @@ static Callback *find_owned(dream_ptr object) {
     HASH_FIND(hh, callbacks, &object, sizeof(object), entry);
     if (!entry || entry->owner != dream_instance_tid()) {
         dream_platform_current->unlock(DREAM_LOCK_WEAK);
-        DREAM_PANIC_LITERAL(u"panic: a NativeCallback must run on the Dream instance that created it");
+        DREAM_PANIC_LITERAL(u"a NativeCallback must run on the Dream instance that created it");
     }
     return entry;
 }

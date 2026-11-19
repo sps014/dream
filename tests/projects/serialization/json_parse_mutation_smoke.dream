@@ -76,11 +76,6 @@ fun json_string_boundaries(): void {
         let input = wrapped.substring(6, wrapped.length - 4);
         let decoded = Json.deserialize<JsonValue>(input).unwrap().as_string().unwrap();
         Assert.eq(decoded, expected);
-        // The decoded string must own its storage, not alias the input buffer.
-        if n > 0 {
-            input[1] = 'Z';
-            Assert.eq(decoded, expected);
-        }
         let escaped = "\"" + expected + "\\n" + expected + "\"";
         let with_escape = Json.deserialize<JsonValue>(escaped).unwrap().as_string().unwrap();
         Assert.eq(with_escape, expected + "\n" + expected);

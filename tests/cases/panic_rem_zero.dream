@@ -1,0 +1,9 @@
+// Remainder by zero names the remainder, not division, in its panic message.
+import system;
+fun main(): void {
+    let a = 10;
+    let b = 0;
+    System.println("before");
+    System.println(a % b);
+    System.println("after");
+}

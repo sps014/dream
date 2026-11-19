@@ -119,9 +119,15 @@ impl<'a> Analyzer<'a> {
             })
             .collect();
 
-        let call_target = format!("{}.{}", struct_name, method.text);
-        let saved_call_target = self.current_call_target_name.take();
-        self.current_call_target_name = Some(call_target);
+        let owner_display = receiver.as_ref().map_or_else(
+            || struct_name.to_owned(),
+            |hir| self.type_id_display(hir.ty),
+        );
+        let call_target = format!("{}.{}", owner_display, method.text);
+        let saved_call_target = self.enter_call_target(
+            call_target,
+            dream_abi::attributes::is_worker_body(&template.attributes),
+        );
 
         let (mut arg_types, mut arg_hirs, mut arg_is_ref) = self
             .analyze_call_arguments_expecting_ref(
@@ -132,7 +138,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             )?;
 
-        self.current_call_target_name = saved_call_target;
+        self.current_call_target = saved_call_target;
 
         // Align with the template's parameter list (index 0 is `this`) for inference.
         let owner = receiver
@@ -173,12 +179,15 @@ impl<'a> Analyzer<'a> {
             self.hir_none();
             return Ok(Type::Unknown);
         }
-        self.verify_generic_constraints(
+        if !self.verify_generic_constraints(
             &template.generic_constraints,
             &bindings,
             &method.position,
             diagnostics,
-        );
+        ) {
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
         self.reject_ref_struct_bindings(&bindings, &method.position, diagnostics);
         let instance = self.register_generic_function_instance(template, &bindings);
 
@@ -196,7 +205,18 @@ impl<'a> Analyzer<'a> {
             }
         };
 
-        self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_unsafe_call(
+            &store_sig,
+            || {
+                format!(
+                    "{}.{}",
+                    self.type_id_display(owner),
+                    dream_syntax::nodes::types::member_display_name(&method.text)
+                )
+            },
+            method.position,
+            diagnostics,
+        );
         self.check_c_fun_args(
             store_sig.identity.0,
             params,
@@ -272,6 +292,7 @@ impl<'a> Analyzer<'a> {
             &expected_params,
             &arg_types,
             method.position,
+            params,
             diagnostics,
         );
 

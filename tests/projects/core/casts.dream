@@ -1,0 +1,73 @@
+import system.testing;
+import system;
+
+interface c3a1_Shape {
+    fun sides(): int;
+}
+
+class c3a1_Square: c3a1_Shape {
+    public constructor() {}
+
+    public fun sides(): int {
+        return 4;
+    }
+
+    public fun label(): string {
+        return "square";
+    }
+}
+
+struct c3a1_Pair {
+    public a: int;
+    public b: int;
+
+    public constructor(a: int, b: int) {
+        this.a = a;
+        this.b = b;
+    }
+}
+
+enum c3a1_Level {
+    Low,
+    Mid,
+    High
+}
+
+@test
+@timeout(180000)
+fun downcasts_to_the_runtime_type(): void {
+    let shape: c3a1_Shape = c3a1_Square();
+    Assert.eq(((c3a1_Square)shape).label(), "square");
+
+    let boxed: object = c3a1_Square();
+    Assert.eq(((c3a1_Square)boxed).sides(), 4);
+
+    let pair: object = c3a1_Pair(2, 5);
+    let unboxed = (c3a1_Pair)pair;
+    Assert.eq(unboxed.a + unboxed.b, 7);
+
+    let text: object = "boxed";
+    Assert.eq((string)text, "boxed");
+}
+
+@test
+@timeout(180000)
+fun enums_convert_to_int_explicitly(): void {
+    Assert.eq((int)c3a1_Level.High, 2);
+    Assert.is_true((c3a1_Level)1 == c3a1_Level.Mid);
+    Assert.is_true(c3a1_Level.Low < c3a1_Level.High);
+}
+
+@test
+fun cast_operands_bind_like_prefix_operators(): void {
+    let n = 5;
+    let arr = [10, 20];
+    let x = 6;
+    Assert.eq((n) - 1, 4);
+    Assert.eq((arr)[1], 20);
+    Assert.eq((int)-3.99, -3);
+    Assert.eq((int)~x, -7);
+    Assert.eq((int)char.parse("A").unwrap(), 65);
+    Assert.eq((uint)(int)'B', 66u);
+    Assert.eq((int)2.5 + 1, 3);
+}

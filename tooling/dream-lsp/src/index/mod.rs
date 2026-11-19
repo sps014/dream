@@ -74,167 +74,166 @@ impl Index {
         };
         let mut generators = Vec::new();
         let mut attributes = Vec::new();
-        if let Ok(ast) = parser.parse() {
-            let program = ast.get_root();
-            for func in &program.functions {
-                if func.attributes.iter().any(|a| a.name.text == "generator") {
-                    let span = func.name.position;
-                    let module = program
-                        .module
-                        .as_ref()
-                        .map(|m| m.path.text.as_str())
-                        .unwrap_or_default();
-                    generators.push((
-                        dream_abi::attributes::decl_identity(module, &func.name.text),
-                        span.start,
-                        span.end,
-                    ));
-                }
+        let ast = parser.parse();
+        let program = ast.get_root();
+        for func in &program.functions {
+            if func.attributes.iter().any(|a| a.name.text == "generator") {
+                let span = func.name.position;
+                let module = program
+                    .module
+                    .as_ref()
+                    .map(|m| m.path.text.as_str())
+                    .unwrap_or_default();
+                generators.push((
+                    dream_abi::attributes::decl_identity(module, &func.name.text),
+                    span.start,
+                    span.end,
+                ));
             }
+        }
 
-            attributes.extend(declared_attrs::collect(
-                text,
-                &program.structs,
-                &program.enums,
-                None,
-            ));
+        attributes.extend(declared_attrs::collect(
+            text,
+            &program.structs,
+            &program.enums,
+            None,
+        ));
 
-            if let Some(module) = &program.module {
-                builder
-                    .file_namespaces
-                    .insert(String::new(), module.path.text.clone());
+        if let Some(module) = &program.module {
+            builder
+                .file_namespaces
+                .insert(String::new(), module.path.text.clone());
+        }
+
+        // Pass 1: Declare all file-level symbols for the main program
+        builder.walk_program_for_imports(program);
+
+        let mut acc = dream::driver::source_loader::ProgramAccumulator::default();
+        acc.cfg = cfg;
+
+        // Collect std + file imports before prelude merge so opt-in packages load.
+        for import in &program.imports {
+            if import.is_js || import.c.is_some() || import.alias.is_some() {
+                continue;
             }
+            let module_name = import.module_name.text.as_str();
+            if let Some(pkg) = dream_stdlib::std_package_from_slash_path(module_name) {
+                acc.requested_std_packages.insert(pkg.name.to_string());
+            }
+        }
 
-            // Pass 1: Declare all file-level symbols for the main program
-            builder.walk_program_for_imports(program);
+        if let Some(path_str) = file_path {
+            let parent_dir = std::path::Path::new(path_str)
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(""));
 
-            let mut acc = dream::driver::source_loader::ProgramAccumulator::default();
-            acc.cfg = cfg;
+            acc.visited.insert(path_str.to_string());
 
-            // Collect std + file imports before prelude merge so opt-in packages load.
             for import in &program.imports {
                 if import.is_js || import.c.is_some() || import.alias.is_some() {
                     continue;
                 }
                 let module_name = import.module_name.text.as_str();
-                if let Some(pkg) = dream_stdlib::std_package_from_slash_path(module_name) {
-                    acc.requested_std_packages.insert(pkg.name.to_string());
+                if dream_stdlib::std_package_from_slash_path(module_name).is_some() {
+                    continue;
                 }
-            }
+                let import_path =
+                    dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
 
-            if let Some(path_str) = file_path {
-                let parent_dir = std::path::Path::new(path_str)
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new(""));
-
-                acc.visited.insert(path_str.to_string());
-
-                for import in &program.imports {
-                    if import.is_js || import.c.is_some() || import.alias.is_some() {
-                        continue;
-                    }
-                    let module_name = import.module_name.text.as_str();
-                    if dream_stdlib::std_package_from_slash_path(module_name).is_some() {
-                        continue;
-                    }
-                    let import_path =
-                        dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
-
-                    if let Some(import_path_str) = import_path.to_str()
-                        && import_path.exists()
-                    {
-                        let _ = dream::driver::source_loader::parse_file_recursive(
-                            &import_path_str.to_string(),
-                            &mut acc,
-                            &arena,
-                            &mut scratch,
-                        );
-                    }
-                }
-            }
-
-            acc.parsed_files.insert(
-                file_path.unwrap_or("main.dream").to_string(),
-                program.clone(),
-            );
-            let _ = dream::driver::js_imports::prepare(
-                &arena,
-                &mut acc,
-                file_path.unwrap_or("main.dream"),
-                if target.execution_environment == ExecutionEnvironment::Node {
-                    "node"
-                } else {
-                    "web"
-                },
-                false,
-                &mut scratch,
-            );
-            let aliases = acc.aliased_imports.clone();
-            for (_, item, alias, _) in aliases {
-                if let Some(mut declaration) = acc
-                    .all_structs
-                    .iter()
-                    .find(|decl| decl.name.text == item)
-                    .cloned()
+                if let Some(import_path_str) = import_path.to_str()
+                    && import_path.exists()
                 {
-                    declaration.name = alias;
-                    acc.all_structs.push(declaration);
+                    let _ = dream::driver::source_loader::parse_file_recursive(
+                        &import_path_str.to_string(),
+                        &mut acc,
+                        &arena,
+                        &mut scratch,
+                    );
                 }
             }
-
-            let _ = dream::driver::prelude::merge_prelude(
-                &arena,
-                &mut acc.all_functions,
-                &mut acc.all_structs,
-                &mut acc.all_interfaces,
-                &mut acc.all_enums,
-                &mut acc.all_extends,
-                &mut acc.all_globals,
-                &mut scratch,
-                &mut acc.file_contents,
-                &mut acc.file_modules,
-                &acc.requested_std_packages,
-                acc.cfg,
-            );
-
-            builder.file_namespaces.extend(
-                acc.file_modules
-                    .iter()
-                    .map(|(file, namespace)| (file.clone(), namespace.to_string())),
-            );
-            let combined = dream::syntax::nodes::ProgramNode::new(
-                vec![],
-                acc.all_structs,
-                acc.all_interfaces,
-                acc.all_functions,
-                acc.all_enums,
-                acc.all_extends,
-                acc.all_globals,
-            );
-            for s in &combined.structs {
-                let Some(path) = s.file_path.as_deref() else {
-                    continue;
-                };
-                if dream_stdlib::is_std_source(path) {
-                    continue;
-                }
-                if let Some(source) = acc.file_contents.get(path) {
-                    attributes.extend(declared_attrs::collect(
-                        source,
-                        std::slice::from_ref(s),
-                        &combined.enums,
-                        None,
-                    ));
-                }
-            }
-            // Pass 1.5: Declare all imported and prelude symbols
-            builder.is_main = false;
-            builder.walk_program_for_imports(&combined);
-            builder.is_main = true;
-
-            // Pass 2: Walk function/method bodies
-            builder.walk_program(program);
         }
+
+        acc.parsed_files.insert(
+            file_path.unwrap_or("main.dream").to_string(),
+            program.clone(),
+        );
+        let _ = dream::driver::js_imports::prepare(
+            &arena,
+            &mut acc,
+            file_path.unwrap_or("main.dream"),
+            if target.execution_environment == ExecutionEnvironment::Node {
+                "node"
+            } else {
+                "web"
+            },
+            false,
+            &mut scratch,
+        );
+        let aliases = acc.aliased_imports.clone();
+        for (_, item, alias, _) in aliases {
+            if let Some(mut declaration) = acc
+                .all_structs
+                .iter()
+                .find(|decl| decl.name.text == item)
+                .cloned()
+            {
+                declaration.name = alias;
+                acc.all_structs.push(declaration);
+            }
+        }
+
+        let _ = dream::driver::prelude::merge_prelude(
+            &arena,
+            &mut acc.all_functions,
+            &mut acc.all_structs,
+            &mut acc.all_interfaces,
+            &mut acc.all_enums,
+            &mut acc.all_extends,
+            &mut acc.all_globals,
+            &mut scratch,
+            &mut acc.file_contents,
+            &mut acc.file_modules,
+            &acc.requested_std_packages,
+            acc.cfg,
+        );
+
+        builder.file_namespaces.extend(
+            acc.file_modules
+                .iter()
+                .map(|(file, namespace)| (file.clone(), namespace.to_string())),
+        );
+        let combined = dream::syntax::nodes::ProgramNode::new(
+            vec![],
+            acc.all_structs,
+            acc.all_interfaces,
+            acc.all_functions,
+            acc.all_enums,
+            acc.all_extends,
+            acc.all_globals,
+        );
+        for s in &combined.structs {
+            let Some(path) = s.file_path.as_deref() else {
+                continue;
+            };
+            if dream_stdlib::is_std_source(path) {
+                continue;
+            }
+            if let Some(source) = acc.file_contents.get(path) {
+                attributes.extend(declared_attrs::collect(
+                    source,
+                    std::slice::from_ref(s),
+                    &combined.enums,
+                    None,
+                ));
+            }
+        }
+        // Pass 1.5: Declare all imported and prelude symbols
+        builder.is_main = false;
+        builder.walk_program_for_imports(&combined);
+        builder.is_main = true;
+
+        // Pass 2: Walk function/method bodies
+        builder.walk_program(program);
         Index {
             decls: builder.decls,
             refs: builder.refs,

@@ -1,5 +1,8 @@
 use crate::token::token_kind::TokenKind;
 
+/// Binding power of prefix operators and of a cast's operand: above every binary operator.
+pub const UNARY_PRECEDENCE: i32 = 100;
+
 impl TokenKind {
     pub fn get_binary_precedence(&self) -> i32 {
         match self {
@@ -44,12 +47,12 @@ impl TokenKind {
     /// refuses unary when `unary_precedence < parent_precedence` (e.g. after `>` at 25).
     pub fn get_unary_precedence(&self) -> i32 {
         match self {
-            TokenKind::PlusToken => 100,
-            TokenKind::MinusToken => 100,
-            TokenKind::BangToken => 100,
-            TokenKind::TildeToken => 100,
-            TokenKind::PlusPlusToken => 100,
-            TokenKind::MinusMinusToken => 100,
+            TokenKind::PlusToken => UNARY_PRECEDENCE,
+            TokenKind::MinusToken => UNARY_PRECEDENCE,
+            TokenKind::BangToken => UNARY_PRECEDENCE,
+            TokenKind::TildeToken => UNARY_PRECEDENCE,
+            TokenKind::PlusPlusToken => UNARY_PRECEDENCE,
+            TokenKind::MinusMinusToken => UNARY_PRECEDENCE,
             _ => 0,
         }
     }

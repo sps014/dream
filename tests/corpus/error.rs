@@ -37,6 +37,11 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error(
+        "escape_errors",
+        "unknown escape '\\q'; write '\\\\' for a literal backslash\nescape_errors.dream:5:20\na '\\u' escape is written '\\u{XXXX}' with 1 to 6 hex digits\n'\\u{D800}' is not a Unicode scalar value\nunknown escape '\\x'\n'\\u{110000}' is not a Unicode scalar value\nescape_errors.dream:9:13",
+        true,
+    ),
+    Case::error(
         "field_default_errors",
         "constructor of 'Partial' must assign field 'who' on every path: 'Speaker' has no default value\n'NoCtor' needs a constructor that assigns field 'at': 'Point' has no default value",
         true,
@@ -103,7 +108,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "generic_constraint_errors",
-        "Type 'List<Widget>' has no method 'sort'\nfunction Map<int, int>.get expects parameter 1 to be int, got ReadOnlySpan<char>",
+        "'List<Widget>.sort' requires 'Widget' to satisfy 'Comparable<Widget>'\nfunction Map<int, int>.get expects parameter 1 to be int, got ReadOnlySpan<char>",
         true,
     ),
     Case::error(
@@ -149,7 +154,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "layout_builtin_errors",
-        "'raw memory access' requires an unmanaged (blittable) type, but 'string' is not\nraw memory access requires a known element type\nalignof: unknown type 'MissingType'\nsizeof: unknown type 'Banana'",
+        "type 'string' does not satisfy the 'unmanaged' constraint on generic parameter 'T'\nunknown type 'MissingType'\nalignof: unknown type 'MissingType'\nsizeof: unknown type 'Banana'",
         true,
     ),
     Case::error(
@@ -169,7 +174,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "parse_errors",
-        "empty character literal\ncharacter literal may only contain one character\nunknown character escape '\\q'\nExpected expression but found ColonToken\nExpected ';' but found ','\n'static' cannot modify a top-level variable; it declares class members. Top-level variables are file-private by default — use 'internal' or 'public' to widen\n'ref' may only precede 'struct', not 'class'\n'ref' parameter 'x' cannot have a default value\nparameter 'xs' cannot be both 'ref' and variadic\n'string' is a reserved word and cannot be used as a variable name\nvariadic parameter 'n' must have an array type, e.g. '...n: T[]'\nparameter 'extra' cannot follow the variadic parameter; the variadic parameter must be last",
+        "empty character literal\ncharacter literal may only contain one character\nunknown escape '\\q'\nExpected expression but found ColonToken\nExpected ';' but found ','\n'static' cannot modify a top-level variable; it declares class members. Top-level variables are file-private by default — use 'internal' or 'public' to widen\n'ref' may only precede 'struct', not 'class'\n'ref' parameter 'x' cannot have a default value\nparameter 'xs' cannot be both 'ref' and variadic\n'string' is a reserved word and cannot be used as a variable name\nvariadic parameter 'n' must have an array type, e.g. '...n: T[]'\nparameter 'extra' cannot follow the variadic parameter; the variadic parameter must be last",
         true,
     ),
     Case::error(
@@ -189,6 +194,11 @@ pub(super) const CASES: &[Case] = &[
         true,
     ),
     Case::error(
+        "static_field_errors",
+        "a field cannot be 'static'; declare shared state as a module-level `let`, or expose it through a static property\nstatic_field_errors.dream:5:12",
+        true,
+    ),
+    Case::error(
         "switch_arm_errors",
         "Unreachable switch arm: a previous arm already matches everything\nvariable undeclared does not exist\nfunction 'f': not all code paths return a value",
         true,
@@ -200,12 +210,37 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "task_capture_errors",
-        "cannot capture 'wrap' of type 'Wrap' in a `Task.spawn` body: 'Wrap' is not shared — mark the class 'shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)\ncannot capture 'wrap' of type 'Wrap' in a `TaskScope_string.spawn_parallel` body: 'Wrap' is not shared",
+        "cannot capture 'wrap' of type 'Wrap' in a `Task.spawn` body: 'Wrap' is not shared — mark the class 'shared', capture a blittable value, string, or a struct of those, or pass a heap object by move (its binding cannot be used afterwards)\ncannot capture 'wrap' of type 'Wrap' in a `TaskScope<string>.spawn_parallel` body: 'Wrap' is not shared",
         true,
     ),
     Case::error(
         "unsafe_call_errors",
-        "call to '@unsafe' function 'Arena_constructor' is only allowed from another '@unsafe' function or method\ncall to '@unsafe' function 'Arena_alloc'\ncall to '@unsafe' function 'RawPtr_int___get_indexer'\ncall to '@unsafe' function 'RawPtr_int_cast'\ncall to '@unsafe' function 'Buffer.realloc' is only allowed from another '@unsafe' function or method\ncall to '@unsafe' function 'RawPtr_int_alloc' is only allowed from another '@unsafe' function or method",
+        "call to '@unsafe' function 'Arena.constructor' is only allowed from another '@unsafe' function or method\ncall to '@unsafe' function 'Arena.alloc'\ncall to '@unsafe' function 'RawPtr<int>.indexer'\ncall to '@unsafe' function 'RawPtr<int>.cast'\ncall to '@unsafe' function 'Buffer.realloc' is only allowed from another '@unsafe' function or method\ncall to '@unsafe' function 'RawPtr<int>.alloc' is only allowed from another '@unsafe' function or method",
+        true,
+    ),
+    Case::error(
+        "diagnostic_hints_errors",
+        "function 'greet' expects parameter 2 to be int, got string\ndiagnostic_hints_errors.dream:17:16\nType 'string' has no member 'lenght'\nsimilar member exists: 'string.length'\na variable with a similar name exists: 'value'\na function with a similar name exists: 'greet'\nadd 'import system;'\n'List<Key>.sort' requires 'Key' to satisfy 'Comparable<Key>'\nlambda parameter type mismatch: expected Key, got string\ndoes not satisfy the constraint 'Comparable<Key>'",
+        true,
+    ),
+    Case::error(
+        "float_literal_range_errors",
+        "literal 1e400 does not fit in double\nfloat_literal_range_errors.dream:3:13\nliteral 3.4e39 does not fit in float\nliteral 1e-400 is too small for double and would round to 0\nliteral -1e309 does not fit in double",
+        true,
+    ),
+    Case::error(
+        "generic_call_reading_errors",
+        "'a' is a variable, but 'a<…>(…)' is read as a generic call\ngeneric_call_reading_errors.dream:14:7",
+        true,
+    ),
+    Case::error(
+        "labeled_break_return_errors",
+        "function 'f': not all code paths return a value\nlabeled_break_return_errors.dream:4:5",
+        true,
+    ),
+    Case::error(
+        "value_cycle_generic_errors",
+        "value struct 'Wrap<Shape>' cannot contain itself by value\nvalue_cycle_generic_errors.dream:2:8",
         true,
     ),
     Case::error(
@@ -232,6 +267,31 @@ pub(super) const CASES: &[Case] = &[
     Case::error(
         "yield_invalid",
         "'yield' requires an Iterable<T> or async AsyncIterable<T> function\nfunction YieldChannel<int>.emit expects parameter 1 to be int, got string\nuse 'yield break' to end an iterator\niterator parameters cannot be ref or borrow\n'await for' requires an async function\nan async iterator body must contain 'yield' or 'yield break'\n'yield' cannot suspend inside 'lock' or 'defer'\n'await for' requires AsyncIterable<T> or AsyncIterator<T>\niterator signal intrinsics are reserved for internal stdlib state",
+        true,
+    ),
+    Case::error(
+        "enum_value_errors",
+        "enum value '1.5' must be an integer in the int range\nenum value of 'B' overflows int; give it an explicit value\nenum variant 'B' has the same value 1 as 'A'\nenum variant 'C' has the same value 1 as 'A'\nvariant 'A' carries a payload and cannot have an explicit value",
+        true,
+    ),
+    Case::error(
+        "silent_type_errors",
+        "class 'HiddenRunner' method 'run' implements interface 'Runner' and cannot be private\nthe get and set indexers of 'Lookup' disagree: get is [int]: string, set is [string] = int\ndefault value of parameter 'flag' has type 'int', but the parameter is 'bool'\ndefault value of parameter 'amount' has type 'string', but the parameter is 'int'\ncannot pass const 'fixed' by 'ref'\nCannot assign to 'fixed' because it is a const binding\n'count' is private to 'Counter'\n'ref' needs a variable, field or element, but 'total' is a temporary value\n'is string' can never be true for a value of type int\n'is Point' can never be true for a value of type Counter\nan integer range cannot match a 'float' subject; write the bounds as 'float' literals\n'this' cannot be assigned to\n'ref' arguments 1 and 2 may name the same storage; a field or element passed by 'ref' is copied back after the call, so one of the writes would be lost\nsilent_type_errors.dream:70:41\nsilent_type_errors.dream:71:29",
+        true,
+    ),
+    Case::error(
+        "type_context_errors",
+        "cannot convert from string to int\ntype_context_errors.dream:16:12\noperator '+' cannot combine bool and int\noperator '*' cannot combine string and int\noperator '<' cannot combine string and int\noperator '&&' cannot combine int and bool\n! operator requires bool, got int\nwhile condition must be bool, got int\nTernary condition must be of type bool, got int\nfor condition must be bool, got int\ntype_context_errors.dream:38:5\ncannot convert from float to int\ntype_context_errors.dream:42:16\ntype_context_errors.dream:43:21\nfunction 'takes_int' expects parameter 1 to be int, got string\nstrings are immutable; build a new string with replace, substring, or StringBuilder\ntype_context_errors.dream:46:5",
+        true,
+    ),
+    Case::error(
+        "type_safety_errors",
+        "Array index must be of type int, got string\nArray index must be of type int, got float\nFunction does not exist (missing_value)\na generic lambda that captures variables needs a known function type here\ncannot convert from Level to int\ncannot convert from int to Level\nfunction 'takes_level' expects parameter 1 to be Level, got int\nCannot cast from int to Holder\nCannot cast from int to int[]\noperator '+' cannot be applied to Level\nclass 'PlainAdjuster' method 'adjust' does not match the signature required by interface 'Adjuster'\nclass 'PlainAdjuster' method 'total' does not match the signature required by interface 'Adjuster'\nTop-level variable 'NARROWED' is declared 'int' but initialized with 'float'\nliteral -1 does not fit in byte\nunary '-' cannot be applied to unsigned type uint",
+        true,
+    ),
+    Case::error(
+        "value_diagnostic_errors",
+        "value_diagnostic_errors.dream:24:24\nvalue_diagnostic_errors.dream:25:25\nvalue_diagnostic_errors.dream:26:18\nvalue_diagnostic_errors.dream:27:20\nvalue_diagnostic_errors.dream:28:17\nvalue_diagnostic_errors.dream:29:16\nvalue_diagnostic_errors.dream:30:20\nthis expression returns 'void' and has no value to use\nif condition must be bool, got void\nvalue_diagnostic_errors.dream:36:12\ncannot convert from void to int\ncannot destructure non-tuple type int\nvariable undefined_index does not exist\ntype 'Plain' does not satisfy the constraint 'Comparable<Plain>' on generic parameter 'T'\npattern 'Other.Nothing' is a variant of 'Other', not of the matched enum 'Shape'\npattern 'Nothing' is a variant of 'Other', not of the matched enum 'Shape'\nVariant 'Shape.Circle' has 1 field(s), but the pattern binds 0",
         true,
     ),
 ];

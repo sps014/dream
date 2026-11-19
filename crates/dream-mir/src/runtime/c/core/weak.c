@@ -37,7 +37,7 @@ void dream_weak_enter(void) {
 }
 void dream_weak_leave(void) {
     unsigned depth = depth_get();
-    if (depth == 0) { DREAM_PANIC_LITERAL(u"panic: weak registry lock underflow"); }
+    if (depth == 0) { DREAM_PANIC_LITERAL(u"weak registry lock underflow"); }
     depth_set(depth - 1);
     if (depth == 1) { dream_platform_current->unlock(DREAM_LOCK_WEAK); }
 }
@@ -75,7 +75,7 @@ __attribute__((noinline)) int dream_rc_claim_observed(dream_ptr ptr) {
 static dream_weak_node *weak_take_locked(void) {
     if (!free_nodes) {
         dream_weak_node *chunk = dream_raw_calloc(1024, sizeof(*chunk));
-        if (!chunk) { DREAM_PANIC_LITERAL(u"panic: out of memory registering weak references"); }
+        if (!chunk) { DREAM_PANIC_LITERAL(u"out of memory registering weak references"); }
         for (size_t i = 1024; i-- > 0;) {
             chunk[i].next = free_nodes;
             free_nodes = &chunk[i];
@@ -120,7 +120,7 @@ void dream_weak_register(dream_ptr target, dream_ptr slot, int32_t kind, int32_t
     }
     int acquired = weak_lock();
     if (__atomic_load_n(dream_rc_word(target), __ATOMIC_RELAXED) == 0) {
-        DREAM_PANIC_LITERAL(u"panic: weak registration of a dying object");
+        DREAM_PANIC_LITERAL(u"weak registration of a dying object");
     }
     /* Observation needs an atomic target count, not publication of its owned graph.
      * A successful load publishes that graph before exposing its temporary owner. */
@@ -246,7 +246,7 @@ static dream_ptr observer_load(uintptr_t slot, int unowned) {
     dream_ptr box = (dream_ptr)slot;
     dream_ptr v;
     if (!box) {
-        if (unowned) { DREAM_PANIC_LITERAL(u"panic: read of unset 'unowned' field (referent not assigned, or already deallocated)"); }
+        if (unowned) { DREAM_PANIC_LITERAL(u"read of unset 'unowned' field (referent not assigned, or already deallocated)"); }
         return 0;
     }
     int acquired = weak_lock();
@@ -254,7 +254,7 @@ static dream_ptr observer_load(uintptr_t slot, int unowned) {
     v = data->value;
     if (!v || (unowned && v == (dream_ptr)(intptr_t)DREAM_UNOWNED_POISON)) {
         weak_unlock(acquired);
-        if (unowned) { DREAM_PANIC_LITERAL(u"panic: 'unowned' reference used after its target was destroyed"); }
+        if (unowned) { DREAM_PANIC_LITERAL(u"'unowned' reference used after its target was destroyed"); }
         return 0;
     }
     if (data->immortal) {
@@ -282,7 +282,7 @@ static dream_ptr observer_load(uintptr_t slot, int unowned) {
         }
     }
     weak_unlock(acquired);
-    if (unowned) { DREAM_PANIC_LITERAL(u"panic: 'unowned' reference used after its target was destroyed"); }
+    if (unowned) { DREAM_PANIC_LITERAL(u"'unowned' reference used after its target was destroyed"); }
     return 0;
 }
 
@@ -363,8 +363,8 @@ dream_ptr dream_weak_load_field(dream_ptr slot, int32_t kind, int32_t none_tag,
         memcpy((char *)dream_p(result) + payload_offset, &zero, sizeof(zero));
     }
     dream_weak_leave();
-    if (unset) { DREAM_PANIC_LITERAL(u"panic: read of unset 'unowned' field (referent not assigned, or already deallocated)"); }
-    if (dead) { DREAM_PANIC_LITERAL(u"panic: 'unowned' reference used after its target was destroyed"); }
+    if (unset) { DREAM_PANIC_LITERAL(u"read of unset 'unowned' field (referent not assigned, or already deallocated)"); }
+    if (dead) { DREAM_PANIC_LITERAL(u"'unowned' reference used after its target was destroyed"); }
     if (target) { dream_publish(target); }
     return kind == 0 ? result : target;
 }

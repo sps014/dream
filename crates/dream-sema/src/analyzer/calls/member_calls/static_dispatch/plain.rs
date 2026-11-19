@@ -56,13 +56,11 @@ impl<'a> Analyzer<'a> {
             &named_expressions
         } else if has_named_arg {
             let Some(info) = method_info.as_ref() else {
-                return Err(report(
+                return Err(report_missing_member(
                     diagnostics,
-                    format!(
-                        "Type '{}' has no static method '{}'",
-                        type_name, method.text
-                    ),
+                    (type_name, "static method", &method.text),
                     Some(method.position),
+                    Vec::new(),
                 ));
             };
             normalized_params = self.normalize_named_arguments(
@@ -106,8 +104,10 @@ impl<'a> Analyzer<'a> {
             args
         } else {
             let call_target = format!("{}.{}", type_name, method.text);
-            let saved_call_target = self.current_call_target_name.take();
-            self.current_call_target_name = Some(call_target);
+            let runs_on_worker = self.candidates_run_on_worker(
+                &self.function_table.method_candidates(owner, &method.text),
+            );
+            let saved_call_target = self.enter_call_target(call_target, runs_on_worker);
 
             let result = self.analyze_call_arguments_expecting_ref(
                 params,
@@ -117,7 +117,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
 
-            self.current_call_target_name = saved_call_target;
+            self.current_call_target = saved_call_target;
 
             result?
         };
@@ -135,14 +135,11 @@ impl<'a> Analyzer<'a> {
             match self.method_info(owner, &method.text) {
                 Ok(s) => s.clone(),
                 Err(_) => {
-                    return Err(report_with_code(
+                    return Err(report_missing_member(
                         diagnostics,
-                        format!(
-                            "Type '{}' has no static method '{}'",
-                            type_name, method.text
-                        ),
+                        (type_name, "static method", &method.text),
                         Some(method.position),
-                        "missing-member",
+                        Vec::new(),
                     ));
                 }
             }
@@ -182,7 +179,12 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_unsafe_call(
+            &store_sig,
+            || format!("{}.{}", type_name, method.text),
+            method.position,
+            diagnostics,
+        );
         self.check_c_fun_args(store_sig.identity.0, params, 0, symbol_table, diagnostics);
 
         self.validate_ref_arguments(
@@ -248,6 +250,7 @@ impl<'a> Analyzer<'a> {
             &expected_params,
             &arg_types,
             method.position,
+            params,
             diagnostics,
         );
 

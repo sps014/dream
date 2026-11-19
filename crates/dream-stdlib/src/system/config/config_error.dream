@@ -26,4 +26,9 @@ public class ConfigError: Error {
     public fun message(): string {
         return this.source + ": " + this.key + ": " + this.detail;
     }
+
+    /// Returns `message()`, so printing the error shows its explanation.
+    public override fun to_string(): string {
+        return this.message();
+    }
 }

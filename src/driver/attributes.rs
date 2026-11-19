@@ -14,9 +14,6 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::Error;
 
-/// Std package whose `GenAttribute` model the synthesized decoders read.
-pub const CODEGEN_PACKAGE: &str = "system.codegen";
-
 /// Virtual file tag of the synthesized attribute decoders.
 const DECODERS_PREFIX: &str = "<attribute-decoders/";
 
@@ -72,7 +69,7 @@ pub fn prepare<'a>(
     }
     let codegen_loaded = dream_stdlib::resolve_packages_to_load(&acc.requested_std_packages)
         .iter()
-        .any(|p| p.name == CODEGEN_PACKAGE);
+        .any(|p| p.name == dream_abi::core_items::CODEGEN_PACKAGE);
     if codegen_loaded && attributes.iter().next().is_some() {
         acc.all_extends.retain(|e| {
             !e.file_path
@@ -256,9 +253,8 @@ pub(crate) fn parse_synthesized_extends<'a>(
     let mut local = DiagnosticBag::new(Some(synthetic_path.to_string()));
     let lexer = Lexer::new(source);
     let mut parser = Parser::new(lexer, arena, &mut local);
-    let parsed = parser.parse();
+    let ast = parser.parse();
     diagnostics.extend(&local);
-    let ast = parsed?;
     let program = ast.get_root();
     let file_tag: std::rc::Rc<str> = std::rc::Rc::from(synthetic_path);
     Ok(program

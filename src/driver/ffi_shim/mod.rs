@@ -201,9 +201,8 @@ fn parse_into<'a>(
     let mut file_diagnostics = DiagnosticBag::new(Some(format!("{}#cpp", fd.file)));
     let lexer = Lexer::new(source);
     let mut parser = Parser::new(lexer, arena, &mut file_diagnostics).with_cfg(acc.cfg);
-    let parsed = parser.parse();
+    let ast = parser.parse();
     diagnostics.extend(&file_diagnostics);
-    let ast = parsed?;
     let (first_struct, first_function) = (acc.all_structs.len(), acc.all_functions.len());
     collect_declarations(
         ast.get_root(),

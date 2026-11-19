@@ -168,7 +168,8 @@ fn blob(
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Bundle, BundleError> {
-    if unsafe { dream_gpu_bundle_abi_version() } != dream_host_abi::gpu_bindings::GPU_BUNDLE_ABI_VERSION
+    if unsafe { dream_gpu_bundle_abi_version() }
+        != dream_host_abi::gpu_bindings::GPU_BUNDLE_ABI_VERSION
     {
         return err("GPU bundle capability ABI version mismatch");
     }

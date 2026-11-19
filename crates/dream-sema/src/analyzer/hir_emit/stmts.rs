@@ -143,7 +143,7 @@ impl<'a> Analyzer<'a> {
         let value = self.coerce_to(value, ty_id);
         let local = LocalId(self.hir.next_local);
         self.hir.next_local += 1;
-        self.hir.locals.insert(name.to_string(), (local, ty_id));
+        self.bind_local_name(name, local, ty_id);
         self.hir.local_decls.push(HLocal {
             id: local,
             name: name.to_string(),
@@ -172,7 +172,7 @@ impl<'a> Analyzer<'a> {
         let elem_tid = self.type_ctx.lower(ty);
         let local = LocalId(self.hir.next_local);
         self.hir.next_local += 1;
-        self.hir.locals.insert(name.to_string(), (local, cell_tid));
+        self.bind_local_name(name, local, cell_tid);
         self.hir.local_decls.push(HLocal {
             id: local,
             name: name.to_string(),
@@ -184,6 +184,13 @@ impl<'a> Analyzer<'a> {
             ty: cell_tid,
             value: cell,
         });
+    }
+
+    /// Coerces the pending expression to `target`, if one was recorded.
+    pub(in crate::analyzer) fn hir_coerce_last(&mut self, target: TypeId) {
+        if let Some(value) = self.hir.last.take() {
+            self.hir.last = Some(self.coerce_to(value, target));
+        }
     }
 
     /// Inserts an implicit boxing cast when a primitive `value` is stored into an `object`-typed
@@ -444,9 +451,8 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Appends a desugared `for (init; cond; step) { body }`. `init`/`step` are statement lists
-    /// (surface form contributes one real statement each, plus optional [`HStmt::SourceLine`] /
-    /// [`HStmt::DebugLine`] markers from `hir_mark_line`). `cond` must be present.
+    /// Appends a desugared `for (init; cond; step) { body }`. `init`/`step` hold zero or more
+    /// statements; a header without a condition arrives here as `true`.
     pub(in crate::analyzer) fn hir_for(
         &mut self,
         init: Vec<HStmt>,
@@ -458,21 +464,15 @@ impl<'a> Analyzer<'a> {
         if !self.active() {
             return;
         }
-        let real = |stmts: &[HStmt]| {
-            stmts
-                .iter()
-                .filter(|s| !matches!(s, HStmt::SourceLine(_) | HStmt::DebugLine(_)))
-                .count()
-        };
-        match (real(&init), real(&step), cond) {
-            (1, 1, Some(cond)) => self.push_stmt(HStmt::For {
+        match cond {
+            Some(cond) => self.push_stmt(HStmt::For {
                 init,
                 cond,
                 step,
                 body,
                 label,
             }),
-            _ => self.hir.ok = false,
+            None => self.hir.ok = false,
         }
     }
 

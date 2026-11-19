@@ -111,8 +111,10 @@ impl<'a> Analyzer<'a> {
         let mut params_types = vec![];
         let mut arg_hirs = vec![];
         let call_target = format!("{}.{}", type_name, method.text);
-        let saved_call_target = self.current_call_target_name.take();
-        self.current_call_target_name = Some(call_target);
+        let saved_call_target = self.enter_call_target(
+            call_target,
+            dream_abi::attributes::is_worker_body(&template.attributes),
+        );
 
         let expected_params: Option<Vec<Type>> = if generic_args
             .as_ref()
@@ -205,7 +207,7 @@ impl<'a> Analyzer<'a> {
         )?;
         params_types.extend(arg_types);
         arg_hirs.extend(analyzed_hirs);
-        self.current_call_target_name = saved_call_target;
+        self.current_call_target = saved_call_target;
         let expected_is_ref: Vec<bool> = template.parameters.iter().map(|p| p.is_ref).collect();
         self.validate_ref_arguments(
             &format!("method '{}'", method.text),
@@ -236,8 +238,8 @@ impl<'a> Analyzer<'a> {
             }
             return Ok(Type::Unknown);
         }
-        // Generic static calls / intrinsics need an `InstanceId` (a later slice); stay out of
-        // HIR coverage regardless of which sub-branch handles the call.
+        // Generic static calls / intrinsics carry no `InstanceId`, so they stay out of HIR coverage
+        // regardless of which sub-branch handles the call.
         self.hir_none();
         if matches!(
             intrinsics::IntrinsicOp::from_attributes(&template.attributes),
@@ -380,12 +382,14 @@ impl<'a> Analyzer<'a> {
         if !self.member_requirements_met(template, &bindings, method.position, diagnostics) {
             return Ok(Type::Unknown);
         }
-        self.verify_generic_constraints(
+        if !self.verify_generic_constraints(
             &template.generic_constraints,
             &bindings,
             &method.position,
             diagnostics,
-        );
+        ) {
+            return Ok(Type::Unknown);
+        }
         self.reject_ref_struct_bindings(&bindings, &method.position, diagnostics);
         let instance = self.register_generic_function_instance(template, &bindings);
 
@@ -436,6 +440,7 @@ impl<'a> Analyzer<'a> {
             &store_sig.parameters,
             &params_types,
             method.position,
+            params,
             diagnostics,
         );
 

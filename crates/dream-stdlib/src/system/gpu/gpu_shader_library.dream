@@ -36,7 +36,7 @@ internal class GpuShaderLibrary {
         let embedded = 0;
         for (let library in gpu_shader_libraries) {
             for (let backend in library.backends) {
-                let bit: int = backend;
+                let bit: int = (int)backend;
                 if library.embedded {
                     embedded = embedded | (1 << bit);
                 } else {

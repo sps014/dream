@@ -92,7 +92,7 @@ mod tests {
                 format!("fun choose(input: int): void {{ switch (input) {{ {labels} }} }}");
             let mut diagnostics = DiagnosticBag::new(None);
             let mut parser = Parser::new(Lexer::new(source.clone()), &arena, &mut diagnostics);
-            let program = parser.parse().unwrap().get_root().clone();
+            let program = parser.parse().get_root().clone();
             assert!(!diagnostics.has_errors());
             let graph = crate::module_graph::ModuleGraph::new(
                 vec![("switch.dream".into(), source, program)],
@@ -121,7 +121,7 @@ mod tests {
         let source = "interface View<T> { fun read(): T; } class Box<T> : View<T> { public value: T; public constructor(value: T) { this.value = value; } public fun read(): T { return this.value; } } fun pick(x: int): int { return x; }\nfun pick(x: string): string { return x; }\nfun main(): void { let inferred = 1 + 2; let selected = pick(inferred); let box = Box<int>(5); let read = box.read(); let poison = not_generated_yet(); }";
         let mut diagnostics = DiagnosticBag::new(Some("facts.dream".into()));
         let mut parser = Parser::new(Lexer::new(source.into()), &arena, &mut diagnostics);
-        let mut program = parser.parse().unwrap().get_root().clone();
+        let mut program = parser.parse().get_root().clone();
         for f in &mut program.functions {
             f.file_path = Some(std::rc::Rc::from("facts.dream"));
         }

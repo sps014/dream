@@ -7,7 +7,7 @@
 use super::*;
 use crate::module_graph::ProgramView;
 use dream_diagnostics::DiagnosticBag;
-use dream_syntax::nodes::{FunctionNode, Type};
+use dream_syntax::nodes::{FunctionNode, Type, Visibility};
 use indexmap::IndexMap as HashMap;
 
 impl<'a> Analyzer<'a> {
@@ -427,7 +427,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// True when `iface_method` and `class_method` have matching signatures (same parameter types
-    /// in order, matching return types, and the same async-ness). Return types may be an exact
+    /// and `ref`/variadic markers in order, matching return types, and the same async-ness). Return types may be an exact
     /// match or a class return that is assignable to the interface return (e.g. a concrete
     /// `ListIterator<T>` for an `Iterator<T>` interface requirement). An `async` interface method
     /// must be implemented by an `async` method (and vice versa) because the two dispatch to
@@ -447,6 +447,9 @@ impl<'a> Analyzer<'a> {
         }
         let scope = self.type_ctx.scope();
         for (a, b) in iface.parameters.iter().zip(&class.parameters) {
+            if a.is_ref != b.is_ref || a.is_variadic != b.is_variadic {
+                return false;
+            }
             self.type_ctx
                 .set_scope(self.graph.module_for_file(iface.file_path.as_deref()));
             let a = self.type_ctx.lower(&a.type_);
@@ -535,6 +538,15 @@ impl<'a> Analyzer<'a> {
                     .find(|cm| accessor_member_name(cm) == im_key && !cm.is_static)
                 {
                     Some(cm) => {
+                        if cm.visibility == Visibility::Private {
+                            diagnostics.report_error(
+                                format!(
+                                    "class '{}' method '{}' implements interface '{}' and cannot be private",
+                                    class_name, im.name.text, iface_name
+                                ),
+                                Some(cm.name.position),
+                            );
+                        }
                         let matches = if bindings.is_empty() {
                             self.interface_method_matches(im, cm, bindings, diagnostics)
                         } else {

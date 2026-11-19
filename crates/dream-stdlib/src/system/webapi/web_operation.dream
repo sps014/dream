@@ -55,7 +55,7 @@ internal class WebOperation {
     internal static fun request(action: WebAction, id: int, timeout_ms: int = 0): WireWriter {
         let request = WireWriter(32);
         request.u8(1);
-        request.u8(action);
+        request.u8((int)action);
         request.i32(id);
         request.i32(timeout_ms);
         return request;

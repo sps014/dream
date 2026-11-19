@@ -52,7 +52,7 @@ tracing-subscriber = "0.3.23"
 # CLI parsing + auto-generated help for the `dream` binary (same crate `dreamer` uses).
 clap = { version = "4", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["unbounded_depth"] }
+serde_json = { version = "1", features = ["float_roundtrip", "unbounded_depth"] }
 serde_stacker = "0.1"
 # Grows the host stack for semantic analysis so a deep (but accepted) tree cannot abort the
 # compiler. The parser's nesting limit is what rejects hostile input.

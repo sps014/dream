@@ -119,30 +119,32 @@ impl DiagnosticBag {
     }
 
     /// Reports a pre-built diagnostic (builder-style: `Diagnostic::new(..).with_help(..)`).
+    /// A diagnostic identical to one already reported (same severity, message, file and span) is
+    /// dropped: analyzing a desugared copy of the same source must not repeat its errors.
     pub fn report(&mut self, diagnostic: Diagnostic) {
-        self.diagnostics.push(diagnostic);
+        let repeated = self.diagnostics.iter().any(|existing| {
+            existing.severity == diagnostic.severity
+                && existing.span == diagnostic.span
+                && existing.message == diagnostic.message
+                && existing.file_path == diagnostic.file_path
+        });
+        if !repeated {
+            self.diagnostics.push(diagnostic);
+        }
     }
 
     pub fn report_error(&mut self, message: String, span: Option<TextSpan>) {
-        self.diagnostics
-            .push(Diagnostic::new(message, span, self.file_path.clone()));
+        self.report(Diagnostic::new(message, span, self.file_path.clone()));
     }
 
     pub fn report_warning(&mut self, message: String, span: Option<TextSpan>) {
-        self.diagnostics
-            .push(Diagnostic::warning(message, span, self.file_path.clone()));
+        self.report(Diagnostic::warning(message, span, self.file_path.clone()));
     }
 
     /// Returns true if at least one error-severity diagnostic has been reported.
     /// Warnings alone do not count as errors.
     pub fn has_errors(&self) -> bool {
         self.diagnostics.iter().any(Diagnostic::is_error)
-    }
-
-    pub fn has_warnings(&self) -> bool {
-        self.diagnostics
-            .iter()
-            .any(|d| d.severity == Severity::Warning)
     }
 
     pub fn errors(&self) -> impl Iterator<Item = &Diagnostic> {

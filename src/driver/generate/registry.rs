@@ -85,14 +85,8 @@ fn scan_source(path: &str, source: &str, diagnostics: &mut DiagnosticBag) -> Par
     let mut local = DiagnosticBag::new(Some(path.to_string()));
     let lexer = dream_syntax::lexer::Lexer::new(source.to_string());
     let mut parser = dream_syntax::parser::Parser::new(lexer, &arena, &mut local);
-    let parsed = parser.parse();
+    let ast = parser.parse();
     diagnostics.extend(&local);
-    let Ok(ast) = parsed else {
-        return ParsedGeneratorFile {
-            module: String::new(),
-            decls: Vec::new(),
-        };
-    };
     let program = ast.get_root();
     dream_stdlib::attributes::resolve_source_attribute_ids(program);
     ParsedGeneratorFile {

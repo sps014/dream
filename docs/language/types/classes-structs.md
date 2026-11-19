@@ -40,7 +40,7 @@ Classes and structs group fields and methods. A class is shared on assignment, a
 | (none) | Members | Private: reachable only from the type's own methods |
 | `internal` | Members, header parameters | Reachable anywhere in the same module |
 | `public` | Members | Reachable wherever the type is reachable |
-| `static` | Fields, methods, properties | Belongs to the type rather than to an instance |
+| `static` | Methods, properties | Belongs to the type rather than to an instance. Keep shared state in a module-level `let` and expose it through a static property |
 | `weak` / `unowned` | Fields | Does not keep the target alive (see [Reference cycles](../memory/cycles.md)) |
 | `override` | `to_string`, `hash_code` | Replaces the object-protocol method; must also be `public` (see [Objects](objects.md)) |
 

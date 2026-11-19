@@ -32,7 +32,6 @@ async fun task_terminate_busy(): void {
     let f = Task.spawn(
         () => {
             while true {}
-            return 0;
         }
     );
     Promise.cancel(f);

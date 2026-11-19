@@ -34,24 +34,24 @@ public class Gamepad {
 
     /// True while `button` is held down.
     public fun is_down(button: GamepadButton): bool {
-        return (this.buttons & (1 << button)) != 0;
+        return (this.buttons & (1 << (int)button)) != 0;
     }
 
     /// True when `button` went down since the previous poll.
     public fun pressed(button: GamepadButton): bool {
-        let bit = 1 << button;
+        let bit = 1 << (int)button;
         return (this.buttons & bit) != 0 && (this.previous & bit) == 0;
     }
 
     /// True when `button` was released since the previous poll.
     public fun released(button: GamepadButton): bool {
-        let bit = 1 << button;
+        let bit = 1 << (int)button;
         return (this.buttons & bit) == 0 && (this.previous & bit) != 0;
     }
 
     /// The current value of `axis`: `-1.0` to `1.0` for sticks, `0.0` to `1.0` for triggers.
     public fun axis(axis: GamepadAxis): float {
-        let index: int = axis;
+        let index: int = (int)axis;
         if index < 0 || index >= this.axes.length {
             return 0.0f;
         }

@@ -35,3 +35,11 @@ A human-readable description that includes the platform's own message when it ga
 ```dream
 public fun message(): string
 ```
+
+## `to_string`
+
+Returns `message()`, so printing the error shows its explanation.
+
+```dream
+public override fun to_string(): string
+```

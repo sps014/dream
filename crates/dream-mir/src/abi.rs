@@ -53,16 +53,6 @@ impl FutureLayout {
     }
 }
 
-/// Address of the refcount word given a data pointer.
-pub fn rc_addr(data_ptr: u32) -> u32 {
-    data_ptr.wrapping_sub(RC_FROM_DATA)
-}
-
-/// Address of the first array element given an array data pointer (`[len][payload…]`).
-pub fn elem_base(array_ptr: u32) -> u32 {
-    array_ptr.wrapping_add(LEN_PREFIX_SIZE)
-}
-
 #[cfg(test)]
 mod abi_h_lockstep {
     use super::*;

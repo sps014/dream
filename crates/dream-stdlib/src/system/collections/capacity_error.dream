@@ -14,4 +14,9 @@ public class CapacityError: Error {
     public fun message(): string {
         return "reserve requires a nonnegative supported element count";
     }
+
+    /// Returns `message()`, so printing the error shows its explanation.
+    public override fun to_string(): string {
+        return this.message();
+    }
 }

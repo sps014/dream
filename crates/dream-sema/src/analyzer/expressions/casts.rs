@@ -14,7 +14,8 @@ use std::rc::Rc;
 
 impl<'a> Analyzer<'a> {
     /// Types a cast `expr as T`: instantiates a generic target struct if needed, then validates the
-    /// conversion (identity, numeric<->numeric, `char`<->`int`/`byte`, boxing/unboxing via `object`).
+    /// conversion (identity, numeric<->numeric, `char`<->`int`/`byte`, enum<->`int`, boxing via
+    /// `object`, interface upcasts, and runtime-checked downcasts from `object`/interfaces).
     /// Always yields the target type, reporting an error for disallowed conversions so analysis can
     /// continue.
     pub(in crate::analyzer) fn analyze_cast(
@@ -29,7 +30,7 @@ impl<'a> Analyzer<'a> {
         // integer literals inside `(double)((int)c - 48)` get retargeted incorrectly.
         let saved_expected = self.current_expected_type.take();
         let expr_type =
-            self.analyze_expression(expr, parent_function, symbol_table, diagnostics)?;
+            self.analyze_value_expression(expr, parent_function, symbol_table, diagnostics)?;
         self.current_expected_type = saved_expected;
         self.check_declared_type(
             target_type,
@@ -51,7 +52,7 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Unknown);
         }
 
-        // User-defined explicit conversion: `@cast("explicit")` (or `@cast("implicit")`, since an
+        // User-defined explicit conversion: `fun explicit()` (or `fun implicit()`, since an
         // explicit cast may always invoke an implicit one) on `expr`'s type converting to
         // `target_type`. Checked before the built-in conversion rules below so a struct's overload
         // always wins over (what would otherwise be) a "cannot cast" error.
@@ -86,28 +87,26 @@ impl<'a> Analyzer<'a> {
             )
         };
         let is_char = |p: Option<PrimTy>| p == Some(PrimTy::Char);
+        let is_enum =
+            |fx: &Self, id: TypeId| matches!(fx.type_ctx.interner.kind(id), TyKind::Enum(_));
+        let enum_int = (is_enum(self, target_id) && expr_prim == Some(PrimTy::Int))
+            || (is_enum(self, expr_id) && target_prim == Some(PrimTy::Int));
 
         if target_id == expr_id
             || (numeric(target_prim) && numeric(expr_prim))
             // `char` is a code point: allow lossless conversion to/from `int`/`byte`.
             || (is_char(target_prim) && code_unit(expr_prim))
             || (code_unit(target_prim) && is_char(expr_prim))
+            || enum_int
+            || target_type.is_object()
         {
-            Ok(target_type.clone())
-        } else if target_type.is_object() || expr_type.is_object() {
-            // Boxing (`T as object`) and unboxing (`object as T`) are always permitted;
-            // an unbox to the wrong primitive traps at runtime.
-            Ok(target_type.clone())
-        } else if expr_type.is_int()
-            && (self.struct_info(target_id).is_some() || target_type.is_array())
-        {
-            // Allow casting int to pointer types (for null pointers)
             Ok(target_type.clone())
         } else if self.is_interface_name(target_id) {
             // Cast to an interface (`(Animal)cat`). Allowed from another interface, or a class that
             // implements the interface (an upcast). Both are identity at runtime (same tagged
             // pointer); only the static type changes.
-            if self.is_interface_name(expr_id)
+            if expr_type.is_object()
+                || self.is_interface_name(expr_id)
                 || self.implements_as_interface_ref(expr_id, target_id, diagnostics)
             {
                 Ok(target_type.clone())
@@ -123,9 +122,12 @@ impl<'a> Analyzer<'a> {
                 );
                 Ok(target_type.clone())
             }
-        } else if self.is_interface_name(expr_id) {
-            // Downcast from an interface to a concrete class or another interface: permitted
-            // (identity at runtime; like unboxing `object`, a wrong downcast is the caller's risk).
+        } else if expr_type.is_object() || self.is_interface_name(expr_id) {
+            // Downcast to a concrete type: the value's runtime tag must match, else it panics.
+            // Unboxing to a numeric/bool/char primitive is already tag-checked by the cast itself.
+            if !matches!(target_prim, Some(p) if p != PrimTy::String) {
+                self.hir_wrap_downcast();
+            }
             Ok(target_type.clone())
         } else {
             diagnostics.report_error(
@@ -221,7 +223,8 @@ impl<'a> Analyzer<'a> {
             _ => return false,
         };
         let name = self.type_ctx.defs.name(def);
-        if name != "Result" && name != "Option" {
+        if name != dream_abi::core_items::RESULT_NAME && name != dream_abi::core_items::OPTION_NAME
+        {
             return false;
         }
         if t_args.len() != v_args.len() {
@@ -244,7 +247,7 @@ impl<'a> Analyzer<'a> {
                 && self.type_ctx.interner.is_reference(value))
     }
 
-    /// If `value` (of static type `from`) has a registered `@cast("implicit")` method converting
+    /// If `value` (of static type `from`) has a registered `fun implicit()` method converting
     /// `from` to `to`, rewrites the HIR into a call to it and returns `to`; otherwise returns
     /// `from`/`value` unchanged. Meant to run just before a [`Self::compare_data_type`] check at a
     /// binding site (`let x: T = expr;`), so a user-defined implicit conversion is accepted there

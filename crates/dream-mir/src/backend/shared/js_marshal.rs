@@ -13,10 +13,6 @@ pub(crate) fn emits_js_marshal(cx: &Cx<'_>) -> bool {
     cx.target.spec().capabilities.js_interop && crate::module_uses_js_bridges(cx.mir, cx.interner)
 }
 
-pub(crate) fn js_sym(wat: &str) -> String {
-    c_ident(wat.trim_start_matches('$'))
-}
-
 /// The callable symbol of the `js.<method>` host bridge.
 pub(crate) fn js_bridge(cx: &Cx<'_>, method: &str) -> String {
     let want = method_fn(js_abi::JS_TYPE, method);
@@ -34,12 +30,12 @@ pub(crate) fn cast_sym(cx: &Cx<'_>, from: TypeId, to: TypeId) -> Option<String> 
     if is_js(to) {
         return cx
             .nstruct(from)
-            .map(|l| js_sym(&js_abi::struct_to_js_sym(&l.name)));
+            .map(|l| c_ident(&js_abi::struct_to_js_sym(&l.name)));
     }
     if is_js(from) {
         return cx
             .nstruct(to)
-            .map(|l| js_sym(&js_abi::js_to_struct_sym(&l.name)));
+            .map(|l| c_ident(&js_abi::js_to_struct_sym(&l.name)));
     }
     None
 }
@@ -47,16 +43,16 @@ pub(crate) fn cast_sym(cx: &Cx<'_>, from: TypeId, to: TypeId) -> Option<String> 
 /// `(to_js, from_js)` symbols of a struct or union named `name`.
 pub(crate) fn struct_syms(name: &str) -> (String, String) {
     (
-        js_sym(&js_abi::struct_to_js_sym(name)),
-        js_sym(&js_abi::js_to_struct_sym(name)),
+        c_ident(&js_abi::struct_to_js_sym(name)),
+        c_ident(&js_abi::js_to_struct_sym(name)),
     )
 }
 
 /// `(to_js, from_js)` symbols of an array of `elem`.
 pub(crate) fn array_syms(elem: TypeId) -> (String, String) {
     (
-        js_sym(&js_abi::array_to_js_sym(elem)),
-        js_sym(&js_abi::js_to_array_sym(elem)),
+        c_ident(&js_abi::array_to_js_sym(elem)),
+        c_ident(&js_abi::js_to_array_sym(elem)),
     )
 }
 

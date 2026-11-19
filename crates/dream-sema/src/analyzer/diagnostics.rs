@@ -15,16 +15,6 @@ pub(super) fn report(
 
 /// Like [`report`], attaching follow-up `help:` lines (e.g. did-you-mean suggestions) and an
 /// optional stable machine-readable error-class code (see [`report_with_code`]).
-pub(super) fn report_with_notes(
-    diagnostics: &mut DiagnosticBag,
-    message: String,
-    span: Option<TextSpan>,
-    notes: Vec<String>,
-) -> SemanticError {
-    report_noted(diagnostics, message, span, notes, None)
-}
-
-/// The shared implementation behind [`report_with_notes`] and [`report_with_code`].
 pub(super) fn report_noted(
     diagnostics: &mut DiagnosticBag,
     message: String,
@@ -56,4 +46,34 @@ pub(super) fn report_with_code(
         Diagnostic::new(message.clone(), span, diagnostics.file_path.clone()).with_code(code);
     diagnostics.report(diag);
     SemanticError::reported(message, span)
+}
+
+/// Reports `Type '{owner}' has no {kind} '{member}'`. When an opt-in std package adds that
+/// member through an `extend` block, the help names the missing `import` instead of `similar`.
+pub(super) fn report_missing_member(
+    diagnostics: &mut DiagnosticBag,
+    (owner, kind, member): (&str, &str, &str),
+    span: Option<TextSpan>,
+    similar: Vec<String>,
+) -> SemanticError {
+    let base = owner.split('<').next().unwrap_or(owner);
+    let notes = match dream_stdlib::imports::package_extending(base, member) {
+        Some(package) => vec![format!(
+            "'{base}.{member}' comes from package '{package}'; add 'import {package};'"
+        )],
+        None => similar,
+    };
+    report_noted(
+        diagnostics,
+        format!("Type '{owner}' has no {kind} '{member}'"),
+        span,
+        notes,
+        Some("missing-member"),
+    )
+}
+
+/// The `help:` note naming the opt-in std package that declares the top-level `name`, if any.
+pub(super) fn import_note(name: &str) -> Option<String> {
+    dream_stdlib::imports::package_exporting(name)
+        .map(|package| format!("'{name}' comes from package '{package}'; add 'import {package};'"))
 }

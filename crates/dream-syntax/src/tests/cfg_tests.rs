@@ -22,7 +22,7 @@ fn parse_with(code: &str, cfg: CfgSymbols) -> Parsed {
     let mut diagnostics = DiagnosticBag::new(None);
     let mut parser =
         Parser::new(Lexer::new(code.to_string()), &arena, &mut diagnostics).with_cfg(cfg);
-    let tree = parser.parse().ok();
+    let tree = Some(parser.parse());
     let root = tree.as_ref().map(|t| t.get_root());
     let parsed = Parsed {
         functions: root.map_or(vec![], |r| {

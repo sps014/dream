@@ -124,6 +124,7 @@ impl<'a> Analyzer<'a> {
                 &expected_strs,
                 &params_types,
                 span.unwrap_or_else(empty_span),
+                params,
                 diagnostics,
             );
             match callee_hir {

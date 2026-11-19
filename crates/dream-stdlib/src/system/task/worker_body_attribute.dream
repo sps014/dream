@@ -1,0 +1,6 @@
+module system.task;
+
+/// Marks a method whose function arguments run on another worker thread, so the compiler
+/// requires their captures to be `shared` or moved.
+@attribute(AttributeTarget.Method, AttributeTarget.StaticMethod)
+internal struct WorkerBodyAttribute {}

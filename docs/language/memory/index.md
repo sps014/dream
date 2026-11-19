@@ -89,3 +89,5 @@ DREAM_STACK_SIZE=32M dream run path/to/file.dream
 ```
 
 `dream run` and `dream --wasm` use this value. Browser and Node use the engine's own stack.
+
+Running out of stack ends the program with `panic: stack overflow` on stderr, after everything already printed has been flushed.

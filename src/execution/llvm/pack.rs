@@ -76,7 +76,9 @@ fn remove_unread_signatures(out: &Path) -> Result<(), String> {
     {
         for need in RuntimeNeed::all_sets() {
             for flavor in FLAVORS {
-                let sigs = out.join(rt_rel_dir(flavor, opt, need)).join("dream_rt.sigs");
+                let sigs = out
+                    .join(rt_rel_dir(flavor, opt, need))
+                    .join("dream_rt.sigs");
                 std::fs::remove_file(&sigs).map_err(|e| format!("{}: {e}", sigs.display()))?;
             }
         }

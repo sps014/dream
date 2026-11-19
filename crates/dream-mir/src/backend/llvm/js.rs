@@ -53,10 +53,9 @@ impl<'l, 'a> Fx<'l, 'a> {
                     .w
                     .gep_const(&buf, off + js_abi::SLOT_PAYLOAD_OFFSET as i64);
                 let t = match store {
-                    "i64.store" => Ty::I64,
-                    "f64.store" => Ty::F64,
-                    "f32.store" => Ty::F32,
-                    _ => Ty::I32,
+                    js_abi::SlotPayload::I64 => Ty::I64,
+                    js_abi::SlotPayload::F64 => Ty::F64,
+                    js_abi::SlotPayload::I32 => Ty::I32,
                 };
                 self.store_ty(&t, &at, &payload, 8);
             }

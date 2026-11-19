@@ -86,7 +86,16 @@ dream_ptr dream_bool_to_string(int32_t v) {
 }
 
 dream_ptr dream_char_to_string(int32_t v) {
-    dream_ptr p = dream_string_alloc(1);
-    ((uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET))[0] = (uint16_t)v;
+    uint32_t cp = (uint32_t)v;
+    if (cp < 0x10000u) {
+        dream_ptr p = dream_string_alloc(1);
+        ((uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET))[0] = (uint16_t)cp;
+        return p;
+    }
+    cp -= 0x10000u;
+    dream_ptr p = dream_string_alloc(2);
+    uint16_t *units = (uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET);
+    units[0] = (uint16_t)(0xD800u + ((cp >> 10) & 0x3FFu));
+    units[1] = (uint16_t)(0xDC00u + (cp & 0x3FFu));
     return p;
 }

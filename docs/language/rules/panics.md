@@ -37,7 +37,7 @@ You can also panic explicitly:
 System.panic("unreachable: config was never validated");
 ```
 
-`System.panic(message: string): void` prints `message` and halts, exactly like an automatic check. Because it returns `void`, it can only be used in statement position — not as part of a larger expression.
+`System.panic(message: string): void` prints `panic: ` and `message`, then halts, exactly like an automatic check. Because it returns `void`, it can only be used in statement position — not as part of a larger expression.
 
 ## What a panic looks like
 
@@ -48,7 +48,7 @@ panic: index out of bounds
   at /home/me/app/src/main.dream:12
 ```
 
-`System.panic(message)` prints exactly the `message` you pass, followed by the same location line.
+`System.panic(message)` prints `panic: ` and the `message` you pass, followed by the same location line.
 
 - The location is the file and line of the statement.
 - A panic inside the standard library or a package points at your call: `xs[10]`, `Option.unwrap()` on `None`, and a package bug in a direct call.
@@ -71,7 +71,7 @@ static void on_panic(const char *message, const char *location) {
 void install(void) { dream_set_panic_hook(on_panic); }
 ```
 
-The hook runs on the panicking thread instead of the default message. `message` is UTF-8. `location` is `file:line`, or `NULL` when there is no source line. The process still stops after the hook returns. A panic inside the hook uses the default message.
+The hook runs on the panicking thread instead of the default message. `message` is UTF-8 and has no `panic: ` prefix. `location` is `file:line`, or `NULL` when there is no source line. The process still stops after the hook returns. A panic inside the hook uses the default message.
 
 ## Why panics, not undefined behavior
 

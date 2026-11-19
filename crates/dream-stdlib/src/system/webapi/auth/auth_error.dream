@@ -21,4 +21,9 @@ public class AuthError: Error {
     public fun message(): string {
         return this._message;
     }
+
+    /// Returns `message()`, so printing the error shows its explanation.
+    public override fun to_string(): string {
+        return this.message();
+    }
 }

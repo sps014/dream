@@ -162,7 +162,7 @@ class c17e_Money: Comparable<c17e_Money> {
         this.cents = cents;
     }
 
-    fun compare(other: c17e_Money): int {
+    public fun compare(other: c17e_Money): int {
         return this.cents - other.cents;
     }
 

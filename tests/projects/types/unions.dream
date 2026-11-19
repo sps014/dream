@@ -196,3 +196,34 @@ fun union_stack_multi_ref(): void {
     Assert.eq(c27e_describe(s), "ok:0");
     Assert.eq(c27e_describe(f), "fail:1:disk full");
 }
+
+enum rge_Tree<T> {
+    Leaf,
+    Node(T, rge_Tree<T>, rge_Tree<T>),
+}
+
+fun rge_count<T>(tree: rge_Tree<T>): int {
+    return switch (tree) {
+        rge_Tree.Leaf => 0,
+        rge_Tree.Node(_, left, right) => 1 + rge_count(left) + rge_count(right),
+    };
+}
+
+@test
+@timeout(180000)
+fun recursive_generic_enum(): void {
+    let tree: rge_Tree<string> = rge_Tree.Node(
+        "root",
+        rge_Tree.Node("left", rge_Tree.Leaf, rge_Tree.Leaf),
+        rge_Tree.Leaf,
+    );
+    Assert.eq(rge_count(tree), 2);
+}
+
+@test
+fun option_text_matches_println(): void {
+    let none: Option<string> = Option.None;
+    let some: Option<int> = Option.Some(3);
+    Assert.eq($"{none}|{some}", "None|Some(3)");
+    Assert.eq("x" + none.to_string(), "xNone");
+}

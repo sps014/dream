@@ -70,11 +70,16 @@ extend float: Comparable<float> {
         return sb.build();
     }
 
-    /// Parses a decimal float from `text`.
+    /// Parses the whole of `text` as a decimal float, accepting the same spellings as
+    /// `double.parse` and rounding to the nearest float. Returns `ParseError` for the same
+    /// malformed input and for a finite value too large for a float.
     public static fun parse(borrow text: string): Result<float, ParseError> {
-        return switch (double.parse(text)) {
-            Ok(d) => Result.Ok((float)d),
-            Err(e) => Result.Err(e),
-        };
+        let d = double.parse(text)?;
+        let magnitude = d < 0.0d ? -d : d;
+        // Halfway between the largest float and the next power of two rounds to infinity.
+        if (magnitude >= 3.4028235677973366e38d) && (magnitude <= 1.7976931348623157e308d) {
+            return Result.Err(ParseError.invalid("cannot parse float: value out of range"));
+        }
+        return Result.Ok((float)d);
     }
 }

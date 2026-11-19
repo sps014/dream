@@ -119,3 +119,21 @@ fn read_bodies(path: &std::path::Path) -> Option<TypedBodies> {
         .ok()
         .map(|bodies| bodies.into_iter().collect())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn cached_float_literals_keep_their_exact_bits() {
+        for value in [
+            f64::from_bits(0x3E70_0000_0000_0000),
+            0.1,
+            f64::MIN_POSITIVE,
+            5e-324,
+            f64::MAX,
+        ] {
+            let bytes = serde_json::to_vec(&value).unwrap();
+            let back: f64 = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(back.to_bits(), value.to_bits(), "{value:e}");
+        }
+    }
+}

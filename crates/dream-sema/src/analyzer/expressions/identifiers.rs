@@ -110,11 +110,22 @@ impl<'a> Analyzer<'a> {
                 }
                 // Unresolved name: report and short-circuit. Statement-level callers recover
                 // (poisoning the binding with `Type::Unknown`) so sibling errors still surface.
-                return Err(report_with_code(
+                let notes = match import_note(&id.text) {
+                    Some(note) => vec![note],
+                    None => {
+                        let visible = symbol_table.borrow().visible_names();
+                        similar_names(&id.text, visible.iter().map(String::as_str))
+                            .into_iter()
+                            .map(|name| format!("a variable with a similar name exists: '{name}'"))
+                            .collect()
+                    }
+                };
+                return Err(report_noted(
                     diagnostics,
                     e.to_string(),
                     Some(id.position),
-                    "unresolved-name",
+                    notes,
+                    Some("unresolved-name"),
                 ));
             }
         };
@@ -160,6 +171,27 @@ impl<'a> Analyzer<'a> {
         Ok(result)
     }
 
+    /// Parameter types of a function used as a value: `ref` parameters travel as `RefBox<T>`,
+    /// the same shape a lambda with `ref` parameters has.
+    pub(in crate::analyzer) fn function_value_params(
+        &mut self,
+        parameters: &[dream_types::TypeId],
+        is_ref: &[bool],
+    ) -> Vec<Type> {
+        parameters
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| {
+                let ty = self.type_ctx.syntax_type(p);
+                if is_ref.get(i).copied().unwrap_or(false) {
+                    Self::ref_box_type(&ty)
+                } else {
+                    ty
+                }
+            })
+            .collect()
+    }
+
     /// The boxed `fun(...)` value of the function registered under `key`, invoked through
     /// synchronous `call_indirect`. An `async fun`'s constructor returns an untagged `Future` frame
     /// pointer, so boxing it as `fun(...): Future<T>` matches the WASM result and lets the caller
@@ -174,11 +206,7 @@ impl<'a> Analyzer<'a> {
             self.hir_fail();
             return Type::Unknown;
         };
-        let params = sig
-            .parameters
-            .iter()
-            .map(|&p| self.type_ctx.syntax_type(p))
-            .collect();
+        let params = self.function_value_params(&sig.parameters, &sig.is_ref);
         let ret = if sig.is_async {
             Self::async_return_type(true, Some(self.type_ctx.syntax_type(sig.resolved_return)))
         } else {

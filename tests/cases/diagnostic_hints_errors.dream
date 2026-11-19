@@ -1,0 +1,28 @@
+// Diagnostics point at the offending argument, suggest close names and missing imports, and stop
+// after a failed generic constraint instead of reporting errors inside the library.
+import system.collections;
+
+class Key {
+    public v: int;
+    public constructor(v: int) {
+        this.v = v;
+    }
+}
+
+fun greet(name: string, times: int): void {
+}
+
+fun main(): void {
+    let value = 1;
+    greet("a", "b");
+    let s = "abc";
+    let n = s.lenght;
+    let v = valeu;
+    gret("a", 1);
+    System.println("x");
+    let keys = List<Key>();
+    keys.sort();
+    keys.sort_by((a: string, b: string) => 0);
+    let m = SortedMap<Key, int>();
+    m.set(Key(1), 1);
+}

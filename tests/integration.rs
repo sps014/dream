@@ -17,6 +17,7 @@ mod cross_emission;
 mod cross_link;
 mod debugger_dap;
 mod debugger_dap_generator;
+mod deep_nesting;
 mod destructor_facts;
 mod e2e_tests;
 mod generator_cache;

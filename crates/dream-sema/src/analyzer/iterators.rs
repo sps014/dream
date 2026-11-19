@@ -37,6 +37,7 @@ impl<'a> Analyzer<'a> {
                 "iterator accessors are not supported".into(),
                 Some(function.name.position),
             );
+            return None;
         }
         if !function.is_async {
             self.check_await_positions(function, diagnostics);
@@ -156,7 +157,8 @@ impl<'a> Analyzer<'a> {
             dream_types::TyKind::Interface(def, _) => {
                 matches!(
                     self.type_ctx.defs.name(*def),
-                    "AsyncIterable" | "AsyncIterator"
+                    dream_abi::core_items::ASYNC_ITERABLE_NAME
+                        | dream_abi::core_items::ASYNC_ITERATOR_NAME
                 ) && self.interface_decl(*def).is_some_and(|d| {
                     d.file_path
                         .as_deref()

@@ -45,7 +45,7 @@ impl<'a> Analyzer<'a> {
                 }
             }
             PatternNode::Literal(lit) => {
-                self.hir_set_literal(lit);
+                self.hir_set_literal(&Self::retarget_numeric_literal(lit, Some(subject_type)));
                 match self.hir_take() {
                     Some(e) => HirArmShape::Const(e),
                     None => HirArmShape::Unsupported,
@@ -293,7 +293,7 @@ impl<'a> Analyzer<'a> {
                 ))
             }
             PatternNode::Literal(lit) => {
-                self.hir_set_literal(lit);
+                self.hir_set_literal(&Self::retarget_numeric_literal(lit, Some(value_type)));
                 let le = self.hir_take()?;
                 Some((vec![self.hx_bin(BinOp::Eq, value.clone(), le)], vec![]))
             }
@@ -330,9 +330,9 @@ impl<'a> Analyzer<'a> {
                 Some((conds, binds))
             }
             PatternNode::Range(lo, hi) => {
-                self.hir_set_literal(lo);
+                self.hir_set_literal(&Self::retarget_numeric_literal(lo, Some(value_type)));
                 let lo_e = self.hir_take()?;
-                self.hir_set_literal(hi);
+                self.hir_set_literal(&Self::retarget_numeric_literal(hi, Some(value_type)));
                 let hi_e = self.hir_take()?;
                 let ge = self.hx_bin(BinOp::Ge, value.clone(), lo_e);
                 let le = self.hx_bin(BinOp::Le, value.clone(), hi_e);

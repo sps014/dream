@@ -77,6 +77,7 @@ impl<'a> Analyzer<'a> {
         let mut hir_default: Vec<HStmt> = Vec::new();
 
         for (gi, (_key, group)) in groups.iter().enumerate() {
+            let group_scope = self.hir_push_scope();
             // Type-check every arm in the group (scopes, exhaustiveness inputs).
             for arm in group {
                 if catch_all_index.is_some() {
@@ -122,6 +123,7 @@ impl<'a> Analyzer<'a> {
                 };
 
                 self.hir_open_block();
+                let arm_scope_depth = self.hir_push_scope();
                 for (name, ty, expr) in binds {
                     self.hir_declare_local(&name, &ty, Some(expr));
                 }
@@ -172,6 +174,7 @@ impl<'a> Analyzer<'a> {
                 } else {
                     run_body(self, diagnostics)?;
                 }
+                self.hir_pop_scope(arm_scope_depth);
                 let then_body = self.hir_close_block();
 
                 // `if (!done && conds…) { … }`
@@ -223,6 +226,7 @@ impl<'a> Analyzer<'a> {
                     emit_ok = false;
                 }
             }
+            self.hir_pop_scope(group_scope);
         }
 
         if is_expression {

@@ -550,8 +550,10 @@ impl<'a> Analyzer<'a> {
                         .struct_info(ty)
                         .and_then(|info| info.js_namespace.clone())
                         .unwrap_or_else(|| self.type_ctx.defs.get(*def).module_path.clone()),
-                    dream_types::TyKind::Js => "system.js".into(),
-                    dream_types::TyKind::Prim(_) => "system.primitives".into(),
+                    dream_types::TyKind::Js => dream_abi::core_items::JS_PACKAGE.into(),
+                    dream_types::TyKind::Prim(_) => {
+                        dream_abi::core_items::PRIMITIVES_PACKAGE.into()
+                    }
                     _ => return None,
                 };
                 (!namespace.is_empty()).then_some((ty, namespace))

@@ -81,7 +81,7 @@ impl<'a> Analyzer<'a> {
         let iter_hir = self.hir_take();
 
         // Interface-typed `Collection` / `IndexedCollection` / `Iterator`: drive `.iterator()` /
-        // `.next()` through interface dispatch (no `@iterator`/`@next` hooks on the interface).
+        // `.next()` through interface dispatch (no `iterator()`/`next()` hooks on the interface).
         if self.is_foreach_interface_type(&iterable_type) {
             return self.analyze_foreach_iface(
                 element,
@@ -93,9 +93,9 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        // A class or `string` receiver iterates through the enumerator protocol (`@iterator` ->
-        // `@next`), lowered directly to a `while` loop (see `analyze_foreach_iter`). `string`
-        // exposes `@iterator` via `extend string`, so `for (let c in s)` walks its chars. Arrays
+        // A class or `string` receiver iterates through the enumerator protocol (`iterator()` ->
+        // `next()`), lowered directly to a `while` loop (see `analyze_foreach_iter`). `string`
+        // exposes `iterator()` via `extend string`, so `for (let c in s)` walks its chars. Arrays
         // keep the built-in index loop below.
         if !matches!(iterable_type, Type::Array(_))
             && (Self::resolve_struct_parts(&iterable_type).is_some()
@@ -258,14 +258,19 @@ impl<'a> Analyzer<'a> {
 
         let entry_moved = self.snapshot_moved();
 
-        let mut cond_hir = None;
-        if let Some(cond_expr) = condition {
+        let cond_hir = if let Some(cond_expr) = condition {
             let cond_type = self
                 .analyze_expression(cond_expr, ctx.parent_function, &for_scope, diagnostics)
                 .unwrap_or(Type::Unknown);
-            cond_hir = self.hir_take();
+            let cond_hir = self.hir_take();
             self.check_bool_condition("for", &cond_type, cond_expr.position(), diagnostics);
-        }
+            cond_hir
+        } else {
+            Some(dream_hir::HExpr::new(
+                self.type_ctx.interner.bool(),
+                dream_hir::HExprKind::BoolLit(true),
+            ))
+        };
 
         self.hir_open_block();
         if let Some(inc_stmt) = increment {

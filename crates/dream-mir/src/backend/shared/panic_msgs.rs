@@ -1,25 +1,26 @@
-pub const INDEX_OUT_OF_BOUNDS: &str = "panic: index out of bounds";
-pub const DIVIDE_BY_ZERO: &str = "panic: attempt to divide by zero";
-pub const INVALID_CAST: &str = "panic: invalid cast";
-pub const ADD_OVERFLOW: &str = "panic: attempt to add with overflow";
-pub const SUB_OVERFLOW: &str = "panic: attempt to subtract with overflow";
-pub const MUL_OVERFLOW: &str = "panic: attempt to multiply with overflow";
-pub const NEG_OVERFLOW: &str = "panic: attempt to negate with overflow";
-pub const DIV_OVERFLOW: &str = "panic: attempt to divide with overflow";
-pub const REM_OVERFLOW: &str = "panic: attempt to calculate the remainder with overflow";
-pub const SHL_OVERFLOW: &str = "panic: attempt to shift left with overflow";
-pub const SHR_OVERFLOW: &str = "panic: attempt to shift right with overflow";
+pub const INDEX_OUT_OF_BOUNDS: &str = "index out of bounds";
+pub const DIVIDE_BY_ZERO: &str = "attempt to divide by zero";
+pub const REM_BY_ZERO: &str = "attempt to calculate the remainder with a divisor of zero";
+pub const INVALID_CAST: &str = "invalid cast";
+pub const ADD_OVERFLOW: &str = "attempt to add with overflow";
+pub const SUB_OVERFLOW: &str = "attempt to subtract with overflow";
+pub const MUL_OVERFLOW: &str = "attempt to multiply with overflow";
+pub const NEG_OVERFLOW: &str = "attempt to negate with overflow";
+pub const DIV_OVERFLOW: &str = "attempt to divide with overflow";
+pub const REM_OVERFLOW: &str = "attempt to calculate the remainder with overflow";
+pub const SHL_OVERFLOW: &str = "attempt to shift left with overflow";
+pub const SHR_OVERFLOW: &str = "attempt to shift right with overflow";
 /// Reading an `unowned` field that was never assigned.
 pub const UNOWNED_NULL_DEREF: &str =
-    "panic: read of unset 'unowned' field (referent not assigned, or already deallocated)";
+    "read of unset 'unowned' field (referent not assigned, or already deallocated)";
 /// Reading an `unowned` field after the referent was destroyed (slot poisoned on destroy).
-pub const UNOWNED_DESTROYED: &str =
-    "panic: 'unowned' reference used after its target was destroyed";
+pub const UNOWNED_DESTROYED: &str = "'unowned' reference used after its target was destroyed";
 
 /// Every panic message base, in a fixed order.
-pub const ALL: [&str; 13] = [
+pub const ALL: [&str; 14] = [
     INDEX_OUT_OF_BOUNDS,
     DIVIDE_BY_ZERO,
+    REM_BY_ZERO,
     INVALID_CAST,
     ADD_OVERFLOW,
     SUB_OVERFLOW,
@@ -36,7 +37,7 @@ pub const ALL: [&str; 13] = [
 /// A capturing closure handed to a `@c` extern's plain `fun` parameter.
 pub fn c_capturing_closure(import: &str) -> String {
     format!(
-        "panic: a capturing closure was passed to '@c' extern '{import}' as a C function pointer; \
+        "a capturing closure was passed to '@c' extern '{import}' as a C function pointer; \
          wrap it in NativeCallback"
     )
 }
@@ -44,19 +45,19 @@ pub fn c_capturing_closure(import: &str) -> String {
 /// A `fun` value whose target has no C wrapper for the parameter's signature.
 pub fn c_no_direct_target(import: &str) -> String {
     format!(
-        "panic: '@c' extern '{import}' received a function its C signature cannot call directly; \
+        "'@c' extern '{import}' received a function its C signature cannot call directly; \
          pass a named function or wrap it in NativeCallback"
     )
 }
 
 /// `NULL` where a non-`Option` `string` crosses from C.
 pub fn c_null_string(what: &str) -> String {
-    format!("panic: {what} is NULL where 'string' was declared; declare it 'Option<string>'")
+    format!("{what} is NULL where 'string' was declared; declare it 'Option<string>'")
 }
 
 /// `NULL` where a managed `string` or array result was declared.
 pub fn c_null_managed(what: &str) -> String {
-    format!("panic: {what} is NULL; C must return the Dream value it built")
+    format!("{what} is NULL; C must return the Dream value it built")
 }
 
 pub fn c_result_what(import: &str) -> String {

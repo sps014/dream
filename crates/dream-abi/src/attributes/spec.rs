@@ -101,11 +101,12 @@ pub fn named_attr_string_arg<'a>(
 /// Only compiler-owned declarations activate compiler behavior.
 pub fn compiler_attribute_module(name: &str) -> Option<&'static str> {
     Some(match name {
-        "js" | "js_type" => "system.js",
+        "js" | "js_type" => crate::core_items::JS_PACKAGE,
         "c" | "marshal" | "user_data" | "packed" | "cpp" | "cpp_name" | "owned" => "system.interop",
         "test" | "timeout" => "system.testing",
+        "worker_body" => "system.task",
         "generator" | "generator_only" | "incremental" | "on_attribute" | "on_call"
-        | "syntax_block" | "uses_tool" => "system.codegen",
+        | "syntax_block" | "uses_tool" => crate::core_items::CODEGEN_PACKAGE,
         "attribute" | "repeatable" | "export" | "intrinsic" | "llvm" | "inline" | "noinline"
         | "unsafe" | "borrowed_result" | "slot_walk" | "allow_cycle" | "consuming" | "runtime"
         | "async_host" | "requires_member" => "system.core",

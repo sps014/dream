@@ -29,6 +29,8 @@ pub const SYSTEM: &str = "system.core::System";
 /// Host loop the generated `main` calls on targets whose operating system owns the main thread.
 pub const PLATFORM_MAIN: &str = "system.core::platform_main";
 
+pub const EQUATABLE: &str = "system.core::Equatable";
+pub const COMPARABLE: &str = "system.core::Comparable";
 pub const ITERABLE: &str = "system.core::Iterable";
 pub const ITERATOR: &str = "system.core::Iterator";
 pub const ASYNC_ITERABLE: &str = "system.core::AsyncIterable";
@@ -50,30 +52,51 @@ pub const VECTOR: &str = "system.simd::Vector";
 
 /// The core package that declares the native interop attributes.
 pub const C_INTEROP_PACKAGE: &str = "system.interop";
+/// The package that declares the scalar primitives' members.
+pub const PRIMITIVES_PACKAGE: &str = "system.primitives";
+/// The core package that declares the `js` type and the JS interop attributes.
+pub const JS_PACKAGE: &str = "system.js";
+/// The package the driver generates the JS builtin bindings into.
+pub const JS_BINDINGS_PACKAGE: &str = "system.js.bindings";
+/// The core package that declares the generator protocol and its attributes.
+pub const CODEGEN_PACKAGE: &str = "system.codegen";
+/// Virtual path prefix of sources the driver generates for a package (`<std>/generated/<package>/…`).
+pub const GENERATED_PREFIX: &str = "<std>/generated/";
 
 pub const C_PTR: &str = "system::CPtr";
 pub const OWNED_C_PTR: &str = "system::OwnedCPtr";
 pub const NATIVE_CALLBACK: &str = "system::NativeCallback";
 
+pub const FUTURE_NAME: &str = dream_syntax::nodes::types::FUTURE_TYPE;
 pub const OPTION_NAME: &str = "Option";
 pub const RESULT_NAME: &str = "Result";
 pub const UNIT_NAME: &str = "Unit";
 pub const RANGE_NAME: &str = "Range";
 pub const WEAK_NAME: &str = "Weak";
 pub const CLOSURE_NAME: &str = "Closure";
-pub const REF_BOX_NAME: &str = "RefBox";
+pub const REF_BOX_NAME: &str = dream_syntax::nodes::types::REF_BOX_TYPE;
 pub const CAPTURE_CELL_NAME: &str = "CaptureCell";
 pub const ARRAY_NAME: &str = "Array";
+pub const ITERATOR_NAME: &str = "Iterator";
+pub const ASYNC_ITERABLE_NAME: &str = "AsyncIterable";
+pub const ASYNC_ITERATOR_NAME: &str = "AsyncIterator";
 pub const LIST_NAME: &str = "List";
 pub const SET_NAME: &str = "Set";
 pub const MAP_NAME: &str = "Map";
 pub const VECTOR_NAME: &str = "Vector";
 pub const SYSTEM_NAME: &str = "System";
+/// The opaque pointer struct: one `usize` field, passed to C by value.
 pub const C_PTR_NAME: &str = "CPtr";
+/// The class a `@c` extern with `@owned("free_fn")` returns: fields `ptr: CPtr` then `free: usize`
+/// (the C function pointer its destructor calls).
 pub const OWNED_C_PTR_NAME: &str = "OwnedCPtr";
+/// The callback class `NativeCallback<F>`, passed to C as `(fn, void* user_data)`.
 pub const NATIVE_CALLBACK_NAME: &str = "NativeCallback";
 
 /// The unqualified declaration spelled by a qualified core identity.
 pub fn short_name(identity: &str) -> &str {
-    identity.rsplit_once("::").map(|(_, name)| name).unwrap_or(identity)
+    identity
+        .rsplit_once("::")
+        .map(|(_, name)| name)
+        .unwrap_or(identity)
 }

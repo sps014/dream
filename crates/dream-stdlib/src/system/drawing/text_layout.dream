@@ -17,7 +17,7 @@ public class TextLayout: DrawingResource {
         text: string,
         style: TextStyle
     ): Result<TextLayout, DrawingError> {
-        let alignment: int = style.alignment;
+        let alignment: int = (int)style.alignment;
         let handle = DrawingHost.text_create(
             text,
             style.family,
@@ -36,7 +36,7 @@ public class TextLayout: DrawingResource {
     ///
     /// Fails with `EINVAL` for invalid style values or text longer than 262144 bytes. In browsers and Node, the drawing engine loads in the background when the program starts; a call made before it is ready fails with `EUNAVAILABLE`, and awaiting any async drawing call, such as `TextLayout.create` or `DrawingSurface.create`, guarantees it is ready.
     public static fun measure(text: string, style: TextStyle): Result<TextMetrics, DrawingError> {
-        let alignment: int = style.alignment;
+        let alignment: int = (int)style.alignment;
         let values = DrawingHost.text_measure(
             text,
             style.family,

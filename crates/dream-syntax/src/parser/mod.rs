@@ -8,7 +8,6 @@ use dream_diagnostics::DiagnosticBag;
 use dream_text::line_text::LineText;
 use dream_text::text_span::TextSpan;
 use std::collections::HashMap;
-use std::io::Error;
 
 mod cfg;
 mod declarations;
@@ -160,9 +159,18 @@ impl<'a, 'b> Parser<'a, 'b> {
     ///returns current token and moves to next token
     fn next_token(&mut self) -> SyntaxToken {
         let r = self.current_token();
+        let body = match r.kind {
+            TokenKind::StringToken => r.text.strip_prefix('"').and_then(|t| t.strip_suffix('"')),
+            TokenKind::InterpolatedStringToken => {
+                r.text.strip_prefix("$\"").and_then(|t| t.strip_suffix('"'))
+            }
+            _ => None,
+        };
+        for message in body.map(crate::escape::escape_errors).unwrap_or_default() {
+            self.diagnostics.report_error(message, Some(r.position));
+        }
         // Clamp at the end of the stream so repeated `next_token` calls during error recovery can
-        // never push the cursor arbitrarily far past EOF (which previously enabled out-of-bounds
-        // indexing). `current_token` keeps returning a synthetic EOF once we reach the end.
+        // never push the cursor arbitrarily far past EOF. `current_token` keeps returning a synthetic EOF once we reach the end.
         if self.current_token_index < self.tokens.len() {
             self.current_token_index += 1;
         }
@@ -325,18 +333,18 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// has already been consumed, and consumes the matching closing `>`/`>>`. Used at every
     /// site that accepts generic arguments (type annotations, function/method calls, struct
     /// instantiation) so the loop and recovery logic live in one place.
-    fn parse_generic_args(&mut self) -> Result<Vec<Type>, Error> {
+    fn parse_generic_args(&mut self) -> Vec<Type> {
         let mut args = Vec::new();
         while !self.is_generic_close() && self.current_token().kind != TokenKind::EndOfFileToken {
             let iter = self.current_token_index;
-            args.push(self.parse_type()?);
+            args.push(self.parse_type());
             if self.current_token().kind == TokenKind::CommaToken {
                 self.match_token(TokenKind::CommaToken);
             }
             self.ensure_progress(iter);
         }
         self.match_generic_close();
-        Ok(args)
+        args
     }
     /// Parses a comma-separated list of elements terminated by `close`, assuming the opening
     /// delimiter has already been consumed, and consumes the matching `close`. A trailing comma is
@@ -346,21 +354,21 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn parse_delimited_list<T>(
         &mut self,
         close: TokenKind,
-        mut parse_elem: impl FnMut(&mut Self) -> Result<T, Error>,
-    ) -> Result<Vec<T>, Error> {
+        mut parse_elem: impl FnMut(&mut Self) -> T,
+    ) -> Vec<T> {
         let mut items = Vec::new();
         while self.current_token().kind != close
             && self.current_token().kind != TokenKind::EndOfFileToken
         {
             let iter = self.current_token_index;
-            items.push(parse_elem(self)?);
+            items.push(parse_elem(self));
             if self.current_token().kind == TokenKind::CommaToken {
                 self.match_token(TokenKind::CommaToken);
             }
             self.ensure_progress(iter);
         }
         self.match_token(close);
-        Ok(items)
+        items
     }
 
     /// One atom of a `:` constraint list: a kind (`struct` / `class` / `unmanaged` / contextual
@@ -391,13 +399,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 kinds.push(crate::nodes::ConstraintKind::Shared);
                 true
             }
-            _ => match self.parse_type() {
-                Ok(t) => {
-                    bounds.push(t);
-                    true
-                }
-                Err(_) => false,
-            },
+            _ => {
+                bounds.push(self.parse_type());
+                true
+            }
         }
     }
 
@@ -529,9 +534,9 @@ impl<'a, 'b> Parser<'a, 'b> {
             .map(|close| close + 1 - self.current_token_index)
     }
     ///parse all tokens from lexer and returns a syntax tree or error
-    pub fn parse(&mut self) -> Result<SyntaxTree<'a>, Error> {
+    pub fn parse(&mut self) -> SyntaxTree<'a> {
         self.tokens = self.lexer.lex_all(self.diagnostics);
-        Ok(SyntaxTree::new(self.parse_program()?))
+        SyntaxTree::new(self.parse_program())
     }
 
     /// Returns the kind of the first token at or after the cursor that is not a leading
@@ -600,7 +605,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
 
     ///get all functions in the file
-    fn parse_program(&mut self) -> Result<ProgramNode<'a>, Error> {
+    fn parse_program(&mut self) -> ProgramNode<'a> {
         let mut imports = vec![];
         let mut functions = vec![];
         let mut structs = vec![];
@@ -623,13 +628,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             } else {
                 Vec::new()
             };
-            match self.parse_module_decl_with_attrs(attrs) {
-                Ok(module_decl) => Some(module_decl),
-                Err(_) => {
-                    self.recover_to_next_declaration();
-                    None
-                }
-            }
+            Some(self.parse_module_decl_with_attrs(attrs))
         } else {
             None
         };
@@ -645,29 +644,24 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let loop_start = self.current_token_index;
             let gate = self.parse_cfg_gate();
-            let parsed = self.parse_import();
-            let keep = self.keep_cfg_item(gate);
-            match parsed {
-                Ok(import_node) if keep => {
-                    if let Some(alias) = &import_node.alias {
-                        if imports.iter().any(|prior: &crate::nodes::ImportNode| {
-                            (prior.c.is_some() || import_node.c.is_some())
-                                && prior.alias.as_ref().is_some_and(|a| a.text == alias.text)
-                        }) {
-                            self.diagnostics.report_error(
-                                format!("duplicate C import namespace '{}'", alias.text),
-                                Some(alias.position),
-                            );
-                        }
-                        if let Some(c) = &import_node.c {
-                            self.c_import_names
-                                .insert(alias.text.clone(), c.prefix.clone());
-                        }
+            let import_node = self.parse_import();
+            if self.keep_cfg_item(gate) {
+                if let Some(alias) = &import_node.alias {
+                    if imports.iter().any(|prior: &crate::nodes::ImportNode| {
+                        (prior.c.is_some() || import_node.c.is_some())
+                            && prior.alias.as_ref().is_some_and(|a| a.text == alias.text)
+                    }) {
+                        self.diagnostics.report_error(
+                            format!("duplicate C import namespace '{}'", alias.text),
+                            Some(alias.position),
+                        );
                     }
-                    imports.push(import_node);
+                    if let Some(c) = &import_node.c {
+                        self.c_import_names
+                            .insert(alias.text.clone(), c.prefix.clone());
+                    }
                 }
-                Ok(_) => {}
-                Err(_) => self.recover_to_next_declaration(),
+                imports.push(import_node);
             }
             self.ensure_progress(loop_start);
         }
@@ -698,51 +692,31 @@ impl<'a, 'b> Parser<'a, 'b> {
                         TokenKind::ClassToken | TokenKind::StructToken
                     ))
             {
-                match self.parse_struct_declaration() {
-                    Ok(struct_decl) => structs.push(struct_decl),
-                    Err(_) => self.recover_to_next_declaration(),
-                }
+                structs.push(self.parse_struct_declaration());
             } else if core == TokenKind::InterfaceToken
                 || (cur == TokenKind::AtToken
                     && self.core_keyword_after_attrs() == TokenKind::InterfaceToken)
             {
-                match self.parse_interface_declaration() {
-                    Ok(iface) => interfaces.push(iface),
-                    Err(_) => self.recover_to_next_declaration(),
-                }
+                interfaces.push(self.parse_interface_declaration());
             } else if cur == TokenKind::EnumToken
                 || core == TokenKind::EnumToken
                 || (cur == TokenKind::AtToken
                     && self.core_keyword_after_attrs() == TokenKind::EnumToken)
             {
-                match self.parse_enum_declaration() {
-                    Ok(enum_decl) => enums.push(enum_decl),
-                    Err(_) => self.recover_to_next_declaration(),
-                }
+                enums.push(self.parse_enum_declaration());
             } else if cur == TokenKind::ExtendToken {
-                match self.parse_extend_declaration() {
-                    Ok(extend_decl) => extends.push(extend_decl),
-                    Err(_) => self.recover_to_next_declaration(),
-                }
+                extends.push(self.parse_extend_declaration());
             } else if cur == TokenKind::TypeToken {
-                if self.parse_type_alias().is_err() {
-                    self.recover_to_next_declaration();
-                }
+                self.parse_type_alias();
             } else if core == TokenKind::LetToken || core == TokenKind::ConstToken {
-                match self.parse_global_variable() {
-                    Ok(global) => globals.push(global),
-                    Err(_) => self.recover_to_next_declaration(),
-                }
+                globals.push(self.parse_global_variable());
             } else if cur == TokenKind::FunToken
                 || cur == TokenKind::AtToken
                 || cur == TokenKind::ExternToken
                 || core == TokenKind::FunToken
                 || core == TokenKind::ExternToken
             {
-                match self.parse_function(None) {
-                    Ok(function) => functions.push(function),
-                    Err(_) => self.recover_to_next_declaration(),
-                }
+                functions.push(self.parse_function(None));
             } else {
                 let cur = self.current_token();
                 self.diagnostics.report_error(
@@ -786,40 +760,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         program
             .node_spans
             .sort_by_key(|s| (s.span.start, std::cmp::Reverse(s.span.end)));
-        Ok(program)
-    }
-
-    /// Skips tokens until a recognized top-level declaration keyword is found,
-    /// allowing the parser to recover from a bad declaration and continue building the AST.
-    fn recover_to_next_declaration(&mut self) {
-        while self.current_token().kind != TokenKind::EndOfFileToken {
-            let kind = self.current_token().kind;
-            if matches!(
-                kind,
-                TokenKind::ClassToken
-                    | TokenKind::StructToken
-                    | TokenKind::SealedToken
-                    | TokenKind::SharedToken
-                    | TokenKind::OverrideToken
-                    | TokenKind::InterfaceToken
-                    | TokenKind::EnumToken
-                    | TokenKind::ExtendToken
-                    | TokenKind::FunToken
-                    | TokenKind::PublicToken
-                    | TokenKind::InternalToken
-                    | TokenKind::ExternToken
-                    | TokenKind::AsyncToken
-                    | TokenKind::TypeToken
-                    | TokenKind::LetToken
-                    | TokenKind::ConstToken
-                    | TokenKind::ImportToken
-                    | TokenKind::JsImportToken
-                    | TokenKind::CImportToken
-            ) {
-                break;
-            }
-            self.next_token();
-        }
+        program
     }
 }
 

@@ -73,7 +73,9 @@ impl<'a> Analyzer<'a> {
             Type::Struct(tok, Some(args)) if tok.text == type_name && args.len() == nparams => {
                 Some(args.clone())
             }
-            Type::Struct(tok, Some(args)) if tok.text == "Future" && args.len() == 1 => {
+            Type::Struct(tok, Some(args))
+                if tok.text == dream_abi::core_items::FUTURE_NAME && args.len() == 1 =>
+            {
                 Self::class_args_matching(&args[0], type_name, nparams)
             }
             _ => None,

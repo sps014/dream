@@ -11,9 +11,8 @@ fn embedded_sources_declare_one_type_named_after_the_file() {
         for &(path, source) in package.files {
             let arena = Bump::new();
             let mut diagnostics = DiagnosticBag::new(Some(path.to_string()));
-            let tree = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics)
-                .parse()
-                .expect("parser always returns a tree");
+            let tree =
+                Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics).parse();
             assert!(
                 !diagnostics.has_errors(),
                 "{path}: {:?}",
@@ -151,6 +150,68 @@ fn compiler_does_not_name_library_packages() {
     assert!(
         violations.is_empty(),
         "compiler names a library package:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn compiler_spells_core_names_only_in_core_items() {
+    const CORE_NAMES: &[&str] = &[
+        "Option",
+        "Result",
+        "Iterator",
+        "AsyncIterator",
+        "Future",
+        "RefBox",
+        "List",
+        "Map",
+        "Set",
+        "Task",
+        "TaskPool",
+        "TaskScope",
+        "system.js",
+        "system.js.bindings",
+        "system.codegen",
+        "<std>/generated/",
+    ];
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let roots = [
+        "crates/dream-syntax/src",
+        "crates/dream-types/src",
+        "crates/dream-hir/src",
+        "crates/dream-abi/src",
+        "crates/dream-sema/src",
+        "crates/dream-mir/src",
+        "src/driver",
+        "src/execution",
+        "tooling/dream-lsp/src",
+    ];
+    let mut violations = Vec::new();
+    for rel in roots {
+        walk_rust(&root.join(rel), &mut |path| {
+            // `nodes/types.rs` holds the constants for crates below `dream-abi`; `syntax_kind`
+            // names in `nodes/expression.rs` are generator-protocol tags, not types.
+            if path.ends_with("core_items.rs")
+                || path.ends_with("dream-syntax/src/nodes/types.rs")
+                || path.ends_with("dream-syntax/src/nodes/expression.rs")
+            {
+                return;
+            }
+            let text = strip_cfg_test(&std::fs::read_to_string(path).unwrap_or_default());
+            for literal in rust_string_literals(&text) {
+                if CORE_NAMES.contains(&literal.as_str()) {
+                    violations.push(format!(
+                        "{}: `{literal}`",
+                        path.strip_prefix(&root).unwrap_or(path).display()
+                    ));
+                }
+            }
+        });
+    }
+    violations.sort();
+    assert!(
+        violations.is_empty(),
+        "compiler spells a core name outside core_items.rs:\n{}",
         violations.join("\n")
     );
 }

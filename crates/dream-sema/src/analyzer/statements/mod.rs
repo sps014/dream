@@ -3,6 +3,7 @@
 //! - [`case_switch`]: the C-style `switch`/`case` statement (int/string/bool/enum subjects).
 //! - [`bindings`]: `let` declarations, simple assignments, and `return`.
 //! - [`assignments`]: indexed (`arr[i] = v`) and member (`obj.m = v`) writes and their desugaring.
+//! - [`lvalue_operands`]: single evaluation of compound-assignment and `++`/`--` targets.
 //! - [`conditionals`]: `if`/`else if`/`else`, including the compile-time `is` fold.
 //!
 //! The reserved-name check, the bool-condition diagnostic, and the `is`-with-binding flow-typing
@@ -24,8 +25,10 @@ mod bindings;
 mod case_switch;
 mod conditionals;
 mod defer_stmt;
+mod indexer_writeback;
 mod lock;
 mod loops;
+mod lvalue_operands;
 mod overflow_block;
 
 impl<'a> Analyzer<'a> {
@@ -59,14 +62,9 @@ impl<'a> Analyzer<'a> {
         role: &str,
         diagnostics: &mut DiagnosticBag,
     ) {
-        // bare callable, so it is a legal ordinary identifier.
         const RESERVED_TYPE_AND_LITERAL_NAMES: &[&str] = &[
             "int", "float", "float16", "double", "string", "bool", "char", "object", "void",
-            "long", "uint", "ulong", "byte", "sbyte", "short", "ushort",
-            // Former C#/.NET-style primitive aliases: no longer usable as types (removed), but
-            // still reserved as identifiers so old code fails loudly instead of silently shadowing.
-            "String", "Int32", "Int64", "UInt32", "UInt64", "Byte", "Single", "Double", "Boolean",
-            "Char", "Object", "Void", "true", "false", "null",
+            "long", "uint", "ulong", "byte", "sbyte", "short", "ushort", "true", "false", "null",
         ];
         // The builtin callables are reserved too; sourced from the intrinsic registry so this list
         // never drifts from the set of names the compiler special-cases.

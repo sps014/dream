@@ -170,7 +170,10 @@ impl Analyzer<'_> {
             .get(&(def, Vec::new()))
             .map(|info| {
                 (
-                    info.parameters.iter().map(|&ty| self.type_key(ty)).collect(),
+                    info.parameters
+                        .iter()
+                        .map(|&ty| self.type_key(ty))
+                        .collect(),
                     Box::new(self.type_key(info.resolved_return)),
                 )
             });

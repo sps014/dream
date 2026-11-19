@@ -156,7 +156,7 @@ pub enum TyKind {
     /// A C-style enum definition (no type arguments; values are `int` at runtime).
     Enum(DefId),
     /// A first-class function value `fun(params...): ret`. At runtime this is a heap-allocated
-    /// 2-word funcbox `[funcidx][env]` (see `runtime/closure.wat`), reference-counted like other
+    /// 2-word funcbox `[funcidx][env]` (see `runtime/c/core/closure.c`), reference-counted like other
     /// heap values so a capturing lambda's environment is reclaimed when the last `fun` drops.
     Func(Vec<TypeId>, TypeId),
     /// A positional product type `(T, U, …)` (arity ≥ 2). Structural identity by element

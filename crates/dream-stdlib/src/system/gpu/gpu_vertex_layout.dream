@@ -34,7 +34,7 @@ public class GpuVertexLayout {
     /// Feeds the vertex shader input `@location(location)` from `offset` bytes into each
     /// element, read as `format`. Returns this layout.
     public fun attribute(location: int, format: GpuVertexFormat, offset: int): GpuVertexLayout {
-        let f: int = format;
+        let f: int = (int)format;
         this.attributes.push_all([location, f, offset]);
         return this;
     }

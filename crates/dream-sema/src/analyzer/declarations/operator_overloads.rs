@@ -1,7 +1,5 @@
-//! `@operator("...")` / `@cast("implicit"|"explicit")` registration: recognizes the two
-//! operator-overload attributes on a struct/class method (their generic shape — one string arg,
-//! method-only placement — is already validated by [`dream_abi::attributes`]), resolves the argument
-//! to a concrete [`OperatorSymbol`]/[`CastKind`], and records the mangled method name so
+//! `fun operator ...` / `fun implicit()` / `fun explicit()` registration: resolves an
+//! operator or conversion method declared on a struct/class to a concrete [`OperatorSymbol`]/[`CastKind`], and records the mangled method name so
 //! `expressions::operators`/`expressions::dispatch`/`expressions::casts` can dispatch `a + b`,
 //! `-a`, and `(T)a` to it. Each interned receiver type has an independent overload table,
 //! including concrete generic instantiations.
@@ -12,7 +10,7 @@ use dream_syntax::token::token_kind::TokenKind;
 use indexmap::IndexMap;
 
 /// A user-overloadable operator symbol. `Sub`/`Neg` (and no other pair) share a surface spelling
-/// (`"-"`); parameter arity at the `@operator` declaration site tells them apart.
+/// (`"-"`); parameter arity at the `fun operator` declaration site tells them apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OperatorSymbol {
     Add,
@@ -32,9 +30,9 @@ pub enum OperatorSymbol {
 }
 
 impl OperatorSymbol {
-    /// Resolves an `@operator("...")` argument string given the tagged method's declared parameter
+    /// Resolves a `fun operator ...` symbol given the method's declared parameter
     /// count (1 = binary, 0 = unary), or `None` if the pairing is not a recognized operator.
-    fn from_attr_str(symbol: &str, arity: usize) -> Option<Self> {
+    fn from_spelling(symbol: &str, arity: usize) -> Option<Self> {
         use OperatorSymbol::*;
         Some(match (symbol, arity) {
             ("+", 1) => Add,
@@ -117,7 +115,7 @@ impl OperatorSymbol {
     }
 }
 
-/// A registered `@operator`-tagged method: its emitted (mangled) name, the parameter type it
+/// A registered `fun operator` method: its emitted (mangled) name, the parameter type it
 /// expects (the right-hand operand for a binary operator; `None` for unary), and its declared
 /// return type.
 #[derive(Debug, Clone)]
@@ -127,7 +125,7 @@ pub struct OperatorMethod {
     pub return_type: Type,
 }
 
-/// A registered `@cast`-tagged method: whether it is implicit or explicit, the target type it
+/// A registered conversion method: whether it is implicit or explicit, the target type it
 /// converts to, and its emitted (mangled) name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CastKind {
@@ -136,7 +134,7 @@ pub enum CastKind {
 }
 
 impl CastKind {
-    fn from_attr_str(s: &str) -> Option<Self> {
+    fn from_spelling(s: &str) -> Option<Self> {
         match s {
             "implicit" => Some(CastKind::Implicit),
             "explicit" => Some(CastKind::Explicit),
@@ -161,11 +159,9 @@ pub struct OperatorOverloads {
 }
 
 impl<'a> Analyzer<'a> {
-    /// Recognizes `@operator("...")`/`@cast("...")` on `method` (already known to carry a valid
-    /// single string argument and to be method-only-placed — see `attributes::validate_attributes`,
-    /// run before analysis) and, if present, records it against `target_type_str`. Reports the
-    /// operator-specific rules the generic attribute layer can't know: the argument must resolve to
-    /// a known symbol/cast-kind for the method's declared arity, and no two methods on the same
+    /// Recognizes `fun operator ...`/`fun implicit()`/`fun explicit()` on `method` and, if present,
+    /// records it against the receiver. Reports the operator-specific rules: the symbol must
+    /// resolve to a known operator for the method's declared arity, and no two methods on the same
     /// type may claim the same operator signature or cast target.
     pub(in crate::analyzer) fn validate_and_register_operator(
         &mut self,
@@ -177,7 +173,7 @@ impl<'a> Analyzer<'a> {
         let target_display = self.type_id_display(receiver);
         if let Some(symbol_text) = method.operator_symbol.as_deref() {
             let arity = method.parameters.len();
-            let Some(symbol) = OperatorSymbol::from_attr_str(symbol_text, arity) else {
+            let Some(symbol) = OperatorSymbol::from_spelling(symbol_text, arity) else {
                 diagnostics.report_error(
                     format!(
                         "'operator {}' is not a recognized operator for a method with {} parameter(s)",
@@ -234,7 +230,7 @@ impl<'a> Analyzer<'a> {
         }
 
         if let Some(kind_text) = method.cast_kind.as_deref() {
-            let Some(kind) = CastKind::from_attr_str(kind_text) else {
+            let Some(kind) = CastKind::from_spelling(kind_text) else {
                 diagnostics.report_error(
                     format!("'{}' must be implicit or explicit", kind_text),
                     Some(method.name.position),
@@ -348,7 +344,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// The registered cast method converting `from` to `to`, if any. `only_implicit` restricts the
-    /// search to `@cast("implicit")` methods (used for implicit-coercion sites); explicit `(T)expr`
+    /// search to `fun implicit()` methods (used for implicit-coercion sites); explicit `(T)expr`
     /// casts pass `false` to accept either kind, matching the common convention that an explicit
     /// cast may always invoke an implicit conversion.
     pub(in crate::analyzer) fn operator_cast_fn(

@@ -4,15 +4,14 @@ use super::super::Parser;
 use crate::nodes::{ExpressionNode, SyntaxBlockNode, SyntaxBlockPart};
 use crate::token::token_kind::TokenKind;
 use dream_text::text_span::TextSpan;
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Parses `name { parts }` where `parts` are raw text segments and `{ dream_expr }` splices.
     /// Cursor starts on the introducer identifier.
-    pub(crate) fn parse_syntax_block(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_syntax_block(&mut self) -> ExpressionNode<'a> {
         let name = self.match_token(TokenKind::IdentifierToken);
         let open = self.match_token(TokenKind::CurlyOpenBracketToken);
-        let (parts, close_end) = self.parse_syntax_block_parts()?;
+        let (parts, close_end) = self.parse_syntax_block_parts();
         let block_span = TextSpan::new(
             (open.position.start, close_end),
             self.lexer.line_text().as_ref(),
@@ -22,12 +21,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             block_span,
             parts,
         };
-        Ok(ExpressionNode::SyntaxBlock(self.arena.alloc(node)))
+        ExpressionNode::SyntaxBlock(self.arena.alloc(node))
     }
 
     /// Body of a syntax block until the matching `}` at depth 1. Text is reconstructed from token
     /// slices (with single spaces between non-adjacent tokens) so generators can re-parse markup.
-    fn parse_syntax_block_parts(&mut self) -> Result<(Vec<SyntaxBlockPart<'a>>, usize), Error> {
+    fn parse_syntax_block_parts(&mut self) -> (Vec<SyntaxBlockPart<'a>>, usize) {
         let mut parts: Vec<SyntaxBlockPart<'a>> = Vec::new();
         let mut text_buf = String::new();
         let mut last_end: Option<usize> = None;
@@ -47,7 +46,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if !text_buf.is_empty() {
                     parts.push(SyntaxBlockPart::Text(std::mem::take(&mut text_buf)));
                 }
-                return Ok((parts, end));
+                return (parts, end);
             }
             if cur.kind == TokenKind::CurlyOpenBracketToken {
                 if !text_buf.is_empty() {
@@ -55,7 +54,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 }
                 last_end = None;
                 self.next_token(); // `{`
-                let expr = self.parse_expression(0)?;
+                let expr = self.parse_expression(0);
                 self.match_token(TokenKind::CurlyCloseBracketToken);
                 parts.push(SyntaxBlockPart::Splice(self.arena.alloc(expr)));
                 continue;
@@ -81,6 +80,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         if !text_buf.is_empty() {
             parts.push(SyntaxBlockPart::Text(std::mem::take(&mut text_buf)));
         }
-        Ok((parts, self.current_token().position.end))
+        (parts, self.current_token().position.end)
     }
 }

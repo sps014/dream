@@ -85,10 +85,6 @@ impl ModuleWriter {
         self.decls.get(name)
     }
 
-    pub fn is_defined(&self, name: &str) -> bool {
-        self.defined.contains(name)
-    }
-
     pub fn define(&mut self, mut f: FunctionWriter) {
         assert!(
             self.defined.insert(f.name().to_string()),

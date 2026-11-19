@@ -161,39 +161,6 @@ impl TypeCtx {
         def
     }
 
-    pub fn resolve_function(&self, name: &str, parameters: &[TypeId]) -> Option<DefId> {
-        let lookup = |module, name: &str| {
-            self.functions
-                .get(&(module, name.to_string(), parameters.to_vec()))
-                .copied()
-        };
-        if let Some((path, local)) = name.rsplit_once("::") {
-            let module = self
-                .modules
-                .iter()
-                .find_map(|(&id, value)| (value == path).then_some(id))?;
-            return lookup(module, name).or_else(|| lookup(module, local));
-        }
-        if let Some(def) = lookup(self.scope, name).or_else(|| lookup(ModuleId::ROOT, name)) {
-            return Some(def);
-        }
-        let mut matches = self
-            .imports
-            .get(&self.scope)
-            .into_iter()
-            .flatten()
-            .filter_map(|&module| lookup(module, name));
-        let def = matches.next()?;
-        matches.all(|other| other == def).then_some(def)
-    }
-
-    /// The definition `name` declares in exactly `module`, ignoring imports and the root fallback.
-    pub fn declared_in(&self, module: ModuleId, kind: DefKind, name: &str) -> Option<DefId> {
-        self.declarations
-            .get(&(module, kind, name.to_string()))
-            .copied()
-    }
-
     pub fn resolve(&self, kind: DefKind, name: &str) -> Option<DefId> {
         if let Some((path, name)) = name.rsplit_once("::") {
             let module = if path.is_empty() {

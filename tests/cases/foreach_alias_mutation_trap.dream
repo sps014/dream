@@ -1,0 +1,12 @@
+// Removing through another name while `for-in` walks the list panics instead of skipping elements.
+import system;
+import system.collections;
+
+fun main() {
+    let xs: List<int> = [1, 2, 3];
+    let alias = xs;
+    for (let x in xs) {
+        System.println(x);
+        alias.remove_at(0);
+    }
+}

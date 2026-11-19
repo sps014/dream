@@ -131,6 +131,7 @@ pub(super) fn children(e: &HExpr) -> Children<'_> {
         | K::RawLoad(a)
         | K::ForceFree(a)
         | K::Cast(a)
+        | K::Downcast(a)
         | K::Await(a)
         | K::Discriminant(a)
         | K::EnumName { value: a, .. }

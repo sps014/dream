@@ -21,13 +21,36 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        let result =
-            self.analyze_expression_inner(expression, parent_function, symbol_table, diagnostics);
+        let result = dream_syntax::stack::grow(|| {
+            self.analyze_expression_inner(expression, parent_function, symbol_table, diagnostics)
+        });
         self.record_generator_type(
             expression,
             result.as_ref().cloned().unwrap_or(Type::Unknown),
         );
         result
+    }
+
+    /// Analyzes an expression whose value is used (an operand, element, argument or receiver).
+    /// A `void` expression is reported once and becomes the poison type. Generic bodies are
+    /// exempt: a type parameter instantiated as `void` carries its unit value through.
+    pub(in crate::analyzer) fn analyze_value_expression(
+        &mut self,
+        expression: &ExpressionNode<'a>,
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        let ty = self.analyze_expression(expression, parent_function, symbol_table, diagnostics)?;
+        if matches!(ty, Type::Void) && self.current_generic_bindings.is_empty() {
+            diagnostics.report_error(
+                "this expression returns 'void' and has no value to use".to_string(),
+                expression.position(),
+            );
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
+        Ok(ty)
     }
 
     fn analyze_expression_inner(
@@ -176,6 +199,7 @@ impl<'a> Analyzer<'a> {
                 } else if left_type.is_object() || self.is_interface_name(left_id) {
                     self.hir_set_is_type(left_hir, right_type);
                 } else {
+                    self.check_is_possible(&left_type, right_type, left.position(), diagnostics);
                     let right_id = self.type_ctx.lower(right_type);
                     self.hir_set_bool(left_id == right_id);
                 }
@@ -363,7 +387,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Desugars a class indexer read `obj[index]` to a call of the type's `@get_indexer` method when
+    /// Desugars a class indexer read `obj[index]` to a call of the type's a `this[index]` getter method when
     /// registered (see [`declarations::protocol_hooks`]): an accessible instance, non-async
     /// method taking one argument and returning a (non-`void`) value.
     fn analyze_index_get(
@@ -529,7 +553,10 @@ impl<'a> Analyzer<'a> {
     /// `let x: double = 3.14` and `Math` double overloads don't require a `d` suffix. Explicit
     /// `f`/`d`/`L`/… suffixes are already classified by the parser; bare decimals arrive as
     /// `Float`, bare integers as `Integer`.
-    fn retarget_numeric_literal(lit: &Type, expected: Option<&Type>) -> Type {
+    pub(in crate::analyzer) fn retarget_numeric_literal(
+        lit: &Type,
+        expected: Option<&Type>,
+    ) -> Type {
         match (expected, lit) {
             (Some(Type::Double(_)), Type::Float(t) | Type::Integer(t)) => Type::Double(t.clone()),
             (Some(Type::Float(_)), Type::Integer(t)) => Type::Float(t.clone()),

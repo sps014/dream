@@ -3,41 +3,34 @@ use crate::nodes::{ExpressionNode, Type};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
 use crate::token::token_kind::TokenKind::{EndOfFileToken, IdentifierToken};
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Parses an expression with operator precedence
-    pub(crate) fn parse_expression(
-        &mut self,
-        parent_precedence: i32,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_expression(&mut self, parent_precedence: i32) -> ExpressionNode<'a> {
         if !self.enter_nesting() {
-            return Ok(ExpressionNode::Literal(Type::Unknown));
+            return ExpressionNode::Literal(Type::Unknown);
         }
-        let result = (|| {
+        let result = crate::stack::grow(|| {
             let start = self.current_token().position;
-            let node = self.parse_expression_inner(parent_precedence)?;
+            let node = self.parse_expression_inner(parent_precedence);
             self.record_node_span(
                 true,
                 node.syntax_kind(),
                 node.position().map(|s| s.start),
                 start,
             );
-            Ok(node)
-        })();
+            node
+        });
         self.leave_nesting();
         result
     }
 
-    fn parse_expression_inner(
-        &mut self,
-        parent_precedence: i32,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    fn parse_expression_inner(&mut self, parent_precedence: i32) -> ExpressionNode<'a> {
         let mut left;
         let unary_precedence = self.current_token().kind.get_unary_precedence();
         if unary_precedence != 0 && unary_precedence >= parent_precedence {
             let operator_token = self.next_token();
-            let operand = self.parse_expression(unary_precedence)?;
+            let operand = self.parse_expression(unary_precedence);
             if matches!(
                 operator_token.kind,
                 TokenKind::PlusPlusToken | TokenKind::MinusMinusToken
@@ -48,11 +41,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                     target: self.arena.alloc(operand),
                     op: operator_token,
                 };
+            } else if let Some(literal) = Self::negated_decimal_literal(&operator_token, &operand) {
+                left = ExpressionNode::Literal(literal);
             } else {
                 left = ExpressionNode::Unary(operator_token, self.arena.alloc(operand));
             }
         } else {
-            left = self.parse_primary_expression()?;
+            left = self.parse_primary_expression();
         }
         loop {
             let precedence = self.current_token().kind.get_binary_precedence();
@@ -62,7 +57,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             let operator_token = self.next_token();
             if operator_token.kind == TokenKind::IsToken {
-                let right_type = self.parse_type()?;
+                let right_type = self.parse_type();
                 // Optional `is`-with-binding: `expr is Type name` binds a narrowed local `name`.
                 let binding = if self.current_token().kind == TokenKind::IdentifierToken {
                     Some(self.next_token())
@@ -71,7 +66,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 };
                 left = ExpressionNode::IsExpression(self.arena.alloc(left), right_type, binding);
             } else {
-                let right = self.parse_expression(precedence)?;
+                let right = self.parse_expression(precedence);
                 left = ExpressionNode::Binary(
                     self.arena.alloc(left),
                     operator_token,
@@ -85,9 +80,9 @@ impl<'a, 'b> Parser<'a, 'b> {
         // of binary operators do not greedily consume a trailing `?`.
         if parent_precedence == 0 && self.current_token().kind == TokenKind::QuestionMarkToken {
             self.match_token(TokenKind::QuestionMarkToken);
-            let then_expr = self.parse_expression(0)?;
+            let then_expr = self.parse_expression(0);
             self.match_token(TokenKind::ColonToken);
-            let else_expr = self.parse_expression(0)?;
+            let else_expr = self.parse_expression(0);
             left = ExpressionNode::Ternary(
                 self.arena.alloc(left),
                 self.arena.alloc(then_expr),
@@ -95,25 +90,25 @@ impl<'a, 'b> Parser<'a, 'b> {
             );
         }
 
-        Ok(left)
+        left
     }
     /// Parses a primary expression (literal, identifier, parenthesized expression, or function call)
-    pub(crate) fn parse_primary_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_primary_expression(&mut self) -> ExpressionNode<'a> {
         let start = self.current_token().position;
-        let node = self.parse_primary_expression_inner()?;
+        let node = self.parse_primary_expression_inner();
         self.record_node_span(
             true,
             node.syntax_kind(),
             node.position().map(|s| s.start),
             start,
         );
-        Ok(node)
+        node
     }
 
-    fn parse_primary_expression_inner(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    fn parse_primary_expression_inner(&mut self) -> ExpressionNode<'a> {
         if let Some(name) = self.c_qualified_name() {
             let expr = if self.current_token().kind == TokenKind::OpenParenthesisToken {
-                self.parse_named_invocation(name)?
+                self.parse_named_invocation(name)
             } else {
                 ExpressionNode::Identifier(name)
             };
@@ -159,10 +154,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let expr = ExpressionNode::ArrayLiteral(open, Vec::new());
                 return self.parse_postfix_chain(expr);
             }
-            let first = self.parse_expression(0)?;
+            let first = self.parse_expression(0);
             if self.current_token().kind == TokenKind::SemicolonToken {
                 self.match_token(TokenKind::SemicolonToken);
-                let len = self.parse_expression(0)?;
+                let len = self.parse_expression(0);
                 self.match_token(TokenKind::CloseBracketToken);
                 let expr = ExpressionNode::ArrayRepeat(open, Box::new(first), Box::new(len));
                 return self.parse_postfix_chain(expr);
@@ -178,7 +173,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 && self.current_token().kind != TokenKind::EndOfFileToken
             {
                 let iter = self.current_token_index;
-                elements.push(self.parse_expression(0)?);
+                elements.push(self.parse_expression(0));
                 if self.current_token().kind == TokenKind::CommaToken {
                     self.match_token(TokenKind::CommaToken);
                 }
@@ -190,7 +185,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         } else if self.current_token().kind == TokenKind::CurlyOpenBracketToken
             && !self.in_condition
         {
-            let expr = self.parse_set_or_map_literal()?;
+            let expr = self.parse_set_or_map_literal();
             return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::BooleanToken {
             let expr =
@@ -208,7 +203,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             while self.current_token().kind == TokenKind::DotToken
                 && self.peek_token(1).kind != TokenKind::AwaitToken
             {
-                expr = self.parse_member_access_step(expr)?;
+                expr = self.parse_member_access_step(expr);
             }
             return self.parse_postfix_chain(expr);
         }
@@ -249,13 +244,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                 // A call on a bare identifier (free function or constructor, e.g.
                 // `Reader(path)`) can still be the base of a postfix chain like
                 // `Reader(path).configure(...)` or `make().field`.
-                let expr = self.parse_invocation_expression()?;
+                let expr = self.parse_invocation_expression();
                 return self.parse_postfix_chain(expr);
             } else if is_generic_static {
                 let receiver = self.next_token();
                 self.match_token(TokenKind::SmallerThanToken);
-                let class_args = self.parse_generic_args()?;
-                let expr = self.parse_generic_static_step(receiver, class_args)?;
+                let class_args = self.parse_generic_args();
+                let expr = self.parse_generic_static_step(receiver, class_args);
                 return self.parse_postfix_chain(expr);
             } else {
                 // A bare identifier may be followed by `{ ... }` (syntax DSL block) or a
@@ -276,15 +271,15 @@ impl<'a, 'b> Parser<'a, 'b> {
             return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::InterpolatedStringToken {
             let tok = self.next_token();
-            let expr = self.parse_interpolated_string(tok)?;
+            let expr = self.parse_interpolated_string(tok);
             return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::RawStringToken {
             let tok = self.next_token();
-            let expr = self.parse_raw_string(tok)?;
+            let expr = self.parse_raw_string(tok);
             return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::InterpolatedRawStringToken {
             let tok = self.next_token();
-            let expr = self.parse_interpolated_raw_string(tok)?;
+            let expr = self.parse_interpolated_raw_string(tok);
             return self.parse_postfix_chain(expr);
         } else if self.current_token().kind == TokenKind::CharToken {
             // A char literal `'a'` is a `char` whose backing token text is the (ASCII/code point)
@@ -305,161 +300,163 @@ impl<'a, 'b> Parser<'a, 'b> {
                 Some(cur.position),
             );
             self.next_token(); // skip the unexpected token to avoid infinite loop
-            return Ok(ExpressionNode::Identifier(SyntaxToken::new(
+            return ExpressionNode::Identifier(SyntaxToken::new(
                 TokenKind::IdentifierToken,
                 cur.position,
                 "".to_string(),
-            )));
+            ));
         }
 
         let identifier = self.match_token(TokenKind::IdentifierToken);
-        Ok(ExpressionNode::Identifier(identifier))
+        ExpressionNode::Identifier(identifier)
     }
 
     /// `sizeof(T)` — soft special (not a keyword). Operand is a type, not a value expression.
-    pub(crate) fn parse_sizeof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_sizeof_expression(&mut self) -> ExpressionNode<'a> {
         let kw = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::OpenParenthesisToken);
-        let ty = self.parse_type()?;
+        let ty = self.parse_type();
         self.match_token(TokenKind::CloseParenthesisToken);
-        Ok(ExpressionNode::SizeOf(kw, ty))
+        ExpressionNode::SizeOf(kw, ty)
     }
 
-    pub(crate) fn parse_alignof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_alignof_expression(&mut self) -> ExpressionNode<'a> {
         let kw = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::OpenParenthesisToken);
-        let ty = self.parse_type()?;
+        let ty = self.parse_type();
         self.match_token(TokenKind::CloseParenthesisToken);
-        Ok(ExpressionNode::AlignOf(kw, ty))
+        ExpressionNode::AlignOf(kw, ty)
     }
 
     /// `nameof(a.b.c)` — soft special (not a keyword). Dotted identifier path only; last segment
     /// is the compile-time string. Types like `int` may appear as `DataTypeToken` segments.
-    pub(crate) fn parse_nameof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
-        let (kw, parts) = self.parse_decl_path_operand()?;
-        Ok(ExpressionNode::NameOf(kw, parts))
+    pub(crate) fn parse_nameof_expression(&mut self) -> ExpressionNode<'a> {
+        let (kw, parts) = self.parse_decl_path_operand();
+        ExpressionNode::NameOf(kw, parts)
     }
 
     /// `declof(a.b)` — soft special (not a keyword); same operand grammar as `nameof`.
-    pub(crate) fn parse_declof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
-        let (kw, parts) = self.parse_decl_path_operand()?;
-        Ok(ExpressionNode::DeclOf(kw, parts))
+    pub(crate) fn parse_declof_expression(&mut self) -> ExpressionNode<'a> {
+        let (kw, parts) = self.parse_decl_path_operand();
+        ExpressionNode::DeclOf(kw, parts)
     }
 
-    fn parse_decl_path_operand(&mut self) -> Result<(SyntaxToken, Vec<SyntaxToken>), Error> {
+    fn parse_decl_path_operand(&mut self) -> (SyntaxToken, Vec<SyntaxToken>) {
         let kw = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::OpenParenthesisToken);
         let mut parts = Vec::new();
-        parts.push(self.parse_nameof_segment()?);
+        parts.push(self.parse_nameof_segment());
         while self.current_token().kind == TokenKind::DotToken {
             self.next_token();
-            parts.push(self.parse_nameof_segment()?);
+            parts.push(self.parse_nameof_segment());
         }
         self.match_token(TokenKind::CloseParenthesisToken);
-        Ok((kw, parts))
+        (kw, parts)
     }
 
     /// `typeof(expr)` — soft special (not a keyword). Operand is a value expression, unlike
     /// `sizeof`, which takes a type.
-    pub(crate) fn parse_typeof_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_typeof_expression(&mut self) -> ExpressionNode<'a> {
         let kw = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::OpenParenthesisToken);
-        let operand = self.parse_expression(0)?;
+        let operand = self.parse_expression(0);
         self.match_token(TokenKind::CloseParenthesisToken);
-        Ok(ExpressionNode::TypeOf(kw, self.arena.alloc(operand)))
+        ExpressionNode::TypeOf(kw, self.arena.alloc(operand))
     }
 
-    fn parse_nameof_segment(&mut self) -> Result<SyntaxToken, Error> {
+    fn parse_nameof_segment(&mut self) -> SyntaxToken {
         let kind = self.current_token().kind;
         if kind == TokenKind::IdentifierToken || kind == TokenKind::DataTypeToken {
-            return Ok(self.next_token());
+            return self.next_token();
         }
-        Ok(self.match_token(TokenKind::IdentifierToken))
+        self.match_token(TokenKind::IdentifierToken)
+    }
+
+    fn paren_starts_cast(&self) -> bool {
+        let first = self.peek_token(1).kind;
+        if first != TokenKind::DataTypeToken && first != TokenKind::IdentifierToken {
+            return false;
+        }
+        let mut i = 2;
+        let mut only_a_type = first == TokenKind::DataTypeToken
+            || crate::nodes::types::PRIMITIVE_TYPE_NAMES
+                .contains(&self.peek_token(1).text.as_str());
+        if self.peek_token(i).kind == TokenKind::SmallerThanToken {
+            match self.scan_generic_args(i + 1) {
+                Some(after) => {
+                    i = after;
+                    only_a_type = true;
+                }
+                None => return false,
+            }
+        }
+        while self.peek_token(i).kind == TokenKind::OpenBracketToken
+            && self.peek_token(i + 1).kind == TokenKind::CloseBracketToken
+        {
+            i += 2;
+            only_a_type = true;
+        }
+        if self.peek_token(i).kind != TokenKind::CloseParenthesisToken {
+            return false;
+        }
+        let next = self.peek_token(i + 1).kind;
+        let starts_term = matches!(
+            next,
+            TokenKind::NumberToken
+                | TokenKind::CharToken
+                | TokenKind::StringToken
+                | TokenKind::InterpolatedStringToken
+                | TokenKind::RawStringToken
+                | TokenKind::InterpolatedRawStringToken
+                | TokenKind::BooleanToken
+                | TokenKind::IdentifierToken
+                | TokenKind::DataTypeToken
+                | TokenKind::BangToken
+                | TokenKind::TildeToken
+                | TokenKind::AwaitToken
+        );
+        if only_a_type {
+            return starts_term
+                || matches!(
+                    next,
+                    TokenKind::OpenParenthesisToken
+                        | TokenKind::OpenBracketToken
+                        | TokenKind::MinusToken
+                        | TokenKind::PlusToken
+                );
+        }
+        if next == TokenKind::OpenParenthesisToken {
+            return self
+                .peek_token(1)
+                .text
+                .chars()
+                .next()
+                .is_some_and(char::is_uppercase);
+        }
+        starts_term
     }
 
     /// Disambiguates a leading `(` between a cast (`(Type)expr`) and a parenthesized expression
-    /// (`(expr)`), assuming the cursor is on the `(`. A cast is recognized when the parenthesized
-    /// content is a type name (`(int)`, `(Node)`, `(Foo[])`) immediately followed by an
-    /// expression-starting token. Parenthesized expressions allow a postfix chain for grouping
-    /// (e.g. `(-5).abs()`, `(arr)[0]`, `("x" + y).len()`).
-    pub(crate) fn parse_paren_or_cast(&mut self) -> Result<ExpressionNode<'a>, Error> {
-        // Casts are a single type in parens, never a comma-separated tuple type.
-        let is_cast = if self.peek_token(1).kind == TokenKind::DataTypeToken
-            || self.peek_token(1).kind == TokenKind::IdentifierToken
-        {
-            // Could be `(Node)0` or `(x) + 1` or `(int, string)` (tuple type / not a cast).
-            // Let's check token after `)`
-            let mut i = 2;
-            // Skip a generic argument list so `(Container<int>)b` (and nested forms like
-            // `(Pair<Box<int>, int>)x`) are recognized as casts. `scan_generic_args` tracks `<`/`>`
-            // nesting (treating `>>` as two closes) and returns the peek offset after the matching
-            // close; `None` means it is not a balanced generic list, so this is not a cast.
-            let generic_ok = if self.peek_token(i).kind == TokenKind::SmallerThanToken {
-                match self.scan_generic_args(i + 1) {
-                    Some(after) => {
-                        i = after;
-                        true
-                    }
-                    None => false,
-                }
-            } else {
-                true
-            };
-            if !generic_ok {
-                false
-            } else {
-                while self.peek_token(i).kind == TokenKind::OpenBracketToken {
-                    i += 2; // skip `[` and `]`
-                }
-                if self.peek_token(i).kind == TokenKind::CloseParenthesisToken {
-                    let next_kind = self.peek_token(i + 1).kind;
-                    // If the token after `)` is an expression starter, it's a cast — except for
-                    // `(ident)(…)` when `ident` is neither a primitive spelling nor a PascalCase
-                    // nominal type: that shape is the postfix-call form `(fun_value)(args)`.
-                    // Primitive casts like `(long)((int)c)` and nominal casts like `(Node)(x)`
-                    // still win; `(f)(2)` becomes Parenthesized + Call.
-                    if next_kind == TokenKind::OpenParenthesisToken {
-                        let type_name = &self.peek_token(1).text;
-                        crate::nodes::types::PRIMITIVE_TYPE_NAMES.contains(&type_name.as_str())
-                            || type_name.chars().next().is_some_and(|c| c.is_uppercase())
-                    } else {
-                        matches!(
-                            next_kind,
-                            TokenKind::NumberToken
-                                | TokenKind::CharToken
-                                | TokenKind::StringToken
-                                | TokenKind::BooleanToken
-                                | TokenKind::IdentifierToken
-                                | TokenKind::OpenBracketToken
-                                | TokenKind::MinusToken
-                                | TokenKind::BangToken
-                        )
-                    }
-                } else {
-                    // Comma (or anything else) after the type means this is not a cast —
-                    // e.g. `(int, string)` or `(a, b)`.
-                    false
-                }
-            }
-        } else {
-            false
-        };
-
-        if is_cast {
+    /// (`(expr)`), assuming the cursor is on the `(`.
+    ///
+    /// Content that can only be a type (a primitive keyword, a generic argument list, or an `[]`
+    /// suffix) is a cast whenever an operand follows the `)`. A bare name such as `(n)` or
+    /// `(Node)` is also a valid expression, so it is a cast only when the next token cannot
+    /// continue one: `(n) - 1` and `(arr)[0]` stay grouping, while `(Node)x` and `(Node)!x` cast.
+    /// `(name)(args)` casts only for PascalCase names; otherwise it calls a function value.
+    /// The operand binds like a prefix operator: `(int)-x` casts `-x`, `(int)x + 1` casts `x`.
+    pub(crate) fn parse_paren_or_cast(&mut self) -> ExpressionNode<'a> {
+        if self.paren_starts_cast() {
             let open = self.match_token(TokenKind::OpenParenthesisToken);
-            let cast_type = self.parse_type()?;
+            let cast_type = self.parse_type();
             self.match_token(TokenKind::CloseParenthesisToken);
-            let expression = self.parse_primary_expression()?;
-            return Ok(ExpressionNode::Cast(
-                open,
-                cast_type,
-                self.arena.alloc(expression),
-            ));
+            let expression = self.parse_expression(crate::precedence::UNARY_PRECEDENCE);
+            return ExpressionNode::Cast(open, cast_type, self.arena.alloc(expression));
         }
 
         //eat the open parenthesis
         let open = self.match_token(TokenKind::OpenParenthesisToken);
-        let first = self.parse_expression(0)?;
+        let first = self.parse_expression(0);
         if self.current_token().kind == TokenKind::CommaToken {
             let mut elems = vec![first];
             while self.current_token().kind == TokenKind::CommaToken {
@@ -467,7 +464,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if self.current_token().kind == TokenKind::CloseParenthesisToken {
                     break;
                 }
-                elems.push(self.parse_expression(0)?);
+                elems.push(self.parse_expression(0));
             }
             self.match_token(TokenKind::CloseParenthesisToken);
             if elems.len() < 2 {
@@ -492,10 +489,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// accesses onto an already-parsed base expression. Used so a call on a bare identifier (e.g. a
     /// constructor like `Reader(path)`) can be chained: `Reader(path).configure(...)`, and so
     /// a `fun(...)` value expression can be invoked: `make()()`, `(f)(x)`.
-    pub(crate) fn parse_postfix_chain(
-        &mut self,
-        base: ExpressionNode<'a>,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_postfix_chain(&mut self, base: ExpressionNode<'a>) -> ExpressionNode<'a> {
         let mut expr = base;
         loop {
             if let Some(start) = expr.start_position() {
@@ -508,7 +502,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
             if self.current_token().kind == TokenKind::OpenBracketToken {
                 self.match_token(TokenKind::OpenBracketToken);
-                let index = self.parse_expression(0)?;
+                let index = self.parse_expression(0);
                 self.match_token(TokenKind::CloseBracketToken);
                 expr = ExpressionNode::IndexAccess(self.arena.alloc(expr), self.arena.alloc(index));
             } else if self.current_token().kind == TokenKind::SmallerThanToken {
@@ -522,14 +516,14 @@ impl<'a, 'b> Parser<'a, 'b> {
                     break;
                 }
                 self.match_token(TokenKind::SmallerThanToken);
-                let generic_args = Some(self.parse_generic_args()?);
+                let generic_args = Some(self.parse_generic_args());
                 self.match_token(TokenKind::OpenParenthesisToken);
                 let mut arguments = Vec::new();
                 while self.current_token().kind != TokenKind::CloseParenthesisToken
                     && self.current_token().kind != EndOfFileToken
                 {
                     let iter = self.current_token_index;
-                    arguments.push(self.parse_call_argument()?);
+                    arguments.push(self.parse_call_argument());
                     if self.current_token().kind == TokenKind::CommaToken
                         && self.peek_token(1).kind != TokenKind::CloseParenthesisToken
                     {
@@ -546,7 +540,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     && self.current_token().kind != EndOfFileToken
                 {
                     let iter = self.current_token_index;
-                    arguments.push(self.parse_call_argument()?);
+                    arguments.push(self.parse_call_argument());
                     if self.current_token().kind == TokenKind::CommaToken
                         && self.peek_token(1).kind != TokenKind::CloseParenthesisToken
                     {
@@ -566,7 +560,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let await_tok = self.match_token(TokenKind::AwaitToken);
                 expr = ExpressionNode::Await(await_tok, self.arena.alloc(expr));
             } else if self.current_token().kind == TokenKind::DotToken {
-                expr = self.parse_member_access_step(expr)?;
+                expr = self.parse_member_access_step(expr);
             } else if self.current_token().kind == TokenKind::QuestionMarkToken
                 && self.is_try_propagation_question_mark()
             {
@@ -589,7 +583,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 break;
             }
         }
-        Ok(expr)
+        expr
     }
 
     /// Disambiguates a postfix `?` (try-propagation, `expr?`) from the leading `?` of a ternary
@@ -631,28 +625,25 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// a bare `?`, not `:`, introduces a ternary's branches). Shared by every call-argument list
     /// (free/generic function calls, method calls, generic-static-receiver calls) so named-argument
     /// support only has to be taught once.
-    pub(crate) fn parse_call_argument(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_call_argument(&mut self) -> ExpressionNode<'a> {
         if self.current_token().kind == IdentifierToken
             && self.peek_token(1).kind == TokenKind::ColonToken
         {
             let name = self.next_token();
             self.match_token(TokenKind::ColonToken);
-            let value = self.parse_call_argument_value()?;
-            return Ok(ExpressionNode::NamedArg(name, self.arena.alloc(value)));
+            let value = self.parse_call_argument_value();
+            return ExpressionNode::NamedArg(name, self.arena.alloc(value));
         }
         self.parse_call_argument_value()
     }
 
-    fn parse_call_argument_value(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    fn parse_call_argument_value(&mut self) -> ExpressionNode<'a> {
         // A pass-by-reference argument: `ref place`. The place shape (identifier/member/index) is
         // validated by the analyzer, not here — parsing accepts any unary-level expression.
         if self.current_token().kind == TokenKind::RefToken {
             let ref_tok = self.match_token(TokenKind::RefToken);
-            let value = self.parse_expression(0)?;
-            return Ok(ExpressionNode::RefArgument(
-                ref_tok,
-                self.arena.alloc(value),
-            ));
+            let value = self.parse_expression(0);
+            return ExpressionNode::RefArgument(ref_tok, self.arena.alloc(value));
         }
         self.parse_expression(0)
     }
@@ -665,7 +656,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_member_access_step(
         &mut self,
         base: ExpressionNode<'a>,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    ) -> ExpressionNode<'a> {
         self.match_token(TokenKind::DotToken);
         let member = self.match_member_name();
 
@@ -679,7 +670,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 .unwrap_or(false);
             if is_generic {
                 self.match_token(TokenKind::SmallerThanToken);
-                generic_args = Some(self.parse_generic_args()?);
+                generic_args = Some(self.parse_generic_args());
             }
         }
 
@@ -687,15 +678,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::OpenParenthesisToken);
             let params = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
                 p.parse_call_argument()
-            })?;
-            Ok(ExpressionNode::MethodCall(
-                self.arena.alloc(base),
-                member,
-                generic_args,
-                params,
-            ))
+            });
+            ExpressionNode::MethodCall(self.arena.alloc(base), member, generic_args, params)
         } else {
-            Ok(ExpressionNode::MemberAccess(self.arena.alloc(base), member))
+            ExpressionNode::MemberAccess(self.arena.alloc(base), member)
         }
     }
 
@@ -708,7 +694,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         &mut self,
         receiver: SyntaxToken,
         class_args: Vec<Type>,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    ) -> ExpressionNode<'a> {
         self.match_token(TokenKind::DotToken);
         let member = self.match_member_name();
         let base = ExpressionNode::Identifier(receiver);
@@ -716,32 +702,24 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::OpenParenthesisToken);
             let params = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
                 p.parse_call_argument()
-            })?;
-            Ok(ExpressionNode::MethodCall(
-                self.arena.alloc(base),
-                member,
-                Some(class_args),
-                params,
-            ))
+            });
+            ExpressionNode::MethodCall(self.arena.alloc(base), member, Some(class_args), params)
         } else {
-            Ok(ExpressionNode::MemberAccess(self.arena.alloc(base), member))
+            ExpressionNode::MemberAccess(self.arena.alloc(base), member)
         }
     }
 
     /// Parses a function invocation expression
-    pub(crate) fn parse_invocation_expression(&mut self) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_invocation_expression(&mut self) -> ExpressionNode<'a> {
         let function_name = self.match_token(TokenKind::IdentifierToken);
         self.parse_named_invocation(function_name)
     }
 
-    fn parse_named_invocation(
-        &mut self,
-        function_name: SyntaxToken,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    fn parse_named_invocation(&mut self, function_name: SyntaxToken) -> ExpressionNode<'a> {
         let mut generic_arguments = None;
         if self.current_token().kind == TokenKind::SmallerThanToken {
             self.match_token(TokenKind::SmallerThanToken);
-            generic_arguments = Some(self.parse_generic_args()?);
+            generic_arguments = Some(self.parse_generic_args());
         }
 
         //eat the open parenthesis
@@ -752,7 +730,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         {
             let iter = self.current_token_index;
             //parse the argument
-            let argument = self.parse_call_argument()?;
+            let argument = self.parse_call_argument();
             arguments.push(argument);
             if self.current_token().kind == TokenKind::CommaToken
                 && self.peek_token(1).kind != TokenKind::CloseParenthesisToken
@@ -764,10 +742,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         //eat the close parenthesis
         self.match_token(TokenKind::CloseParenthesisToken);
-        Ok(ExpressionNode::FunctionCall(
-            function_name,
-            generic_arguments,
-            arguments,
-        ))
+        ExpressionNode::FunctionCall(function_name, generic_arguments, arguments)
     }
 }

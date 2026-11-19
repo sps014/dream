@@ -42,3 +42,8 @@ ureq = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
+
+# `dream-host-core` is a link-time dependency: this cdylib calls core's C ABI through the shared
+# library, so no Rust item is imported and a Rust import would duplicate core's state.
+[lints.cargo]
+unused_dependencies = "allow"

@@ -28,9 +28,9 @@ impl<'a> Analyzer<'a> {
         // Default: clear `last` until a matching builtin re-fills it (`to_string` / …).
         self.hir_none();
 
-        // Element count is the property `arr.length` / `str.length` (see member_access). Reject
-        // call forms (including the old `.size()` spelling) so there is one public API.
-        if method.text == intrinsics::LENGTH || method.text == "size" {
+        // Element count is the property `arr.length` / `str.length` (see member_access), so the
+        // call form is rejected.
+        if method.text == intrinsics::LENGTH {
             let base = obj_type.get_type();
             if base.ends_with("[]") || base == "string" {
                 diagnostics.report_error(

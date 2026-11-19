@@ -156,7 +156,7 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
         "".into(),
         "\n".into(),
     ];
-    v.push("length".into());
+    v.push(dream_abi::intrinsics::LENGTH.into());
     v.push("type".into());
     for (ty, layout) in &mir.layouts.structs {
         v.push(format!(

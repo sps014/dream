@@ -59,7 +59,7 @@ public class MouseState {
     }
 
     fun has(button: MouseButton, mask: int): bool {
-        let index: int = button;
+        let index: int = (int)button;
         if index < 0 || index >= this.buttons.length {
             return false;
         }

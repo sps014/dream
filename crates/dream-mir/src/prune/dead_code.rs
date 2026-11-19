@@ -84,7 +84,7 @@ fn prune_dead_intrinsics(mir: &mut Mir) {
 
 /// Drops `mir.imports` whose `DefId` is not referenced by any surviving call / `JsCall` / `FuncRef`.
 ///
-/// Generated struct↔js marshalers (emitted later as WAT) call the `js*` host bridges by symbol, so
+/// Generated struct↔js marshalers (emitted by the backend) call the `js*` host bridges by symbol, so
 /// whenever a surviving `Cast` involves `js` — or any `JsCall` remains — every import whose host
 /// `field` starts with `js` is kept even if no MIR call edge names it.
 fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
@@ -100,7 +100,7 @@ fn prune_dead_imports(mir: &mut Mir, interner: &TypeInterner) {
 }
 
 /// True when a surviving `JsCall` or a `Cast` involving `js` remains. Generated marshalers and the
-/// `js*` host-bridge imports are only needed in that case (debug builds skip WAT DCE, so unused
+/// `js*` host-bridge imports are only needed in that case (debug builds skip linker DCE, so unused
 /// marshalers would otherwise call dropped `$js_object` / `$js_array` imports).
 pub(crate) fn module_uses_js_bridges(mir: &Mir, interner: &TypeInterner) -> bool {
     let is_js = |ty: TypeId| matches!(interner.kind(ty), TyKind::Js);
@@ -127,7 +127,7 @@ pub(crate) fn module_uses_js_bridges(mir: &Mir, interner: &TypeInterner) -> bool
 ///
 /// `mir.layouts` is filled from the full analyzed prelude, so a `println` program otherwise interned
 /// hundreds of `to_string` field-label strings and emitted `$release_*`/`$Type_to_string` for every
-/// stdlib type. WAT DCE drops dead funcs but keeps every data segment, so unused layouts dominated
+/// stdlib type. Linker DCE drops dead funcs but keeps every data segment, so unused layouts dominated
 /// tiny `--release` binaries. Remaining layouts still drive protocol strings, release helpers, tags,
 /// and JS marshalers.
 fn prune_dead_layouts(mir: &mut Mir, interner: &TypeInterner) {

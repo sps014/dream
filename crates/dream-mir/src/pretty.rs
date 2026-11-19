@@ -102,27 +102,6 @@ impl<'a> PrettyCx<'a> {
     }
 }
 
-/// Every function (then every poll body) of `mir` accepted by `keep`, in module order.
-pub fn print_module(
-    mir: &Mir,
-    interner: &TypeInterner,
-    keep: impl Fn(&MirFunction) -> bool,
-) -> String {
-    let names = MirNames::of(mir);
-    let cx = PrettyCx::new(interner, &names);
-    let mut out = String::new();
-    for f in mir.functions.iter().filter(|f| keep(f)) {
-        out.push_str(&print_function(&cx, f));
-        out.push('\n');
-    }
-    for p in mir.polls.iter().filter(|f| keep(f)) {
-        out.push_str("poll ");
-        out.push_str(&print_function(&cx, p));
-        out.push('\n');
-    }
-    out
-}
-
 pub fn print_function(cx: &PrettyCx<'_>, func: &MirFunction) -> String {
     let fp = FnPrinter { cx, func };
     let mut out = String::new();

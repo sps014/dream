@@ -109,14 +109,6 @@ impl AttributeArg {
         }
     }
 
-    /// Integer literal text (no suffix), if this is an int arg.
-    pub fn as_int_text(&self) -> Option<&str> {
-        match self {
-            AttributeArg::Int(t) => Some(t.text.as_str()),
-            _ => None,
-        }
-    }
-
     /// Value used by SemanticModel / codegen facades (strings unquoted; enum as dotted path).
     pub fn semantic_value(&self) -> String {
         match self {

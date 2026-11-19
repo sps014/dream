@@ -1,0 +1,49 @@
+import system;
+
+class Account {
+    public balance: int;
+
+    public constructor() {
+        this.balance = 0;
+    }
+}
+
+fun takes_int(value: int): int {
+    return value;
+}
+
+fun wrong_return(): int {
+    return "text";
+}
+
+fun operands(): void {
+    let mixed = true + 1;
+    let product = "a" * 2;
+    let ordered = "a" < 1;
+    let both = 1 && true;
+    let negated = !5;
+}
+
+fun conditions(): void {
+    let count = 3;
+    while count {
+        count = count - 1;
+    }
+    let picked = count ? 1 : 2;
+    for (let i = 0; i; i = i + 1) {}
+}
+
+fun assignments(): void {
+    let count = 1;
+    count = "many";
+    let account = Account();
+    account.balance = 2.5;
+    let items: int[] = [1, 2];
+    items[0] = "one";
+    let mixed = [1, "two"];
+    takes_int("three");
+    let word = "dream";
+    word[0] = 'D';
+}
+
+fun main(): void {}

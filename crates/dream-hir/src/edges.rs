@@ -21,8 +21,6 @@ pub struct HirEdges {
     /// First-class function values (`Binding::Func` / `Rvalue::FuncRef`), distinct from call
     /// targets — only these need a `$__ft` slot.
     pub funcrefs: Vec<FnKey>,
-    /// `print` / `to_string` / `hash_code` in the body, so the emitter can splice object/format WAT.
-    pub needs_format: bool,
     pub to_string: Vec<TypeId>,
     pub hash_code: Vec<TypeId>,
 }
@@ -171,7 +169,10 @@ pub fn hir_expr_edges(e: &crate::HExpr, out: &mut HirEdges) {
                 out.callees.push((*c, vec![]));
             }
             out.types.push(e.ty);
-            for a in args.iter().chain(field_inits.iter().map(|(_, value)| value)) {
+            for a in args
+                .iter()
+                .chain(field_inits.iter().map(|(_, value)| value))
+            {
                 hir_expr_edges(a, out);
             }
         }
@@ -205,19 +206,15 @@ pub fn hir_expr_edges(e: &crate::HExpr, out: &mut HirEdges) {
         | K::UnionField { base: x, .. }
         | K::IsType { value: x, .. }
         | K::TypeName { value: x }
-        | K::ForceFree(x) => hir_expr_edges(x, out),
-        K::Cast(x) => {
-            out.needs_format = true;
-            hir_expr_edges(x, out);
-        }
+        | K::ForceFree(x)
+        | K::Cast(x)
+        | K::Downcast(x) => hir_expr_edges(x, out),
         K::HashCode(x) => {
-            out.needs_format = true;
             out.hash_code.push(x.ty);
             hir_expr_edges(x, out);
         }
         K::ToString(x) | K::Print { arg: x, .. } => {
             out.to_string.push(x.ty);
-            out.needs_format = true;
             hir_expr_edges(x, out);
         }
         K::ArraySlotTake { array, index, .. } => {

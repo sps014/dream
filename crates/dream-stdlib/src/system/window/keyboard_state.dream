@@ -30,7 +30,7 @@ public class KeyboardState {
     }
 
     fun has(code: KeyCode, mask: int): bool {
-        let index: int = code;
+        let index: int = (int)code;
         if index < 0 || index >= this.states.length {
             return false;
         }

@@ -62,7 +62,7 @@ public override fun to_string(): string
 
 ## `parse`
 
-Parses a decimal float from `text`.
+Parses the whole of `text` as a decimal float, accepting the same spellings as `double.parse` and rounding to the nearest float. Returns `ParseError` for the same malformed input and for a finite value too large for a float.
 
 ```dream
 public static fun parse(borrow text: string): Result<float, ParseError>

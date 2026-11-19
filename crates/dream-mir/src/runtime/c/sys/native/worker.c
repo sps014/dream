@@ -547,7 +547,7 @@ static int unqueue_worker(Worker *w) {
 int32_t workerSpawn(int32_t one_shot) {
     Worker *w = calloc(1, sizeof(*w));
     if (!w) {
-        worker_failure("panic: out of memory creating a worker");
+        worker_failure("out of memory creating a worker");
     }
     __atomic_store_n(&dream_rt_mt, 1, __ATOMIC_RELEASE);
     w->one_shot = one_shot;
@@ -560,7 +560,7 @@ int32_t workerSpawn(int32_t one_shot) {
     dream_mutex_unlock(&reg_mu);
     if (id == 0) {
         destroy_worker(w);
-        worker_failure("panic: out of memory indexing workers");
+        worker_failure("out of memory indexing workers");
     }
     return id;
 }
@@ -575,7 +575,7 @@ static void bind_thread(Worker *w) {
             unregister_worker(w->id);
         }
         dream_mutex_unlock(&reg_mu);
-        worker_failure("panic: could not start a worker thread");
+        worker_failure("could not start a worker thread");
     }
 }
 
@@ -586,7 +586,7 @@ static Job *new_job(Worker *w, int32_t fn, dream_ptr env, dream_ptr msg) {
         if (j) { dream_count(DREAM_COUNT_WORKER_JOB_ALLOC, 1); }
     }
     if (!j) {
-        worker_failure("panic: out of memory posting a worker job");
+        worker_failure("out of memory posting a worker job");
     }
     j->fn = fn;
     j->env = env;

@@ -266,7 +266,7 @@ System.println(xs.length); // 2
 System.println(xs[0]); // 10
 ```
 
-`List<T>` offers `push`, `pop`, `@get_indexer` / `@set_indexer` (so `xs[i]` return `T` and panic if out of range; `xs[i] = v` writes through), `contains`, `index_of`, `remove_at`, `clear`, and `@iterator` (so `for (let x in xs)` works). Nested lists support `list[i][j]`. When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
+`List<T>` offers `push`, `pop`, an indexer (`xs[i]` returns `T` and panics if out of range; `xs[i] = v` writes through), `contains`, `index_of`, `remove_at`, `clear`, and `iterator()` (so `for (let x in xs)` works). Nested lists support `list[i][j]`. When the element type is `Comparable`, `sort()` and `binary_search()` are also available:
 
 ```dream
 let ys = List<int>();
@@ -283,7 +283,7 @@ System.println(ys.binary_search(2).unwrap_or(-1)); // 1
 
 - `Collection<T>` — `length` and `iterator()` (plus default `is_empty()` and query helpers like `all` / `any`). Implemented by `List`, `Set`, `Map`, `Queue`, `Stack`, and every `T[]`.
 - `IndexedCollection<T>` — extends `Collection<T>` with ordered indexable access (`items[index]`, defaults `first` / `last`). Implemented by `List` and by arrays (`extend T[]` in bootstrap).
-- `for (let x in xs)` works for arrays (native index loop), concrete `@iterator` types, and interface-typed `Collection` / `IndexedCollection` / `Iterator`.
+- `for (let x in xs)` works for arrays (native index loop), types with an `iterator()` method, and interface-typed `Collection` / `IndexedCollection` / `Iterator`.
 
 ```dream
 fun total_size(xs: Collection<string>): int {

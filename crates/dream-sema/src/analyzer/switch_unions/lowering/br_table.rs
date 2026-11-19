@@ -72,9 +72,22 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
         }
-        let (subject_type, subject_hir, subject_base, union_info) =
+        let resolved =
             self.resolve_switch_subject(subject, parent_function, symbol_table, diagnostics)?;
-        let subject_id = self.type_ctx.lower(&subject_type);
+        let subject_id = self.type_ctx.lower(&resolved.0);
+        // A `Switch` dispatches on an integer key, so floating-point subjects compare arm by arm.
+        if matches!(self.type_ctx.interner.kind(subject_id), dream_types::TyKind::Prim(p) if p.is_float())
+        {
+            return self.analyze_resolved_pattern_switch_chain(
+                super::if_chain::ResolvedSwitchSubject { subject, resolved },
+                arms,
+                parent_function,
+                symbol_table,
+                is_expression,
+                diagnostics,
+            );
+        }
+        let (subject_type, subject_hir, subject_base, union_info) = resolved;
         let union_def = match self.type_ctx.interner.kind(subject_id) {
             dream_types::TyKind::Union(def, _) => Some(*def),
             _ => None,
@@ -146,6 +159,7 @@ impl<'a> Analyzer<'a> {
             // Each arm introduces its pattern bindings into a fresh child scope.
             let arm_scope = Rc::new(RefCell::new(SymbolTable::new(Some(symbol_table.clone()))));
             (*symbol_table).borrow_mut().add_child(arm_scope.clone());
+            let scope = self.hir_push_scope();
 
             let info = self.check_pattern(&arm.pattern, &subject_type, &arm_scope, diagnostics)?;
 
@@ -201,6 +215,7 @@ impl<'a> Analyzer<'a> {
                 &mut hir_ok,
                 diagnostics,
             )?;
+            self.hir_pop_scope(scope);
             let body_hir = self.hir_close_block();
 
             match shape {

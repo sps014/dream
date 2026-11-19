@@ -45,7 +45,9 @@ mod source;
 use source::file_path_string;
 
 mod diagnostics;
-use diagnostics::{report, report_noted, report_with_code, report_with_notes};
+use diagnostics::{import_note, report, report_missing_member, report_noted, report_with_code};
+mod suggest;
+use suggest::similar_names;
 
 /// An empty source span, used for diagnostics on synthesized nodes that have no real
 /// position in the user's source (e.g. array element type mismatches).
@@ -180,6 +182,13 @@ pub struct AnalyzerContext<'a, 'b> {
     pub symbol_table: &'b Rc<RefCell<SymbolTable>>,
 }
 
+/// The callee whose arguments are being analyzed: its display name for diagnostics, and whether
+/// it runs function arguments on another worker (`@worker_body`).
+pub(super) struct CallTarget {
+    name: String,
+    runs_on_worker: bool,
+}
+
 /// Outcome of resolving `obj.member` as a struct field, shared by member reads (`obj.m`) and writes
 /// (`obj.m = v`) via [`Analyzer::resolve_member_field`]. Callers apply their own error-reporting and
 /// accessor (getter/setter) policy to the non-`Field` variants, which differs between read and write
@@ -292,6 +301,9 @@ pub struct Analyzer<'a> {
     /// binding for each of a generic class's `extern`/`@intrinsic` methods, mangled per instance)
     /// consult this list instead of `node.structs` to find every instantiation that needs one.
     generic_struct_instances: indexmap::IndexSet<dream_types::TypeId>,
+    /// Generic class instances whose type arguments failed the template's constraints. The
+    /// failure is reported once; values of these types are poisoned instead of re-diagnosed.
+    unsatisfied_instances: indexmap::IndexSet<dream_types::TypeId>,
     /// `@c` externs (by registered name) whose listed `fun` parameters need a per-target C wrapper,
     /// so a call site must pass a named function or a lambda literal there.
     c_wrapped_fun_params: HashMap<dream_types::DefId, Vec<usize>>,
@@ -347,13 +359,13 @@ pub struct Analyzer<'a> {
     /// transitive parent interfaces of each explicitly implemented interface.
     implements: HashMap<dream_types::TypeId, Vec<dream_types::TypeId>>,
     /// Type name (mangled for generic instances, matching `implements`'s keys) -> its
-    /// `@operator`/`@cast`-tagged methods, populated by
+    /// `fun operator`/`fun implicit()`/`fun explicit()` methods, populated by
     /// [`declarations::operator_overloads::Analyzer::validate_and_register_operator`] and consulted
     /// by `expressions::operators`/`expressions::dispatch`/`expressions::casts` to dispatch
     /// operators and user-defined conversions to the right method.
     operator_overloads:
         HashMap<dream_types::TypeId, declarations::operator_overloads::OperatorOverloads>,
-    /// Type name (mangled for generic instances) -> `@get_indexer`/`@set_indexer`/`@iterator`/`@next` hooks,
+    /// Type name (mangled for generic instances) -> `this[index]` indexer / `iterator()` / `next()` hooks,
     /// populated by [`declarations::protocol_hooks`] and consulted by indexer/`for..in` desugar.
     protocol_hooks: HashMap<dream_types::TypeId, declarations::protocol_hooks::ProtocolHooks>,
     /// Names of types declared `sealed` (class/struct/enum). A user `extend` block may not target
@@ -375,11 +387,10 @@ pub struct Analyzer<'a> {
     /// struct-method body. Empty outside of any generic instantiation. Used to resolve generic
     /// type parameters that appear inside a body (e.g. the `T` in `array_new<T>(...)`).
     current_generic_bindings: GenericBindings,
-    /// The callee name (function/constructor) whose arguments are currently being analyzed, or
-    /// `None` outside of any call. Consulted by `analyze_lambda` to apply `Task`-specific
-    /// capture restrictions (see `is_task_body_call`) without threading a dedicated parameter
-    /// through every call-argument-analysis helper.
-    current_call_target_name: Option<String>,
+    /// The callee whose arguments are currently being analyzed, or `None` outside of any call.
+    /// Consulted by `analyze_lambda` to apply worker-thread capture restrictions without threading
+    /// a dedicated parameter through every call-argument-analysis helper.
+    current_call_target: Option<CallTarget>,
     /// Stack of loop labels currently in scope, so `break label;`/`continue label;` can be
     /// validated against an enclosing labeled loop.
     loop_labels: Vec<String>,
@@ -392,6 +403,9 @@ pub struct Analyzer<'a> {
     /// True while instantiating a generic whose type argument was already rejected as a
     /// `ref struct`: the same escape would otherwise be reported again from inside its body.
     ref_struct_escape_muted: bool,
+    /// Generic union instances whose variants are being registered. A recursive payload such as
+    /// `Tree<T>` inside `Tree<T>` names the instance before it is complete.
+    unions_instantiating: HashSet<dream_types::TypeId>,
     /// True while analyzing the body of an `async fun`. Gates the use of `await`.
     current_function_is_async: bool,
     /// True while analyzing the body of an `@unsafe fun`/method. Gates calling another `@unsafe`
@@ -488,6 +502,7 @@ impl<'a> Analyzer<'a> {
             is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
             generic_struct_instances: indexmap::IndexSet::new(),
+            unsatisfied_instances: indexmap::IndexSet::new(),
             c_wrapped_fun_params: HashMap::new(),
             intrinsic_defs: Vec::new(),
             generic_method_bindings: indexmap::IndexMap::new(),
@@ -512,11 +527,12 @@ impl<'a> Analyzer<'a> {
             protocol_hooks: HashMap::new(),
             current_expected_type: None,
             current_generic_bindings: GenericBindings::new(),
-            current_call_target_name: None,
+            current_call_target: None,
             loop_labels: Vec::new(),
             pending_loop_label: None,
             switch_in_loop: false,
             ref_struct_escape_muted: false,
+            unions_instantiating: HashSet::new(),
             current_function_is_async: false,
             current_function_is_unsafe: false,
             target_layout: dream_hir::TargetLayout::default(),

@@ -89,13 +89,6 @@ impl FunctionWriter {
         &self.name
     }
 
-    pub fn fn_ty(&self) -> FnTy {
-        FnTy::new(
-            self.ret.clone(),
-            self.params.iter().map(|(t, _)| t.clone()).collect(),
-        )
-    }
-
     pub fn param(&self, i: usize) -> Value {
         Value::new(self.params[i].0.clone(), Repr::Arg(i as u32))
     }

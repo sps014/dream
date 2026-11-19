@@ -1,0 +1,63 @@
+import system;
+
+enum Shape {
+    Circle(int),
+    Dot
+}
+
+enum Other {
+    Thing(int),
+    Nothing
+}
+
+class Plain {
+    public constructor() {}
+}
+
+fun nothing(): void {}
+
+fun biggest<T: Comparable<T>>(a: T, b: T): T {
+    return a;
+}
+
+fun void_values(): int {
+    let joined = "a" + nothing();
+    let text = $"value {nothing()}";
+    let items = [nothing()];
+    let pair = (1, nothing());
+    let shown = nothing().to_string();
+    let same = nothing() == 1;
+    System.println(nothing());
+    if nothing() {
+        return 1;
+    }
+    let count = 0;
+    count = nothing();
+    return nothing();
+}
+
+fun cascades(): void {
+    let (first, second) = 5;
+    System.println(first);
+    System.println(second);
+
+    let values = [1];
+    values[undefined_index] += 1;
+
+    let p = biggest(Plain(), Plain());
+}
+
+fun patterns(shape: Shape): int {
+    let a = switch (shape) {
+        Other.Nothing => 0,
+        Nothing => 1,
+        Circle(r) => r,
+        Dot => 2,
+    };
+    return switch (shape) {
+        Circle() => 1,
+        Dot => 2,
+    };
+}
+
+fun main(): void {}

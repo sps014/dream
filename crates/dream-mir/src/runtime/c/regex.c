@@ -60,7 +60,7 @@ static void reject_match_limit(int rc) {
     if (rc == PCRE2_ERROR_MATCHLIMIT || rc == PCRE2_ERROR_DEPTHLIMIT ||
         rc == PCRE2_ERROR_HEAPLIMIT || rc == PCRE2_ERROR_JIT_STACKLIMIT) {
         dream_panic(dream_utf8_to_string(
-            "panic: regular expression exceeded its match limit"));
+            "regular expression exceeded its match limit"));
     }
 }
 

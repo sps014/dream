@@ -96,8 +96,14 @@ fn subst_unless_const(
     }
 }
 
-fn is_int_const(c: &Const) -> bool {
-    matches!(c, Const::Int(_) | Const::Long(_))
+/// Constants that do not determine the type a type-dispatched rvalue (`to_string`, `hash_code`,
+/// `type_name`) reads from its operand: an integer payload may be any integer-like type, and a
+/// string or `null` may also be a niche `Option` such as `Option<string>`.
+fn is_type_ambiguous_const(c: &Const) -> bool {
+    matches!(
+        c,
+        Const::Int(_) | Const::Long(_) | Const::Str(_) | Const::Null
+    )
 }
 
 /// Canonical 32-bit payloads compare the same signed or unsigned; a negative 64-bit payload may be
@@ -242,7 +248,7 @@ fn subst_rvalue_reads(rvalue: &mut Rvalue, known: &HashMap<Local, Operand>) -> b
                 | subst_operand(else_val, known)
         }
         Rvalue::TypeName(o) | Rvalue::HashCode(o) | Rvalue::ToString(o) => {
-            subst_unless_const(o, known, is_int_const)
+            subst_unless_const(o, known, is_type_ambiguous_const)
         }
         Rvalue::Binary(op, a, b) if op.is_comparison() => {
             subst_unless_const(a, known, is_sign_ambiguous_const)

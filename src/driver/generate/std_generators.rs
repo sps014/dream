@@ -24,15 +24,15 @@ fn parse(package: &'static dream_stdlib::StdPackage) -> StdGeneratorPackage {
     let files = package
         .files
         .iter()
-        .filter_map(|&(file, source)| {
+        .map(|&(file, source)| {
             let arena = bumpalo::Bump::new();
             let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
             let lexer = dream_syntax::lexer::Lexer::new(source.to_string());
             let mut parser = dream_syntax::parser::Parser::new(lexer, &arena, &mut diagnostics);
-            let ast = parser.parse().ok()?;
+            let ast = parser.parse();
             let program = ast.get_root();
             dream_stdlib::attributes::resolve_source_attribute_ids(program);
-            Some(StdGeneratorFile {
+            StdGeneratorFile {
                 file,
                 module: program
                     .module
@@ -45,7 +45,7 @@ fn parse(package: &'static dream_stdlib::StdPackage) -> StdGeneratorPackage {
                     .filter_map(super::registry::generator_decl)
                     .collect(),
                 scope: Scope::of_program(program),
-            })
+            }
         })
         .collect();
     StdGeneratorPackage {

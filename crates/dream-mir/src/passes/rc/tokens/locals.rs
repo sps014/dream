@@ -120,10 +120,12 @@ pub(crate) fn assigns_local(stmt: &Statement, local: u32) -> bool {
     matches!(stmt, Statement::Assign(Place::Local(l), _) if l.0 == local)
 }
 
+/// The last statement of the source line holding `si`. A `defer` exit ends the line early so a
+/// release that belongs to the `defer` body is queued before that `defer`'s budget is spent.
 pub(crate) fn source_line_end(block: &crate::BasicBlock, si: usize) -> usize {
     let mut end = si;
     for (j, s) in block.stmts.iter().enumerate().skip(si + 1) {
-        if matches!(s, Statement::SourceLine(_)) {
+        if matches!(s, Statement::SourceLine(_) | Statement::DeferLeave(_)) {
             break;
         }
         end = j;

@@ -90,7 +90,7 @@ static NodeBlock *node_cache_pop(NodeCache *cache) {
 
 static NodeBlock *node_block_allocate(dream_counter counter) {
     NodeBlock *block = dream_platform_current->allocate(sizeof(*block));
-    if (!block) { DREAM_PANIC_LITERAL(u"panic: scheduler allocation failed"); }
+    if (!block) { DREAM_PANIC_LITERAL(u"scheduler allocation failed"); }
     dream_count(counter, 1);
     return block;
 }

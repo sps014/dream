@@ -12,3 +12,8 @@ crate-type = ["cdylib"]
 dream-host-core = { path = "../dream-host-core" }
 dream-host-abi = { path = "../dream-host-abi" }
 tempfile = "3"
+
+# `dream-host-core` is a link-time dependency: this cdylib calls core's C ABI through the shared
+# library, so no Rust item is imported and a Rust import would duplicate core's state.
+[lints.cargo]
+unused_dependencies = "allow"

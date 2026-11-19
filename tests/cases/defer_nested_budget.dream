@@ -1,0 +1,27 @@
+// A nested `defer(n)` cleans `n` objects at its own `}`; `defer(0)` outside leaves the rest queued.
+import system;
+class Tracked {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+
+    del() {
+        System.print("drop ");
+        System.println(this.id);
+    }
+}
+
+fun main() {
+    defer(0) {
+        defer(2) {
+            let a = Tracked(1);
+            let b = Tracked(2);
+            let c = Tracked(3);
+            System.println(a.id + b.id + c.id);
+        }
+        System.println("inner");
+    }
+    System.println("outer");
+}

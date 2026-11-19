@@ -14,3 +14,8 @@ dream-host-abi = { path = "../dream-host-abi" }
 chrono = "0.4"
 chrono-tz = "0.10.4"
 iana-time-zone = "0.1.65"
+
+# `dream-host-core` is a link-time dependency: this cdylib calls core's C ABI through the shared
+# library, so no Rust item is imported and a Rust import would duplicate core's state.
+[lints.cargo]
+unused_dependencies = "allow"

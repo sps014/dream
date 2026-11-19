@@ -5,14 +5,25 @@ use super::token_kind::TokenKind;
 /// tracking nesting so multi-argument and nested generics (`Pair<Box<int>, int>`,
 /// `Box<Box<int>>`) are handled and `>>` counts as two closing `>`.
 ///
-/// Returns the index of the matching closing token, or `None` if a `;`, brace, or end-of-file is
-/// hit first: no type argument contains those, so `i < 8 { x >> 1 }` stays a comparison. Shared by the parser (to disambiguate generic calls/instantiations
-/// from `<`/`>` comparisons) and the formatter (to space type-argument regions correctly).
+/// Returns the index of the matching closing token, or `None` if a `;`, brace, unmatched `)`/`]`,
+/// or end-of-file is hit first: no type argument contains those, so `i < 8 { x >> 1 }` stays a
+/// comparison. Shared by the parser (to disambiguate generic calls/instantiations from `<`/`>`
+/// comparisons) and the formatter (to space type-argument regions correctly).
 pub fn scan_generic_close(tokens: &[SyntaxToken], open_idx: usize) -> Option<usize> {
     let mut depth: i32 = 1;
+    // Function and tuple types nest their own brackets; a close with no open inside the list
+    // belongs to an enclosing expression (`f((a < b), c > d)`), so the `<` is a comparison.
+    let mut nested: i32 = 0;
     let mut i = open_idx + 1;
     while i < tokens.len() {
         match tokens[i].kind {
+            TokenKind::OpenParenthesisToken | TokenKind::OpenBracketToken => nested += 1,
+            TokenKind::CloseParenthesisToken | TokenKind::CloseBracketToken => {
+                if nested == 0 {
+                    return None;
+                }
+                nested -= 1;
+            }
             TokenKind::SmallerThanToken => depth += 1,
             TokenKind::GreaterThanToken => {
                 depth -= 1;

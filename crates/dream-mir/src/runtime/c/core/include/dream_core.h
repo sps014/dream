@@ -662,14 +662,14 @@ void dream_panic_at(dream_ptr msg, const char *location);
 DREAM_ALWAYS_INLINE int32_t dream_str_byte_size(dream_ptr str) {
     int32_t units = dream_str_len(str);
     if (DREAM_UNLIKELY(units > INT32_MAX / 2)) {
-        DREAM_PANIC_LITERAL(u"panic: string byte count exceeds the int range");
+        DREAM_PANIC_LITERAL(u"string byte count exceeds the int range");
     }
     return units * 2;
 }
 
 DREAM_ALWAYS_INLINE int32_t dream_string_count_add(int32_t a, int32_t b) {
     if (DREAM_UNLIKELY(a < 0 || b < 0 || b > INT32_MAX - a)) {
-        DREAM_PANIC_LITERAL(u"panic: string length exceeds the supported limit");
+        DREAM_PANIC_LITERAL(u"string length exceeds the supported limit");
     }
     return a + b;
 }
@@ -677,7 +677,7 @@ DREAM_ALWAYS_INLINE int32_t dream_string_count_add(int32_t a, int32_t b) {
 DREAM_ALWAYS_INLINE dream_size dream_string_bytes(int32_t units) {
     if (DREAM_UNLIKELY(units < 0 ||
         (size_t)units > (DREAM_SIZE_MAX - HEAP_HEADER_SIZE - 23u) / 2u)) {
-        DREAM_PANIC_LITERAL(u"panic: string size exceeds the supported limit");
+        DREAM_PANIC_LITERAL(u"string size exceeds the supported limit");
     }
     return (dream_size)units * 2 + STRING_HEADER_SIZE;
 }
@@ -891,7 +891,7 @@ DREAM_ALWAYS_INLINE void dream_strb_append_ascii(dream_strb *sb, const char *s) 
         return;
     }
     if (n > (size_t)(INT32_MAX - sb->len)) {
-        DREAM_PANIC_LITERAL(u"panic: string length exceeds the supported limit");
+        DREAM_PANIC_LITERAL(u"string length exceeds the supported limit");
     }
     if ((size_t)sb->len + n > (size_t)sb->cap || sb->blk == 0) {
         dream_strb_reserve(sb, sb->len + (int32_t)n);
@@ -1381,7 +1381,7 @@ dream_ptr dream_array_new(int32_t len, int32_t esize);
    the payload. */
 static inline dream_ptr dream_status_bytes(uint8_t status, const void *payload, size_t count) {
     if (DREAM_UNLIKELY(count > INT32_MAX - 1u || (count && !payload))) {
-        DREAM_PANIC_LITERAL(u"panic: invalid host result payload size");
+        DREAM_PANIC_LITERAL(u"invalid host result payload size");
     }
     dream_ptr result = dream_array_new((int32_t)count + 1, 1);
     uint8_t *bytes = dream_array_bytes(result);
@@ -1394,14 +1394,14 @@ static inline dream_ptr dream_status_bytes(uint8_t status, const void *payload, 
    dream_status_finish records how many were filled, or failure when `filled` is negative. */
 static inline dream_ptr dream_status_buffer(int32_t capacity) {
     if (DREAM_UNLIKELY(capacity < 0 || capacity == INT32_MAX)) {
-        DREAM_PANIC_LITERAL(u"panic: invalid host result capacity");
+        DREAM_PANIC_LITERAL(u"invalid host result capacity");
     }
     return dream_array_new(capacity + 1, 1);
 }
 
 static inline void dream_status_finish(dream_ptr result, int64_t filled) {
     if (DREAM_UNLIKELY(!result || dream_i32(result)[0] < 1 || filled >= dream_i32(result)[0])) {
-        DREAM_PANIC_LITERAL(u"panic: host result exceeds buffer capacity");
+        DREAM_PANIC_LITERAL(u"host result exceeds buffer capacity");
     }
     dream_array_bytes(result)[0] = filled < 0 ? 1 : 0;
     dream_i32(result)[0] = filled < 0 ? 1 : (int32_t)filled + 1;
@@ -1550,7 +1550,7 @@ dream_ptr dream_to_wire(dream_ptr value, int32_t size);
 void dream_from_wire(dream_ptr text, dream_ptr dst, int32_t size);
 dream_ptr dream_from_wire_box(dream_ptr text, dream_size size, int32_t tag);
 int32_t dream_object_hash_code(dream_ptr p);
-int32_t dream_bitcast_f32(float v);
+int32_t dream_hash_float(float v);
 int32_t dream_hash_double(double v);
 int32_t dream_hash_long(int64_t v);
 dream_ptr dream_object_to_string(dream_ptr p);
@@ -1804,6 +1804,8 @@ int64_t fileHandleLength(int32_t fd);
 int32_t fileHandleClose(int32_t fd);
 
 void dream_process_capture_args(int32_t argc, char **argv);
+/* Native entry: report main-thread stack exhaustion as a panic instead of a bare signal. */
+void dream_install_stack_guard(void);
 int32_t processOsFamily(void);
 dream_ptr processArgs(void);
 dream_ptr processExePath(void);

@@ -78,7 +78,7 @@ pub struct Mir {
     /// Pre-lowered async poll bodies corresponding to the async functions in `functions`
     /// (in the exact same order). Separated so `functions.len()` maps 1:1 to user functions.
     pub polls: Vec<MirFunction>,
-    /// Module-level variable slots, so the backend can declare a WASM global per slot.
+    /// Module-level variable slots, so the backend can declare a global per slot.
     pub globals: Vec<MirGlobal>,
     /// Field/offset layout of every nominal type, carried from HIR for the backend to lower
     /// field/index access.
@@ -114,9 +114,11 @@ pub struct Mir {
     /// header, of any class constructed into it. The local's declared type cannot size the
     /// buffer: it may be a header-only supertype such as `object`.
     pub frame_objects: std::collections::BTreeMap<(DefId, Vec<TypeId>, Local), u32>,
+    /// Set once the ownership preparation pipeline has inserted explicit retains and releases.
+    pub ownership_prepared: bool,
 }
 
-/// A module-level variable slot (declared as one mutable WASM global `$g{id}`).
+/// A module-level variable slot (declared as one mutable backend global).
 #[derive(Debug)]
 pub struct MirGlobal {
     pub id: Global,

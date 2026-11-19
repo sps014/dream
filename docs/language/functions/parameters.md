@@ -219,6 +219,33 @@ Rules:
   adding it where the parameter isn't `ref`, is a compile-time error.
 - A `ref` argument's target may be a local variable, a parameter, a struct/class field, or an
   array element (`f(ref x)`, `f(ref obj.field)`, `f(ref arr[i])`).
+- A `ref` to a local variable or parameter shares that variable's storage for the whole call.
+  A `ref` to a field or array element works on a copy instead: the callee starts from the
+  field's current value, and the final value is written back to the field when the call
+  returns. While the call runs, reading the field through another path (for example through
+  the object passed as a separate argument) still shows the old value:
+  ```dream
+  class Counter {
+      public value: int;
+
+      public constructor() {
+          this.value = 0;
+      }
+  }
+
+  fun bump(ref n: int, counter: Counter): void {
+      n = n + 1;
+      System.println(counter.value); // 0, the write lands after the call
+  }
+
+  let counter: Counter = Counter();
+  bump(ref counter.value, counter);
+  System.println(counter.value); // 1
+  ```
+- Because of that write-back, two `ref` arguments in the same call cannot name overlapping
+  fields or elements, such as `swap(ref box.v, ref box.v)` or `swap(ref items[0], ref items[i])`.
+  The compiler rejects such a call. Distinct fields (`ref box.v, ref box.w`) and distinct
+  constant indices (`ref items[0], ref items[1]`) are fine.
 - `ref` cannot combine with a default value or a variadic (`...`) parameter on the same parameter.
 - A lambda may declare `ref` parameters. Annotate the function type as `fun(ref T): R` (the
   `ref` markers are part of the type) and call with `f(ref x)`:

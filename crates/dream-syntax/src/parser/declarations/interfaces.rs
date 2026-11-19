@@ -2,14 +2,13 @@ use super::super::Parser;
 use super::functions::FunctionModifiers;
 use crate::nodes::{FunctionNode, StatementNode, Type, Visibility};
 use crate::token::token_kind::TokenKind;
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Parses an `interface` declaration:
     /// `[public] interface Name [<T>] [: Parent (+ Parent)*] { method* }`.
     pub(crate) fn parse_interface_declaration(
         &mut self,
-    ) -> Result<crate::nodes::InterfaceDeclarationNode<'a>, Error> {
+    ) -> crate::nodes::InterfaceDeclarationNode<'a> {
         let first_trivia = self.current_token().leading_trivia.clone();
         let attributes = self.parse_attributes();
         let doc_trivia = Self::recover_doc_trivia(first_trivia, &attributes);
@@ -43,10 +42,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::ColonToken);
             loop {
                 let iter = self.current_token_index;
-                match self.parse_type() {
-                    Ok(t) => parents.push(t),
-                    Err(_) => break,
-                }
+                parents.push(self.parse_type());
                 if self.current_token().kind != TokenKind::PlusToken {
                     break;
                 }
@@ -67,7 +63,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 continue;
             }
             let method_attributes = self.parse_attributes();
-            let method = self.parse_interface_method(method_attributes)?;
+            let method = self.parse_interface_method(method_attributes);
             if self.keep_cfg_item(gate) {
                 methods.push(method);
             }
@@ -84,7 +80,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         );
         decl.generic_constraints = generic_constraints;
         decl.parents = parents;
-        Ok(decl)
+        decl
     }
 
     /// Parses one interface method: `[public] [static] fun Name[<T>](params)[: ret] ;` for a
@@ -94,7 +90,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_interface_method(
         &mut self,
         attributes: Vec<crate::nodes::AttributeNode>,
-    ) -> Result<FunctionNode<'a>, Error> {
+    ) -> FunctionNode<'a> {
         let FunctionModifiers {
             is_async,
             visibility,
@@ -132,15 +128,15 @@ impl<'a, 'b> Parser<'a, 'b> {
         if let Some(accessor_kind) = accessor_kind {
             self.match_token(TokenKind::IdentifierToken);
             let function_name = self.match_member_name();
-            let params = self.parse_formal_parameters()?;
+            let params = self.parse_formal_parameters();
             let mut return_type: Option<Type> = None;
             if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);
-                return_type = Some(self.parse_type()?);
+                return_type = Some(self.parse_type());
             }
             let (body, is_default): (&'a [StatementNode<'a>], bool) =
                 if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
-                    (self.parse_block()?, true)
+                    (self.parse_block(), true)
                 } else {
                     self.match_token(TokenKind::SemicolonToken);
                     (self.arena.alloc_slice_fill_iter(std::iter::empty()), false)
@@ -159,7 +155,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_default_impl = is_default;
             node.accessor = Some(accessor_kind);
             node.receiver_mode = receiver_mode;
-            return Ok(node);
+            return node;
         }
 
         self.match_token(TokenKind::FunToken);
@@ -176,12 +172,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::OpenBracketToken);
             let mut ps = self.parse_delimited_list(TokenKind::CloseBracketToken, |p| {
                 p.parse_simple_named_parameter()
-            })?;
+            });
             if self.current_token().kind == TokenKind::EqualToken {
                 self.match_token(TokenKind::EqualToken);
                 let value_name = self.match_token(TokenKind::IdentifierToken);
                 self.match_token(TokenKind::ColonToken);
-                let value_ty = self.parse_type()?;
+                let value_ty = self.parse_type();
                 ps.push(crate::nodes::function::ParameterNode::new(
                     value_name, value_ty,
                 ));
@@ -193,8 +189,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::IdentifierToken,
                 this_tok.position,
                 match indexer_kind {
-                    Some(crate::nodes::function::IndexerKind::Set) => "__set_indexer".to_string(),
-                    _ => "__get_indexer".to_string(),
+                    Some(crate::nodes::function::IndexerKind::Set) => {
+                        crate::nodes::types::SET_INDEXER_NAME.to_string()
+                    }
+                    _ => crate::nodes::types::GET_INDEXER_NAME.to_string(),
                 },
             );
             params = ps;
@@ -205,19 +203,19 @@ impl<'a, 'b> Parser<'a, 'b> {
             let (gp, gc) = self.take_generic_params();
             generic_parameters = gp;
             generic_constraints = gc;
-            params = self.parse_formal_parameters()?;
+            params = self.parse_formal_parameters();
         }
         let mut return_type: Option<Type> = None;
         if self.current_token().kind == TokenKind::ColonToken {
             self.match_token(TokenKind::ColonToken);
-            return_type = Some(self.parse_type()?);
+            return_type = Some(self.parse_type());
         }
 
         // A `{ ... }` body makes this a *default* method: implementing classes that omit it inherit
         // this body. A signature-only method ends with `;`.
         let (body, is_default): (&'a [StatementNode<'a>], bool) =
             if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
-                (self.parse_block()?, true)
+                (self.parse_block(), true)
             } else {
                 self.match_token(TokenKind::SemicolonToken);
                 (self.arena.alloc_slice_fill_iter(std::iter::empty()), false)
@@ -238,15 +236,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         node.generic_constraints = generic_constraints;
         node.receiver_mode = receiver_mode;
         node.indexer_kind = indexer_kind;
-        Ok(node)
+        node
     }
 
     /// Parses an `extend Type { ... }` block: a set of methods attached to an existing type
     /// (a primitive, `object`, array `T[]`, or a struct). The body holds method declarations only
     /// (no fields, no `constructor`/`del`).
-    pub(crate) fn parse_extend_declaration(
-        &mut self,
-    ) -> Result<crate::nodes::ExtendNode<'a>, Error> {
+    pub(crate) fn parse_extend_declaration(&mut self) -> crate::nodes::ExtendNode<'a> {
         self.match_token(TokenKind::ExtendToken);
 
         // Track whether the bare target was an identifier (e.g. `T` / `Point`) vs a data-type
@@ -285,7 +281,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::ColonToken);
             loop {
                 let iter = self.current_token_index;
-                implements.push(self.parse_type()?);
+                implements.push(self.parse_type());
                 if self.current_token().kind == TokenKind::CommaToken {
                     self.match_token(TokenKind::CommaToken);
                 } else {
@@ -322,7 +318,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 || self.current_token().kind == TokenKind::AsyncToken
                 || is_accessor
             {
-                methods.push(self.parse_function(Some(field_attributes))?);
+                methods.push(self.parse_function(Some(field_attributes)));
             } else {
                 let cur = self.current_token();
                 self.diagnostics.report_error(
@@ -344,6 +340,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         let mut node = crate::nodes::ExtendNode::new(target, generic_parameters, methods);
         node.generic_constraints = generic_constraints;
         node.implements = implements;
-        Ok(node)
+        node
     }
 }

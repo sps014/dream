@@ -19,7 +19,7 @@ fn verified_ir(source: &str, target: Target) -> Option<String> {
         &parse_arena,
         &mut diagnostics,
     );
-    let tree = parser.parse().expect("parser must recover to a program");
+    let tree = parser.parse();
     if diagnostics.has_errors() {
         return None;
     }

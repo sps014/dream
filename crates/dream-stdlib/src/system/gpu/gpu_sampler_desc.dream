@@ -67,8 +67,8 @@ public class GpuSamplerDesc {
     // [min_filter, mag_filter, mip_filter, address_u, address_v, address_w, compare + 1 or 0,
     //  max_anisotropy]
     internal fun encode(): int[] {
-        let filter: int = this.desc_filter;
-        let address: int = this.desc_address;
+        let filter: int = (int)this.desc_filter;
+        let address: int = (int)this.desc_address;
         let compare = switch (this.desc_compare) {
             Some(c) => GpuSamplerDesc.compare_code(c),
             None => 0,
@@ -77,7 +77,7 @@ public class GpuSamplerDesc {
     }
 
     static fun compare_code(compare: GpuCompare): int {
-        let code: int = compare;
+        let code: int = (int)compare;
         return code + 1;
     }
 }

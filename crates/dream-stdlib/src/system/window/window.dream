@@ -330,7 +330,7 @@ public class Window {
     public fun set_cursor_mode(mode: CursorMode): void {
         this.cursor = mode;
         if this.handle > 0 {
-            Window.set_cursor_mode_host(this.handle, mode);
+            Window.set_cursor_mode_host(this.handle, (int)mode);
         }
     }
 
@@ -338,7 +338,7 @@ public class Window {
     /// not provide fall back to the default arrow.
     public fun set_cursor_icon(icon: CursorIcon): void {
         if this.handle > 0 {
-            Window.set_cursor_icon_host(this.handle, icon);
+            Window.set_cursor_icon_host(this.handle, (int)icon);
         }
     }
 

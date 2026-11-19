@@ -496,7 +496,7 @@ fn test_hir_emission_global_initializer_runs_in_start() {
     let lexer = Lexer::new(code.to_string());
     let parse_arena = bumpalo::Bump::new();
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
-    let tree = parser.parse().expect("parse should succeed");
+    let tree = parser.parse();
     let arena = bumpalo::Bump::new();
     dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
     let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());
@@ -993,7 +993,7 @@ fn func_value_argument_is_reference_counted() {
     let lexer = Lexer::new(code.to_string());
     let parse_arena = bumpalo::Bump::new();
     let mut parser = Parser::new(lexer, &parse_arena, &mut diagnostics);
-    let tree = parser.parse().expect("parse should succeed");
+    let tree = parser.parse();
     let arena = bumpalo::Bump::new();
     dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
     let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());

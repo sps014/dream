@@ -19,11 +19,6 @@ pub struct StructFieldInfo {
 }
 
 impl StructFieldInfo {
-    /// True when this field is excluded from ARC strong-reference bookkeeping (`weak` or
-    /// `unowned`), and therefore does not contribute an edge to the reference-cycle graph.
-    pub fn is_non_owning(&self) -> bool {
-        self.is_weak || self.is_unowned
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +39,8 @@ pub struct StructInfo {
     /// Source file this type was declared in, for file/module-level visibility: a non-public type
     /// is only referenceable from its own file. `None` for synthesized types (always visible).
     pub file_path: Option<std::rc::Rc<str>>,
+    /// Name of the declaring `struct`/`class`; a generic instance shares its template's. `None` for unions.
+    pub name_span: Option<dream_text::text_span::TextSpan>,
 }
 
 #[derive(Debug, Clone)]
@@ -140,6 +137,7 @@ impl StructTable {
                 is_value: struct_decl.is_value,
                 packed,
                 file_path: struct_decl.file_path.clone(),
+                name_span: Some(struct_decl.name.position),
             },
         );
 
@@ -171,6 +169,7 @@ impl StructTable {
                 is_value: false,
                 packed: false,
                 file_path,
+                name_span: None,
             },
         );
         Ok(())

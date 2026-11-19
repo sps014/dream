@@ -81,17 +81,22 @@ impl<'a> Analyzer<'a> {
         // their concrete types (e.g. `let cmp: fun(T, T): int` becomes `fun(int, int): int`), so the
         // published expected type, the initializer check, and the recorded variable type are all
         // concrete. Outside a generic body the bindings are empty and this just clones.
+        let mut annotation_ok = true;
         if let Some(annotation) = type_annotation {
             let parameters = self
                 .current_generic_bindings
                 .keys()
                 .cloned()
                 .collect::<Vec<_>>();
-            self.check_declared_type(annotation, &parameters, diagnostics);
+            annotation_ok = self.check_declared_type(annotation, &parameters, diagnostics);
         }
-        let mono_annotation = type_annotation
-            .as_ref()
-            .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
+        let mono_annotation = type_annotation.as_ref().map(|t| {
+            if annotation_ok {
+                Self::monomorphize_type(t, &self.current_generic_bindings)
+            } else {
+                Type::Unknown
+            }
+        });
         let type_annotation = &mono_annotation;
         // Empty array literals carry no element type, so the declaration must supply one via an
         // array-typed (`int[]`) or `List<T>` annotation (e.g. `let xs: int[] = [];` / `let xs:
@@ -100,9 +105,11 @@ impl<'a> Analyzer<'a> {
         // analysis uses to allocate a zero-length array, or lower to `List<T>([])`).
         if let ExpressionNode::ArrayLiteral(_, elements) = right
             && elements.is_empty()
-            && !type_annotation
-                .as_ref()
-                .is_some_and(|t| t.is_array() || Self::collection_generic_arg(t, "List").is_some())
+            && !type_annotation.as_ref().is_some_and(|t| {
+                t.is_unknown()
+                    || t.is_array()
+                    || Self::collection_generic_arg(t, dream_abi::core_items::LIST_NAME).is_some()
+            })
         {
             self.hir_fail();
             diagnostics.report_error(
@@ -168,7 +175,7 @@ impl<'a> Analyzer<'a> {
         }
 
         let var_type = if let Some(t) = type_annotation {
-            // A user-defined `@cast("implicit")` conversion is tried before the built-in
+            // A user-defined `fun implicit()` conversion is tried before the built-in
             // assignability check, so `let x: T = expr;` accepts it exactly like numeric widening.
             let converted_type;
             (converted_type, value) = self.apply_implicit_cast(&right_type, t, value);
@@ -311,6 +318,34 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Declares every name in a destructuring pattern that could not be matched as the poison
+    /// type, so later uses don't report the names as undefined.
+    fn bind_pattern_as_unknown(
+        &mut self,
+        pattern: &dream_syntax::nodes::PatternNode,
+        is_const: bool,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        diagnostics: &mut DiagnosticBag,
+    ) {
+        use dream_syntax::nodes::PatternNode;
+        match pattern {
+            PatternNode::Binding(name) | PatternNode::Wildcard(name) => self.bind_or_discard_local(
+                name,
+                Type::Unknown,
+                None,
+                is_const,
+                symbol_table,
+                diagnostics,
+            ),
+            PatternNode::Tuple(pats) => {
+                for p in pats.iter() {
+                    self.bind_pattern_as_unknown(p, is_const, symbol_table, diagnostics);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn bind_pattern_from_value(
         &mut self,
         pattern: &dream_syntax::nodes::PatternNode,
@@ -341,6 +376,7 @@ impl<'a> Analyzer<'a> {
                         );
                     }
                     self.hir_fail();
+                    self.bind_pattern_as_unknown(pattern, is_const, symbol_table, diagnostics);
                     return;
                 };
                 if elem_tys.len() != pats.len() {
@@ -353,6 +389,7 @@ impl<'a> Analyzer<'a> {
                         pattern.position(),
                     );
                     self.hir_fail();
+                    self.bind_pattern_as_unknown(pattern, is_const, symbol_table, diagnostics);
                     return;
                 }
                 let pos = pattern.position().map(|s| s.start).unwrap_or(0);
@@ -398,6 +435,14 @@ impl<'a> Analyzer<'a> {
         symbol_table: &Rc<RefCell<SymbolTable>>,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<(), SemanticError> {
+        if left.text == dream_syntax::nodes::types::THIS_NAME {
+            diagnostics.report_error(
+                "'this' cannot be assigned to".to_string(),
+                Some(left.position),
+            );
+            self.hir_fail();
+            return Ok(());
+        }
         if Self::is_discard_binding(&left.text) {
             diagnostics.report_error(
                 "'_' is a discard and cannot be assigned to".to_string(),
@@ -477,7 +522,9 @@ impl<'a> Analyzer<'a> {
                 self.compare_data_type(
                     return_type,
                     &r,
-                    &parent_function.name.position,
+                    &expression
+                        .position()
+                        .unwrap_or(parent_function.name.position),
                     diagnostics,
                 )?;
                 let target = self.type_ctx.lower(return_type);
@@ -487,24 +534,27 @@ impl<'a> Analyzer<'a> {
             // parses to `Some(Type::Void)`, which is semantically the same as an unannotated
             // function); it exits early with no value.
             (None, Some(Type::Void)) => self.hir_return_void(),
-            (None, &Some(_)) => {
+            (None, Some(return_type)) => {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "return type mismatch at  {}",
-                        parent_function.name.position.get_point_str()
+                        "function '{}' returns '{}', so 'return' needs a value",
+                        parent_function.name.text,
+                        self.ty_display(return_type)
                     ),
                     Some(parent_function.name.position),
                 );
             }
-            (Some(_), &None) => {
+            (Some(expression), None) => {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "return type mismatch at {}",
-                        parent_function.name.position.get_point_str()
+                        "function '{}' does not return a value, so 'return' cannot have one",
+                        parent_function.name.text
                     ),
-                    Some(parent_function.name.position),
+                    expression
+                        .position()
+                        .or(Some(parent_function.name.position)),
                 );
             }
             (None, &None) => self.hir_return_void(),

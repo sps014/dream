@@ -40,9 +40,7 @@ fn collect(text: &str, offset: usize, len: usize, spans: &mut BTreeMap<usize, us
     let arena = Bump::new();
     let mut diagnostics = DiagnosticBag::new(None);
     let mut parser = Parser::new(Lexer::new(text.to_owned()), &arena, &mut diagnostics);
-    let Ok(tree) = parser.parse() else {
-        return false;
-    };
+    let tree = parser.parse();
     for span in &tree.get_root().node_spans {
         if span.expression
             && span.kind == "SyntaxBlock"

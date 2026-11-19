@@ -280,7 +280,7 @@ impl Lowerer<'_> {
     /// [`Self::release_locks_above`]/[`Self::release_all_locks`]. The temp's *declared* type (a
     /// `@shared class`) is what lets the backend find the target's lock-word offset
     /// (`obj_ptr + layout.size`, computed from the layout table at emission — see
-    /// `Emitter::emit_stmt`'s `Statement::LockAcquire`/`LockRelease` arms) without needing the
+    /// the LLVM backend's `Statement::LockAcquire`/`LockRelease` arms) without needing the
     /// layout table here during HIR->MIR lowering.
     pub(super) fn lower_lock(&mut self, target: &HExpr, body: &[HStmt]) {
         let target_op = self.lower_operand(target);

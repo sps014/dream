@@ -1,0 +1,60 @@
+import system;
+
+fun bump(ref value: int) {
+    value = value + 1;
+}
+
+fun main() {
+    let numbers = [1, 2, 3];
+    bump(ref numbers["zero"]);
+    bump(ref numbers[1.0]);
+
+    let poisoned = missing_value();
+    poisoned[0] = 1;
+
+    let k = 1;
+    let generic = <T>(x: T) => k;
+}
+
+enum Level {
+    Low,
+    High
+}
+
+class Holder {
+    public constructor() {}
+}
+
+fun takes_level(level: Level): void {}
+
+fun conversions() {
+    let raw: int = Level.High;
+    let level: Level = 1;
+    takes_level(0);
+    let holder = (Holder)0;
+    let items = (int[])0;
+    let sum = Level.Low + Level.High;
+}
+
+const NARROWED: int = 2.5;
+
+interface Adjuster {
+    fun adjust(ref value: int): void;
+    fun total(...values: int[]): int;
+}
+
+class PlainAdjuster: Adjuster {
+    public constructor() {}
+
+    public fun adjust(value: int): void {}
+
+    public fun total(values: int[]): int {
+        return 0;
+    }
+}
+
+fun unsigned_negation() {
+    let small: byte = -1;
+    let count: uint = 3;
+    let flipped = -count;
+}

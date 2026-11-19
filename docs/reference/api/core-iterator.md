@@ -6,7 +6,7 @@ Read the [usage guide](../../library/core/builtins.md) for examples and common t
 
 ## `Iterator`
 
-Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this. `@next` lives on the implementing class (attributes are not required on the interface).
+Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this.
 
 ```dream
 public interface Iterator<T>

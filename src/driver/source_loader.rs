@@ -334,13 +334,7 @@ pub fn parse_source_recursive<'a>(
         .with_cfg(acc.cfg)
         .with_c_import_scope(super::c_imports::source_scope(&path));
 
-    let ast = match parser.parse() {
-        Ok(ast) => ast,
-        Err(e) => {
-            diagnostics.extend(&file_diagnostics);
-            return Err(e);
-        }
-    };
+    let ast = parser.parse();
 
     diagnostics.extend(&file_diagnostics);
 
@@ -360,7 +354,8 @@ pub fn parse_source_recursive<'a>(
             continue;
         }
         if import.is_js {
-            acc.requested_std_packages.insert("system.js".into());
+            acc.requested_std_packages
+                .insert(dream_abi::core_items::JS_PACKAGE.into());
             continue;
         }
         if let Some(alias) = &import.alias {

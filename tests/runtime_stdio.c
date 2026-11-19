@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     text.units[1022] = 0xd83d;
     text.units[1023] = 0xde00;
     text.units[1024] = 0xd800;
-    /* Keep the surrogates lone, and verify bytes after the embedded zero stay hidden. */
+    /* Lone surrogates print as U+FFFD; an embedded zero and what follows it are written. */
     text.units[1025] = 'y';
     text.units[1026] = 0xdc00;
     text.units[1027] = 0xe9;

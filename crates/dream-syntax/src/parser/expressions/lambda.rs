@@ -2,7 +2,6 @@ use super::super::Parser;
 use crate::nodes::{ExpressionNode, LambdaBody, LambdaNode, ParameterNode, Type};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Lookahead for an arrow-lambda literal (`(params) => ...`), starting at peek offset `start`
@@ -47,21 +46,18 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// Parses an arrow-lambda literal `(params) => expr` / `(params) => { stmts }`, optionally
     /// preceded by `<TypeParams>`. `async_kw` is `Some` when the caller already consumed a leading
     /// `async`.
-    pub(crate) fn parse_lambda(
-        &mut self,
-        async_kw: Option<SyntaxToken>,
-    ) -> Result<ExpressionNode<'a>, Error> {
+    pub(crate) fn parse_lambda(&mut self, async_kw: Option<SyntaxToken>) -> ExpressionNode<'a> {
         let (generic_parameters, generic_constraints) = self.take_generic_params();
         let open_paren_position = self.current_token().position;
-        let parameters = self.parse_lambda_parameters()?;
+        let parameters = self.parse_lambda_parameters();
         self.match_token(TokenKind::FatArrowToken);
         let body = if self.current_token().kind == TokenKind::CurlyOpenBracketToken {
-            LambdaBody::Block(self.parse_block()?)
+            LambdaBody::Block(self.parse_block())
         } else {
-            let expr = self.parse_expression(0)?;
+            let expr = self.parse_expression(0);
             LambdaBody::Expr(self.arena.alloc(expr))
         };
-        Ok(ExpressionNode::Lambda(self.arena.alloc(LambdaNode {
+        ExpressionNode::Lambda(self.arena.alloc(LambdaNode {
             open_paren_position,
             async_keyword: async_kw.as_ref().map(|t| t.position),
             is_async: async_kw.is_some(),
@@ -69,14 +65,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             generic_constraints,
             parameters,
             body,
-        })))
+        }))
     }
 
     /// Parses a lambda's parameter list, `(name [: Type] [= default], ...)`. Identical to
     /// [`parse_formal_parameters`](Self::parse_formal_parameters) except the `: Type` annotation is
     /// optional: an omitted type is recorded as `Type::Unknown`, a sentinel the analyzer resolves
     /// from the lambda's expected `fun(...)` context (or reports a diagnostic for if none exists).
-    pub(crate) fn parse_lambda_parameters(&mut self) -> Result<Vec<ParameterNode>, Error> {
+    pub(crate) fn parse_lambda_parameters(&mut self) -> Vec<ParameterNode> {
         let mut params = vec![];
         self.match_token(TokenKind::OpenParenthesisToken);
 
@@ -103,7 +99,7 @@ impl<'a, 'b> Parser<'a, 'b> {
 
             let param_type = if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);
-                self.parse_type()?
+                self.parse_type()
             } else {
                 Type::Unknown
             };
@@ -135,7 +131,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 let default = if self.current_token().kind == TokenKind::EqualToken {
                     self.match_token(TokenKind::EqualToken);
                     seen_default = true;
-                    Some(self.parse_literal_pattern()?)
+                    Some(self.parse_literal_pattern())
                 } else {
                     if seen_default {
                         self.diagnostics.report_error(
@@ -165,6 +161,6 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
 
         self.match_token(TokenKind::CloseParenthesisToken);
-        Ok(params)
+        params
     }
 }

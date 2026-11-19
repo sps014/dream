@@ -98,12 +98,12 @@ internal class InputTracker {
         switch (event) {
             KeyDown(key) => {
                 if !key.repeat {
-                    InputTracker.press(this.keys, key.code);
+                    InputTracker.press(this.keys, (int)key.code);
                 }
             }
-            KeyUp(key) => InputTracker.release(this.keys, key.code),
-            MouseDown(button) => InputTracker.press(this.buttons, button),
-            MouseUp(button) => InputTracker.release(this.buttons, button),
+            KeyUp(key) => InputTracker.release(this.keys, (int)key.code),
+            MouseDown(button) => InputTracker.press(this.buttons, (int)button),
+            MouseUp(button) => InputTracker.release(this.buttons, (int)button),
             MouseMove(position) => {
                 if this.has_cursor {
                     this.motion = WindowVector(

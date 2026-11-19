@@ -49,7 +49,6 @@ async fun c2c_in_switch(n: int): int {
         default:
             return c2c_g(200).await;
     }
-    return -1;
 }
 
 async fun c2c_in_ternary(flag: bool): int {

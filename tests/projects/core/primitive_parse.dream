@@ -24,6 +24,17 @@ fun int_parse(): void {
 }
 
 @test
+fun parse_error_prints_its_message(): void {
+    switch (int.parse("x")) {
+        Ok(_) => Assert.fail("parsed an invalid digit"),
+        Err(e) => {
+            Assert.eq(e.to_string(), e.message());
+            Assert.eq($"{e}", e.message());
+        }
+    }
+}
+
+@test
 @timeout(180000)
 fun integer_parse_range(): void {
     Assert.eq(int.parse("2147483647").unwrap_or(0).to_string(), "2147483647");
@@ -49,7 +60,7 @@ fun integer_parse_range(): void {
     );
     Assert.is_true(ulong.parse("18446744073709551616").is_err());
     Assert.is_true(byte.parse("256").is_err());
-    Assert.is_true(double.parse("1e99999999999").unwrap_or(0.0d) > 1.0d);
+    Assert.is_true(double.parse("1e99999999999").is_err());
 }
 
 @test
@@ -100,4 +111,22 @@ fun parse_error(): void {
         Ok(n) => Assert.fail("propagated nope as " + n),
         Err(e) => Assert.eq(e.message(), "cannot parse int: invalid digit"),
     }
+}
+
+@test
+fun floating_parse_consumes_whole_text(): void {
+    Assert.is_true(double.parse("42 ").is_err());
+    Assert.is_true(double.parse("0x10").is_err());
+    Assert.is_true(double.parse("1e").is_err());
+    Assert.is_true(double.parse("-").is_err());
+    Assert.is_true(double.parse("1e400").is_err());
+    Assert.is_true(float.parse("1e39").is_err());
+    Assert.eq(double.parse("0e500").unwrap(), 0.0d);
+    Assert.eq(double.parse("0.001e310").unwrap(), 1e307d);
+    Assert.eq(double.parse(".5").unwrap(), 0.5d);
+    Assert.eq(1.0d / double.parse("-0").unwrap(), double.parse("-inf").unwrap());
+    let nan = double.parse("nan").unwrap();
+    Assert.is_true(nan != nan);
+    Assert.eq(double.parse(double.parse("inf").unwrap().to_string()).unwrap().to_string(), "inf");
+    Assert.eq(float.parse("-inf").unwrap().to_string(), "-inf");
 }

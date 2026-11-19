@@ -270,6 +270,16 @@ pub(crate) fn infer_cursors(
             {
                 continue;
             }
+            // Re-assigning the source releases the object the alias still reads
+            // (`prev = s; s = next(s); prev.id`), so such a copy must own its value.
+            let src_redefined_while_live = func.blocks.iter().enumerate().any(|(rbi, block)| {
+                block.stmts.iter().enumerate().any(|(rsi, stmt)| {
+                    assigns_local_cursor(stmt, src) && live.after_stmt(rbi, rsi, dest)
+                })
+            });
+            if src_redefined_while_live {
+                continue;
+            }
             // Last-use `y = x` is a move (dest owns). A still-live source is an alias cursor
             // (`t = s; return s`). Copies of field snapshots stay cursors.
             if func.locals[src as usize].is_cursor || live.after_stmt(bi, si, src) {

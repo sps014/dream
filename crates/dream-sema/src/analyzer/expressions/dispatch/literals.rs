@@ -133,6 +133,37 @@ impl<'a> Analyzer<'a> {
                                 number.get_span(),
                             )
                         }
+                        Some(v) if !matches!(ty, Type::Float16(_)) => {
+                            let (stored, largest) = if matches!(ty, Type::Float(_)) {
+                                (v as f32 as f64, "3.4028235e38")
+                            } else {
+                                (v, "1.7976931348623157e308")
+                            };
+                            let nonzero_digits = t
+                                .text
+                                .split(['e', 'E'])
+                                .next()
+                                .is_some_and(|m| m.chars().any(|c| ('1'..='9').contains(&c)));
+                            if stored.is_infinite() {
+                                diagnostics.report_error(
+                                    format!(
+                                        "literal {} does not fit in {} (largest finite value is {largest})",
+                                        t.text,
+                                        ty.get_type()
+                                    ),
+                                    number.get_span(),
+                                );
+                            } else if stored == 0.0 && nonzero_digits {
+                                diagnostics.report_error(
+                                    format!(
+                                        "literal {} is too small for {} and would round to 0",
+                                        t.text,
+                                        ty.get_type()
+                                    ),
+                                    number.get_span(),
+                                );
+                            }
+                        }
                         Some(_) => {}
                     }
                 }
@@ -162,7 +193,7 @@ impl<'a> Analyzer<'a> {
                     self.current_expected_type =
                         expected_elems.as_ref().and_then(|es| es.get(i).cloned());
                     let ty = self
-                        .analyze_expression(elem, parent_function, symbol_table, diagnostics)
+                        .analyze_value_expression(elem, parent_function, symbol_table, diagnostics)
                         .unwrap_or(Type::Unknown);
                     elem_hirs.push(self.hir_take());
                     self.current_expected_type = saved;

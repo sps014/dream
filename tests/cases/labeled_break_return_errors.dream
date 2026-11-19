@@ -1,0 +1,17 @@
+// A labeled break leaves the outer loop, so the end of the function is reachable.
+import system;
+
+fun f(c: int): int {
+    outer: while (true) {
+        while (true) {
+            if (c == 1) {
+                break outer;
+            }
+            return 5;
+        }
+    }
+}
+
+fun main(): void {
+    System.println(f(1));
+}

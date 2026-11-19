@@ -198,7 +198,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     /// A field of the protocol receiver `p`: inline values by address, the rest loaded.
-    fn proto_field(&mut self, p: &V, f: &FieldLayout) -> V {
+    pub(super) fn proto_field(&mut self, p: &V, f: &FieldLayout) -> V {
         let at = self.addr(p, f.offset as i64);
         if self.is_value(f.ty) {
             return self.as_ref(&V::s(at));
@@ -706,12 +706,12 @@ fn hash_code_router(l: &mut Lcx<'_>) {
         ),
         call_arm(
             vec![abi::TAG_FLOAT],
-            "dream_bitcast_f32".into(),
+            "dream_hash_float".into(),
             Some(Ty::F32),
         ),
         call_arm(
             vec![abi::TAG_FLOAT16],
-            "dream_bitcast_f32".into(),
+            "dream_hash_float".into(),
             Some(Ty::F16),
         ),
         call_arm(

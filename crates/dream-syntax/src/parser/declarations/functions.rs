@@ -1,7 +1,6 @@
 use super::super::Parser;
 use crate::nodes::{FunctionNode, ParameterNode, StatementNode, Type, Visibility};
 use crate::token::token_kind::TokenKind;
-use std::io::Error;
 
 /// The four modifiers a `fun`/`constructor`/`del` declaration may carry, parsed from the flexible
 /// `async`/`public`/`internal`/`static`/`extern` prefix (which may appear in several orders).
@@ -60,7 +59,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     pub(crate) fn parse_function(
         &mut self,
         pre_parsed_attributes: Option<Vec<crate::nodes::AttributeNode>>,
-    ) -> Result<FunctionNode<'a>, Error> {
+    ) -> FunctionNode<'a> {
         let first_trivia = self.current_token().leading_trivia.clone();
 
         let attributes = pre_parsed_attributes.unwrap_or_else(|| self.parse_attributes());
@@ -141,7 +140,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     Some(ctor_name.position),
                 );
             }
-            let params = self.parse_formal_parameters()?;
+            let params = self.parse_formal_parameters();
             let where_constraints = if is_dtor {
                 Vec::new()
             } else {
@@ -163,9 +162,9 @@ impl<'a, 'b> Parser<'a, 'b> {
                     FunctionNode::new(attributes, ctor_name, None, None, params, empty, visibility);
                 node.is_extern = true;
                 node.where_constraints = where_constraints;
-                return Ok(node);
+                return node;
             }
-            let block = self.parse_block()?;
+            let block = self.parse_block();
             let ctor_vis = if is_dtor {
                 Visibility::Private
             } else {
@@ -175,7 +174,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 FunctionNode::new(attributes, ctor_name, None, None, params, block, ctor_vis);
             node.is_override = is_override;
             node.where_constraints = where_constraints;
-            return Ok(node);
+            return node;
         }
 
         // TypeScript-style property accessor: `get name(): T { ... }` / `set name(value: T) { ... }`.
@@ -195,13 +194,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::IdentifierToken);
             let mut prop_name = self.match_member_name();
             Self::splice_leading_trivia(&mut prop_name, first_trivia);
-            let params = self.parse_formal_parameters()?;
+            let params = self.parse_formal_parameters();
             let mut return_type: Option<Type> = None;
             if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);
-                return_type = Some(self.parse_type()?);
+                return_type = Some(self.parse_type());
             }
-            let block = self.parse_block()?;
+            let block = self.parse_block();
             let mut node = FunctionNode::new(
                 attributes,
                 prop_name,
@@ -215,7 +214,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.is_async = is_async;
             node.accessor = Some(accessor_kind);
             node.is_override = is_override;
-            return Ok(node);
+            return node;
         }
 
         //eat the fun keyword
@@ -233,7 +232,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             operator_symbol = Some(op.text.clone());
             let op_pos = op.position;
             self.next_token();
-            params = self.parse_formal_parameters()?;
+            params = self.parse_formal_parameters();
             function_name = crate::token::syntax_token::SyntaxToken::new(
                 TokenKind::IdentifierToken,
                 op_pos,
@@ -248,12 +247,12 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::OpenBracketToken);
             params = self.parse_delimited_list(TokenKind::CloseBracketToken, |p| {
                 p.parse_simple_named_parameter()
-            })?;
+            });
             if self.current_token().kind == TokenKind::EqualToken {
                 self.match_token(TokenKind::EqualToken);
                 let value_name = self.match_token(TokenKind::IdentifierToken);
                 self.match_token(TokenKind::ColonToken);
-                let value_ty = self.parse_type()?;
+                let value_ty = self.parse_type();
                 params.push(ParameterNode::new(value_name, value_ty));
                 indexer_kind = Some(crate::nodes::function::IndexerKind::Set);
             } else {
@@ -263,8 +262,10 @@ impl<'a, 'b> Parser<'a, 'b> {
                 TokenKind::IdentifierToken,
                 this_tok.position,
                 match indexer_kind {
-                    Some(crate::nodes::function::IndexerKind::Set) => "__set_indexer".to_string(),
-                    _ => "__get_indexer".to_string(),
+                    Some(crate::nodes::function::IndexerKind::Set) => {
+                        crate::nodes::types::SET_INDEXER_NAME.to_string()
+                    }
+                    _ => crate::nodes::types::GET_INDEXER_NAME.to_string(),
                 },
             );
             Self::splice_leading_trivia(&mut function_name, first_trivia);
@@ -274,7 +275,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             let (gp, gc) = self.take_generic_params();
             generic_parameters = gp;
             generic_constraints = gc;
-            params = self.parse_formal_parameters()?;
+            params = self.parse_formal_parameters();
         }
 
         let mut cast_kind = None;
@@ -289,7 +290,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         if self.current_token().kind == TokenKind::ColonToken {
             //eat the colon
             self.match_token(TokenKind::ColonToken);
-            return_type = Some(self.parse_type()?);
+            return_type = Some(self.parse_type());
         }
 
         let where_constraints = self.parse_where_constraints();
@@ -327,10 +328,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             node.operator_symbol = operator_symbol;
             node.cast_kind = cast_kind;
             node.indexer_kind = indexer_kind;
-            return Ok(node);
+            return node;
         }
 
-        let block = self.parse_block()?;
+        let block = self.parse_block();
         let mut node = FunctionNode::new(
             attributes,
             function_name,
@@ -349,13 +350,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         node.operator_symbol = operator_symbol;
         node.cast_kind = cast_kind;
         node.indexer_kind = indexer_kind;
-        Ok(node)
+        node
     }
 
     /// Parses formal parameters for a function declaration. A parameter may carry a constant
     /// default (`name: type = <literal>` or `= Option.None`); once one parameter has a default,
     /// every parameter after it must also have one (defaults must be trailing).
-    pub(crate) fn parse_formal_parameters(&mut self) -> Result<Vec<ParameterNode>, Error> {
+    pub(crate) fn parse_formal_parameters(&mut self) -> Vec<ParameterNode> {
         let mut params = vec![];
         //eat the open parenthesis
         self.match_token(TokenKind::OpenParenthesisToken);
@@ -394,7 +395,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             //eat the colon
             self.match_token(TokenKind::ColonToken);
 
-            let param_type = self.parse_type()?;
+            let param_type = self.parse_type();
 
             let ownership_modifier = if is_ref {
                 Some("ref")
@@ -465,7 +466,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     let default = if self.current_token().kind == TokenKind::EqualToken {
                         self.match_token(TokenKind::EqualToken);
                         seen_default = true;
-                        Some(self.parse_literal_pattern()?)
+                        Some(self.parse_literal_pattern())
                     } else {
                         if seen_default {
                             self.diagnostics.report_error(
@@ -509,10 +510,10 @@ impl<'a, 'b> Parser<'a, 'b> {
 
         //eat the close parenthesis
         self.match_token(TokenKind::CloseParenthesisToken);
-        Ok(params)
+        params
     }
 
-    pub(crate) fn parse_simple_named_parameter(&mut self) -> Result<ParameterNode, Error> {
+    pub(crate) fn parse_simple_named_parameter(&mut self) -> ParameterNode {
         let is_ref = self.current_token().kind == TokenKind::RefToken;
         if is_ref {
             self.match_token(TokenKind::RefToken);
@@ -525,13 +526,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         };
         let param = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::ColonToken);
-        let param_type = self.parse_type()?;
+        let param_type = self.parse_type();
         if is_ref {
-            Ok(ParameterNode::by_ref(param, param_type))
+            ParameterNode::by_ref(param, param_type)
         } else if is_borrow {
-            Ok(ParameterNode::borrow(param, param_type))
+            ParameterNode::borrow(param, param_type)
         } else {
-            Ok(ParameterNode::new(param, param_type))
+            ParameterNode::new(param, param_type)
         }
     }
 }

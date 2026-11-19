@@ -124,6 +124,73 @@ impl<'a> Analyzer<'a> {
         )
     }
 
+    /// For a generic instance `ty` lacking `member`, the `where` clause of a template method by
+    /// that name with `ty`'s type arguments substituted (`'P' to satisfy 'Comparable<P>'`): the
+    /// method exists but did not attach because an argument fails the clause.
+    pub(in crate::analyzer) fn unmet_where_clause(
+        &mut self,
+        ty: TypeId,
+        member: &str,
+    ) -> Option<String> {
+        let (target, args) = match self.type_ctx.interner.kind(ty) {
+            TyKind::Struct(def, args) | TyKind::Union(def, args) if !args.is_empty() => {
+                (GenericExtendTarget::Nominal(*def), args.clone())
+            }
+            TyKind::Array(elem) => (GenericExtendTarget::Array, vec![*elem]),
+            _ => return None,
+        };
+        let mut candidates: Vec<(&'a FunctionNode<'a>, Vec<String>)> = Vec::new();
+        if let GenericExtendTarget::Nominal(def) = target {
+            if let Some(template) = self.generic_struct(def) {
+                let names = generic_param_names(&template.generic_parameters);
+                candidates.extend(template.methods.iter().map(|m| (m, names.clone())));
+            } else if let Some(template) = self.generic_union(def) {
+                let names = generic_param_names(&template.generic_parameters);
+                candidates.extend(template.methods.iter().map(|m| (m, names.clone())));
+            }
+        }
+        for ext in self.generic_extends.get(&target).into_iter().flatten() {
+            let names = generic_param_names(&ext.generic_parameters);
+            candidates.extend(ext.methods.iter().map(|m| (m, names.clone())));
+        }
+        let (method, names) = candidates
+            .into_iter()
+            .find(|(m, _)| m.name.text == member && !m.where_constraints.is_empty())?;
+        let bindings: GenericBindings = names
+            .into_iter()
+            .zip(args.iter().map(|&arg| self.type_ctx.syntax_type(arg)))
+            .collect();
+        let mut clauses = Vec::new();
+        for c in &method.where_constraints {
+            let Some(concrete) = bindings.get(&c.param.text).cloned() else {
+                continue;
+            };
+            let mut bounds: Vec<String> = c
+                .bounds
+                .iter()
+                .map(|bound| {
+                    let bound = Self::monomorphize_type(bound, &bindings);
+                    format!("'{}'", self.ty_display(&bound))
+                })
+                .collect();
+            bounds.extend(c.kinds.iter().map(|kind| {
+                match kind {
+                    dream_syntax::nodes::ConstraintKind::Struct => "'struct'",
+                    dream_syntax::nodes::ConstraintKind::Unmanaged => "'unmanaged'",
+                    dream_syntax::nodes::ConstraintKind::Shared => "'shared'",
+                    dream_syntax::nodes::ConstraintKind::Class => "'class'",
+                }
+                .to_string()
+            }));
+            clauses.push(format!(
+                "'{}' to satisfy {}",
+                self.ty_display(&concrete),
+                bounds.join(" and ")
+            ));
+        }
+        (!clauses.is_empty()).then(|| clauses.join(", and "))
+    }
+
     /// Whether a non-generic declaration or extension of `ty` declares `member`. Generic types can
     /// be instantiated before those methods are registered.
     fn declared_in_source(&mut self, ty: TypeId, member: &str) -> bool {

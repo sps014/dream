@@ -268,3 +268,18 @@ fun returned_closures_preserve_each_capture_and_dynamic_choice(): void {
     Assert.eq(sub(30), 23);
     Assert.eq(add(40), 47);
 }
+
+@test
+fun generic_lambdas_capture_their_environment(): void {
+    let offset = 40;
+    let one: fun(int): int = <T>(x: T) => offset + 2;
+    Assert.eq(one(1), 42);
+
+    let prefix = "x";
+    let count = 3;
+    let many: fun(int): string = <T>(x: T) => prefix + count.to_string();
+    Assert.eq(many(1), "x3");
+
+    offset = 50;
+    Assert.eq(one(1), 52);
+}

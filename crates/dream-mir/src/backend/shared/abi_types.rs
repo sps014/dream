@@ -361,7 +361,7 @@ pub(crate) fn runtime_c_name(sym: &str) -> String {
         dream_abi::intrinsics::ATTR_FUNCBOX_NEW => "dream_funcbox_new".into(),
         dream_abi::intrinsics::ATTR_FUNCBOX_FUNCIDX => "dream_funcbox_funcidx".into(),
         dream_abi::intrinsics::ATTR_FUNCBOX_ENV => "dream_funcbox_env".into(),
-        dream_abi::intrinsics::SLEEP => "dream_sleep".into(),
+        dream_abi::intrinsics::ATTR_SLEEP => "dream_sleep".into(),
         dream_abi::intrinsics::ATTR_PROMISE_ALL => "dream_all".into(),
         dream_abi::intrinsics::ATTR_PROMISE_RACE => "dream_race".into(),
         "shared_lock_acquire" => "dream_lock_acquire".into(),

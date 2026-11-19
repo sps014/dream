@@ -117,6 +117,10 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
         let mut owner = self.type_ctx.lower(obj_type);
+        if self.unsatisfied_instances.contains(&owner) {
+            self.hir_fail();
+            return Ok(Type::Unknown);
+        }
         let mut mangled_name = method_fn(struct_name, &method.text);
         let mut effective_struct = struct_name.to_string();
 
@@ -183,7 +187,7 @@ impl<'a> Analyzer<'a> {
         let method_info = self.method_info(owner, &method.text).ok();
         let is_variadic = method_info.as_ref().is_some_and(|info| info.is_variadic);
         let is_overloaded = self.method_overloaded(owner, &method.text);
-        let call_target = format!("{}.{}", effective_struct, method.text);
+        let call_target = format!("{}.{}", self.type_id_display(owner), method.text);
         let named_call = if has_named_arg && is_overloaded {
             Some(self.resolve_named_call(
                 (&call_target, method.position),
@@ -209,9 +213,9 @@ impl<'a> Analyzer<'a> {
                     .iter()
                     .map(|m| format!("similar method exists: '{}.{}'", owner_name, m))
                     .collect();
-                return Err(report_with_notes(
+                return Err(report_missing_member(
                     diagnostics,
-                    format!("Type '{}' has no method '{}'", owner_name, method.text),
+                    (&owner_name, "method", &method.text),
                     Some(method.position),
                     notes,
                 ));
@@ -262,8 +266,10 @@ impl<'a> Analyzer<'a> {
         let (mut arg_types, mut arg_hirs, mut arg_is_ref) = if let Some(args) = named_args {
             args
         } else {
-            let saved_call_target = self.current_call_target_name.take();
-            self.current_call_target_name = Some(call_target);
+            let runs_on_worker = self.candidates_run_on_worker(
+                &self.function_table.method_candidates(owner, &method.text),
+            );
+            let saved_call_target = self.enter_call_target(call_target, runs_on_worker);
 
             // Analyze the explicit arguments once, then resolve the method (overloaded methods select
             // by argument types, with the receiver supplied as the implicit `this` argument).
@@ -275,7 +281,7 @@ impl<'a> Analyzer<'a> {
                 diagnostics,
             );
 
-            self.current_call_target_name = saved_call_target;
+            self.current_call_target = saved_call_target;
 
             result?
         };
@@ -297,16 +303,23 @@ impl<'a> Analyzer<'a> {
                 Ok(s) => s.clone(),
                 Err(_) => {
                     let owner_name = self.type_id_display(owner);
+                    if let Some(clause) = self.unmet_where_clause(owner, &method.text) {
+                        return Err(report_with_code(
+                            diagnostics,
+                            format!("'{owner_name}.{}' requires {clause}", method.text),
+                            Some(method.position),
+                            "missing-member",
+                        ));
+                    }
                     let notes = suggest_methods(&self.function_table, owner, &method.text)
                         .iter()
                         .map(|m| format!("similar method exists: '{}.{}'", owner_name, m))
                         .collect();
-                    return Err(report_noted(
+                    return Err(report_missing_member(
                         diagnostics,
-                        format!("Type '{}' has no method '{}'", owner_name, method.text),
+                        (&owner_name, "method", &method.text),
                         Some(method.position),
                         notes,
-                        Some("missing-member"),
                     ));
                 }
             }
@@ -343,7 +356,18 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        self.check_unsafe_call(&store_sig, method.position, diagnostics);
+        self.check_unsafe_call(
+            &store_sig,
+            || {
+                format!(
+                    "{}.{}",
+                    self.type_id_display(owner),
+                    dream_syntax::nodes::types::member_display_name(&method.text)
+                )
+            },
+            method.position,
+            diagnostics,
+        );
         self.check_c_fun_args(
             store_sig.identity.0,
             params,
@@ -382,7 +406,11 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
 
-        let method_label = format!("{}.{}", self.type_id_display(owner), method.text);
+        let method_label = format!(
+            "{}.{}",
+            self.type_id_display(owner),
+            dream_syntax::nodes::types::member_display_name(&method.text)
+        );
         let total = expected_params.len();
         let required = Self::required_arg_count(&expected_defaults, total);
         let given = arg_types.len();
@@ -418,6 +446,7 @@ impl<'a> Analyzer<'a> {
             &expected_params,
             &arg_types,
             method.position,
+            params,
             diagnostics,
         );
         self.validate_js_callback_arguments(
@@ -477,46 +506,18 @@ impl<'a> Analyzer<'a> {
     }
 }
 
-/// Case-insensitive close-match suggestions for `did you mean` notes: prefix match or
-/// Levenshtein distance <= 2 over the methods of `struct_name` registered in the table.
+/// Close-match `did you mean` suggestions over the methods registered for `owner`.
 fn suggest_methods(
     table: &crate::function_table::FunctionTable,
     owner: dream_types::TypeId,
     wanted: &str,
 ) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let want = wanted.to_ascii_lowercase();
-    for (receiver, member) in table.methods.keys() {
-        if *receiver != owner {
-            continue;
-        }
-        let m = member.clone();
-        let lm = m.to_ascii_lowercase();
-        if (lm.starts_with(&want) || levenshtein(&lm, &want) <= 2) && !out.contains(&m) {
-            out.push(m);
-        }
-        if out.len() >= 3 {
-            break;
-        }
-    }
-    out.sort();
-    out
-}
-
-fn levenshtein(a: &str, b: &str) -> usize {
-    let a: Vec<char> = a.chars().collect();
-    let b: Vec<char> = b.chars().collect();
-    let mut prev: Vec<usize> = (0..=b.len()).collect();
-    for (i, ca) in a.iter().enumerate() {
-        let mut cur = vec![i + 1];
-        for (j2, cb) in b.iter().enumerate() {
-            let cost = if ca == cb { 0 } else { 1 };
-            cur.push((prev[j2] + cost).min(cur[j2] + 1).min(prev[j2 + 1] + 1));
-        }
-        prev = cur;
-        if i > 40 {
-            break;
-        }
-    }
-    *prev.last().unwrap_or(&usize::MAX)
+    crate::analyzer::similar_names(
+        wanted,
+        table
+            .methods
+            .keys()
+            .filter(|(receiver, _)| *receiver == owner)
+            .map(|(_, member)| member.as_str()),
+    )
 }

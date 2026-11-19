@@ -47,8 +47,3 @@ pub fn generator_only_paths(attributes: &[AttributeNode]) -> Option<Vec<String>>
 pub fn has_generator_attr(attributes: &[AttributeNode]) -> bool {
     has_named_attr(attributes, GENERATOR_ATTR)
 }
-
-/// True when the type declaration is an `@attribute` declaration.
-pub fn has_attribute_decl_attr(attributes: &[AttributeNode]) -> bool {
-    has_named_attr(attributes, ATTRIBUTE_ATTR)
-}

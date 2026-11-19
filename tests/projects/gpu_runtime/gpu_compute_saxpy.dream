@@ -6,7 +6,7 @@ import system.gpu;
 
 fun saxpy_label(backend: GpuBackend): string {
     let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
-    let index: int = backend;
+    let index: int = (int)backend;
     return names[index];
 }
 

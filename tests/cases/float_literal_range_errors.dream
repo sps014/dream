@@ -1,0 +1,10 @@
+// Float literals that overflow to infinity or round a nonzero value to zero are compile errors.
+fun main(): void {
+    let a = 1e400d;
+    let b = 3.4e39f;
+    let c = 1e-400d;
+    let d = -1e309d;
+    let largest = 1.7976931348623157e308d;
+    let tiny = 5e-324d;
+    let zero = 0.0e-400d;
+}

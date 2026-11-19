@@ -124,7 +124,7 @@ impl<'a> Analyzer<'a> {
     /// The `RefBox<elem>` value-struct type wrapping a local/parameter that is `ref`-passed but
     /// never closure-captured (see `src/stdlib/core/closure.dream` and `docs/compiler/03-hir.md`).
     pub(in crate::analyzer) fn ref_box_type(elem: &Type) -> Type {
-        Self::boxed_type("RefBox", elem)
+        Self::boxed_type(dream_abi::core_items::REF_BOX_NAME, elem)
     }
 
     pub(in crate::analyzer) fn boxed_type(base: &str, elem: &Type) -> Type {
@@ -155,7 +155,12 @@ impl<'a> Analyzer<'a> {
         elem_ty: &Type,
         value: HExpr,
     ) -> Option<HExpr> {
-        self.hir_build_boxed_new("RefBox", Self::ref_box_type(elem_ty), elem_ty, value)
+        self.hir_build_boxed_new(
+            dream_abi::core_items::REF_BOX_NAME,
+            Self::ref_box_type(elem_ty),
+            elem_ty,
+            value,
+        )
     }
 
     pub(in crate::analyzer) fn hir_build_boxed_new(

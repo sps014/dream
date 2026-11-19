@@ -10,7 +10,7 @@ fn initializer<'a>(
     let mut diagnostics = DiagnosticBag::new(None);
     let lexer = Lexer::new(format!("fun main() {{\n    let s = {code};\n}}\n"));
     let mut parser = Parser::new(lexer, arena, &mut diagnostics);
-    let init = parser.parse().ok().and_then(|tree| {
+    let init = Some(parser.parse()).and_then(|tree| {
         tree.get_root()
             .functions
             .first()

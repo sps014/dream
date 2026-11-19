@@ -359,7 +359,7 @@ mod tests {
         let arena = Bump::new();
         let mut diagnostics = DiagnosticBag::new(None);
         let mut parser = Parser::new(Lexer::new(source.into()), &arena, &mut diagnostics);
-        let program = parser.parse().unwrap().get_root().clone();
+        let program = parser.parse().get_root().clone();
         assert!(!diagnostics.has_errors(), "{:?}", diagnostics.diagnostics);
         let sources = IndexMap::from([("test.dream".to_string(), program.node_spans.clone())]);
         let paths = ProjectPaths {

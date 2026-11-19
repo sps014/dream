@@ -33,7 +33,8 @@ impl<'a> Analyzer<'a> {
                 if field.is_weak {
                     let is_class_option = match self.type_ctx.interner.kind(ty) {
                         TyKind::Union(def, args) if args.len() == 1 => {
-                            self.type_ctx.defs.name(*def) == "Option" && self.is_class_type(args[0])
+                            self.is_core_def(*def, dream_abi::core_items::OPTION)
+                                && self.is_class_type(args[0])
                         }
                         _ => false,
                     };

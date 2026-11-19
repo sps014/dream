@@ -6,7 +6,7 @@ import system.gpu;
 
 fun selection_label(backend: GpuBackend): string {
     let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
-    let index: int = backend;
+    let index: int = (int)backend;
     return names[index];
 }
 
@@ -135,7 +135,7 @@ async fun gpu_backend_selection(): void {
 
 fun half_label(backend: GpuBackend): string {
     let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
-    let index: int = backend;
+    let index: int = (int)backend;
     return names[index];
 }
 
@@ -262,7 +262,7 @@ async fun gpu_float16_buffers(): void {
 
 fun layouts_label(backend: GpuBackend): string {
     let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
-    let index: int = backend;
+    let index: int = (int)backend;
     return names[index];
 }
 
@@ -397,7 +397,7 @@ async fun gpu_pipeline_layouts(): void {
 
 fun reduction_label(backend: GpuBackend): string {
     let names = ["Auto", "Dx12", "Dx11", "Vulkan", "Metal", "Cuda", "WebGpu"];
-    let index: int = backend;
+    let index: int = (int)backend;
     return names[index];
 }
 

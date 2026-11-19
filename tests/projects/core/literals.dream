@@ -122,3 +122,12 @@ fun length_consistent(): void {
     m["b"] = 2;
     Assert.eq(m.length, 2);
 }
+
+@test
+fun interpolation_holes_skip_braces_in_literals(): void {
+    let name = "n";
+    Assert.eq($"x{"}"}y", "x}y");
+    Assert.eq($"a{'}'}b", "a}b");
+    Assert.eq($"<{name + "{"}>", "<n{>");
+    Assert.eq($"{"\"}"}", "\"}");
+}

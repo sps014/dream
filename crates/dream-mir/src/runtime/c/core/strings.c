@@ -39,7 +39,7 @@ dream_ptr dream_string_alloc(int32_t units) {
 static dream_size array_bytes(int32_t len, int32_t esize) {
     if (len < 0 || esize < 1 ||
         (size_t)len > (DREAM_SIZE_MAX - HEAP_HEADER_SIZE - 15u - LEN_PREFIX_SIZE) / (size_t)esize) {
-        DREAM_PANIC_LITERAL(u"panic: array size exceeds the supported limit");
+        DREAM_PANIC_LITERAL(u"array size exceeds the supported limit");
     }
     return (dream_size)len * esize + LEN_PREFIX_SIZE;
 }
@@ -93,7 +93,7 @@ __attribute__((cold, noinline)) dream_ptr dream_sb_grow_bytes(dream_sb *sb, drea
     int32_t cap = bytes ? dream_i32(bytes)[0] : 0;
     int32_t new_cap = cap <= INT32_MAX / 2 ? cap * 2 : INT32_MAX;
     if (DREAM_UNLIKELY(need > INT32_MAX)) {
-        DREAM_PANIC_LITERAL(u"panic: string builder length exceeds the supported limit");
+        DREAM_PANIC_LITERAL(u"string builder length exceeds the supported limit");
     }
     if (new_cap < need) {
         new_cap = (int32_t)need;
@@ -448,7 +448,7 @@ void *dream_string_from_utf8(const char *bytes, size_t len) {
         return DREAM_TO_PUBLIC(dream_string_alloc(0));
     }
     if (len > (size_t)INT32_MAX) {
-        DREAM_PANIC_LITERAL(u"panic: UTF-8 text is too long for a Dream string");
+        DREAM_PANIC_LITERAL(u"UTF-8 text is too long for a Dream string");
     }
     return DREAM_TO_PUBLIC(utf8_to_utf16((const uint8_t *)bytes, (int32_t)len));
 }
@@ -459,7 +459,7 @@ void *dream_string_from_utf16(const uint16_t *units, size_t len) {
         return DREAM_TO_PUBLIC(dream_string_alloc(0));
     }
     if (len > (size_t)INT32_MAX) {
-        DREAM_PANIC_LITERAL(u"panic: UTF-16 text is too long for a Dream string");
+        DREAM_PANIC_LITERAL(u"UTF-16 text is too long for a Dream string");
     }
     p = dream_string_alloc((int32_t)len);
     memcpy((char *)dream_p(p) + STRING_UNITS_OFFSET, units, len * sizeof(uint16_t));
@@ -493,7 +493,7 @@ char *dream_string_to_utf8(dream_ptr s) {
         out[0] = 0;
         return out;
     }
-    dream_utf8_chunk(u, n, out, cap, 0, &written, 0);
+    dream_utf8_chunk(u, n, out, cap, 0, &written);
     return out;
 }
 

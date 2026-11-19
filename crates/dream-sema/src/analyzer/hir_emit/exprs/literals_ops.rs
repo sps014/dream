@@ -271,6 +271,17 @@ impl<'a> Analyzer<'a> {
         });
     }
 
+    /// Turns the just-recorded `Cast` into a runtime-checked `Downcast`.
+    pub(in crate::analyzer) fn hir_wrap_downcast(&mut self) {
+        if let Some(HExpr {
+            kind: HExprKind::Cast(inner),
+            ty,
+        }) = self.hir.last.take()
+        {
+            self.hir.last = Some(HExpr::new(ty, HExprKind::Downcast(inner)));
+        }
+    }
+
     /// Records the HIR for a non-empty array literal. `result_ty` is the array type (`T[]`); the
     /// element type is taken from it. Fails if any element was not representable.
     pub(in crate::analyzer) fn hir_set_array_lit(

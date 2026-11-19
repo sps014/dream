@@ -377,6 +377,9 @@ pub enum HExprKind {
     },
     /// An explicit or implicit numeric/object coercion to `ty`.
     Cast(Box<HExpr>),
+    /// A source-level downcast from `object` or an interface to the concrete type `ty`: panics
+    /// with an invalid-cast error unless the value's runtime tag is `ty`'s, then acts as `Cast`.
+    Downcast(Box<HExpr>),
     /// `cond ? then : else_`.
     Ternary {
         cond: Box<HExpr>,

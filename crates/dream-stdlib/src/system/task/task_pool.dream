@@ -39,6 +39,7 @@ public class TaskPool {
     }
 
     /// Dispatches a CPU job; capture and return values follow the shared/move worker rules.
+    @worker_body
     public fun dispatch<TOut: shared>(
         body: fun(): TOut,
         token: Option<CancellationToken> = Option.None
@@ -87,6 +88,7 @@ public class TaskPool {
     }
 
     /// Dispatches an async job on a pool worker and waits for its operation to settle.
+    @worker_body
     public fun dispatch_async<TOut: shared>(
         body: fun(): Future<TOut>,
         token: Option<CancellationToken> = Option.None
@@ -219,6 +221,7 @@ public class TaskPool {
     }
 
     /// Maps CPU work with at most size active dispatches and preserves input order.
+    @worker_body
     public fun map<T: shared, U: shared>(
         items: T[],
         body: fun(T): U,
@@ -244,6 +247,7 @@ public class TaskPool {
     }
 
     /// Maps async worker jobs with bounded dispatch rather than creating one worker per input.
+    @worker_body
     public fun map_async<T: shared, U: shared>(
         items: T[],
         body: fun(T): Future<U>,

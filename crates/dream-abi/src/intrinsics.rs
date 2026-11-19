@@ -37,8 +37,7 @@ pub const ATTR_CALLBACK_UNREGISTER: &str = "dream_callback_unregister";
 pub const INTRINSIC_ATTR: &str = "intrinsic";
 
 /// Extracts the intrinsic key from a declaration's attribute list, i.e. the `"name"` in
-/// `@intrinsic(Intrinsic.Member)`, or `None` if the declaration is not an intrinsic. Centralizes the
-/// attribute lookup + quote-stripping that was previously duplicated across layers.
+/// `@intrinsic(Intrinsic.Member)`, or `None` if the declaration is not an intrinsic.
 /// An `@llvm("llvm.sqrt.f64")` extern yields its LLVM intrinsic name as the key; see
 /// [`is_llvm_intrinsic_key`].
 pub fn intrinsic_key(attributes: &[dream_syntax::nodes::AttributeNode]) -> Option<String> {
@@ -115,9 +114,6 @@ pub const BYTE_SIZE: &str = "byte_size";
 /// `s.byte_at(i)` — raw byte at UTF-8 byte index `i`.
 pub const BYTE_AT: &str = "byte_at";
 
-/// The generic array-allocation builtin, surfaced as the static method `Buffer.alloc<T>(len)`.
-pub const ARRAY_NEW: &str = "array_new";
-
 /// Synthetic local holding a capturing closure's `object[]` env (`hir_set_multi_capturing_func_value`).
 /// The backend allocates it with `TAG_CLOSURE_ENV` so funcbox last-drop runs typed `release_array_*`.
 pub const CLOSURE_ENV_ARRAY_LOCAL: &str = "__closure_env_array";
@@ -128,11 +124,6 @@ pub const CLOSURE_ENV_ARRAY_LOCAL: &str = "__closure_env_array";
 /// `string.length` / `T[].length`: the element-count property on strings and arrays. The same name
 /// is used by the stdlib `List`/`Map` getters, so `length` is uniform across every collection.
 pub const LENGTH: &str = "length";
-
-// --- Async intrinsics -----------------------------------------------------------------------
-
-/// `sleep(ms)`: the async timer intrinsic (a free function, unlike the `Promise.*` combinators).
-pub const SLEEP: &str = "sleep";
 
 // --- `@intrinsic(Intrinsic.Member)` static-method registry ----------------------------------------------
 // The string inside `@intrinsic(Intrinsic.Member)` on a stdlib static method. Both semantics (typing) and
@@ -156,7 +147,7 @@ pub const GEN_ATTRIBUTE_DECODE_ALL_MEMBER: &str = "__gen_decode_all";
 /// `Buffer.alloc<T>(len)` — allocate a zero-initialized array.
 pub const ATTR_ARRAY_NEW: &str = "array_new";
 pub const ATTR_BUFFER_ZERO: &str = "buffer_zero";
-/// `Time.sleep(ms)` — the async timer (yields `Future<void>`).
+/// `Time.sleep_host(ms)` — the async timer behind `Time.sleep` (yields `Future<void>`).
 pub const ATTR_SLEEP: &str = "sleep";
 /// `String.alloc(n)` / `String.set(s, i, c)` — low-level string buffer primitives.
 pub const ATTR_STRING_ALLOC: &str = "string_alloc";

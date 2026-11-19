@@ -155,6 +155,7 @@ impl<'a> Analyzer<'a> {
         };
 
         let mut parameters: Vec<ParameterNode> = Vec::with_capacity(lambda.parameters.len());
+        let mut mismatched = false;
         for (param, exp) in lambda.parameters.iter().zip(exp_params.iter()) {
             let (exp_elem, exp_is_ref) = Self::peel_ref_box(exp);
             if param.is_ref != exp_is_ref {
@@ -196,6 +197,7 @@ impl<'a> Analyzer<'a> {
                             ),
                             Some(lambda.open_paren_position),
                         );
+                        mismatched = true;
                     }
                     let mut concrete_param = param.clone();
                     concrete_param.type_ = declared_type;
@@ -259,20 +261,24 @@ impl<'a> Analyzer<'a> {
         } else {
             (exp_ret.clone(), exp_ret)
         };
-        self.finish_lambda_with_expected(
+        let ty = self.finish_lambda_with_expected(
             lambda,
             parent_function,
             symbol_table,
             diagnostics,
             param_types,
             (body_ret, box_ret),
-        )
+        )?;
+        // The mismatch is already reported; a poisoned type keeps the call from repeating it.
+        Ok(if mismatched { Type::Unknown } else { ty })
     }
 
     /// If `ty` is `RefBox<T>`, returns `(T, true)`; otherwise `(ty, false)`.
     pub(in crate::analyzer) fn peel_ref_box(ty: &Type) -> (Type, bool) {
         match ty {
-            Type::Struct(tok, Some(args)) if tok.text == "RefBox" && args.len() == 1 => {
+            Type::Struct(tok, Some(args))
+                if tok.text == dream_abi::core_items::REF_BOX_NAME && args.len() == 1 =>
+            {
                 (args[0].clone(), true)
             }
             other => (other.clone(), false),
@@ -453,7 +459,9 @@ impl<'a> Analyzer<'a> {
                         }
                     };
                     let t = if *is_weak {
-                        let target = Self::collection_generic_arg(&t, "Option").unwrap_or(t);
+                        let target =
+                            Self::collection_generic_arg(&t, dream_abi::core_items::OPTION_NAME)
+                                .unwrap_or(t);
                         Self::weak_storage_type(&target)
                     } else {
                         t
@@ -563,7 +571,7 @@ impl<'a> Analyzer<'a> {
         }
 
         let mut move_captures: Vec<String> = Vec::new();
-        if self.is_task_body_call() {
+        if self.is_worker_body_call() {
             // Task bodies run on another thread sharing linear memory. A non-shared capture
             // cannot be aliased across that boundary unless it is *transferred*: a managed heap
             // value (`Job`, `int[]`, `List<Job>`, …) moves by pointer hand-off and its sender-side
@@ -582,9 +590,9 @@ impl<'a> Analyzer<'a> {
             }) {
                 self.hir_none();
                 let who = self
-                    .current_call_target_name
-                    .clone()
-                    .unwrap_or_else(|| "Task".to_string());
+                    .current_call_target
+                    .as_ref()
+                    .map_or_else(String::new, |target| target.name.clone());
                 let pretty = self.ty_display(bad_ty);
                 return Err(report(
                     diagnostics,
@@ -699,20 +707,29 @@ impl<'a> Analyzer<'a> {
                 .map(|t| Self::monomorphize_type(t, &self.current_generic_bindings));
             if let Some(Type::Function(_, _)) = expected {
                 let tok = synthetic_token(TokenKind::IdentifierToken, &name);
-                return match self.instantiate_generic_function_value(&tok, diagnostics) {
-                    Some(func_ty) => {
-                        // Propagate captures onto the mangled instance if any.
-                        if let Some(caps) = self.closure_captures.get(&def).cloned()
-                            && let Some(Type::Function(_, _)) = self.current_expected_type.as_ref()
-                        {
-                            // Instance name is mangled; find latest registered instance.
-                            // `instantiate_generic_function_value` already emitted HIR.
-                            let _ = caps;
-                        }
-                        Ok(func_ty)
-                    }
-                    None => Ok(Type::Unknown),
+                let Some((func_ty, identity)) =
+                    self.instantiate_generic_function_instance(&tok, diagnostics)
+                else {
+                    self.hir_none();
+                    return Ok(Type::Unknown);
                 };
+                let Type::Function(_, ret) = &func_ty else {
+                    unreachable!("generic function values instantiate to function types")
+                };
+                let ret = (**ret).clone();
+                for name in move_captures {
+                    self.moved_locals.insert(name);
+                }
+                self.hir_set_closure_value(&identity, &captures, &func_ty, &ret);
+                return Ok(func_ty);
+            }
+            if !captures.is_empty() {
+                diagnostics.report_error(
+                    "a generic lambda that captures variables needs a known function type here (e.g. `let f: fun(int): int = <T>(x: T) => ...;`)".to_string(),
+                    Some(lambda.open_paren_position),
+                );
+                self.hir_none();
+                return Ok(Type::Unknown);
             }
             self.hir_none();
             return Ok(Type::GenericFunctionItem(name));
@@ -741,56 +758,68 @@ impl<'a> Analyzer<'a> {
         for name in move_captures {
             self.moved_locals.insert(name);
         }
-        match captures.len() {
-            0 => self.hir_set_func_value(&name, &func_ty, &box_ret),
-            1 => {
-                let (cap_name, cap_ty) = &captures[0];
-                match self.hir_capture_slot(def, cap_name, cap_ty) {
-                    Some(cell) => {
-                        self.hir_set_capturing_func_value(&name, cell, &func_ty, &box_ret);
+        self.hir_set_closure_value(&(def, Vec::new()), &captures, &func_ty, &box_ret);
+        Ok(func_ty)
+    }
+
+    /// Emits the boxed function value for lifted lambda `identity`, with an environment holding
+    /// `captures` (none, one cell, or an `object[]` of cells).
+    fn hir_set_closure_value(
+        &mut self,
+        identity: &crate::function_table::FunctionIdentity,
+        captures: &[(String, Type)],
+        func_ty: &Type,
+        ret: &Type,
+    ) {
+        let def = identity.0;
+        match captures {
+            [] => self.hir_set_func_value_identity(identity, func_ty, ret),
+            [(cap_name, cap_ty)] => match self.hir_capture_slot(def, cap_name, cap_ty) {
+                Some(cell) => self.hir_set_capturing_func_value(identity, cell, func_ty, ret),
+                None => self.hir_none(),
+            },
+            _ => {
+                let cells: Option<Vec<_>> = captures
+                    .iter()
+                    .map(|(cap_name, cap_ty)| self.hir_capture_slot(def, cap_name, cap_ty))
+                    .collect();
+                match cells {
+                    Some(cells) => {
+                        self.hir_set_multi_capturing_func_value(identity, cells, func_ty, ret)
                     }
                     None => self.hir_none(),
                 }
             }
-            _ => {
-                let mut cells = Vec::with_capacity(captures.len());
-                let mut ok = true;
-                for (cap_name, cap_ty) in &captures {
-                    match self.hir_capture_slot(def, cap_name, cap_ty) {
-                        Some(cell) => cells.push(cell),
-                        None => {
-                            ok = false;
-                            break;
-                        }
-                    }
-                }
-                if ok {
-                    self.hir_set_multi_capturing_func_value(&name, cells, &func_ty, &box_ret);
-                } else {
-                    self.hir_none();
-                }
-            }
         }
-        Ok(func_ty)
     }
 
-    // True when the lambda/function-value being analyzed is a `Task.spawn` /
-    // `Task.spawn_async` / `Task.map` / `TaskPool.dispatch` body argument.
-    pub(in crate::analyzer) fn is_task_body_call(&self) -> bool {
-        match self.current_call_target_name.as_deref() {
-            Some("Task") => true,
-            Some(name) => match name.split_once('.') {
-                Some((recv, "spawn"))
-                | Some((recv, "spawn_async"))
-                | Some((recv, "map"))
-                | Some((recv, "map_async")) => recv == "Task" || recv.starts_with("Task_"),
-                Some((recv, "dispatch")) | Some((recv, "dispatch_async")) => recv == "TaskPool",
-                Some((recv, "spawn_parallel")) | Some((recv, "spawn_on")) => {
-                    recv == "TaskScope" || recv.starts_with("TaskScope_")
-                }
-                _ => false,
-            },
-            None => false,
-        }
+    pub(in crate::analyzer) fn enter_call_target(
+        &mut self,
+        name: String,
+        runs_on_worker: bool,
+    ) -> Option<crate::analyzer::CallTarget> {
+        self.current_call_target
+            .replace(crate::analyzer::CallTarget {
+                name,
+                runs_on_worker,
+            })
+    }
+
+    pub(in crate::analyzer) fn candidates_run_on_worker(
+        &self,
+        keys: &[crate::function_table::FunctionIdentity],
+    ) -> bool {
+        keys.iter().any(|key| {
+            self.function_table
+                .get_function(key)
+                .is_ok_and(|info| info.runs_on_worker)
+        })
+    }
+
+    // True when the lambda/function-value being analyzed is an argument of a `@worker_body` callee.
+    pub(in crate::analyzer) fn is_worker_body_call(&self) -> bool {
+        self.current_call_target
+            .as_ref()
+            .is_some_and(|target| target.runs_on_worker)
     }
 }

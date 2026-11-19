@@ -53,7 +53,7 @@ internal static class InputWire {
         } else if kind == 5 {
             events.push(WindowEvent.CloseRequested);
         } else if (kind == 6 || kind == 7) && length >= 3 {
-            let modifiers: KeyModifiers = (int)wire[at + 1] & 63;
+            let modifiers: KeyModifiers = (KeyModifiers)((int)wire[at + 1] & 63);
             let key = KeyEvent(
                 InputWire.key_code((int)wire[at]),
                 InputWire.text(wire, at + 3, length - 3),
@@ -70,7 +70,7 @@ internal static class InputWire {
         } else if (kind == 10 || kind == 11) && length >= 1 {
             let index = (int)wire[at];
             if index >= 0 && index < InputTracker.BUTTON_COUNT {
-                let button: MouseButton = index;
+                let button: MouseButton = (MouseButton)index;
                 if kind == 10 {
                     events.push(WindowEvent.MouseDown(button));
                 } else {
@@ -126,7 +126,7 @@ internal static class InputWire {
         if value <= 0 || value >= InputTracker.KEY_COUNT {
             return KeyCode.Unknown;
         }
-        let code: KeyCode = value;
+        let code: KeyCode = (KeyCode)value;
         return code;
     }
 

@@ -58,7 +58,7 @@ internal fun hash_load_factor_denom(): int {
 // itself is not representable.
 internal fun grow_capacity(old: int, need: int): int {
     if need < 0 {
-        System.panic("panic: capacity exceeds the supported limit");
+        System.panic("capacity exceeds the supported limit");
     }
     let c = old;
     if c < sequence_min_capacity() {
@@ -86,7 +86,7 @@ internal fun mix_hash(hash: int): int {
 // The largest representable power of two is 2^30; asking for more panics instead of wrapping.
 internal fun hash_capacity_for(need: int): int {
     if need > 1073741824 {
-        System.panic("panic: capacity exceeds the supported limit");
+        System.panic("capacity exceeds the supported limit");
     }
     let c = hash_min_capacity();
     while c < need {
@@ -98,7 +98,7 @@ internal fun hash_capacity_for(need: int): int {
 // `a * b` for non-negative sizes, panicking instead of wrapping.
 internal fun checked_size(a: int, b: int): int {
     if (a < 0) || (b < 0) || ((a != 0) && (b > 2147483647 / a)) {
-        System.panic("panic: size exceeds the supported limit");
+        System.panic("size exceeds the supported limit");
     }
     return a * b;
 }

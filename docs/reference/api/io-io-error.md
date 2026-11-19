@@ -34,6 +34,14 @@ Human-readable explanation of the I/O failure, suitable for logs and error outpu
 public fun message(): string
 ```
 
+## `to_string`
+
+Returns `message()`, so printing the error shows its explanation.
+
+```dream
+public override fun to_string(): string
+```
+
 ## `code`
 
 Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).

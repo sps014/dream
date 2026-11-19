@@ -93,6 +93,7 @@ void dream_callback_set_waker(void (*wake)(void *), void *context) {
 void dream_release_closure_env(dream_ptr env) { dream_release(env); }
 void dream_panic(dream_ptr message) {
     assert(live_workers() == 0);
+    fputs("panic: ", stderr);
     for (int i = 0; i < dream_str_len(message); ++i) {
         fputc(dream_char_at_u(message, i), stderr);
     }

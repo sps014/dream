@@ -16,14 +16,14 @@ impl<'a> Analyzer<'a> {
                 if let Some(elem_ty) = self
                     .current_expected_type
                     .as_ref()
-                    .and_then(|t| Self::collection_generic_arg(t, "List"))
+                    .and_then(|t| Self::collection_generic_arg(t, dream_abi::core_items::LIST_NAME))
                 {
                     let ctx = super::super::AnalyzerContext {
                         parent_function,
                         symbol_table,
                     };
                     return self.lower_collection_literal_call(
-                        "List",
+                        dream_abi::core_items::LIST_NAME,
                         vec![elem_ty],
                         vec![ExpressionNode::ArrayLiteral(open.clone(), elements.clone())],
                         &ctx,
@@ -41,6 +41,10 @@ impl<'a> Analyzer<'a> {
                 };
 
                 if elements.is_empty() {
+                    if matches!(self.current_expected_type, Some(Type::Unknown)) {
+                        self.hir_none();
+                        return Ok(Type::Unknown);
+                    }
                     // With an array-typed context the empty literal takes that element type; without
                     // one it is genuinely ambiguous (nothing to infer from), so reject it clearly.
                     if let Some(elem) = expected_elem {
@@ -63,7 +67,7 @@ impl<'a> Analyzer<'a> {
 
                 let saved_expected = self.current_expected_type.take();
                 self.current_expected_type = expected_elem.clone();
-                let first_type = self.analyze_expression(
+                let first_type = self.analyze_value_expression(
                     &elements[0],
                     parent_function,
                     symbol_table,
@@ -85,8 +89,12 @@ impl<'a> Analyzer<'a> {
                 };
 
                 for elem in elements.iter().skip(1) {
-                    let element_type =
-                        self.analyze_expression(elem, parent_function, symbol_table, diagnostics)?;
+                    let element_type = self.analyze_value_expression(
+                        elem,
+                        parent_function,
+                        symbol_table,
+                        diagnostics,
+                    )?;
                     elem_hirs.push(self.hir_take());
                     let span = elem.position().unwrap_or(open.position);
                     self.compare_data_type(&elem_ty, &element_type, &span, diagnostics)?;
@@ -105,14 +113,14 @@ impl<'a> Analyzer<'a> {
                 if let Some(elem_ty) = self
                     .current_expected_type
                     .as_ref()
-                    .and_then(|t| Self::collection_generic_arg(t, "List"))
+                    .and_then(|t| Self::collection_generic_arg(t, dream_abi::core_items::LIST_NAME))
                 {
                     let ctx = super::super::AnalyzerContext {
                         parent_function,
                         symbol_table,
                     };
                     return self.lower_collection_literal_call(
-                        "List",
+                        dream_abi::core_items::LIST_NAME,
                         vec![elem_ty],
                         vec![ExpressionNode::ArrayRepeat(
                             open.clone(),
@@ -213,7 +221,11 @@ impl<'a> Analyzer<'a> {
                 match self.current_expected_type.clone() {
                     Some(t)
                         if elements.is_empty()
-                            && Self::collection_generic_arg2(&t, "Map").is_some() =>
+                            && Self::collection_generic_arg2(
+                                &t,
+                                dream_abi::core_items::MAP_NAME,
+                            )
+                            .is_some() =>
                     {
                         self.analyze_expression(
                             &ExpressionNode::MapLiteral(open.clone(), vec![]),
@@ -223,7 +235,9 @@ impl<'a> Analyzer<'a> {
                         )
                     }
                     Some(t) => {
-                        let Some(elem_ty) = Self::collection_generic_arg(&t, "Set") else {
+                        let Some(elem_ty) =
+                            Self::collection_generic_arg(&t, dream_abi::core_items::SET_NAME)
+                        else {
                             self.hir_none();
                             self.hir_fail();
                             diagnostics.report_error(
@@ -241,7 +255,7 @@ impl<'a> Analyzer<'a> {
                         };
                         let bracket = synthetic_token(TokenKind::OpenBracketToken, "[");
                         self.lower_collection_literal_call(
-                            "Set",
+                            dream_abi::core_items::SET_NAME,
                             vec![elem_ty],
                             vec![ExpressionNode::ArrayLiteral(bracket, elements.clone())],
                             &ctx,
@@ -262,11 +276,9 @@ impl<'a> Analyzer<'a> {
             ExpressionNode::MapLiteral(_, entries) => {
                 // A Map literal always requires an expected `Map<K, V>` target type, for the same
                 // reason as `SetLiteral` above.
-                let Some((key_ty, val_ty)) = self
-                    .current_expected_type
-                    .clone()
-                    .and_then(|t| Self::collection_generic_arg2(&t, "Map"))
-                else {
+                let Some((key_ty, val_ty)) = self.current_expected_type.clone().and_then(|t| {
+                    Self::collection_generic_arg2(&t, dream_abi::core_items::MAP_NAME)
+                }) else {
                     self.hir_none();
                     self.hir_fail();
                     diagnostics.report_error(
@@ -282,7 +294,7 @@ impl<'a> Analyzer<'a> {
                 };
                 let bracket = synthetic_token(TokenKind::OpenBracketToken, "[");
                 self.lower_collection_literal_call(
-                    "Map",
+                    dream_abi::core_items::MAP_NAME,
                     vec![key_ty, val_ty],
                     vec![
                         ExpressionNode::ArrayLiteral(bracket.clone(), keys),

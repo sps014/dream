@@ -204,3 +204,53 @@ fun switch_bindings(): void {
     Assert.eq(c23b_describe(c23b_Outer.Wrap(c23b_Inner.B)), -1);
     Assert.eq(c23b_describe(c23b_Outer.Bare), 0);
 }
+
+fun classify_ratio(ratio: double): string {
+    return switch (ratio) {
+        2.5 => "exact",
+        1.0..3.0 => "inside",
+        _ => "outside",
+    };
+}
+
+@test
+fun switch_on_floating_point(): void {
+    Assert.eq(classify_ratio(2.5), "exact");
+    Assert.eq(classify_ratio(2.7), "inside");
+    Assert.eq(classify_ratio(3.5), "outside");
+    Assert.eq(classify_ratio(0.5), "outside");
+}
+
+enum spx_Shape {
+    Pair(int, int),
+    One(int),
+}
+
+fun spx_tuple(a: spx_Shape, b: bool): int {
+    return switch ((a, b)) {
+        (Pair(x, y), true) => x + y,
+        (Pair(x, _), false) => x,
+        (One(x), _) => x,
+    };
+}
+
+fun spx_nested(a: Option<spx_Shape>): int {
+    return switch (a) {
+        Some(Pair(x, y)) => x * y,
+        Some(One(x)) => x,
+        None => 0,
+    };
+}
+
+@test
+fun nested_and_tuple_patterns_are_exhaustive(): void {
+    Assert.eq(spx_tuple(spx_Shape.Pair(1, 2), true), 3);
+    Assert.eq(spx_tuple(spx_Shape.Pair(1, 2), false), 1);
+    Assert.eq(spx_tuple(spx_Shape.One(7), true), 7);
+    Assert.eq(spx_nested(Option.Some(spx_Shape.Pair(3, 4))), 12);
+    Assert.eq(spx_nested(Option<spx_Shape>.None), 0);
+    let low: int = -2147483648;
+    let lowest: long = -9223372036854775808L;
+    Assert.eq(low.to_string(), "-2147483648");
+    Assert.eq(lowest.to_string(), "-9223372036854775808");
+}

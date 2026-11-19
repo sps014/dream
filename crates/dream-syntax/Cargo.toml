@@ -13,6 +13,7 @@ dream-text = { path = "../dream-text" }
 dream-diagnostics = { path = "../dream-diagnostics" }
 bumpalo = "3.20.3"
 logos = "0.16.1"
+stacker = "0.1"
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

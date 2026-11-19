@@ -20,7 +20,7 @@ mod syntax;
 pub use c_scalar::CScalar;
 pub use compat::{assignable, numeric_widen, overload_compatible};
 pub use def::{DefInfo, DefKind, DefTable};
-pub use display::{UNKNOWN_TYPE_NAME, display_name};
+pub use display::display_name;
 pub use interner::TypeInterner;
 pub use kind::{PrimTy, TyKind};
 pub use lower::TypeCtx;
@@ -175,11 +175,11 @@ mod tests {
         assert!(assignable(&i, long, i.int()));
         assert!(!assignable(&i, i.int(), long));
 
-        // Enum <-> int.
+        // Enum <-> int needs an explicit cast in both directions.
         let color = defs.allocate(ModuleId::ROOT, "", DefKind::Enum, "Color", vec![]);
         let color_ty = i.enum_ty(color);
-        assert!(assignable(&i, color_ty, i.int()));
-        assert!(assignable(&i, i.int(), color_ty));
+        assert!(!assignable(&i, color_ty, i.int()));
+        assert!(!assignable(&i, i.int(), color_ty));
 
         // Poison is bidirectionally compatible.
         assert!(assignable(&i, i.int(), i.error()));

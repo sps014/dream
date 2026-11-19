@@ -77,6 +77,15 @@ impl SymbolTable {
             .is_some_and(|parent| parent.borrow().is_weak(name))
     }
 
+    /// Every name visible from this scope, innermost first, for did-you-mean suggestions.
+    pub fn visible_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.symbols.keys().cloned().collect();
+        if let Some(parent) = self.parent.as_ref().and_then(Weak::upgrade) {
+            names.extend(parent.borrow().visible_names());
+        }
+        names
+    }
+
     pub fn add_child(&mut self, child: Rc<RefCell<SymbolTable>>) {
         self.children.push(child);
     }
@@ -104,10 +113,8 @@ impl SymbolTable {
             .symbols
             .insert(name.clone(), Symbol { ty, sink_parameter })
         {
-            Some(previous) => Err(SymbolError::new(format!(
-                "variable {} already exists at: {}",
-                name,
-                previous.ty.get_line_str()
+            Some(_) => Err(SymbolError::new(format!(
+                "variable {name} is already declared in this scope"
             ))),
             None => Ok(()),
         }
@@ -205,9 +212,8 @@ impl SymbolTable {
                 )))
             }
             None => Err(SymbolError::new(format!(
-                "variable {} does not exist at: {}",
-                name.text,
-                name.position.get_point_str()
+                "variable {} does not exist",
+                name.text
             ))),
         }
     }

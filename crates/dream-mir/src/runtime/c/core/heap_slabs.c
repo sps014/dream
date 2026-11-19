@@ -6,13 +6,13 @@
  * of OS page size and custom platform implementations; gauges include the alignment reservation. */
 static dream_heap_span *map_span(unsigned cls, size_t bytes, int locked) {
     if (bytes > PTRDIFF_MAX - DREAM_SLAB_BYTES) {
-        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
+        DREAM_PANIC_LITERAL(u"allocation size exceeds the supported limit");
     }
     size_t mapped = bytes + DREAM_SLAB_BYTES - 1u;
     char *raw = dream_platform_current->map(mapped);
     if (!raw) {
-        if (locked) { DREAM_PANIC_LITERAL(u"panic: out of memory mapping the shared heap"); }
-        DREAM_PANIC_LITERAL(u"panic: out of memory mapping the private heap");
+        if (locked) { DREAM_PANIC_LITERAL(u"out of memory mapping the shared heap"); }
+        DREAM_PANIC_LITERAL(u"out of memory mapping the private heap");
     }
     uintptr_t aligned = ((uintptr_t)raw + DREAM_SLAB_BYTES - 1u) & ~(uintptr_t)(DREAM_SLAB_BYTES - 1u);
     dream_heap_span *span = (dream_heap_span *)aligned;
@@ -43,7 +43,7 @@ char *dream_slab_bump(dream_heap_span **current, unsigned cls, int locked) {
 
 char *dream_large_map(size_t total, int locked) {
     if (total > PTRDIFF_MAX - DREAM_SLAB_PREFIX - DREAM_LARGE_PREFIX) {
-        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
+        DREAM_PANIC_LITERAL(u"allocation size exceeds the supported limit");
     }
     dream_heap_span *span = map_span(DREAM_CLASS_LARGE, DREAM_SLAB_PREFIX + DREAM_LARGE_PREFIX + total, locked);
     char *block = (char *)span + DREAM_SLAB_PREFIX + DREAM_LARGE_PREFIX;

@@ -25,14 +25,7 @@ pub fn parse_expression_source<'a>(
     let mut local = DiagnosticBag::new(Some("<syntax-replace>".into()));
     let lexer = Lexer::new(wrapped);
     let mut parser = Parser::new(lexer, arena, &mut local);
-    let ast = match parser.parse() {
-        Ok(a) => a,
-        Err(e) => {
-            remap_local(&mut local, source, origin, real_source);
-            diagnostics.extend(&local);
-            return Err(e);
-        }
-    };
+    let ast = parser.parse();
     remap_local(&mut local, source, origin, real_source);
     diagnostics.extend(&local);
     let program = ast.get_root();

@@ -32,8 +32,8 @@ impl<'a> Analyzer<'a> {
 
         let wrapper_shape = Self::resolve_struct_parts(&operand_type).and_then(|(base, args)| {
             match base.as_str() {
-                "Result" if args.len() == 2 => Some((base, args)),
-                "Option" if args.len() == 1 => Some((base, args)),
+                dream_abi::core_items::RESULT_NAME if args.len() == 2 => Some((base, args)),
+                dream_abi::core_items::OPTION_NAME if args.len() == 1 => Some((base, args)),
                 _ => None,
             }
         });
@@ -53,7 +53,9 @@ impl<'a> Analyzer<'a> {
         let return_type = parent_function.return_type.clone();
         let ret_shape = return_type.as_ref().and_then(|rt| {
             Self::resolve_struct_parts(rt).filter(|(base, args)| {
-                base == &op_base && ((op_base == "Result" && args.len() == 2) || args.len() == 1)
+                base == &op_base
+                    && ((op_base == dream_abi::core_items::RESULT_NAME && args.len() == 2)
+                        || args.len() == 1)
             })
         });
         let (Some(return_type), Some((_ret_base, ret_args))) = (return_type, ret_shape) else {
@@ -77,7 +79,7 @@ impl<'a> Analyzer<'a> {
         // Operand `E` must be assignable to the function's `E`. `?` rebuilds `Err` at the
         // function's Result type, so a class that implements the function's error interface
         // (e.g. `IoError` → `Error`) is allowed; there is still no general `From`.
-        if op_base == "Result" {
+        if op_base == dream_abi::core_items::RESULT_NAME {
             self.compare_data_type(
                 &ret_args[1],
                 &op_args[1],
@@ -90,7 +92,7 @@ impl<'a> Analyzer<'a> {
         self.ensure_union_instantiated(&op_base, &op_args, &span, diagnostics);
         self.ensure_union_instantiated(&op_base, &ret_args, &span, diagnostics);
 
-        let (ok_name, err_name) = if op_base == "Result" {
+        let (ok_name, err_name) = if op_base == dream_abi::core_items::RESULT_NAME {
             (RESULT_OK, RESULT_ERR)
         } else {
             (OPTION_SOME, OPTION_NONE)

@@ -71,14 +71,18 @@ impl<'a> Analyzer<'a> {
             .filter(|entry| matches!(entry, Entry::Intern(_)))
             .count();
         let last = after.len() - 1;
-        let accounted = after.iter().zip(before).enumerate().all(|(slot, (&a, &b))| {
-            let own = match slot {
-                0 => interned,
-                _ if slot == last => 1,
-                _ => 0,
-            };
-            a.checked_sub(b) == Some(journal.explained[slot] + own)
-        });
+        let accounted = after
+            .iter()
+            .zip(before)
+            .enumerate()
+            .all(|(slot, (&a, &b))| {
+                let own = match slot {
+                    0 => interned,
+                    _ if slot == last => 1,
+                    _ => 0,
+                };
+                a.checked_sub(b) == Some(journal.explained[slot] + own)
+            });
         accounted.then_some(journal.entries)
     }
 

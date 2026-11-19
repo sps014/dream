@@ -66,9 +66,19 @@ extend char: Comparable<char> {
 
     /// Parses exactly one Unicode scalar from `text`.
     public static fun parse(borrow text: string): Result<char, ParseError> {
-        if text.length != 1 {
-            return Result.Err(ParseError.invalid("char.parse requires exactly one Unicode scalar"));
+        if text.length == 1 {
+            let unit = (int)text.char_at(0);
+            if (unit < 0xD800) || (unit > 0xDFFF) {
+                return Result.Ok(text.char_at(0));
+            }
         }
-        return Result.Ok(text.char_at(0));
+        if text.length == 2 {
+            let high = (int)text.char_at(0);
+            let low = (int)text.char_at(1);
+            if (high >= 0xD800) && (high <= 0xDBFF) && (low >= 0xDC00) && (low <= 0xDFFF) {
+                return Result.Ok((char)(0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)));
+            }
+        }
+        return Result.Err(ParseError.invalid("char.parse requires exactly one Unicode scalar"));
     }
 }

@@ -177,14 +177,7 @@ impl<'l, 'a> Fx<'l, 'a> {
                 };
                 self.w.cast(op, &x.v, to.clone())
             }
-            (Ty::F16 | Ty::F32 | Ty::F64, Ty::Int(b)) => {
-                let name = format!("llvm.fptosi.sat.i{b}.{}", float_suffix(&from));
-                let sig = self
-                    .l
-                    .intrinsic(&name, FnTy::new(to.clone(), vec![from.clone()]));
-                self.call_sig(&name, &sig, vec![x.v.clone()])
-                    .unwrap_or_else(|| crate::internal_error!("fptosi.sat returned void"))
-            }
+            (Ty::F16 | Ty::F32 | Ty::F64, Ty::Int(b)) => self.float_to_int_sat(x, *b, false),
             (Ty::F32, Ty::F64) => self.w.cast("fpext", &x.v, Ty::F64),
             (Ty::F64, Ty::F32) => self.w.cast("fptrunc", &x.v, Ty::F32),
             (Ty::F16, Ty::F32 | Ty::F64) => self.w.cast("fpext", &x.v, to.clone()),
@@ -200,6 +193,17 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             _ => crate::internal_error!("no LLVM conversion from {from} to {to}"),
         }
+    }
+
+    /// Float `x` converted to a `bits`-wide integer, saturating at the target range (NaN gives 0).
+    pub fn float_to_int_sat(&mut self, x: &V, bits: u32, unsigned: bool) -> Value {
+        let from = x.ty().clone();
+        let to = Ty::Int(bits);
+        let op = if unsigned { "fptoui" } else { "fptosi" };
+        let name = format!("llvm.{op}.sat.i{bits}.{}", float_suffix(&from));
+        let sig = self.l.intrinsic(&name, FnTy::new(to, vec![from]));
+        self.call_sig(&name, &sig, vec![x.v.clone()])
+            .unwrap_or_else(|| crate::internal_error!("{name} returned void"))
     }
 
     pub fn conv_v(&mut self, x: &V, to: &Ty, unsigned: bool) -> V {

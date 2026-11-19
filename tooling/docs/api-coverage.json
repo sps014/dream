@@ -160,6 +160,12 @@
         "description": "A human-readable description of the problem.",
         "line": 20,
         "page": "reference/api/app-app-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 25,
+        "page": "reference/api/app-app-error.md"
       }
     ]
   },
@@ -458,15 +464,21 @@
         "page": "reference/api/argument-error.md"
       },
       {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 21,
+        "page": "reference/api/argument-error.md"
+      },
+      {
         "signature": "public fun code(): string",
         "description": "Stable machine-readable code (e.g. `EINVAL`).",
-        "line": 21,
+        "line": 26,
         "page": "reference/api/argument-error.md"
       },
       {
         "signature": "public static fun invalid(message: string): ArgumentError",
         "description": "Convenience constructor for invalid-argument failures.",
-        "line": 26,
+        "line": 31,
         "page": "reference/api/argument-error.md"
       }
     ]
@@ -888,6 +900,12 @@
         "description": "Returns a readable explanation of the failure.",
         "line": 20,
         "page": "reference/api/audio-audio-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 25,
+        "page": "reference/api/audio-audio-error.md"
       }
     ]
   },
@@ -1236,6 +1254,12 @@
         "signature": "public fun message(): string",
         "description": "Human-readable diagnostic; invocation failures include usage guidance.",
         "line": 20,
+        "page": "reference/api/cli-cli-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 25,
         "page": "reference/api/cli-cli-error.md"
       }
     ]
@@ -2077,6 +2101,12 @@
         "signature": "public fun message(): string",
         "description": "Returns the compiler's explanation of the failure in `target`.",
         "line": 24,
+        "page": "reference/api/codegen-gen-compilation-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 29,
         "page": "reference/api/codegen-gen-compilation-error.md"
       }
     ]
@@ -4514,6 +4544,12 @@
         "description": "Describes the accepted reserve domain.",
         "line": 14,
         "page": "reference/api/collections-capacity-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 19,
+        "page": "reference/api/collections-capacity-error.md"
       }
     ]
   },
@@ -4587,187 +4623,187 @@
       {
         "signature": "public fun is_empty(): bool",
         "description": "True when the list has no elements.",
-        "line": 33,
+        "line": 41,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 39,
+        "line": 47,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<Unit, CapacityError>",
         "description": "Reserves room for additional elements without changing length or existing values.",
-        "line": 44,
+        "line": 52,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push(value: T): void",
         "description": "Appends a value to the end, growing if necessary.",
-        "line": 64,
+        "line": 72,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun push_all(borrow items: T[]): void",
         "description": "Appends every element of `items` in order.",
-        "line": 75,
+        "line": 83,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public constructor(borrow items: T[])",
         "description": "Creates a list containing the elements of `items` in order. List literals such as `[1, 2, 3]` create lists in the same way.",
-        "line": 91,
+        "line": 99,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun take_array(): T[]",
         "description": "Returns the elements as an array and leaves the list empty. The returned array has exactly the previous list length.",
-        "line": 101,
+        "line": 109,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int]: T",
         "description": "Returns the element at `index`. Panics if `index` is out of range.",
-        "line": 126,
+        "line": 134,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun this[index: int] = value: T",
         "description": "Overwrites the element at `index`. Panics if `index` is out of range.",
-        "line": 134,
+        "line": 142,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun pop(): Option<T>",
         "description": "Removes and returns the last element, or `None` if the list is empty.",
-        "line": 142,
+        "line": 150,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if `value` is present (uses value equality, including string contents).",
-        "line": 153,
+        "line": 161,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun index_of(borrow value: T): Option<int>",
         "description": "Index of the first matching element (by value equality), or `None` if absent.",
-        "line": 165,
+        "line": 173,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow value: T): Option<int>",
         "description": "Index of the last matching element (by value equality), or `None` if absent.",
-        "line": 177,
+        "line": 185,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun reverse(): void",
         "description": "Reverses the live prefix in place.",
-        "line": 189,
+        "line": 197,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun slice(start: int, end: int): List<T>",
         "description": "Returns a new list holding the elements from `start` (inclusive) to `end` (exclusive). Panics unless `0 <= start <= end <= length`.",
-        "line": 201,
+        "line": 209,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun concat(borrow other: List<T>): List<T>",
         "description": "A new list with this list's elements followed by `other`.",
-        "line": 215,
+        "line": 223,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clone(): List<T>",
         "description": "A shallow copy of the live elements.",
-        "line": 231,
+        "line": 239,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun join(sep: string): string",
         "description": "Joins stringifiable elements with `sep` (same conversion as `to_string` uses). Single pass into a StringBuilder — O(total output), never the quadratic accumulate-and-recopy shape.",
-        "line": 237,
+        "line": 245,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements and releases the references they held. Capacity is unchanged.",
-        "line": 255,
+        "line": 263,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Removes all elements and releases the references they held. Capacity is unchanged.",
-        "line": 270,
+        "line": 278,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool",
         "description": "Inserts `value` at `index`, shifting later elements right. `index == length` appends. Returns false and leaves the list unchanged when `index` is outside `0` through `length`.",
-        "line": 276,
+        "line": 284,
         "page": "reference/api/collections-list-1.md"
       },
       {
         "signature": "public fun insert(index: int, value: T): bool where T: unmanaged",
         "description": "Inserts `value` at `index`, shifting later elements right. `index == length` appends. Returns false and leaves the list unchanged when `index` is outside `0` through `length`.",
-        "line": 295,
+        "line": 303,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove_at(index: int): bool",
         "description": "Removes the element at `index`, shifting later elements left. Returns true on success, or false if `index` is out of range (the list is left unchanged in that case).",
-        "line": 314,
+        "line": 322,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes the first occurrence of `value` (by equality). Returns true when something was removed.",
-        "line": 330,
+        "line": 338,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun iterator(): ListIterator<T>",
         "description": "Enumerator for `for (let x in list)`. Returns a fresh cursor over the current elements.",
-        "line": 338,
+        "line": 346,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_span(): Span<T>",
         "description": "A view of the current elements, writable in place. The span holds the backing array it was taken from: after the list grows (or shrinks and regrows) it keeps showing that old array, so take a fresh span after structural changes.",
-        "line": 345,
+        "line": 353,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun as_read_only_span(): ReadOnlySpan<T>",
         "description": "A read-only view of the current elements, with the same staleness rule as `as_span`.",
-        "line": 350,
+        "line": 358,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort_by(borrow cmp: fun(T, T): int): void",
         "description": "Sorts the list in place with the supplied comparator.",
-        "line": 363,
+        "line": 371,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun sort(): void where T: Comparable<T>",
         "description": "Sorts the list in place into ascending order using each element's `compare` method. Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 417,
+        "line": 425,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public fun binary_search(borrow value: T): Option<int> where T: Comparable<T>",
         "description": "Binary search over a list that is already sorted ascending (by `compare`). Returns the index of a matching element as `Some(index)`, or `None` if `value` is not present. O(log n). Only attached when `T : Comparable<T>` (via `where`).",
-        "line": 425,
+        "line": 433,
         "page": "reference/api/collections-list-2.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 444,
+        "line": 452,
         "page": "reference/api/collections-list-2.md"
       }
     ]
@@ -4823,121 +4859,121 @@
       {
         "signature": "public get capacity(): int",
         "description": "Number of elements that fit before storage must grow.",
-        "line": 64,
+        "line": 72,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun this[key: K] = value: V",
         "description": "The first probe hits an empty or matching entry on the usual insert. That case stays in the caller; collisions fall through to the full probe.",
-        "line": 196,
+        "line": 204,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun contains(borrow key: K): bool",
         "description": "Returns whether `key` is present.",
-        "line": 222,
+        "line": 230,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun set_all(borrow keys: K[], borrow values: V[]): void",
         "description": "Inserts corresponding entries from `keys` and `values`; the arrays must have equal lengths.",
-        "line": 228,
+        "line": 236,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public constructor(borrow keys: K[], borrow values: V[])",
         "description": "Creates a map by pairing keys and values up to the shorter array length; later duplicate keys replace earlier values.",
-        "line": 241,
+        "line": 249,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get(borrow key: K): Option<V>",
         "description": "Value for `key`, or `None` when absent.",
-        "line": 254,
+        "line": 262,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get(borrow key: ReadOnlySpan<char>): Option<V> where K: StringKey",
         "description": "Value for the `string` key equal to `key`, without building a `string`.",
-        "line": 264,
+        "line": 272,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun contains(borrow key: ReadOnlySpan<char>): bool where K: StringKey",
         "description": "Returns whether `key` is present.",
-        "line": 273,
+        "line": 281,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun this[borrow key: K]: V",
         "description": "Value for `key`. Panics when the key is absent — this is what `m[k]` compiles to; use `get(k)` for absence-tolerant reads.",
-        "line": 279,
+        "line": 287,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun get_or_insert(borrow key: K, borrow factory: fun(): V): V",
         "description": "Returns the existing value, or inserts and returns the result of `factory` when absent. The key is borrowed for the lookup and copied only on a miss.",
-        "line": 289,
+        "line": 297,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun merge(borrow other: Map<K, V>): void",
         "description": "Copies entries from `other`, replacing values with matching keys.",
-        "line": 300,
+        "line": 308,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun entries(): List<KeyValuePair<K, V>>",
         "description": "Returns a new list of key/value pairs.",
-        "line": 307,
+        "line": 315,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun remove(borrow key: K): bool",
         "description": "Removes `key` and its value; returns whether the key was present.",
-        "line": 320,
+        "line": 328,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "Returns whether there are no elements.",
-        "line": 336,
+        "line": 344,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 342,
+        "line": 350,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun clear(): void where K: unmanaged, V: unmanaged",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 362,
+        "line": 370,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun keys(): List<K>",
         "description": "Returns a new list of the keys, in the map's iteration order.",
-        "line": 369,
+        "line": 377,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun values(): List<V>",
         "description": "Returns a new list of the values, in the map's iteration order.",
-        "line": 382,
+        "line": 390,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public fun iterator(): MapIterator<K, V>",
         "description": "Creates a cursor over the sequence. Close it when iteration ends early.",
-        "line": 395,
+        "line": 403,
         "page": "reference/api/collections-map.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 420,
+        "line": 428,
         "page": "reference/api/collections-map.md"
       }
     ]
@@ -5079,49 +5115,49 @@
       {
         "signature": "public get capacity(): int",
         "description": "Current element capacity of the ring buffer.",
-        "line": 26,
+        "line": 34,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun reserve(additional: int): Result<Unit, CapacityError>",
         "description": "Reserves room for additional elements while preserving FIFO order and length.",
-        "line": 31,
+        "line": 39,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun enqueue(value: T): void",
         "description": "Appends `value` at the back of the queue.",
-        "line": 66,
+        "line": 74,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun dequeue(): Option<T>",
         "description": "Removes and returns the front element, or `None` when empty. The vacated element is zeroed so managed elements release immediately instead of staying retained until overwritten.",
-        "line": 77,
+        "line": 85,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun peek(): Option<T>",
         "description": "Returns the front element without removing it, or `None` when empty.",
-        "line": 88,
+        "line": 96,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes every element. Live ring slots are overwritten with a zero value so managed elements release immediately instead of staying retained until later enqueues overwrite them; the ring is reset to front-aligned empty.",
-        "line": 98,
+        "line": 106,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Unmanaged: no RC to release — rewind only.",
-        "line": 111,
+        "line": 119,
         "page": "reference/api/collections-queue.md"
       },
       {
         "signature": "public fun iterator(): QueueIterator<T>",
         "description": "Iterates elements from front to back.",
-        "line": 117,
+        "line": 125,
         "page": "reference/api/collections-queue.md"
       }
     ]
@@ -5287,115 +5323,115 @@
       {
         "signature": "public get capacity(): int",
         "description": "Current capacity of the backing buffer.",
-        "line": 61,
+        "line": 69,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add(value: T): bool",
         "description": "Inserts a value into the set. Returns true if it was newly added, false if already present.",
-        "line": 179,
+        "line": 187,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: T): bool",
         "description": "True if the set contains the value.",
-        "line": 191,
+        "line": 199,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun contains(borrow value: ReadOnlySpan<char>): bool where T: StringKey",
         "description": "True when the set holds the `string` equal to `value`, without building a `string`.",
-        "line": 197,
+        "line": 205,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun add_all(borrow items: T[]): void",
         "description": "Adds every element of `items`, ignoring duplicates.",
-        "line": 226,
+        "line": 234,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public constructor(borrow items: T[])",
         "description": "Creates a set containing the distinct elements of `items`. Set literals such as `{1, 2, 3}` create sets in the same way.",
-        "line": 238,
+        "line": 246,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool",
         "description": "Removes a value and returns true if it was removed.",
-        "line": 250,
+        "line": 258,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun remove(borrow value: T): bool where T: unmanaged",
         "description": "Removes `value`; returns whether it was present.",
-        "line": 263,
+        "line": 271,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_empty(): bool",
         "description": "True if the set is empty.",
-        "line": 274,
+        "line": 282,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void",
         "description": "Removes all elements, keeping the current capacity. Occupied key slots are zeroed so managed entries release; probe `states` are reset in place (no capacity realloc).",
-        "line": 280,
+        "line": 288,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun clear(): void where T: unmanaged",
         "description": "Removes all entries while keeping storage for reuse.",
-        "line": 297,
+        "line": 305,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun to_array(): T[]",
         "description": "Gets all elements as an array.",
-        "line": 304,
+        "line": 312,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun union(borrow other: Set<T>): Set<T>",
         "description": "Elements present in this set or `other`.",
-        "line": 319,
+        "line": 327,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun intersection(borrow other: Set<T>): Set<T>",
         "description": "Elements present in both sets.",
-        "line": 335,
+        "line": 343,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun difference(borrow other: Set<T>): Set<T>",
         "description": "Elements in this set but not in `other`.",
-        "line": 350,
+        "line": 358,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_subset(borrow other: Set<T>): bool",
         "description": "True when every element of this set is in `other`.",
-        "line": 365,
+        "line": 373,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun is_disjoint(borrow other: Set<T>): bool",
         "description": "True when the sets share no elements.",
-        "line": 379,
+        "line": 387,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public fun iterator(): SetIterator<T>",
         "description": "Gets an iterator for the set.",
-        "line": 393,
+        "line": 401,
         "page": "reference/api/collections-set.md"
       },
       {
         "signature": "public override fun to_string(): string",
         "description": "Returns a text representation of this value.",
-        "line": 408,
+        "line": 416,
         "page": "reference/api/collections-set.md"
       }
     ]
@@ -5851,6 +5887,12 @@
         "signature": "public fun message(): string",
         "description": "Describes the invalid setting without disclosing its value.",
         "line": 26,
+        "page": "reference/api/config-config-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 31,
         "page": "reference/api/config-config-error.md"
       }
     ]
@@ -6482,15 +6524,21 @@
         "page": "reference/api/core-cancelled-error.md"
       },
       {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 18,
+        "page": "reference/api/core-cancelled-error.md"
+      },
+      {
         "signature": "public fun code(): string",
         "description": "Stable machine code.",
-        "line": 18,
+        "line": 23,
         "page": "reference/api/core-cancelled-error.md"
       },
       {
         "signature": "public static fun cancelled(): CancelledError",
         "description": "Factory for a standard cancelled error.",
-        "line": 23,
+        "line": 28,
         "page": "reference/api/core-cancelled-error.md"
       }
     ]
@@ -6502,7 +6550,7 @@
     "declarations": [
       {
         "signature": "public interface Collection<T>: Iterable<T>",
-        "description": "Sized collection — the type users pass into APIs that need a count. `for (let x in xs)` works for concrete `@iterator` types and for interface-typed `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch). Query chains start with `seq()` in system.collections, keeping bootstrap independent of List.",
+        "description": "Sized collection — the type users pass into APIs that need a count. `for (let x in xs)` works for types with an `iterator()` method and for interface-typed `Collection` / `IndexedCollection` / `Iterator` (via `.iterator()` / `.next()` dispatch). Query chains start with `seq()` in system.collections, keeping bootstrap independent of List.",
         "line": 7,
         "page": "reference/api/core-collection.md"
       },
@@ -6771,20 +6819,20 @@
     "declarations": [
       {
         "signature": "public interface Iterator<T>",
-        "description": "Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this. `@next` lives on the implementing class (attributes are not required on the interface).",
-        "line": 5,
+        "description": "Pull one element at a time. Concrete iterators (`ListIterator`, …) implement this.",
+        "line": 4,
         "page": "reference/api/core-iterator.md"
       },
       {
         "signature": "unique fun next(): Option<T>",
         "description": "Returns the next value, or `None` when the sequence has ended.",
-        "line": 7,
+        "line": 6,
         "page": "reference/api/core-iterator.md"
       },
       {
         "signature": "unique fun close(): void",
         "description": "Ends iteration and releases resources held by the cursor.",
-        "line": 10,
+        "line": 9,
         "page": "reference/api/core-iterator.md"
       }
     ]
@@ -7105,15 +7153,21 @@
         "page": "reference/api/core-parse-error.md"
       },
       {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 20,
+        "page": "reference/api/core-parse-error.md"
+      },
+      {
         "signature": "public fun code(): string",
         "description": "Stable machine code (typically `EPARSE`).",
-        "line": 20,
+        "line": 25,
         "page": "reference/api/core-parse-error.md"
       },
       {
         "signature": "public static fun invalid(message: string): ParseError",
         "description": "Generic invalid-input parse failure.",
-        "line": 25,
+        "line": 30,
         "page": "reference/api/core-parse-error.md"
       }
     ]
@@ -8420,27 +8474,33 @@
         "page": "reference/api/crypto-crypto-error.md"
       },
       {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 20,
+        "page": "reference/api/crypto-crypto-error.md"
+      },
+      {
         "signature": "public fun code(): string",
         "description": "Stable machine code (`EINVAL_KEY`, `EINVAL_NONCE`, `EDECRYPT`, …).",
-        "line": 20,
+        "line": 25,
         "page": "reference/api/crypto-crypto-error.md"
       },
       {
         "signature": "public static fun invalid_key(message: string): CryptoError",
         "description": "Key material has the wrong length or shape.",
-        "line": 25,
+        "line": 30,
         "page": "reference/api/crypto-crypto-error.md"
       },
       {
         "signature": "public static fun invalid_nonce(message: string): CryptoError",
         "description": "Nonce/IV has the wrong length.",
-        "line": 30,
+        "line": 35,
         "page": "reference/api/crypto-crypto-error.md"
       },
       {
         "signature": "public static fun decrypt_failed(message: string): CryptoError",
         "description": "Decryption failed: authentication tag mismatch, truncated ciphertext, or tampering.",
-        "line": 35,
+        "line": 40,
         "page": "reference/api/crypto-crypto-error.md"
       }
     ]
@@ -8566,6 +8626,12 @@
         "signature": "public fun message(): string",
         "description": "Human-readable syntax, limit, adapter, or I/O failure.",
         "line": 26,
+        "page": "reference/api/csv-csv-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 31,
         "page": "reference/api/csv-csv-error.md"
       }
     ]
@@ -8837,8 +8903,8 @@
       },
       {
         "signature": "public static fun parse(text: string): Result<DateTime, ParseError>",
-        "description": "Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).",
-        "line": 289,
+        "description": "Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).  Returns `Err(ParseError)` for malformed text and for dates that do not exist in the Gregorian calendar, such as `2023-02-29` or `2024-04-31`; they are never rolled over into the next month.",
+        "line": 293,
         "page": "reference/api/date-time-2.md"
       }
     ]
@@ -14843,51 +14909,57 @@
         "page": "reference/api/io-io-error.md"
       },
       {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 24,
+        "page": "reference/api/io-io-error.md"
+      },
+      {
         "signature": "public fun code(): string",
         "description": "Stable machine code (`ENOENT`, `EACCES`, `EIO`, `EEXIST`, …).",
-        "line": 24,
+        "line": 29,
         "page": "reference/api/io-io-error.md"
       },
       {
         "signature": "public static fun not_found(path: string): IoError",
         "description": "File or directory does not exist.",
-        "line": 29,
+        "line": 34,
         "page": "reference/api/io-io-error.md"
       },
       {
         "signature": "public static fun permission_denied(path: string): IoError",
         "description": "Permission was denied for the operation.",
-        "line": 34,
+        "line": 39,
         "page": "reference/api/io-io-error.md"
       },
       {
         "signature": "public static fun other(path: string, message: string): IoError",
         "description": "Generic I/O failure with a custom message.",
-        "line": 39,
+        "line": 44,
         "page": "reference/api/io-io-error.md"
       },
       {
         "signature": "public static fun exists(path: string): IoError",
         "description": "Path already exists when exclusive create was requested.",
-        "line": 44,
+        "line": 49,
         "page": "reference/api/io-io-error.md"
       },
       {
         "signature": "public static fun closed(path: string): IoError",
         "description": "Creates an `ECLOSED` error for an operation on a closed resource.",
-        "line": 49,
+        "line": 54,
         "page": "reference/api/io-io-error.md"
       },
       {
         "signature": "public static fun invalid(path: string, message: string): IoError",
         "description": "Creates an `EINVAL` error for an invalid argument or operation.",
-        "line": 54,
+        "line": 59,
         "page": "reference/api/io-io-error.md"
       },
       {
         "signature": "public static fun cancelled(): IoError",
         "description": "Cooperative cancellation (`CancellationToken`).",
-        "line": 59,
+        "line": 64,
         "page": "reference/api/io-io-error.md"
       }
     ]
@@ -16360,6 +16432,12 @@
         "description": "Human-readable failure detail; transport adapters omit request URLs from error messages.",
         "line": 20,
         "page": "reference/api/net-http-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 25,
+        "page": "reference/api/net-http-error.md"
       }
     ]
   },
@@ -17314,8 +17392,8 @@
       },
       {
         "signature": "public static fun parse(borrow text: string): Result<double, ParseError>",
-        "description": "Parses a decimal double from `text`.",
-        "line": 74,
+        "description": "Parses the whole of `text` as a decimal double: an optional sign, digits with an optional fraction, and an optional exponent (`-12.5`, `.5`, `3e-4`). The spellings `nan`, `inf`, and `-inf` written by `to_string` parse back to the same values. Returns `ParseError` for empty text, text with no digits, an exponent with no digits, any other trailing character (including spaces), and a value too large to represent.",
+        "line": 78,
         "page": "reference/api/primitives-double.md"
       }
     ]
@@ -17369,8 +17447,8 @@
       },
       {
         "signature": "public static fun parse(borrow text: string): Result<float, ParseError>",
-        "description": "Parses a decimal float from `text`.",
-        "line": 74,
+        "description": "Parses the whole of `text` as a decimal float, accepting the same spellings as `double.parse` and rounding to the nearest float. Returns `ParseError` for the same malformed input and for a finite value too large for a float.",
+        "line": 76,
         "page": "reference/api/primitives-float.md"
       }
     ]
@@ -17969,39 +18047,45 @@
         "page": "reference/api/process-process-error.md"
       },
       {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 20,
+        "page": "reference/api/process-process-error.md"
+      },
+      {
         "signature": "public fun code(): string",
         "description": "Stable machine code (`ESPAWN`, `EIO`, `EUNSUPPORTED`, …).",
-        "line": 20,
+        "line": 25,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun spawn_failed(message: string): ProcessError",
         "description": "The executable could not be launched (not found, not executable, permission denied, ...).",
-        "line": 25,
+        "line": 30,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun io(message: string): ProcessError",
         "description": "A read/write against a running child's stdin/stdout/stderr failed.",
-        "line": 30,
+        "line": 35,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun unsupported(message: string): ProcessError",
         "description": "Process control is not available on the current host (e.g. the browser).",
-        "line": 35,
+        "line": 40,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun failed(message: string): ProcessError",
         "description": "Reports a nonzero exit status from run_checked.",
-        "line": 40,
+        "line": 45,
         "page": "reference/api/process-process-error.md"
       },
       {
         "signature": "public static fun cancelled(): ProcessError",
         "description": "Cooperative cancellation (`CancellationToken`).",
-        "line": 45,
+        "line": 50,
         "page": "reference/api/process-process-error.md"
       }
     ]
@@ -18574,25 +18658,25 @@
       {
         "signature": "public static async fun spawn<TOut: shared>( body: fun(): TOut, token: Option<CancellationToken> = Option.None ): TOut",
         "description": "Runs one synchronous function on a separate worker; use scope.spawn_on for structured CPU jobs. Panics when the worker crashes before replying; `TaskPool.dispatch` and scope children report that as `TaskPoolError.WorkerCrashed` instead.",
-        "line": 107,
+        "line": 108,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun spawn_async<TOut: shared>( body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None ): TOut",
         "description": "Runs an async function on a separate worker; local async scope children need no worker. Panics when the worker crashes before replying.",
-        "line": 130,
+        "line": 132,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun map<T, U, E>( items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None ): Result<U[], TaskFailure<E>>",
         "description": "Maps with bounded local async concurrency and returns values in input order.",
-        "line": 149,
+        "line": 151,
         "page": "reference/api/task-task.md"
       },
       {
         "signature": "public static async fun for_each<T, U, E>( items: T[], body: fun(T): Future<Result<U, E>>, concurrency: int, token: Option<CancellationToken> = Option.None ): Result<Unit, TaskFailure<E>>",
         "description": "Applies an async operation with bounded concurrency; successful child values are discarded.",
-        "line": 169,
+        "line": 171,
         "page": "reference/api/task-task.md"
       }
     ]
@@ -18685,31 +18769,31 @@
       {
         "signature": "public fun dispatch<TOut: shared>( body: fun(): TOut, token: Option<CancellationToken> = Option.None ): Future<Result<TOut, TaskPoolError>>",
         "description": "Dispatches a CPU job; capture and return values follow the shared/move worker rules.",
-        "line": 42,
+        "line": 43,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun dispatch_async<TOut: shared>( body: fun(): Future<TOut>, token: Option<CancellationToken> = Option.None ): Future<Result<TOut, TaskPoolError>>",
         "description": "Dispatches an async job on a pool worker and waits for its operation to settle.",
-        "line": 90,
+        "line": 92,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun map<T: shared, U: shared>( items: T[], body: fun(T): U, token: Option<CancellationToken> = Option.None ): Future<Result<U[], TaskFailure<TaskPoolError>>>",
         "description": "Maps CPU work with at most size active dispatches and preserves input order.",
-        "line": 222,
+        "line": 225,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun map_async<T: shared, U: shared>( items: T[], body: fun(T): Future<U>, token: Option<CancellationToken> = Option.None ): Future<Result<U[], TaskFailure<TaskPoolError>>>",
         "description": "Maps async worker jobs with bounded dispatch rather than creating one worker per input.",
-        "line": 247,
+        "line": 251,
         "page": "reference/api/task-task-pool.md"
       },
       {
         "signature": "public fun close(): Future<Result<Unit, TaskPoolError>>",
         "description": "Stops accepting work, waits for submitted jobs, then closes workers idempotently.",
-        "line": 272,
+        "line": 276,
         "page": "reference/api/task-task-pool.md"
       }
     ]
@@ -18795,13 +18879,13 @@
       {
         "signature": "public fun spawn_parallel<T: shared>(body: fun(): T): TaskHandle<T, E>",
         "description": "Schedules CPU work on the runtime's shared worker threads and retains structured ownership.",
-        "line": 51,
+        "line": 52,
         "page": "reference/api/task-task-scope.md"
       },
       {
         "signature": "public fun spawn_on<T: shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E>",
         "description": "Schedules CPU work on an explicit reusable pool while retaining structured ownership.",
-        "line": 66,
+        "line": 68,
         "page": "reference/api/task-task-scope.md"
       }
     ]
@@ -19109,9 +19193,15 @@
         "page": "reference/api/text-regex-error.md"
       },
       {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 18,
+        "page": "reference/api/text-regex-error.md"
+      },
+      {
         "signature": "public fun code(): string",
         "description": "Stable compilation-failure code.",
-        "line": 18,
+        "line": 23,
         "page": "reference/api/text-regex-error.md"
       }
     ]
@@ -19258,213 +19348,207 @@
         "page": "reference/api/text-string-text-1.md"
       },
       {
-        "signature": "public fun this[index: int] = value: char",
-        "description": "Replaces the UTF-16 code unit at `index`; an invalid index panics.",
-        "line": 23,
-        "page": "reference/api/text-string-text-1.md"
-      },
-      {
         "signature": "public fun iterator(): StringIterator",
         "description": "Gets an iterator for the string's characters.",
-        "line": 31,
+        "line": 22,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun substring(start: int, end: int): string",
         "description": "Gets a substring from start to end (O(1) slice of the parent).",
-        "line": 36,
+        "line": 27,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun index_of(target: char): Option<int>",
         "description": "The index of the first occurrence of `target`, or `None`.",
-        "line": 41,
+        "line": 32,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun index_of(borrow sub: string): Option<int>",
         "description": "The index of the first occurrence of substring `sub`, or `None`.",
-        "line": 50,
+        "line": 41,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun contains(borrow sub: string): bool",
         "description": "True if `sub` occurs anywhere in this string.",
-        "line": 59,
+        "line": 50,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun starts_with(borrow prefix: string): bool",
         "description": "True if this string begins with `prefix`.",
-        "line": 64,
+        "line": 55,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun ends_with(borrow suffix: string): bool",
         "description": "True if this string ends with `suffix`.",
-        "line": 73,
+        "line": 64,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun to_lower(): string",
         "description": "A new string with every uppercase letter lowercased.",
-        "line": 83,
+        "line": 74,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun to_upper(): string",
         "description": "A new string with every lowercase letter uppercased.",
-        "line": 96,
+        "line": 87,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun to_lower_unicode(): string",
         "description": "A new string with every character lowercased by the Unicode full case mapping, which can change the length (`\"İ\"` becomes `\"i̇\"`). Capital sigma becomes final sigma `ς` at the end of a word. The result is the same on every target and does not depend on a locale.",
-        "line": 111,
+        "line": 102,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun to_upper_unicode(): string",
         "description": "A new string with every character uppercased by the Unicode full case mapping, which can change the length (`\"straße\"` becomes `\"STRASSE\"`). The result is the same on every target and does not depend on a locale.",
-        "line": 118,
+        "line": 109,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun graphemes(): string[]",
         "description": "Splits the string into extended grapheme clusters (Unicode UAX #29), the units a reader perceives as single characters: a letter with its accents, an emoji sequence joined by zero-width joiners, or a flag. Returns an empty array for an empty string.",
-        "line": 125,
+        "line": 116,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun normalize(form: UnicodeNormForm): string",
         "description": "Returns the string in Unicode normalization `form` (UAX #15). `Nfc` and `Nfd` preserve meaning; `Nfkc` and `Nfkd` also replace compatibility characters such as `ﬁ` with `fi`.",
-        "line": 131,
+        "line": 122,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun trim(): string",
         "description": "A new string with leading and trailing whitespace removed.",
-        "line": 136,
+        "line": 127,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun trim_start(): string",
         "description": "A new string with leading whitespace removed.",
-        "line": 150,
+        "line": 141,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun trim_end(): string",
         "description": "A new string with trailing whitespace removed.",
-        "line": 160,
+        "line": 151,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun is_blank(): bool",
         "description": "True when `trim()` is empty.",
-        "line": 170,
+        "line": 161,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun pad_start(width: int, pad: string): string",
         "description": "Left-pads this string with `pad` until `width` code units (no-op when `pad` is empty).",
-        "line": 175,
+        "line": 166,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun pad_end(width: int, pad: string): string",
         "description": "Right-pads this string with `pad` until `width` code units (no-op when `pad` is empty).",
-        "line": 192,
+        "line": 183,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun last_index_of(target: char): Option<int>",
         "description": "The index of the last occurrence of `target`, or `None`.",
-        "line": 209,
+        "line": 200,
         "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun last_index_of(borrow sub: string): Option<int>",
         "description": "The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`. Byte-compare scan like `index_of` — allocates nothing per candidate.",
-        "line": 219,
-        "page": "reference/api/text-string-text-2.md"
+        "line": 210,
+        "page": "reference/api/text-string-text-1.md"
       },
       {
         "signature": "public fun replace_first(borrow old: string, borrow replacement: string): string",
         "description": "Replaces the first occurrence of `old` with `replacement`.",
-        "line": 228,
+        "line": 219,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split_once(sep: char): string[]",
         "description": "Splits at the first occurrence of `sep` into exactly two parts. When `sep` does not occur, returns `[this]` (consistent with `split`), never an empty array.",
-        "line": 239,
+        "line": 230,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split_once(borrow sep: string): string[]",
         "description": "Splits at the first occurrence of `sep`; returns a one-element array when no separator is found.",
-        "line": 255,
+        "line": 246,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun strip_prefix(borrow prefix: string): Option<string>",
         "description": "`Some` remainder when this starts with `prefix`.",
-        "line": 275,
+        "line": 266,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun strip_suffix(borrow suffix: string): Option<string>",
         "description": "`Some` remainder when this ends with `suffix`.",
-        "line": 283,
+        "line": 274,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun lines(): StringLines",
         "description": "Iterates over the lines without copying them. Lines end at `\\n`; a trailing `\\r` is dropped from each line, and a final line terminator does not produce an empty line. Call `to_string()` on a line to keep an owned copy.",
-        "line": 293,
+        "line": 284,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun repeat(times: int): string",
         "description": "A new string repeated `times` times.",
-        "line": 298,
+        "line": 289,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun equals(borrow other: string): bool",
         "description": "Value equality (`Equatable<string>`); identical to `this == other`.",
-        "line": 317,
+        "line": 308,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(sep: char): string[]",
         "description": "Splits this string on the single character `sep`.",
-        "line": 322,
+        "line": 313,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string): string[]",
         "description": "Splits this string on every occurrence of substring `sep`.",
-        "line": 341,
+        "line": 332,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(sep: char, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 371,
+        "line": 362,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 403,
+        "line": 394,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun replace(borrow old: string, borrow replacement: string): string",
         "description": "A new string with every occurrence of `old` replaced by `replacement`.",
-        "line": 435,
+        "line": 426,
         "page": "reference/api/text-string-text-2.md"
       }
     ]
@@ -19699,6 +19783,12 @@
         "signature": "public fun message(): string",
         "description": "Human-readable validation or entropy failure.",
         "line": 18,
+        "page": "reference/api/uuid-uuid-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 23,
         "page": "reference/api/uuid-uuid-error.md"
       }
     ]
@@ -19954,9 +20044,15 @@
         "page": "reference/api/validation-validation-errors.md"
       },
       {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 42,
+        "page": "reference/api/validation-validation-errors.md"
+      },
+      {
         "signature": "public fun to_json(): JsonValue",
         "description": "Returns validation issues as JSON, including their location, code, and message.",
-        "line": 42,
+        "line": 47,
         "page": "reference/api/validation-validation-errors.md"
       }
     ]
@@ -20154,6 +20250,12 @@
         "signature": "public fun message(): string",
         "description": "Returns the readable explanation of the failure.",
         "line": 21,
+        "page": "reference/api/webapi-auth-auth-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 26,
         "page": "reference/api/webapi-auth-auth-error.md"
       }
     ]
@@ -23936,6 +24038,12 @@
         "signature": "public fun message(): string",
         "description": "A human-readable description that includes the platform's own message when it gave one.",
         "line": 25,
+        "page": "reference/api/window-window-error.md"
+      },
+      {
+        "signature": "public override fun to_string(): string",
+        "description": "Returns `message()`, so printing the error shows its explanation.",
+        "line": 30,
         "page": "reference/api/window-window-error.md"
       }
     ]

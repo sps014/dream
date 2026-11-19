@@ -28,6 +28,14 @@ Human-readable explanation of the cryptographic failure, suitable for logs and e
 public fun message(): string
 ```
 
+## `to_string`
+
+Returns `message()`, so printing the error shows its explanation.
+
+```dream
+public override fun to_string(): string
+```
+
 ## `code`
 
 Stable machine code (`EINVAL_KEY`, `EINVAL_NONCE`, `EDECRYPT`, …).

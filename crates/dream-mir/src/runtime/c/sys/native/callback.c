@@ -8,7 +8,7 @@ static dream_mutex callback_mu = DREAM_MUTEX_INIT;
 static dream_cond callback_cv = DREAM_COND_INIT;
 #define uthash_fatal(message) do { \
     dream_mutex_unlock(&callback_mu); \
-    DREAM_PANIC_LITERAL(u"panic: out of memory indexing native callbacks"); \
+    DREAM_PANIC_LITERAL(u"out of memory indexing native callbacks"); \
 } while (0)
 #include "uthash.h"
 
@@ -63,20 +63,20 @@ int dream_rc_on_owner_thread(void) {
 
 static void callback_failure(void) {
     dream_mutex_unlock(&callback_mu);
-    DREAM_PANIC_LITERAL(u"panic: a NativeCallback closure must run on the Dream thread that created it");
+    DREAM_PANIC_LITERAL(u"a NativeCallback closure must run on the Dream thread that created it");
 }
 
 void dream_thread_attach(void) {
     if (current_owner) {
         if (current_owner->refs == INT_MAX) {
-            DREAM_PANIC_LITERAL(u"panic: dream_thread_attach nested past its limit");
+            DREAM_PANIC_LITERAL(u"dream_thread_attach nested past its limit");
         }
         current_owner->refs += 1;
         return;
     }
     current_owner = (CallbackOwner *)calloc(1, sizeof(*current_owner));
     if (!current_owner) {
-        DREAM_PANIC_LITERAL(u"panic: out of memory registering a callback owner thread");
+        DREAM_PANIC_LITERAL(u"out of memory registering a callback owner thread");
     }
     current_owner->attached = 1;
     current_owner->refs = 1;
@@ -104,7 +104,7 @@ void dream_thread_detach(void) {
 
 void dream_callback_enter(void) {
     if (!current_owner) {
-        DREAM_PANIC_LITERAL(u"panic: C called into Dream from a thread Dream does not know; call dream_thread_attach() first (see dream_embed.h)");
+        DREAM_PANIC_LITERAL(u"C called into Dream from a thread Dream does not know; call dream_thread_attach() first (see dream_embed.h)");
     }
 }
 
@@ -113,7 +113,7 @@ void dream_callback_register(dream_ptr object) {
     dream_callback_enter();
     callback = (Callback *)calloc(1, sizeof(*callback));
     if (!callback) {
-        DREAM_PANIC_LITERAL(u"panic: out of memory registering a native callback");
+        DREAM_PANIC_LITERAL(u"out of memory registering a native callback");
     }
     callback->object = object;
     callback->owner = current_owner;
@@ -177,7 +177,7 @@ void dream_callback_release(dream_ptr object) {
     if (!callback->owner->attached || callback->pending == UINT32_MAX
         || callback->owner->waking == UINT32_MAX) {
         dream_mutex_unlock(&callback_mu);
-        DREAM_PANIC_LITERAL(u"panic: native callback release requires a live Dream owner thread");
+        DREAM_PANIC_LITERAL(u"native callback release requires a live Dream owner thread");
     }
     // The foreign handle's existing retain keeps the object alive until the owner consumes it.
     if (!callback->pending) {
@@ -254,7 +254,7 @@ void dream_post(void *owner, void (*fn)(void *), void *ud) {
     }
     post = (Post *)calloc(1, sizeof *post);
     if (!post) {
-        DREAM_PANIC_LITERAL(u"panic: out of memory posting work to a Dream thread");
+        DREAM_PANIC_LITERAL(u"out of memory posting work to a Dream thread");
     }
     post->fn = fn;
     post->ud = ud;
@@ -322,7 +322,7 @@ void dream_callback_owner_finish(void) {
     dream_callback_drain();
     dream_defer_drain_all();
     if (owner->refs > 1) {
-        DREAM_PANIC_LITERAL(u"panic: dream_thread_detach is still owed on this Dream worker");
+        DREAM_PANIC_LITERAL(u"dream_thread_detach is still owed on this Dream worker");
     }
     dream_mutex_lock(&callback_mu);
     owner->attached = 0;
@@ -334,7 +334,7 @@ void dream_callback_owner_finish(void) {
     }
     if (owner->head) {
         dream_mutex_unlock(&callback_mu);
-        DREAM_PANIC_LITERAL(u"panic: native callbacks outlive their Dream owner thread");
+        DREAM_PANIC_LITERAL(u"native callbacks outlive their Dream owner thread");
     }
     current_owner = NULL;
     dream_mutex_unlock(&callback_mu);

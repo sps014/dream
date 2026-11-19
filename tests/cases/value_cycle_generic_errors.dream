@@ -1,0 +1,12 @@
+// A cycle found only after a generic struct is instantiated still points at its declaration.
+struct Wrap<T> {
+    public v: T;
+}
+
+enum struct Shape {
+    Circle(Wrap<Shape>),
+    Empty,
+}
+
+fun main(): void {
+}

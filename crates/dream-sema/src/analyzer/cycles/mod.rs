@@ -53,7 +53,7 @@ impl<'a> Analyzer<'a> {
                 })
         };
         let builtins = program::Builtins {
-            funcbox_new: self.closure_intrinsic("funcbox_new"),
+            funcbox_new: self.closure_intrinsic(dream_abi::intrinsics::ATTR_FUNCBOX_NEW),
             funcbox_env: self.closure_intrinsic("funcbox_env"),
             funcbox_funcidx: self.closure_intrinsic("funcbox_funcidx"),
             future: self

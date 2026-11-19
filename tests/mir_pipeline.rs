@@ -464,7 +464,7 @@ fn source_weak_forest_builder_batches_niche_null_initialization() {
     let (_, fixture) = fixture.split_once("class ForestNode").unwrap();
     let (fixture, _) = fixture.split_once("fun main()").unwrap();
     let source = format!(
-        "enum Option<T> {{ Some(T), None }} @allow_cycle class ForestNode{fixture} fun main(): void {{ let root = forest(5); }}"
+        "module system.core; enum Option<T> {{ Some(T), None }} @allow_cycle class ForestNode{fixture} fun main(): void {{ let root = forest(5); }}"
     );
     common::compile_test_pipeline(&source, |hir, interner| {
         let mut mir = lower_program(hir, interner);

@@ -151,6 +151,14 @@ impl<'l, 'a> Fx<'l, 'a> {
         self.w.switch_to(ok);
     }
 
+    fn zero_divisor_msg(op: BinOp) -> &'static str {
+        if op == BinOp::Rem {
+            msgs::REM_BY_ZERO
+        } else {
+            msgs::DIVIDE_BY_ZERO
+        }
+    }
+
     /// Division panics on a zero divisor; signed `MIN / -1` wraps to `MIN` (and `MIN % -1` is 0).
     fn int_div(&mut self, op: BinOp, ty: IntTy, lhs: &V, rhs: &V) -> V {
         let t = int_ll(ty);
@@ -160,7 +168,7 @@ impl<'l, 'a> Fx<'l, 'a> {
         let known = y.const_int().map(|v| v as u128 & width_mask);
         if known.is_none_or(|v| v == 0) {
             let zero = self.w.icmp("eq", &y, &Value::zero(t.clone()));
-            self.panic_if(&zero, msgs::DIVIDE_BY_ZERO);
+            self.panic_if(&zero, Self::zero_divisor_msg(op));
         }
         if !ty.signed() {
             let name = if op == BinOp::Div { "udiv" } else { "urem" };
@@ -229,7 +237,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             BinOp::Mul => self.overflow_op("mul", ty.signed(), &t, &x, &y, msgs::MUL_OVERFLOW),
             BinOp::Div | BinOp::Rem => {
                 let zero = self.w.icmp("eq", &y, &Value::zero(t.clone()));
-                self.panic_if(&zero, msgs::DIVIDE_BY_ZERO);
+                self.panic_if(&zero, Self::zero_divisor_msg(op));
                 let signed = ty.signed();
                 if signed {
                     let min = Value::int(t.clone(), -(1i128 << (ty.bits() - 1)));

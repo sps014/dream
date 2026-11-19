@@ -41,6 +41,12 @@ System.println(first(words)); // "a" (inferred)
 
 Multiple type parameters are allowed: `fun swap<A, B>(a: A, b: B): A { ... }`.
 
+A name followed by `<`, a list, `>`, and `(` is always read as a call with type arguments. This matters when two comparisons sit side by side in an argument list: `check(a < b, c > (d))` calls `a<b, c>(d)` and reports that `a` is a variable. Put parentheses around a comparison to keep it a comparison:
+
+```dream
+check((a < b), c > (d));
+```
+
 ## Generic classes
 
 Classes and structs can be generic.

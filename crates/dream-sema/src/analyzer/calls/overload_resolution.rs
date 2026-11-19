@@ -132,17 +132,31 @@ impl<'a> Analyzer<'a> {
                 ))
             }
             OverloadResolution::Ambiguous(keys) => {
+                let poisoned = arg_types
+                    .iter()
+                    .any(|t| *t == self.type_ctx.interner.error());
+                if poisoned && let Ok(info) = self.function_table.get_function(&keys[0]) {
+                    return Ok(info);
+                }
                 let pretty: Vec<String> =
                     arg_types.iter().map(|t| self.type_id_display(*t)).collect();
+                let signatures: Vec<String> = keys
+                    .iter()
+                    .filter_map(|key| self.function_table.functions.get(key))
+                    .map(|info| info.parameters.clone())
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .map(|params| {
+                        let params: Vec<String> =
+                            params.iter().map(|t| self.type_id_display(*t)).collect();
+                        format!("{base}({})", params.join(", "))
+                    })
+                    .collect();
                 Err(format!(
                     "Ambiguous call to '{}' with argument types ({}); candidates: {}",
                     base,
                     pretty.join(", "),
-                    keys.iter()
-                        .filter_map(|key| self.function_table.functions.get(key))
-                        .map(|info| info.name.clone())
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    signatures.join(", ")
                 ))
             }
         }
@@ -189,6 +203,7 @@ impl<'a> Analyzer<'a> {
         expected: &[dream_types::TypeId],
         given: &[dream_types::TypeId],
         position: dream_text::text_span::TextSpan,
+        args: &[dream_syntax::nodes::ExpressionNode<'_>],
         diagnostics: &mut dream_diagnostics::DiagnosticBag,
     ) {
         for (i, given_type) in given.iter().enumerate() {
@@ -205,7 +220,11 @@ impl<'a> Analyzer<'a> {
                         expected_pretty,
                         given_pretty
                     ),
-                    Some(position),
+                    Some(
+                        args.get(i)
+                            .and_then(ExpressionNode::position)
+                            .unwrap_or(position),
+                    ),
                 );
             }
         }

@@ -144,3 +144,55 @@ fun list_join_temporary(): void {
     Assert.eq(kept.join("+"), "a1+b2");
     Assert.eq(kept.join("+"), "a1+b2");
 }
+
+struct lwb_Point {
+    public x: int;
+
+    public constructor(x: int) {
+        this.x = x;
+    }
+
+    public fun bump(): void {
+        this.x = this.x + 1;
+    }
+}
+
+struct lwb_Line {
+    public start: lwb_Point;
+
+    public constructor(start: lwb_Point) {
+        this.start = start;
+    }
+}
+
+fun lwb_index(calls: List<int>): int {
+    calls.push(0);
+    return 0;
+}
+
+@test
+fun indexer_element_writes_persist(): void {
+    let points = List<lwb_Point>();
+    points.push(lwb_Point(1));
+    points[0].x = 55;
+    Assert.eq(points[0].x, 55);
+    points[0].bump();
+    Assert.eq(points[0].x, 56);
+
+    let calls = List<int>();
+    points[lwb_index(calls)].x += 4;
+    Assert.eq(points[0].x, 60);
+    Assert.eq(calls.length, 1);
+
+    let lines = Map<string, lwb_Line>();
+    lines["a"] = lwb_Line(lwb_Point(3));
+    lines["a"].start.x = 7;
+    lines["a"].start.bump();
+    Assert.eq(lines["a"].start.x, 8);
+
+    let grid = List<List<lwb_Point>>();
+    grid.push(List<lwb_Point>());
+    grid[0].push(lwb_Point(0));
+    grid[0][0].x = 9;
+    Assert.eq(grid[0][0].x, 9);
+}

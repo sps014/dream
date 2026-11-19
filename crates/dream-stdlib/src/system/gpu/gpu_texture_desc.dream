@@ -107,7 +107,7 @@ public class GpuTextureDesc {
         if this.desc_storage {
             usage = usage | 2;
         }
-        let format: int = this.desc_format;
+        let format: int = (int)this.desc_format;
         return [
             this.desc_width,
             this.desc_height,

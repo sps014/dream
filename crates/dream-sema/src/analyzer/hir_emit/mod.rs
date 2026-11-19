@@ -29,9 +29,17 @@ mod exprs;
 mod field_defaults;
 mod stmts;
 
+/// An outer local hidden by a declaration in a nested scope.
+struct ShadowedLocal {
+    name: String,
+    entry: (LocalId, TypeId),
+    boxed: Option<TypeId>,
+}
+
 /// Per-analysis HIR-emission state, plus the accumulated [`HFunction`]s. Reset at the start of each
 /// candidate function (see [`Analyzer::hir_begin_function`]).
 #[derive(Default)]
+
 pub(super) struct HirEmit {
     /// True while inside a function we are attempting to emit. When false, every helper is a no-op,
     /// so non-candidate functions (generic templates, methods, anything unsupported) cost nothing.
@@ -46,6 +54,9 @@ pub(super) struct HirEmit {
     /// Keyed by name, so a re-declaration (shadowing in a sibling/nested scope) overwrites the entry;
     /// unique slot ids therefore come from `next_local`, not this map's length.
     locals: IndexMap<String, (LocalId, TypeId)>,
+    /// One frame per open lexical scope: the outer entries its declarations shadowed, restored
+    /// when the scope closes so the outer variable is visible again.
+    scopes: Vec<Vec<ShadowedLocal>>,
     /// Names (a subset of `locals`' keys) whose slot holds a `CaptureCell<T>` box rather than a raw
     /// value — either a `let` captured by a nested lambda, an enclosing function's own captured
     /// parameter, or (inside a capturing lambda's own lifted function) a captured name received
@@ -209,6 +220,7 @@ impl<'a> Analyzer<'a> {
         self.capturing_fun_locals.clear();
         self.clear_moved_locals();
         self.hir.locals.clear();
+        self.hir.scopes.clear();
         self.hir.boxed.clear();
         self.hir.next_local = 0;
         self.hir.local_decls.clear();
@@ -264,7 +276,7 @@ impl<'a> Analyzer<'a> {
                     col_no: 0,
                 };
                 self.ensure_struct_instantiated(
-                    "RefBox",
+                    dream_abi::core_items::REF_BOX_NAME,
                     std::slice::from_ref(&param.type_),
                     &no_span,
                     &mut throwaway,
@@ -548,9 +560,9 @@ impl<'a> Analyzer<'a> {
     ///
     /// `errors_before` is the number of error diagnostics that existed *before* this function was
     /// analyzed. If the function was a candidate for emission but is dropped (an unrepresentable
-    /// construct flipped `ok` to false, or the block stack is unbalanced) and no error was reported
-    /// during its analysis, the drop would otherwise be silent — the function would produce no WASM
-    /// with no diagnostic. In that case we report an explicit error so the failure is visible.
+    /// construct flipped `ok` to false, or the block stack is unbalanced) while the program has no
+    /// other error, the drop would otherwise be silent: the function would produce no code and no
+    /// diagnostic. In that case an explicit error makes the failure visible.
     pub(in crate::analyzer) fn hir_finish_function(
         &mut self,
         diagnostics: &mut DiagnosticBag,
@@ -588,11 +600,10 @@ impl<'a> Analyzer<'a> {
                 });
             }
         } else if self.hir.collecting {
-            // This function was selected as an emission candidate but did not produce HIR. Surface a
-            // diagnostic unless its analysis already reported one (in which case a more specific
-            // message exists and the build already fails).
-            let reported_during_fn = diagnostics.errors().count() > errors_before;
-            if !reported_during_fn {
+            // A function that produced no HIR is a compiler bug only when nothing else failed: an
+            // earlier error poisons the types a generic instance is analyzed with, and the build
+            // already fails with that more specific message.
+            if errors_before == 0 && diagnostics.errors().count() == 0 {
                 diagnostics.report_error(
                     format!(
                         "function '{}' failed to produce code for the compiler backend; no code was generated for it",
@@ -763,6 +774,48 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Points `name` at a newly declared slot, remembering the entry it shadows in the innermost
+    /// open scope.
+    pub(in crate::analyzer) fn bind_local_name(&mut self, name: &str, local: LocalId, ty: TypeId) {
+        if let Some(&entry) = self.hir.locals.get(name)
+            && let Some(frame) = self.hir.scopes.last_mut()
+            && !frame.iter().any(|saved| saved.name == name)
+        {
+            frame.push(ShadowedLocal {
+                name: name.to_string(),
+                entry,
+                boxed: self.hir.boxed.get(name).copied(),
+            });
+        }
+        self.hir.boxed.shift_remove(name);
+        self.hir.locals.insert(name.to_string(), (local, ty));
+    }
+
+    /// Opens a lexical scope for local names and returns the depth to hand to
+    /// [`Self::hir_pop_scope`].
+    pub(in crate::analyzer) fn hir_push_scope(&mut self) -> usize {
+        self.hir.scopes.push(Vec::new());
+        self.hir.scopes.len() - 1
+    }
+
+    /// Closes every scope opened at or above `depth`, making the locals they shadowed visible
+    /// again. Unwinding by depth also closes scopes left open by an early error return.
+    pub(in crate::analyzer) fn hir_pop_scope(&mut self, depth: usize) {
+        while self.hir.scopes.len() > depth {
+            self.pop_innermost_scope();
+        }
+    }
+
+    fn pop_innermost_scope(&mut self) {
+        for saved in self.hir.scopes.pop().unwrap_or_default().into_iter().rev() {
+            match saved.boxed {
+                Some(elem) => self.hir.boxed.insert(saved.name.clone(), elem),
+                None => self.hir.boxed.shift_remove(&saved.name),
+            };
+            self.hir.locals.insert(saved.name, saved.entry);
+        }
+    }
+
     /// Closes the innermost block and returns its statements.
     pub(in crate::analyzer) fn hir_close_block(&mut self) -> Vec<HStmt> {
         if self.hir.collecting {
@@ -791,7 +844,7 @@ impl<'a> Analyzer<'a> {
         let ty = self.type_ctx.lower(ty);
         let local = LocalId(self.hir.next_local);
         self.hir.next_local += 1;
-        self.hir.locals.insert(name.to_string(), (local, ty));
+        self.bind_local_name(name, local, ty);
         self.hir.local_decls.push(HLocal {
             id: local,
             name: name.to_string(),
@@ -805,29 +858,6 @@ fn extern_import_target(func: &FunctionNode) -> (String, String) {
     dream_abi::attributes::extern_import_target(&func.attributes, &func.name.text)
 }
 
-/// Expands the backslash escapes a string/char literal body may contain (`\n`, `\t`, `\r`, `\0`,
-/// `\\`, `\"`, `\'`). Unknown escapes keep the escaped character verbatim, matching the lexer's
-/// permissive stance.
-fn unescape_lit_body(body: &str) -> String {
-    let mut out = String::with_capacity(body.len());
-    let mut chars = body.chars();
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        match chars.next() {
-            Some('n') => out.push('\n'),
-            Some('t') => out.push('\t'),
-            Some('r') => out.push('\r'),
-            Some('0') => out.push('\0'),
-            Some(other) => out.push(other),
-            None => out.push('\\'),
-        }
-    }
-    out
-}
-
 /// The runtime content of a string literal: the raw token text still carries its surrounding double
 /// quotes (it is the source slice), so strip them and expand escapes. Idempotent on already-unquoted
 /// input.
@@ -836,5 +866,5 @@ pub(super) fn string_lit_value(text: &str) -> String {
         .strip_prefix('"')
         .and_then(|s| s.strip_suffix('"'))
         .unwrap_or(text);
-    unescape_lit_body(body)
+    dream_syntax::escape::unescape(body)
 }

@@ -45,7 +45,11 @@ impl<'a> Analyzer<'a> {
             template_matches.then(|| {
                 crate::analyzer::typed_hir_cache::Request::Function(
                     def,
-                    bindings.keys().cloned().zip(identity.1.iter().copied()).collect(),
+                    bindings
+                        .keys()
+                        .cloned()
+                        .zip(identity.1.iter().copied())
+                        .collect(),
                 )
             })
         };
@@ -118,6 +122,22 @@ impl<'a> Analyzer<'a> {
         id: &SyntaxToken,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<Type> {
+        let (func_ty, identity) = self.instantiate_generic_function_instance(id, diagnostics)?;
+        let Type::Function(_, ret) = &func_ty else {
+            unreachable!("generic function values instantiate to function types")
+        };
+        let ret = (**ret).clone();
+        self.hir_set_func_value_identity(&identity, &func_ty, &ret);
+        Some(func_ty)
+    }
+
+    /// Infers and registers the concrete instance of generic function `id` for the function-typed
+    /// context at this site, without emitting a value for it.
+    pub(crate) fn instantiate_generic_function_instance(
+        &mut self,
+        id: &SyntaxToken,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Option<(Type, crate::function_table::FunctionIdentity)> {
         let def = self.type_ctx.resolve(DefKind::Function, &id.text)?;
         let template = *self.generic_functions.get(&def)?;
 
@@ -144,20 +164,19 @@ impl<'a> Analyzer<'a> {
         let param_ids: Vec<_> = exp_params.iter().map(|p| self.type_ctx.lower(p)).collect();
         let bindings =
             self.infer_generic_bindings(template, &None, &param_ids, &id.position, diagnostics);
-        self.verify_generic_constraints(
+        if !self.verify_generic_constraints(
             &template.generic_constraints,
             &bindings,
             &id.position,
             diagnostics,
-        );
+        ) {
+            return None;
+        }
         self.reject_ref_struct_bindings(&bindings, &id.position, diagnostics);
 
-        let identity = self.register_generic_function_instance(template, &bindings);
         // The func value must reference the base template's `DefId` + concrete instance args (in
         // binding order) so it maps to the monomorphized instance's function-table slot.
-        let ret = (*exp_ret).clone();
-        let func_ty = Type::Function(exp_params, exp_ret);
-        self.hir_set_func_value_identity(&identity, &func_ty, &ret);
-        Some(func_ty)
+        let identity = self.register_generic_function_instance(template, &bindings);
+        Some((Type::Function(exp_params, exp_ret), identity))
     }
 }

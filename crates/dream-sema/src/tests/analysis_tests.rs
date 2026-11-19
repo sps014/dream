@@ -114,14 +114,11 @@ fn test_analyze_new_integer_explicit_casts_ok() {
 }
 
 #[test]
-fn test_analyze_unary_minus_allows_all_numeric_types() {
-    // Regression test: unary +/- used to be rejected for `long`/`uint`/`ulong`/`byte`, even though
-    // the MIR backend (const-fold + codegen) already handled them like `int`/`float`/`double`.
+fn test_analyze_unary_minus_allows_all_signed_numeric_types() {
     let code = "fun main(): void {
         let a: long = -15L;
-        let b: uint = -3u;
-        let c: ulong = -7ul;
-        let d: byte = -(byte)1;
+        let b: sbyte = -(sbyte)1;
+        let c: short = -(short)7;
         let e: int = -42;
         let f: float = -1.5f;
         let g: double = -2.5d;
@@ -759,7 +756,7 @@ fn test_class_indexer_get_set_ok() {
 
 #[test]
 fn test_class_indexer_bare_get_is_not_an_indexer() {
-    // Without `@get_indexer`, a method named `get` is ordinary — `obj[i]` errors.
+    // Without a `this[index]` getter, a method named `get` is ordinary — `obj[i]` errors.
     let code = "
         class Box {
             v: int;
@@ -783,7 +780,7 @@ fn test_class_indexer_bare_get_is_not_an_indexer() {
 
 #[test]
 fn test_class_indexer_void_get_attr_rejected() {
-    // `@get_indexer` returning `void` is rejected at registration.
+    // a `this[index]` getter returning `void` is rejected at registration.
     let code = "
         class Box {
             v: int;
@@ -822,7 +819,7 @@ fn test_class_void_get_still_callable_as_method() {
 
 #[test]
 fn test_class_indexer_static_get_attr_rejected() {
-    // `@get_indexer` on a static method is rejected at registration.
+    // a `this[index]` getter on a static method is rejected at registration.
     let code = "
         class Box {
             v: int;
@@ -843,7 +840,7 @@ fn test_class_indexer_static_get_attr_rejected() {
 
 #[test]
 fn test_class_indexer_async_get_attr_rejected() {
-    // `@get_indexer` on an async method is rejected at registration.
+    // a `this[index]` getter on an async method is rejected at registration.
     let code = "
         class Box {
             v: int;
@@ -956,7 +953,7 @@ fn test_async_accessor_is_rejected() {
 
 #[test]
 fn test_class_foreach_with_option_enumerator_ok() {
-    // The full enumerator protocol: `@iterator` returns an object whose `@next(): Option<T>`
+    // The full enumerator protocol: `iterator()` returns an object whose `next(): Option<T>`
     // yields elements. `break`/`continue` are valid in the body.
     let code = "
         module system.core;
@@ -993,7 +990,7 @@ fn test_class_foreach_with_option_enumerator_ok() {
 
 #[test]
 fn test_class_foreach_next_not_option_errors() {
-    // `@next` must return `Option<T>`; a non-Option return is rejected at registration.
+    // `next()` must return `Option<T>`; a non-Option return is rejected at registration.
     let code = "
         class NumIter {
             n: int;
@@ -1020,7 +1017,7 @@ fn test_class_foreach_next_not_option_errors() {
 
 #[test]
 fn test_class_foreach_missing_iterator_errors() {
-    // A class without an `@iterator` method cannot be iterated with `for..in`.
+    // A class without an `iterator()` method cannot be iterated with `for..in`.
     let code = "
         class Plain {
             v: int;
@@ -1290,8 +1287,7 @@ fn test_is_binding_in_and_chain_is_visible_in_branch() {
 
 #[test]
 fn test_is_binding_visible_in_later_and_conjunct() {
-    // `t` bound by the first conjunct's `is` is now also visible in a later conjunct of the same
-    // `&&` chain (previously only the branch body could see it).
+    // `t` bound by the first conjunct's `is` is visible in a later conjunct of the same `&&` chain.
     let code = "
         interface Animal { fun speak(): int; }
         class Cat : Animal { public fun speak(): int { return 7; } }
@@ -1757,7 +1753,8 @@ fn test_cycle_analysis_scales_to_many_linking_functions() {
 
 #[test]
 fn test_weak_field_breaks_self_cycle() {
-    let code = "enum Option<T> { Some(T), None }
+    let code = "module system.core;
+        enum Option<T> { Some(T), None }
         class Node { weak next: Option<Node>; }";
     let diagnostics = analyze_code(code);
     assert_eq!(diagnostics.has_errors(), false);
@@ -2294,7 +2291,7 @@ fn test_illegal_string_operator_is_poison() {
     let errors = error_messages(&analyze_code(code));
     assert_eq!(errors.len(), 1, "got: {:?}", errors);
     assert!(
-        errors[0].contains("Cannot perform operation"),
+        errors[0].contains("operator '-' cannot be applied to string"),
         "got: {:?}",
         errors
     );
@@ -2498,11 +2495,10 @@ fn operator_no_match_and_poison_do_not_cascade() {
     );
     let errors: Vec<_> = diagnostics.errors().collect();
     assert_eq!(errors.len(), 2, "{errors:?}");
-    assert!(
-        errors
-            .iter()
-            .any(|d| d.message.contains("cannot convert from bool to Value"))
-    );
+    assert!(errors.iter().any(|d| {
+        d.message
+            .contains("operator '*' cannot combine Value and bool")
+    }));
     assert!(errors.iter().any(|d| d.message.contains("missing")));
 }
 
@@ -2544,7 +2540,7 @@ fn ownership_protocol_attributes_cannot_be_forged() {
             "borrowed results are reserved",
         ),
         (
-            "@slot_walk(\"length\", \"read\", \"\") class Forged {}",
+            "@slot_walk(\"length\", \"read\", \"\", \"\", \"\") class Forged {}",
             "slot walks are reserved",
         ),
     ] {

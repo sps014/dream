@@ -46,7 +46,11 @@ pub fn hint_for_failure(msg: &str) -> Option<&'static str> {
 }
 
 /// `wasm-ld` with the guest module's export/memory/stack flags; objects and `-o` not yet added.
-pub(crate) fn wasm_ld_command(wasm_ld: &Path, threads: bool, opt: OptLevel) -> Command {
+pub(crate) fn wasm_ld_command(
+    wasm_ld: &Path,
+    threads: bool,
+    opt: OptLevel,
+) -> Result<Command, String> {
     let mut cmd = Command::new(wasm_ld);
     cmd.args([
         "--no-entry",
@@ -65,9 +69,7 @@ pub(crate) fn wasm_ld_command(wasm_ld: &Path, threads: bool, opt: OptLevel) -> C
     if opt != OptLevel::O0 {
         cmd.arg("-O2");
     }
-    if let Some(stack) = stack_size_bytes() {
-        cmd.arg(format!("-zstack-size={stack}"));
-    }
+    cmd.arg(format!("-zstack-size={}", stack_size_bytes()?));
     if threads {
         cmd.args([
             "--export=__tls_size",
@@ -86,7 +88,7 @@ pub(crate) fn wasm_ld_command(wasm_ld: &Path, threads: bool, opt: OptLevel) -> C
     if tool_color() {
         cmd.arg("--color-diagnostics");
     }
-    cmd
+    Ok(cmd)
 }
 
 /// The runtime include directories every guest unit compiles against.
@@ -175,11 +177,25 @@ pub(crate) fn unit_command(
     cmd
 }
 
-/// Guest call-stack size for the linked module, from `DREAM_STACK_SIZE` (e.g. `32M`, `32MiB`,
-/// or a plain byte count). `None` leaves wasm-ld's default.
-pub(crate) fn stack_size_bytes() -> Option<u64> {
-    let v = std::env::var("DREAM_STACK_SIZE").ok()?;
-    parse_size(&v)
+const MIN_STACK_SIZE: u64 = 64 * 1024;
+const FALLBACK_STACK_SIZE: u64 = 16 * 1024 * 1024;
+
+/// Guest call-stack size for the linked module: `DREAM_STACK_SIZE` (e.g. `32M`, `32MiB`, or a
+/// plain byte count) when set, otherwise `[package.metadata.dream] stack-size`. wasm-ld's own
+/// 64 KiB default would trap ordinary recursion, so a size is always chosen.
+pub(crate) fn stack_size_bytes() -> Result<u64, String> {
+    let size = match std::env::var("DREAM_STACK_SIZE") {
+        Ok(v) => parse_size(&v)
+            .filter(|&n| n >= MIN_STACK_SIZE)
+            .ok_or_else(|| {
+                format!("DREAM_STACK_SIZE={v:?} must be a size of at least 64KiB (e.g. 32M)")
+            })?,
+        Err(_) => option_env!("DREAM_DEFAULT_STACK_SIZE")
+            .and_then(parse_size)
+            .unwrap_or(FALLBACK_STACK_SIZE),
+    };
+    // wasm-ld requires a 16-byte aligned stack.
+    Ok(size.next_multiple_of(16))
 }
 
 fn parse_size(s: &str) -> Option<u64> {

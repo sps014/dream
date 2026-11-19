@@ -98,10 +98,10 @@ STRING_BASE: u32 = 1024 => "STRING_BASE";
 ALLOC_LOCK_ADDR: u32 = 44 => "ALLOC_LOCK_ADDR";
 HEAP_PTR_ADDR: u32 = 48 => "HEAP_PTR_ADDR";
 /// A monotonically increasing counter (`i32.atomic.rmw.add`) handing out a small, dense, unique id
-/// to each thread that ever calls `$__thread_id` (see `runtime/sync.wat`) — the owner instance and
+/// to each thread that ever calls `dream_instance_tid` (see `runtime/c/sys/wasi/g0.c`) — the owner instance and
 /// every `Task` thread draw from this one shared word, so ids never collide across threads.
-/// Each thread caches its own id in the ordinary (per-*instance*) WASM global `$__tid` after the
-/// first call, so every later call is a single `global.get`, not a repeat atomic RMW. Backs the
+/// Each thread caches its own id in a per-instance global after the first call, so later calls
+/// skip the atomic RMW. Backs the
 /// owner-thread-id half of the reentrant lock word (`@shared class`'s embedded lock, `lock (obj)
 /// { ... }`, and `Lock`) — see `HEADER_LOCK_WORD_SIZE` below for the lock word's own layout.
 THREAD_ID_COUNTER_ADDR: u32 = 52 => "THREAD_ID_COUNTER_ADDR";
@@ -161,8 +161,8 @@ EXPORT_HOST_PIN: &str = "__dream_host_pin" => "DREAM_SYM_HOST_PIN";
 EXPORT_HOST_STATUS: &str = "__dream_host_status" => "DREAM_SYM_HOST_STATUS";
 EXPORT_HOST_UNPIN: &str = "__dream_host_unpin" => "DREAM_SYM_HOST_UNPIN";
 EXPORT_NEW_FUTURE: &str = "__dream_new_future" => "DREAM_SYM_NEW_FUTURE";
-/// Per-instance startup (function table, heap bump, `__dream_init`). WAT uses `(start)`; C wasm32
-/// exports this so `load()` and worker instances can run it without calling `main`.
+/// Per-instance startup (function table, heap bump, `__dream_init`). wasm32 exports this
+/// so `load()` and worker instances can run it without calling `main`.
 EXPORT_RUNTIME_INIT: &str = "__runtime_init" => "DREAM_SYM_RUNTIME_INIT";
 /// Worker-thread trampoline export (see `crates/dream-stdlib/src/system/task/task.dream`). The *native* host
 /// worker driver (`execution/host/worker.rs`) calls this with a body funcref index and a message
@@ -195,7 +195,7 @@ EXPORT_LEAK_LIVE: &str = "__dream_leak_live" => "DREAM_SYM_EXPORT_LEAK_LIVE";
 /// C-backend wasm32 export mapping a `dream_ft[]` dispatch index to the function-pointer value.
 /// Clang assigns `__indirect_function_table` slots independently of `dream_ft[]` order, but on
 /// wasm32 a function pointer *is* its table index — so the JS host translates through this before
-/// `table.get` when wrapping a FUNC-slot callback (the WAT backend needs no such export).
+/// `table.get` when wrapping a FUNC-slot callback.
 EXPORT_FT_GET: &str = "dream_ft_get" => "DREAM_SYM_EXPORT_FT_GET";
 HOST_MODULE: &str = "Dream" => "DREAM_MODULE_HOST";
 TIME_NOW_NANOS: &str = "timeNowNanos" => "DREAM_SYM_TIME_NOW_NANOS";

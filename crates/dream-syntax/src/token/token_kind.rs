@@ -431,7 +431,7 @@ pub const SOFT_SPECIALS: &[&str] = &["sizeof", "nameof", "typeof"];
 /// everywhere else - unlike [`KEYWORDS`], they cannot be listed as their own `TokenKind`. Listed
 /// here so LSP tooling can offer/highlight them without hand-duplicating the spellings.
 pub const CONTEXTUAL_KEYWORDS: &[&str] = &[
-    "this",
+    crate::nodes::types::THIS_NAME,
     crate::nodes::function::GET_ACCESSOR,
     crate::nodes::function::SET_ACCESSOR,
     crate::nodes::types::CONSTRUCTOR_NAME,
@@ -464,7 +464,7 @@ mod tests {
 
     /// Every *alphabetic* `#[token("...")]` spelling declared on `TokenKind` above must appear in
     /// [`KEYWORDS`] - otherwise a newly added keyword can silently drift out of the LSP's completion
-    /// list the way `interface`/`async`/`await`/`sealed`/`struct`/`unmanaged` previously did.
+    /// list.
     #[test]
     fn every_alphabetic_token_attr_is_listed() {
         for word in [

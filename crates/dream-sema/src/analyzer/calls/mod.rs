@@ -1,7 +1,7 @@
 //! Call-expression analysis, grouped by call shape:
 //! - [`free_functions`]: free-function calls and overload selection entry points.
 //! - [`member_calls`]: instance/static/namespaced method calls, plus the indexer/enumerator "hook"
-//!   resolution (`@get_indexer`/`@set_indexer`/`@iterator`/`@next`) used to desugar `obj[i]`, `obj[i] = v`, and
+//!   resolution (`this[index]` indexer / `iterator()` / `next()`) used to desugar `obj[i]`, `obj[i] = v`, and
 //!   `for..in`. `resolve_hook_or_diagnose` there is the shared entry point those desugaring sites
 //!   call; the `HookResolution` outcome is an implementation detail kept private to that module.
 //! - [`overload_resolution`]: scoring/ranking of candidate overloads.
@@ -160,6 +160,7 @@ impl<'a> Analyzer<'a> {
     pub(super) fn check_unsafe_call(
         &self,
         callee: &crate::function_table::FunctionTableInfo,
+        label: impl FnOnce() -> String,
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
@@ -170,7 +171,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.report_error(
                 format!(
                     "call to '@unsafe' function '{}' is only allowed from another '@unsafe' function or method",
-                    callee.name
+                    label()
                 ),
                 Some(position),
             );

@@ -17,7 +17,7 @@ fn exe_fingerprint() -> &'static str {
 pub fn compiler_identity(config: &ToolchainConfig) -> String {
     let sources = dream_stdlib::STD_PACKAGES
         .iter()
-        .find(|p| p.name == "system.codegen")
+        .find(|p| p.name == dream_abi::core_items::CODEGEN_PACKAGE)
         .map(|p| p.files)
         .unwrap_or_default();
     identity_with_sources(config, sources)

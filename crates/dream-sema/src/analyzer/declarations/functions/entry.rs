@@ -34,7 +34,7 @@ impl<'a> Analyzer<'a> {
             "'main' must return void, int, or Result<T, E>, got {}",
             self.ty_display(&ret)
         );
-        if parts.is_some_and(|(base, _)| base == "Option") {
+        if parts.is_some_and(|(base, _)| base == dream_abi::core_items::OPTION_NAME) {
             message.push_str(" (use 'ok_or' to turn an Option into a Result)");
         }
         diagnostics.report_error(message, Some(function.name.position));

@@ -73,8 +73,10 @@ impl Walker<'_, '_> {
                 field_inits,
                 ..
             } => {
-                let mut atoms =
-                    self.eval_all(args.iter().chain(field_inits.iter().map(|(_, value)| value)));
+                let mut atoms = self.eval_all(
+                    args.iter()
+                        .chain(field_inits.iter().map(|(_, value)| value)),
+                );
                 let this = if self.bearing(e.ty) {
                     let site = self.site_holding(key, 0, &mut atoms);
                     one(self.typed(site, e.ty))
@@ -241,7 +243,7 @@ impl Walker<'_, '_> {
                 self.wrote(Slot::Elem(dst.ty), &targets);
                 Atoms::new()
             }
-            K::Cast(inner) => self.eval(inner),
+            K::Cast(inner) | K::Downcast(inner) => self.eval(inner),
             K::Ternary {
                 cond,
                 then_expr,

@@ -1,7 +1,6 @@
 //! CFG simplification: fold branches with constant conditions into unconditional jumps, resolve
 //! constant `switch`es, collapse branches whose arms all target the same block, thread jumps through
-//! empty forwarding blocks, and merge a block into its sole predecessor. Subsumes the codegen-time
-//! `is`-folding the old backend did inline.
+//! empty forwarding blocks, and merge a block into its sole predecessor.
 
 use super::MirPass;
 use crate::{BlockId, Const, MirFunction, Operand, Place, Rvalue, Statement, Terminator};
@@ -137,8 +136,11 @@ fn if_convert(func: &mut MirFunction, interner: &TypeInterner) -> bool {
         if xt != xe || jt != je {
             continue;
         }
-        if interner.is_value_type(func.local_ty(xt)) {
-            continue; // `select` is scalar-only
+        // `select` is scalar-only, and an arm that copies a reference-counted value carries an
+        // ownership effect that a branch-free select would lose.
+        let selected = func.local_ty(xt);
+        if interner.is_value_type(selected) || interner.is_rc_tracked(selected) {
+            continue;
         }
 
         func.blocks[i].stmts.push(Statement::Assign(

@@ -135,9 +135,7 @@ pub fn file_symbols(text: &str, path: &str) -> Vec<WsSymbol> {
     let mut scratch = DiagnosticBag::new(None);
     let lexer = Lexer::new(text.to_string());
     let mut parser = Parser::new(lexer, &arena, &mut scratch);
-    let Ok(ast) = parser.parse() else {
-        return Vec::new();
-    };
+    let ast = parser.parse();
     let program = ast.get_root();
 
     let mut out = Vec::new();

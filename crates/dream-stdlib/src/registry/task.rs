@@ -10,6 +10,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
     generators: &[],
     files: &[
         (
+            "<std>/system/task/worker_body_attribute.dream",
+            include_str!("../system/task/worker_body_attribute.dream"),
+        ),
+        (
             "<std>/system/task/shared_channel_state.dream",
             include_str!("../system/task/shared_channel_state.dream"),
         ),

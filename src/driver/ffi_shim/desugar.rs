@@ -234,7 +234,7 @@ fn member_source(
     ));
 
     // Unmarked members stay callable, matching a binding rather than a Dream default of private.
-    // `internal` is preserved; it used to be the only non-public spelling.
+    // `internal` is preserved.
     let vis = match m.visibility {
         Visibility::Internal => "internal",
         Visibility::Public | Visibility::Private => "public",

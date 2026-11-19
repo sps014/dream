@@ -3,14 +3,14 @@
 //! Everything the backend and the prune pass must agree on about *how* Dream talks to the JS host —
 //! and which is specific to `js` interop rather than to any one compiler stage — lives here so there
 //! is a single source of truth: the tagged argument-slot layout used by dynamic `js` calls
-//! (`Emitter::emit_js_call`), the symbol names of the generated struct/array
-//! marshalers (`mir::backend::wasm::js_marshal`), and the host bridge set those marshalers call.
+//! (`backend::llvm::js`), the symbol names of the generated struct/array marshalers
+//! (`backend::shared::js_marshal`), and the host bridge set those marshalers call.
 //!
 //! Fused bridges (`get_as_*`, `call_as_*`, `get_call`, `get_call_as_*`, `set_slot`,
-//! `index_set_slot`) share the same module (`Dream`) and slot layout; they are named via
-//! [`bridge_sym`] like every other `js.*` stdlib method.
+//! `index_set_slot`) share the same module (`Dream`) and slot layout; they are named through
+//! [`method_fn`](dream_types::method_fn) like every other `js.*` stdlib method.
 
-use dream_types::{PrimTy, TyKind, TypeId, TypeInterner, method_fn};
+use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 
 /// The host module Dream runtime bridges are imported from: `@runtime("fileRead")` and the
 /// `@js("Dream", …)` attributes in `stdlib/core/js.dream`, matching the module object installed by
@@ -23,16 +23,10 @@ pub const HOST_JS_RETAIN: &str = "jsRetain";
 pub const HOST_JS_RELEASE: &str = "jsRelease";
 
 /// The Dream type name whose stdlib methods back every interop bridge. Combined with a method name
-/// via [`method_fn`] it yields the mangled symbol an `@js` extern is emitted/imported under. Shared
+/// via [`method_fn`](dream_types::method_fn) it yields the mangled symbol an `@js` extern is emitted/imported under. Shared
 /// with the analyzer (`dream_sema::analyzer::js_interop`) so the spelling that drives bridge mangling
 /// and the one the analyzer recognizes as the dynamic `js` type can never diverge.
 pub const JS_TYPE: &str = "js";
-
-/// The WAT symbol of the `js.<method>` stdlib bridge (e.g. `bridge_sym("box_int")` -> `$js_box_int`),
-/// derived through the one canonical mangler so the generated marshalers never hard-code the scheme.
-pub fn bridge_sym(method: &str) -> String {
-    format!("${}", method_fn(JS_TYPE, method))
-}
 
 /// The bridge family a primitive crosses the JS boundary through. Each family has one
 /// `box_<suffix>` / `as_<suffix>` bridge pair over a single carrier primitive; other members of
@@ -110,21 +104,21 @@ impl JsBridgeClass {
 
 // -- Generated-marshaler symbol names ------------------------------------------------------------
 
-/// `$<Name>_to_js`: the marshaler that deep-copies a struct/class into a plain JS object.
+/// `<Name>_to_js`: the marshaler that deep-copies a struct/class into a plain JS object.
 pub fn struct_to_js_sym(name: &str) -> String {
-    format!("${}_to_js", name)
+    format!("{}_to_js", name)
 }
-/// `$js_to_<Name>`: the marshaler that rebuilds a struct/class from a JS object's properties.
+/// `js_to_<Name>`: the marshaler that rebuilds a struct/class from a JS object's properties.
 pub fn js_to_struct_sym(name: &str) -> String {
-    format!("$js_to_{}", name)
+    format!("js_to_{}", name)
 }
-/// `$array_to_js_t<id>`: the marshaler that copies a Dream `elem[]` into a JS array.
+/// `array_to_js_t<id>`: the marshaler that copies a Dream `elem[]` into a JS array.
 pub fn array_to_js_sym(elem: TypeId) -> String {
-    format!("$array_to_js_t{}", elem.0)
+    format!("array_to_js_t{}", elem.0)
 }
-/// `$js_to_array_t<id>`: the marshaler that copies a JS array into a fresh Dream `elem[]`.
+/// `js_to_array_t<id>`: the marshaler that copies a JS array into a fresh Dream `elem[]`.
 pub fn js_to_array_sym(elem: TypeId) -> String {
-    format!("$js_to_array_t{}", elem.0)
+    format!("js_to_array_t{}", elem.0)
 }
 
 // -- Dynamic-call argument slots -----------------------------------------------------------------
@@ -152,34 +146,41 @@ pub mod tag {
     pub const USIZE: i32 = 10;
 }
 
-/// How a `js`-call argument of type `ty` is written into its 16-byte slot: `(tag, aux, payload store
-/// instruction)`. `aux` carries the element tag for an `ARRAY` slot and the parameter count for a
-/// `FUNC` slot (so the host wraps the funcref with the right arity); it is `0` otherwise. The payload
-/// store is `i64.store`/`f64.store` for wide scalars, else `i32.store`.
-pub fn slot_desc(interner: &TypeInterner, ty: TypeId) -> (i32, i32, &'static str) {
-    let stripped = ty;
-    match interner.kind(stripped) {
-        TyKind::Js => (tag::JS, 0, "i32.store"),
-        TyKind::Enum(_) => (tag::INT, 0, "i32.store"),
-        TyKind::Func(params, _) => (tag::FUNC, params.len() as i32, "i32.store"),
-        TyKind::Array(elem) => (tag::ARRAY, slot_tag(interner, *elem), "i32.store"),
+/// Width of the payload a slot stores at [`SLOT_PAYLOAD_OFFSET`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotPayload {
+    I32,
+    I64,
+    F64,
+}
+
+/// How a `js`-call argument of type `ty` is written into its 16-byte slot: `(tag, aux, payload)`.
+/// `aux` carries the element tag for an `ARRAY` slot and the parameter count for a `FUNC` slot (so
+/// the host wraps the funcref with the right arity); it is `0` otherwise.
+pub fn slot_desc(interner: &TypeInterner, ty: TypeId) -> (i32, i32, SlotPayload) {
+    use SlotPayload::{F64, I32, I64};
+    match interner.kind(ty) {
+        TyKind::Js => (tag::JS, 0, I32),
+        TyKind::Enum(_) => (tag::INT, 0, I32),
+        TyKind::Func(params, _) => (tag::FUNC, params.len() as i32, I32),
+        TyKind::Array(elem) => (tag::ARRAY, slot_tag(interner, *elem), I32),
         TyKind::Prim(p) => match p {
-            PrimTy::String => (tag::STRING, 0, "i32.store"),
-            PrimTy::Bool => (tag::BOOL, 0, "i32.store"),
-            PrimTy::Double | PrimTy::Float | PrimTy::Float16 => (tag::DOUBLE, 0, "f64.store"),
-            PrimTy::ISize => (tag::ISIZE, 0, "i32.store"),
-            PrimTy::USize => (tag::USIZE, 0, "i32.store"),
-            PrimTy::Long | PrimTy::ULong => (tag::LONG, 0, "i64.store"),
+            PrimTy::String => (tag::STRING, 0, I32),
+            PrimTy::Bool => (tag::BOOL, 0, I32),
+            PrimTy::Double | PrimTy::Float | PrimTy::Float16 => (tag::DOUBLE, 0, F64),
+            PrimTy::ISize => (tag::ISIZE, 0, I32),
+            PrimTy::USize => (tag::USIZE, 0, I32),
+            PrimTy::Long | PrimTy::ULong => (tag::LONG, 0, I64),
             PrimTy::Int
             | PrimTy::UInt
             | PrimTy::Byte
             | PrimTy::SByte
             | PrimTy::Short
             | PrimTy::UShort
-            | PrimTy::Char => (tag::INT, 0, "i32.store"),
+            | PrimTy::Char => (tag::INT, 0, I32),
         },
         // The analyzer rejects other types as `js` arguments; treat any leftover as a handle.
-        _ => (tag::JS, 0, "i32.store"),
+        _ => (tag::JS, 0, I32),
     }
 }
 

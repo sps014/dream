@@ -78,7 +78,7 @@ static dream_heap_counters *thread_counters(void) {
     heap_unlock();
     if (!record) {
         record = dream_raw_calloc(1, sizeof(*record));
-        if (!record) { DREAM_PANIC_LITERAL(u"panic: out of memory registering heap counters"); }
+        if (!record) { DREAM_PANIC_LITERAL(u"out of memory registering heap counters"); }
     }
     c = &record->counters;
     memset(c, 0, sizeof(*c));
@@ -121,8 +121,8 @@ void dream_pin_immortal(dream_ptr s) {
 __attribute__((cold, noinline)) void dream_retain_slow(int32_t *rc, int32_t v) {
     for (;;) {
         if (v == DREAM_RC_IMMORTAL) { return; }
-        if (v == 0) { DREAM_PANIC_LITERAL(u"panic: resurrection of a dying object"); }
-        if ((v & INT32_MAX) == INT32_MAX) { DREAM_PANIC_LITERAL(u"panic: reference count overflow"); }
+        if (v == 0) { DREAM_PANIC_LITERAL(u"resurrection of a dying object"); }
+        if ((v & INT32_MAX) == INT32_MAX) { DREAM_PANIC_LITERAL(u"reference count overflow"); }
         int32_t next = (int32_t)((uint32_t)v + 1u);
         if (__atomic_compare_exchange_n(rc, &v, next, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { return; }
     }
@@ -139,7 +139,7 @@ __attribute__((noinline)) int dream_rc_last_slow(int32_t *rc, int32_t v) {
             return last;
         }
     }
-    if (v == 0) { DREAM_PANIC_LITERAL(u"panic: reference count underflow"); }
+    if (v == 0) { DREAM_PANIC_LITERAL(u"reference count underflow"); }
     return 0;
 }
 
@@ -177,7 +177,7 @@ static void block_set_next(char *block, void *next) { dream_block_link(block, ne
 void dream_heap_thread_exit(void) {
     HeapRecord *record = (HeapRecord *)th.counters;
     if (!record) { return; }
-    if (th.region_active) { DREAM_PANIC_LITERAL(u"panic: thread exit with an active allocation region"); }
+    if (th.region_active) { DREAM_PANIC_LITERAL(u"thread exit with an active allocation region"); }
     heap_lock();
     for (unsigned cls = 0; cls < NCLASS; cls++) {
         char *block = dream_heap.free[cls];
@@ -246,7 +246,7 @@ static void heap_refresh_fast(void) {
 
 static size_t allocation_total(size_t size) {
     if (size > PTRDIFF_MAX - HEAP_HEADER_SIZE - 15 - DREAM_REDZONE_BYTES) {
-        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the supported limit");
+        DREAM_PANIC_LITERAL(u"allocation size exceeds the supported limit");
     }
     return dream_block_need(size);
 }
@@ -504,7 +504,7 @@ dream_ptr dream_realloc(dream_ptr ptr, dream_size new_size, int32_t tag) {
     if (ptr == 0) {
         return dream_malloc(new_size, tag);
     }
-    if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) { DREAM_PANIC_LITERAL(u"panic: cannot resize immortal storage"); }
+    if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == DREAM_RC_IMMORTAL) { DREAM_PANIC_LITERAL(u"cannot resize immortal storage"); }
     block = (char *)dream_p(ptr) - HEAP_HEADER_SIZE;
     old_total = dream_block_total(block);
 #ifdef DREAM_ASAN

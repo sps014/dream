@@ -28,10 +28,14 @@ impl<'a> Analyzer<'a> {
 
         // A `js`-typed receiver: `obj[key] = v` sets a JS property/element dynamically.
         if self.is_js_type(&array_type) {
-            let _key_type = self
+            let key_type = self
                 .analyze_expression(index, parent_function, symbol_table, diagnostics)
                 .unwrap_or(Type::Unknown);
             let key_hir = self.hir_take();
+            if !self.check_js_index_key(&key_type, index.position(), diagnostics) {
+                self.hir_fail();
+                return Ok(());
+            }
             let _value_type = self
                 .analyze_expression(right, parent_function, symbol_table, diagnostics)
                 .unwrap_or(Type::Unknown);
@@ -40,12 +44,23 @@ impl<'a> Analyzer<'a> {
             return Ok(());
         }
 
-        // Class/string index-assignment: `obj[i] = v` on a struct or `string` receiver desugars
-        // to the `@set_indexer` method when registered. Arrays keep the built-in path; `Unknown`
-        // is a poison carried from an earlier error and must not cascade.
+        if matches!(array_type, Type::String(_)) {
+            self.hir_fail();
+            diagnostics.report_error(
+                "strings are immutable; build a new string with replace, substring, or StringBuilder"
+                    .to_string(),
+                arr.position(),
+            );
+            let _ = self.analyze_expression(index, parent_function, symbol_table, diagnostics);
+            let _ = self.analyze_expression(right, parent_function, symbol_table, diagnostics);
+            return Ok(());
+        }
+
+        // `obj[i] = v` on a class or struct receiver desugars to its indexer setter. Arrays keep
+        // the built-in path; `Unknown` is a poison carried from an earlier error and must not
+        // cascade.
         if !matches!(array_type, Type::Array(_) | Type::Unknown)
-            && (Self::resolve_struct_parts(&array_type).is_some()
-                || matches!(array_type, Type::String(_)))
+            && Self::resolve_struct_parts(&array_type).is_some()
         {
             // The synthesized call re-evaluates the receiver, so drop the base HIR taken above.
             let _ = array_hir;
@@ -62,6 +77,12 @@ impl<'a> Analyzer<'a> {
 
         let inner_type = match array_type {
             Type::Array(inner) => *inner,
+            Type::Unknown => {
+                self.hir_fail();
+                let _ = self.analyze_expression(index, parent_function, symbol_table, diagnostics);
+                let _ = self.analyze_expression(right, parent_function, symbol_table, diagnostics);
+                return Ok(());
+            }
             other => {
                 self.hir_fail();
                 diagnostics.report_error(
@@ -79,15 +100,7 @@ impl<'a> Analyzer<'a> {
             .analyze_expression(index, parent_function, symbol_table, diagnostics)
             .unwrap_or(Type::Unknown);
         let index_hir = self.hir_take();
-        if !index_type.is_unknown() && !index_type.is_int() {
-            diagnostics.report_error(
-                format!(
-                    "Array index must be of type int, got {}",
-                    self.ty_display(&index_type)
-                ),
-                index.position(),
-            );
-        }
+        self.check_array_index(&index_type, index.position(), diagnostics);
 
         let right_type = self
             .analyze_expression(right, parent_function, symbol_table, diagnostics)
@@ -107,7 +120,7 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Desugars a class index-assignment `obj[index] = value` to a call of the type's
-    /// `@set_indexer` method when registered (accessible instance, non-async method taking two
+    /// a `this[index] = value` setter method when registered (accessible instance, non-async method taking two
     /// arguments; its return value is discarded).
     #[allow(clippy::too_many_arguments)]
     fn analyze_index_set(
@@ -139,7 +152,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
             || {
                 format!(
-                    "type '{}' is not index-assignable (define '@set_indexer public fun ...(index, value)' to allow obj[index] = value)",
+                    "type '{}' is not index-assignable (define 'public fun this[index: K] = value: V' to allow obj[index] = value)",
                     pretty_obj
                 )
             },
@@ -316,8 +329,9 @@ impl<'a> Analyzer<'a> {
                 self.hir_fail();
                 diagnostics.report_error(
                     format!(
-                        "Cannot access member of non-class type {}",
-                        self.ty_display(&obj_type)
+                        "Type '{}' has no member '{}'",
+                        self.ty_display(&obj_type),
+                        member.text
                     ),
                     Some(member.position),
                 );
@@ -399,12 +413,21 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        let target_ty = self
-            .analyze_expression(target, parent_function, symbol_table, diagnostics)
+        let ctx = AnalyzerContext {
+            parent_function,
+            symbol_table,
+        };
+        let target = self.hoist_place_operands(target, &ctx, diagnostics)?;
+        let old = self.declare_synthetic_const("__incdec_old", target, &ctx, diagnostics)?;
+        let target_ty = symbol_table
+            .borrow()
+            .get_symbol(&old)
             .unwrap_or(Type::Unknown);
-        let old_val = self.hir_take();
-
-        if !target_ty.is_unknown() && !target_ty.is_integer() {
+        if target_ty.is_unknown() {
+            self.hir_fail();
+            return Ok(Type::Unknown);
+        }
+        if !target_ty.is_integer() {
             diagnostics.report_error(
                 format!(
                     "'++'/'--' require an integer operand, got {}",
@@ -416,9 +439,6 @@ impl<'a> Analyzer<'a> {
             return Ok(Type::Unknown);
         }
 
-        let tmp_name = format!("__incdec_{}", op.position.start);
-        self.hir_declare_local(&tmp_name, &target_ty, old_val);
-
         let plain_kind = if is_inc {
             TokenKind::PlusToken
         } else {
@@ -429,67 +449,20 @@ impl<'a> Analyzer<'a> {
             op.position,
             if is_inc { "+" } else { "-" }.into(),
         );
-        self.hir_set_var(&tmp_name);
-        let left = self.hir_take();
-        let one_ty = Type::Integer(SyntaxToken::new(
-            TokenKind::NumberToken,
-            op.position,
-            "1".into(),
-        ));
-        self.hir_set_literal(&one_ty);
-        let one_hir = self.hir_take();
-        self.hir_set_binary(left, &plain_tok, one_hir, &target_ty);
-        let new_val = self.hir_take();
-
-        match target {
-            ExpressionNode::Identifier(id) => {
-                self.hir_assign_local(&id.text, new_val.clone());
-            }
-            ExpressionNode::IndexAccess(arr, idx) => {
-                let _ = self.analyze_expression(arr, parent_function, symbol_table, diagnostics);
-                let arr_hir = self.hir_take();
-                let _ = self.analyze_expression(idx, parent_function, symbol_table, diagnostics);
-                let idx_hir = self.hir_take();
-                let slot = self.type_ctx.lower(&target_ty);
-                self.hir_assign_index(arr_hir, idx_hir, new_val.clone(), Some(slot));
-            }
-            ExpressionNode::MemberAccess(obj, member) => {
-                let obj_type = self
-                    .analyze_expression(obj, parent_function, symbol_table, diagnostics)
-                    .unwrap_or(Type::Unknown);
-                let obj_hir = self.hir_take();
-                let slot = self.type_ctx.lower(&target_ty);
-                if let Type::Tuple(elems) = &obj_type {
-                    if let Ok(idx) = member.text.parse::<usize>() {
-                        if idx < elems.len() {
-                            self.hir_assign_field(obj_hir, idx, new_val.clone(), Some(slot));
-                        } else {
-                            self.hir_fail();
-                        }
-                    } else {
-                        self.hir_fail();
-                    }
-                } else if let MemberField::Field { struct_ty, .. } =
-                    self.resolve_member_field(&obj_type, member, parent_function, diagnostics)
-                {
-                    match self.struct_field_index(struct_ty, &member.text) {
-                        Some(index) => {
-                            self.hir_assign_field(obj_hir, index, new_val.clone(), Some(slot))
-                        }
-                        None => self.hir_fail(),
-                    }
-                } else {
-                    self.hir_fail();
-                }
-            }
-            _ => self.hir_fail(),
-        }
-
-        if prefix {
-            self.hir_set_last(new_val);
-        } else {
-            self.hir_set_var(&tmp_name);
-        }
+        let one = self
+            .arena
+            .alloc(ExpressionNode::Literal(Type::Integer(SyntaxToken::new(
+                TokenKind::NumberToken,
+                op.position,
+                "1".into(),
+            ))));
+        let old_ref = self.arena.alloc(ExpressionNode::Identifier(old.clone()));
+        let stepped = ExpressionNode::Binary(old_ref, plain_tok, one);
+        let new = self.declare_synthetic_const("__incdec_new", &stepped, &ctx, diagnostics)?;
+        let new_ref = ExpressionNode::Identifier(new.clone());
+        let assignment = Self::assignment_to(target, new_ref);
+        self.analyze_synthetic_assignment(&assignment, parent_function, symbol_table, diagnostics)?;
+        self.hir_set_var(if prefix { &new.text } else { &old.text });
         Ok(target_ty)
     }
 }

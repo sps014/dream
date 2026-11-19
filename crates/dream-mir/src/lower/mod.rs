@@ -197,6 +197,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         type_symbols: hir.type_symbols.clone(),
         object_methods: hir.object_methods.clone(),
         frame_objects: Default::default(),
+        ownership_prepared: false,
     }
 }
 
@@ -403,21 +404,6 @@ fn lower_sync_function(
     f
 }
 
-/// Lowers a complete async function body into a coroutine CFG for the poll state machine: the whole
-/// body becomes one block graph in which every `await` is a [`Terminator::Await`] suspend point
-/// (see [`Lowerer::lower_await`]), so awaits work in any control-flow position (branches, loops,
-/// `switch`, ternary arms). `return` becomes [`Terminator::AsyncComplete`]; falling off the end
-/// completes the task with no value. The async backend ([`crate::async_emit`]) turns each
-/// `Await`'s `resume` block id into the saved poll state.
-#[allow(clippy::too_many_arguments)]
-pub fn lower_async_poll_body(
-    func: &HFunction,
-    interner: &TypeInterner,
-    layouts: &dream_hir::LayoutTable,
-) -> MirFunction {
-    lower_async_poll_body_with(func, interner, layouts, &HashMap::new())
-}
-
 fn lower_async_poll_body_with(
     func: &HFunction,
     interner: &TypeInterner,
@@ -503,6 +489,10 @@ impl Lowerer<'_> {
     }
 
     fn lower_stmt(&mut self, stmt: &HStmt) {
+        dream_syntax::stack::grow(|| self.lower_stmt_inner(stmt))
+    }
+
+    fn lower_stmt_inner(&mut self, stmt: &HStmt) {
         match stmt {
             HStmt::Let { local, value, .. } => {
                 let rv = self.lower_rvalue(value);
@@ -510,13 +500,18 @@ impl Lowerer<'_> {
                 self.b.assign(Place::Local(dest), rv);
             }
             HStmt::Assign { place, value } => {
+                // `x = x` stores nothing new. Lowered as a copy, its release-then-retain of the
+                // same object is split apart by copy propagation into an unbalanced release.
+                if same_place_expr(place, value) && is_pure_place(place) {
+                    return;
+                }
                 // `this.f = Buffer.realloc<T>(this.f, n)` (the `List<T>.grow`
                 // idiom): lowering `array` through the ordinary `lower_operand` path would
                 // materialize the field read into a fresh temp, losing the fact that it reads the
                 // very place being overwritten. That matters because `$realloc` already consumes
                 // the old block itself (frees it outright if it moved) — the backend's
                 // release-old-occupant step for a field/element store
-                // (`Emitter::emit_place_store_no_release_old`) only recognizes this and skips the
+                // (`realloc_self_store`) only recognizes this and skips the
                 // now-double-free-prone release when the `Rvalue::ArrayRealloc` operand is literally
                 // `Operand::Copy` of the destination `Place`, so this constructs it directly rather
                 // than going through `lower_rvalue`/`lower_place` independently. Local-variable

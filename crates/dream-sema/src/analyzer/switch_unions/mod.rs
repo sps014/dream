@@ -14,6 +14,7 @@
 
 use super::*;
 
+mod coverage;
 mod exhaustiveness;
 mod foreach;
 mod foreach_indexed;

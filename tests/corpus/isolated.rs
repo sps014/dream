@@ -74,6 +74,12 @@ pub(super) const CASES: &[Case] = &[
         "destructor ordering and exit cleanup",
     ),
     Case::isolated(
+        "defer_nested_budget",
+        "6\ndrop 1\ndrop 2\ninner\nouter\ndrop 3",
+        true,
+        "destructor ordering and exit cleanup",
+    ),
+    Case::isolated(
         "destroy_long_chain",
         "499999500000\n999999\n499500\nn999999\n0",
         true,
@@ -192,5 +198,11 @@ pub(super) const CASES: &[Case] = &[
         "42\nself loop dropped\n7\nsensor dropped\nholder gone, engine alive\n7\nengine dropped\ndone",
         true,
         "destructor ordering and exit cleanup",
+    ),
+    Case::isolated(
+        "user_named_equatable",
+        "false\ntrue",
+        true,
+        "a user interface named like a core protocol must not shadow it",
     ),
 ];

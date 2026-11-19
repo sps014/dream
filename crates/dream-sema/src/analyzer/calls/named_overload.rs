@@ -63,6 +63,7 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) -> Result<NamedCall<'a>, SemanticError> {
         let (name, position) = callee;
+        let runs_on_worker = self.candidates_run_on_worker(&keys);
         let mut candidates = Vec::new();
         let mut layout_error = None;
         for key in keys {
@@ -96,7 +97,7 @@ impl<'a> Analyzer<'a> {
             .map(|index| NamedSlot::Source(index).expression(raw))
             .collect();
         let expected = self.named_argument_context(&candidates, &source, skip);
-        let saved_target = self.current_call_target_name.replace(name.to_owned());
+        let saved_target = self.enter_call_target(name.to_owned(), runs_on_worker);
         let result = self.analyze_call_arguments_expecting_ref(
             &source,
             Some(&expected),
@@ -104,7 +105,7 @@ impl<'a> Analyzer<'a> {
             ctx.symbol_table,
             diagnostics,
         );
-        self.current_call_target_name = saved_target;
+        self.current_call_target = saved_target;
         let mut args = result?;
 
         let mut best = None;

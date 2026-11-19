@@ -160,7 +160,7 @@ public class WebSocket {
     internal static fun request(action: WebSocketAction, id: int, timeout_ms: int): WireWriter {
         let request = WireWriter(32);
         request.u8(1);
-        request.u8(action);
+        request.u8((int)action);
         request.i32(id);
         request.i32(timeout_ms);
         return request;

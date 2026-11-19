@@ -72,7 +72,7 @@ mod tests {
             &arena,
             &mut diagnostics,
         );
-        let ast = parser.parse().unwrap();
+        let ast = parser.parse();
         let mut acc = ProgramAccumulator {
             all_structs: ast.get_root().structs.clone(),
             ..Default::default()
@@ -83,7 +83,7 @@ mod tests {
             &arena,
             &mut diagnostics,
         );
-        let generated = parser.parse().unwrap();
+        let generated = parser.parse();
         check(
             &acc,
             generated.get_root(),

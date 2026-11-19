@@ -15,7 +15,9 @@ impl<'a> Analyzer<'a> {
     /// ABI (a boxed `[funcidx][env]` heap value); every call site is built directly here rather than
     /// through ordinary name resolution, so the stdlib class is never referenced by user code.
     pub(in crate::analyzer) fn closure_intrinsic(&self, method: &str) -> Option<DefId> {
-        let owner = self.type_ctx.resolved_type(dream_abi::core_items::CLOSURE)?;
+        let owner = self
+            .type_ctx
+            .resolved_type(dream_abi::core_items::CLOSURE)?;
         self.unique_method_def(owner, method)
     }
 
@@ -32,7 +34,7 @@ impl<'a> Analyzer<'a> {
         env: Option<HExpr>,
         func_ty: &Type,
     ) -> Option<HExpr> {
-        let new_def = self.closure_intrinsic("funcbox_new")?;
+        let new_def = self.closure_intrinsic(dream_abi::intrinsics::ATTR_FUNCBOX_NEW)?;
         let int_ty = self.type_ctx.interner.int();
         let env_expr = env.unwrap_or_else(|| HExpr::new(int_ty, HExprKind::IntLit(0)));
         let box_ty = self.type_ctx.lower(func_ty);
@@ -72,24 +74,10 @@ impl<'a> Analyzer<'a> {
         ))
     }
 
-    /// Records a first-class function value: a bare function name used as a value (e.g. `let f = foo;`
-    /// or passing `foo` to a `fun(...)` parameter) resolves its `Binding::Func` (the def + signature)
-    /// to a raw function-table index, then boxes it (with a null environment — see [`build_funcbox`])
-    /// so it carries the same runtime shape as a capturing closure. Drops coverage if the name is not
-    /// a registered function def.
-    pub(in crate::analyzer) fn hir_set_func_value(
-        &mut self,
-        name: &str,
-        func_ty: &Type,
-        ret: &Type,
-    ) {
-        let Ok(info) = self.function_info(name) else {
-            self.hir.last = None;
-            return;
-        };
-        self.hir_set_func_value_identity(&info.identity, func_ty, ret);
-    }
-
+    /// Records a first-class function value: a function used as a value (e.g. `let f = foo;`
+    /// or passing `foo` to a `fun(...)` parameter) resolves `identity` to a raw function-table
+    /// index, then boxes it (with a null environment — see [`build_funcbox`])
+    /// so it carries the same runtime shape as a capturing closure.
     pub(in crate::analyzer) fn hir_set_func_value_identity(
         &mut self,
         identity: &crate::function_table::FunctionIdentity,
@@ -122,7 +110,7 @@ impl<'a> Analyzer<'a> {
     /// released only in the same leftover batch as the box.
     pub(in crate::analyzer) fn hir_set_capturing_func_value(
         &mut self,
-        name: &str,
+        identity: &crate::function_table::FunctionIdentity,
         env_cell: HExpr,
         func_ty: &Type,
         ret: &Type,
@@ -131,17 +119,13 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.resolve(DefKind::Function, name) else {
-            self.hir.last = None;
-            return;
-        };
         let int_ty = self.type_ctx.interner.int();
         let ret_ty = self.type_ctx.lower(ret);
         let raw = HExpr::new(
             int_ty,
             HExprKind::Var(Binding::Func(Callee {
-                def,
-                instance: vec![],
+                def: identity.0,
+                instance: identity.1.clone(),
                 ret: ret_ty,
                 take_params: vec![],
             })),
@@ -160,7 +144,7 @@ impl<'a> Analyzer<'a> {
     /// same batch as the box (typed `TAG_CLOSURE_ENV`).
     pub(in crate::analyzer) fn hir_set_multi_capturing_func_value(
         &mut self,
-        name: &str,
+        identity: &crate::function_table::FunctionIdentity,
         env_cells: Vec<HExpr>,
         func_ty: &Type,
         ret: &Type,
@@ -169,10 +153,6 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         }
-        let Some(def) = self.type_ctx.resolve(DefKind::Function, name) else {
-            self.hir.last = None;
-            return;
-        };
         let int_ty = self.type_ctx.interner.int();
         let object_ty = self.type_ctx.interner.object();
         let array_ty = self.type_ctx.interner.array(object_ty);
@@ -214,8 +194,8 @@ impl<'a> Analyzer<'a> {
         let raw = HExpr::new(
             int_ty,
             HExprKind::Var(Binding::Func(Callee {
-                def,
-                instance: vec![],
+                def: identity.0,
+                instance: identity.1.clone(),
                 ret: ret_ty,
                 take_params: vec![],
             })),

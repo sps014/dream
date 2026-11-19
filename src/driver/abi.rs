@@ -588,7 +588,7 @@ mod tests {
         let lexer = Lexer::new(source.to_string());
         let arena = Bump::new();
         let mut parser = Parser::new(lexer, &arena, &mut diagnostics);
-        let tree = parser.parse().expect("parse should succeed");
+        let tree = parser.parse();
         dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let program = tree.get_root();
         let graph = dream_sema::module_graph::ModuleGraph::single(program.clone());
@@ -652,7 +652,7 @@ mod tests {
         let source = "import system.interop;\n@c(\"kv\", \"kv_open\") extern fun kv_open(): int;\n@c(\"z\", \"inflate\") extern fun inflate(): int;\n";
         let arena = Bump::new();
         let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
-        let tree = parser.parse().expect("parse should succeed");
+        let tree = parser.parse();
         dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let live: Vec<LiveImport> = vec![
             ("c/kv".into(), "kv_open".into()),
@@ -825,7 +825,7 @@ mod tests {
         let mut diagnostics = DiagnosticBag::new(None);
         let arena = Bump::new();
         let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
-        let tree = parser.parse().expect("parse should succeed");
+        let tree = parser.parse();
         dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         let program = tree.get_root();
         let graph = dream_sema::module_graph::ModuleGraph::single(program.clone());
@@ -880,7 +880,7 @@ mod tests {
         let mut diagnostics = DiagnosticBag::new(None);
         let arena = Bump::new();
         let mut parser = Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics);
-        let tree = parser.parse().expect("parse should succeed");
+        let tree = parser.parse();
         dream_stdlib::attributes::resolve_source_attribute_ids(tree.get_root());
         for (ptr_size, expected) in [(4, 24), (8, 32)] {
             let graph = dream_sema::module_graph::ModuleGraph::single(tree.get_root().clone());

@@ -58,7 +58,6 @@ fun str_cursor_scan(): void {
 fun text_perf_paths(): void {
     let text = string.clone("\"hello😀\"");
     let parsed = Json.deserialize<JsonValue>(text).unwrap().as_string().unwrap();
-    text[1] = 'X';
     Assert.eq(parsed, "hello😀");
     let empty = Json.deserialize<JsonValue>("\"\"").unwrap().as_string().unwrap();
     Assert.eq(empty.length, 0);

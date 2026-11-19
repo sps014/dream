@@ -5,7 +5,7 @@
 //!   every (or every primitive/array) receiver.
 //! - [`instance_dispatch`]: ordinary and interface instance-method resolution once the receiver type
 //!   is known and the static/builtin cases have been ruled out.
-//! - [`hooks`]: indexer/enumerator protocol-hook resolution (`@get_indexer`/`@set_indexer`/`@iterator`/`@next`) shared by
+//! - [`hooks`]: indexer/enumerator protocol-hook resolution (`this[index]` indexer / `iterator()` / `next()`) shared by
 //!   the `obj[i]`, `obj[i] = v`, and `for..in` desugaring sites; `resolve_hook_or_diagnose` is the
 //!   shared entry point those call, with the `HookResolution` outcome kept private to this module.
 
@@ -37,7 +37,7 @@ impl<'a> Analyzer<'a> {
         }
 
         let obj_type =
-            self.analyze_expression(obj, ctx.parent_function, ctx.symbol_table, diagnostics)?;
+            self.analyze_value_expression(obj, ctx.parent_function, ctx.symbol_table, diagnostics)?;
         let obj_hir = self.hir_take();
 
         // The receiver was already poisoned by an earlier error; still type-check the arguments

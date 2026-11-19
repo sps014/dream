@@ -35,7 +35,8 @@ pub fn prepare<'a>(
     if imports.is_empty() {
         return Ok(());
     }
-    acc.requested_std_packages.insert("system.js".into());
+    acc.requested_std_packages
+        .insert(dream_abi::core_items::JS_PACKAGE.into());
     let root = std::path::absolute(root(entry))?;
     acc.js_project_root = Some(root.clone());
     let manifest = root.join("dream.toml");
@@ -117,7 +118,7 @@ pub fn prepare<'a>(
                 arena,
                 acc,
                 &path,
-                "system.js.bindings",
+                dream_abi::core_items::JS_BINDINGS_PACKAGE,
                 generated.source,
                 diagnostics,
             )?;

@@ -79,13 +79,17 @@ impl<'s> Extractor<'s> {
                     }
                     ExpressionNode::SetLiteral(..) => {
                         self.local_class.retain(|(n, _)| n != &name_tok.text);
-                        self.local_class
-                            .push((name_tok.text.clone(), "Set".to_string()));
+                        self.local_class.push((
+                            name_tok.text.clone(),
+                            dream_abi::core_items::SET_NAME.to_string(),
+                        ));
                     }
                     ExpressionNode::MapLiteral(..) => {
                         self.local_class.retain(|(n, _)| n != &name_tok.text);
-                        self.local_class
-                            .push((name_tok.text.clone(), "Map".to_string()));
+                        self.local_class.push((
+                            name_tok.text.clone(),
+                            dream_abi::core_items::MAP_NAME.to_string(),
+                        ));
                     }
                     _ => {}
                 }

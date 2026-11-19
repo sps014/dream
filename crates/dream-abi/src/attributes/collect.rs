@@ -1,5 +1,6 @@
 use super::user::AttributeEnum;
 use super::*;
+use crate::core_items::{LIST_NAME, OPTION_NAME};
 use dream_syntax::nodes::{EnumDeclarationNode, StructDeclarationNode};
 
 fn placement_targets(member: &str) -> Option<&'static [AttributeTarget]> {
@@ -109,14 +110,16 @@ impl UserAttributes {
             for (i, field) in s.fields.iter().enumerate() {
                 let (ty, variadic, optional) = match &field.field_type {
                     Type::Struct(tok, Some(args))
-                        if args.len() == 1 && matches!(tok.text.as_str(), "List" | "Option") =>
+                        if args.len() == 1
+                            && (tok.text == LIST_NAME || tok.text == OPTION_NAME) =>
                     {
-                        (&args[0], tok.text == "List", tok.text == "Option")
+                        (&args[0], tok.text == LIST_NAME, tok.text == OPTION_NAME)
                     }
                     Type::Array(inner) => (inner.as_ref(), true, false),
                     ty => (ty, false, false),
                 };
-                if (variadic && i + 1 != s.fields.len()) || (!optional && !variadic && optional_seen)
+                if (variadic && i + 1 != s.fields.len())
+                    || (!optional && !variadic && optional_seen)
                 {
                     diagnostics.report_error(format!("attribute type '{name}': optional fields must follow every required field, and only the last field may be a List"), Some(field.name.position));
                 }

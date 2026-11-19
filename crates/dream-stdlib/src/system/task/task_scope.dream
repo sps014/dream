@@ -48,6 +48,7 @@ public class TaskScope<E> {
     }
 
     /// Schedules CPU work on the runtime's shared worker threads and retains structured ownership.
+    @worker_body
     public fun spawn_parallel<T: shared>(body: fun(): T): TaskHandle<T, E> {
         let handle: TaskHandle<T, E> = TaskHandle<T, E>();
         if !this.accepting || this.source.is_cancelled {
@@ -63,6 +64,7 @@ public class TaskScope<E> {
     }
 
     /// Schedules CPU work on an explicit reusable pool while retaining structured ownership.
+    @worker_body
     public fun spawn_on<T: shared>(pool: TaskPool, body: fun(): T): TaskHandle<T, E> {
         let handle: TaskHandle<T, E> = TaskHandle<T, E>();
         if !this.accepting || this.source.is_cancelled {

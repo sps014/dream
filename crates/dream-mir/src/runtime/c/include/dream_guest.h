@@ -1,11 +1,10 @@
 #ifndef DREAM_GUEST_H
 #define DREAM_GUEST_H
 
-#ifdef DREAM_NATIVE
+#if !defined(DREAM_NATIVE) && !defined(DREAM_WASM32)
+#define DREAM_WASM32 1
+#endif
 #include "dream_core.h"
-
-#define dream_alloc dream_malloc
-#define dream_drop dream_release
 
 static inline int32_t dream_array_len(dream_ptr p) {
     return p ? dream_i32(p)[0] : 0;
@@ -28,72 +27,5 @@ static inline dream_ptr dream_str_from_units(const uint16_t *u, int32_t n) {
 static inline dream_ptr dream_array_i32(int32_t count) {
     return dream_array_new(count, 4);
 }
-
-#else
-#include "dream_rt.h"
-
-typedef int32_t dream_ptr;
-
-IMPORT("malloc") int32_t malloc_tagged(int32_t size, int32_t tag);
-IMPORT("free") void free_tagged(int32_t ptr);
-
-static inline dream_ptr dream_alloc(int32_t size, int32_t tag) {
-    return malloc_tagged(size, tag);
-}
-
-static inline void dream_free(dream_ptr ptr) {
-    free_tagged(ptr);
-}
-
-#define dream_drop dream_free
-
-static inline int32_t dream_array_len(dream_ptr p) {
-    return p ? i32_load(p) : 0;
-}
-
-static inline int32_t *dream_array_i32s(dream_ptr p) {
-    return (int32_t *)(uintptr_t)(uint32_t)(p + (int32_t)LEN_PREFIX_SIZE);
-}
-
-static inline int32_t dream_str_len(dream_ptr s) {
-    return s ? i32_load(s) : 0;
-}
-
-/* Pad word: `DREAM_STR_SLICE` = units pointer after the parent; otherwise the (possibly cached
- * hash) pad of an inline payload. */
-static inline const uint16_t *dream_str_units(dream_ptr s) {
-    if (s == 0) {
-        return NULL;
-    }
-    if (i32_load(s + (int32_t)STRING_SCALAR_LEN_OFFSET) == DREAM_STR_SLICE) {
-        return (const uint16_t *)(uintptr_t)(uint32_t)i32_load(s + (int32_t)STRING_UNITS_OFFSET
-                                                               + 4);
-    }
-    return (const uint16_t *)(uintptr_t)(uint32_t)(s + (int32_t)STRING_UNITS_OFFSET);
-}
-
-static inline dream_ptr dream_str_from_units(const uint16_t *u, int32_t n) {
-    dream_ptr p;
-    if (n <= 0 || u == NULL) {
-        return intern_empty();
-    }
-    p = dream_alloc(n * 2 + (int32_t)STRING_HEADER_SIZE, TAG_STRING);
-    i32_store(p, n);
-    i32_store(p + (int32_t)STRING_SCALAR_LEN_OFFSET, DREAM_STR_PAD_INLINE);
-    mem_copy(p + (int32_t)STRING_UNITS_OFFSET, (int32_t)(uintptr_t)u, n * 2);
-    return p;
-}
-
-static inline dream_ptr dream_array_i32(int32_t count) {
-    dream_ptr p = dream_alloc((int32_t)LEN_PREFIX_SIZE + count * 4, TAG_ARRAY);
-    int32_t i;
-    i32_store(p, count);
-    for (i = 0; i < count; i++) {
-        i32_store(p + (int32_t)LEN_PREFIX_SIZE + i * 4, 0);
-    }
-    return p;
-}
-
-#endif
 
 #endif

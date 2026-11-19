@@ -36,7 +36,7 @@ static region_state *current(void) {
 }
 
 static void region_panic(void) {
-    DREAM_PANIC_LITERAL(u"panic: region allocation exceeds the supported object size");
+    DREAM_PANIC_LITERAL(u"region allocation exceeds the supported object size");
 }
 
 void dream_region_enter(void) {

@@ -1,0 +1,110 @@
+import system.testing;
+import system.collections;
+import system;
+
+struct RebindState {
+    public name: string;
+    public count: int;
+
+    public constructor(name: string, count: int) {
+        this.name = name;
+        this.count = count;
+    }
+}
+
+class RebindItem {
+    public id: int;
+
+    public constructor(id: int) {
+        this.id = id;
+    }
+}
+
+class RebindHolder {
+    public item: Option<RebindItem>;
+
+    public constructor() {
+        this.item = Option.None;
+    }
+}
+
+class RebindNode {
+    public label: string;
+
+    public constructor(label: string) {
+        this.label = label;
+    }
+}
+
+fun rebind_next(item: RebindItem): RebindItem {
+    return RebindItem(item.id + 1);
+}
+
+@test
+fun rebuild_from_own_fields(): void {
+    let st = RebindState("s" + "1", 1);
+    st = RebindState(st.name, st.count + 1);
+    Assert.eq(st.name, "s1");
+    Assert.eq(st.count, 2);
+
+    let label = "a" + "b";
+    let pair = (2, label);
+    pair = (3, pair.1);
+    Assert.eq(pair.1, "ab");
+    Assert.eq(pair.0, 3);
+}
+
+@test
+fun copy_survives_source_rebinding(): void {
+    let current = RebindItem(1);
+    let previous = current;
+    current = rebind_next(current);
+    Assert.eq(previous.id, 1);
+    Assert.eq(current.id, 2);
+
+    let text = "q" + "w";
+    let saved = text;
+    text += "x";
+    Assert.eq(saved, "qw");
+    Assert.eq(text, "qwx");
+
+    let kept = current;
+    if current.id > 0 {
+        current = RebindItem(5);
+    }
+    Assert.eq(kept.id, 2);
+
+    for (let i in 0..3) {
+        let before = current;
+        current = rebind_next(current);
+        Assert.eq(before.id + 1, current.id);
+    }
+}
+
+@test
+fun handed_off_then_rebound(): void {
+    let holder = RebindHolder();
+    let item = RebindItem(1);
+    holder.item = Option.Some(item);
+    item = RebindItem(2);
+    Assert.eq(item.id, 2);
+    Assert.eq(holder.item.unwrap().id, 1);
+
+    let items = List<RebindItem>();
+    let next = RebindItem(3);
+    items.push(next);
+    next = RebindItem(4);
+    Assert.eq(next.id, 4);
+    Assert.eq(items[0].id, 3);
+}
+
+@test
+fun self_assignment_keeps_the_value(): void {
+    let node = RebindNode("n" + "1");
+    node = node;
+    Assert.eq(node.label, "n1");
+
+    let text = "a" + "b";
+    text = text;
+    Assert.eq(text, "ab");
+}

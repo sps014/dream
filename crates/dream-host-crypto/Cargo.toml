@@ -17,3 +17,8 @@ aes-gcm = "0.10"
 argon2 = "0.5"
 jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 serde_json = "1"
+
+# `dream-host-core` is a link-time dependency: this cdylib calls core's C ABI through the shared
+# library, so no Rust item is imported and a Rust import would duplicate core's state.
+[lints.cargo]
+unused_dependencies = "allow"

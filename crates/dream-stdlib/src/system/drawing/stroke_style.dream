@@ -32,8 +32,8 @@ public class StrokeStyle {
 
     internal fun encode(output: List<float>): void {
         output.push(this.width);
-        let cap: int = this.cap;
-        let join: int = this.join;
+        let cap: int = (int)this.cap;
+        let join: int = (int)this.join;
         output.push((float)cap);
         output.push((float)join);
         output.push(this.miter_limit);

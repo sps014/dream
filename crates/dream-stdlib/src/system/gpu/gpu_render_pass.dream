@@ -35,8 +35,8 @@ public class GpuRenderPass {
             return;
         }
         if this.record(GpuOp.Bind) {
-            let stage: int = slot.stage;
-            let k: int = kind;
+            let stage: int = (int)slot.stage;
+            let k: int = (int)kind;
             this.encoder.words.push_all([stage, slot.index, k, owner.handle, 0]);
         }
     }
@@ -76,7 +76,7 @@ public class GpuRenderPass {
             return;
         }
         if this.record(GpuOp.SetIndexBuffer) {
-            let f: int = format;
+            let f: int = (int)format;
             this.encoder.words.push_all([owner.handle, f, 0]);
         }
     }
@@ -141,8 +141,8 @@ public class GpuRenderPass {
         let bytes = Bytes.of(value);
         let offset = this.encoder.data.length;
         this.encoder.data.push_all(bytes);
-        let stage: int = slot.stage;
-        let kind: int = GpuArgKind.Value;
+        let stage: int = (int)slot.stage;
+        let kind: int = (int)GpuArgKind.Value;
         this.encoder.words.push_all([stage, slot.index, kind, offset, bytes.length]);
     }
 

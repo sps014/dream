@@ -81,6 +81,9 @@ pub fn strip_array(type_name: &str) -> &str {
 /// entry on demand — there is no per-primitive copy of the array Collection impl.
 pub const ARRAY_EXTEND_KEY: &str = "[]";
 
+/// The receiver name inside an instance method (`this.field`); it cannot be rebound.
+pub const THIS_NAME: &str = "this";
+
 /// The reserved member name of a type's constructor declaration (`constructor(...) { ... }`).
 /// The parser recognizes it, semantics validates it, and codegen mangles it (via the backend
 /// `constructor_fn`). Single source of truth so the spelling never drifts between layers.
@@ -89,6 +92,19 @@ pub const CONSTRUCTOR_NAME: &str = "constructor";
 /// The reserved member name of a type's destructor declaration (`del() { ... }`), run on
 /// scope exit. Single source of truth shared by parser/semantics/codegen.
 pub const DESTRUCTOR_NAME: &str = "del";
+
+/// The member names a `get`/`set` indexer declaration (`this[i]`) is registered under.
+pub const GET_INDEXER_NAME: &str = "__get_indexer";
+pub const SET_INDEXER_NAME: &str = "__set_indexer";
+
+/// How a diagnostic spells a member: indexers have no source name of their own.
+pub fn member_display_name(name: &str) -> &str {
+    if name == GET_INDEXER_NAME || name == SET_INDEXER_NAME {
+        "indexer"
+    } else {
+        name
+    }
+}
 
 /// True if `name` is a reserved member declaration keyword (`constructor`/`del`) that the parser
 /// accepts without the leading `fun` and that cannot carry a return type.
@@ -112,6 +128,9 @@ pub fn foreach_array_local(n: usize) -> String {
 /// The base type name of the async handle `Future<T>`. Single source of truth for the identifier
 /// the async machinery keys on (the structured `Future<T>` type and its `Future_<inner>` mangling).
 pub const FUTURE_TYPE: &str = "Future";
+
+/// The base type name of the box a `ref` parameter type lowers to (`ref T` is `RefBox<T>`).
+pub const REF_BOX_TYPE: &str = "RefBox";
 
 /// Represents a data type in the language
 #[derive(Debug, Clone, PartialEq)]
@@ -263,7 +282,7 @@ impl Type {
                     .iter()
                     .map(|p| match p {
                         Type::Struct(tok, Some(args))
-                            if tok.text == "RefBox" && args.len() == 1 =>
+                            if tok.text == REF_BOX_TYPE && args.len() == 1 =>
                         {
                             format!("ref {}", args[0].display_name())
                         }
@@ -318,6 +337,12 @@ impl Type {
         )
     }
 
+    /// True for every integer and floating-point primitive: the operand types the arithmetic
+    /// operators accept.
+    pub fn is_numeric(&self) -> bool {
+        self.is_integer() || matches!(self, Type::Float16(_) | Type::Float(_) | Type::Double(_))
+    }
+
     /// True if this is the primitive `string` type. Structural replacement for
     /// `get_type() == "string"`.
     pub fn is_string(&self) -> bool {
@@ -364,34 +389,6 @@ impl Type {
             | Type::Function(_, _)
             | Type::GenericFunctionItem(_)
             | Type::Unknown => None,
-        }
-    }
-
-    /// Returns the line and column string of the type token
-    pub fn get_line_str(&self) -> String {
-        match self {
-            Type::Integer(token) => token.position.get_point_str(),
-            Type::Float(token) | Type::Float16(token) => token.position.get_point_str(),
-            Type::Double(token) => token.position.get_point_str(),
-            Type::String(token) => token.position.get_point_str(),
-            Type::Object(token) => token.position.get_point_str(),
-            Type::Void => "".to_string(),
-            Type::Boolean(token) => token.position.get_point_str(),
-            Type::Char(token) => token.position.get_point_str(),
-            Type::Long(token) => token.position.get_point_str(),
-            Type::UInt(token) => token.position.get_point_str(),
-            Type::ULong(token) => token.position.get_point_str(),
-            Type::ISize(token) | Type::USize(token) => token.position.get_point_str(),
-            Type::Byte(token) | Type::SByte(token) | Type::Short(token) | Type::UShort(token) => {
-                token.position.get_point_str()
-            }
-            Type::Array(inner) => inner.get_line_str(),
-            Type::Tuple(elems) => elems.first().map(|e| e.get_line_str()).unwrap_or_default(),
-            Type::Struct(token, _) => token.position.get_point_str(),
-            Type::Generic(_) => "".to_string(), // Can be improved
-            Type::Function(_, _) => "".to_string(),
-            Type::GenericFunctionItem(_) => "".to_string(),
-            Type::Unknown => "".to_string(),
         }
     }
 

@@ -3,8 +3,7 @@
 //! A `fun` value is called through [`Statement::IndirectCall`], which knows only the interned
 //! `fun(...)` shape — and [`dream_types::TyKind::Func`] carries no per-parameter ownership. So an
 //! indirect call cannot tell a `take` parameter from a `borrow` one and would have to retain every
-//! argument, which leaks whenever the callee is `borrow` (it never releases) and is exactly why
-//! `borrow` used to be unusable on anything reachable through a funcbox.
+//! argument, which leaks whenever the callee is `borrow` (it never releases).
 //!
 //! Wrapping each target in a retaining thunk would not pay: most funcboxes are lambdas whose
 //! parameters are `take`, so nearly every callback would grow a thunk and the retain would only

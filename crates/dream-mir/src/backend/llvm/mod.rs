@@ -3,6 +3,7 @@
 mod array_slots;
 mod body;
 mod calls;
+mod cast;
 mod const_blob;
 mod construction;
 mod debug;
@@ -236,6 +237,7 @@ fn emit_llvm_module_unchecked(
     glue::release::emit_all(&mut l);
     glue::ownership::emit_all(&mut l);
     glue::protocol::emit_all(&mut l, &protocol);
+    glue::equality::emit_all(&mut l);
     glue::imports::emit_all(&mut l);
     glue::js_marshal::emit_all(&mut l);
     glue::tables::emit_all(&mut l);

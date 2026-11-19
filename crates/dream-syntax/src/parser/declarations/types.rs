@@ -2,16 +2,15 @@ use super::super::Parser;
 use crate::nodes::Type;
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Parses a type alias: `type Name = ExistingType;`. The alias is recorded and resolved
     /// (erased) during `parse_type`, so it must be declared before use.
-    pub(crate) fn parse_type_alias(&mut self) -> Result<(), Error> {
+    pub(crate) fn parse_type_alias(&mut self) {
         self.match_token(TokenKind::TypeToken);
         let name = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::EqualToken);
-        let aliased = self.parse_type()?;
+        let aliased = self.parse_type();
         self.match_token(TokenKind::SemicolonToken);
         if self.type_aliases.contains_key(&name.text) {
             self.diagnostics.report_error(
@@ -20,19 +19,18 @@ impl<'a, 'b> Parser<'a, 'b> {
             );
         }
         self.type_aliases.insert(name.text, aliased);
-        Ok(())
     }
     /// Parses a Type from the token stream, including array types
-    pub(crate) fn parse_type(&mut self) -> Result<Type, Error> {
+    pub(crate) fn parse_type(&mut self) -> Type {
         if !self.enter_nesting() {
-            return Ok(Type::Unknown);
+            return Type::Unknown;
         }
-        let result = self.parse_type_inner();
+        let result = crate::stack::grow(|| self.parse_type_inner());
         self.leave_nesting();
         result
     }
 
-    fn parse_type_inner(&mut self) -> Result<Type, Error> {
+    fn parse_type_inner(&mut self) -> Type {
         // Function type: `fun(param, ...): ret` (the return annotation is optional, defaulting to
         // void). Used for first-class function values and function parameters.
         if self.current_token().kind == TokenKind::FunToken {
@@ -43,31 +41,35 @@ impl<'a, 'b> Parser<'a, 'b> {
                 if is_ref {
                     p.match_token(TokenKind::RefToken);
                 }
-                let ty = p.parse_type()?;
+                let ty = p.parse_type();
                 if is_ref {
                     let span = ty.get_span().unwrap_or_else(|| p.current_token().position);
-                    Ok(Type::Struct(
-                        SyntaxToken::new(TokenKind::RefToken, span, "RefBox".to_string()),
+                    Type::Struct(
+                        SyntaxToken::new(
+                            TokenKind::RefToken,
+                            span,
+                            crate::nodes::types::REF_BOX_TYPE.to_string(),
+                        ),
                         Some(vec![ty]),
-                    ))
+                    )
                 } else {
-                    Ok(ty)
+                    ty
                 }
-            })?;
+            });
             let ret = if self.current_token().kind == TokenKind::ColonToken {
                 self.match_token(TokenKind::ColonToken);
-                self.parse_type()?
+                self.parse_type()
             } else {
                 Type::Void
             };
-            return Ok(Type::Function(params, Box::new(ret)));
+            return Type::Function(params, Box::new(ret));
         }
 
         // Positional tuple type: `(T, U, …)` with arity ≥ 2.
         if self.current_token().kind == TokenKind::OpenParenthesisToken {
             self.match_token(TokenKind::OpenParenthesisToken);
             let elems =
-                self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| p.parse_type())?;
+                self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| p.parse_type());
             if elems.len() < 2 {
                 let span = elems
                     .first()
@@ -77,7 +79,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     "Tuple types require at least two elements".to_string(),
                     span,
                 );
-                return Ok(Type::Unknown);
+                return Type::Unknown;
             }
             let mut parsed_type = Type::Tuple(elems);
             while self.current_token().kind == TokenKind::OpenBracketToken {
@@ -85,7 +87,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.match_token(TokenKind::CloseBracketToken);
                 parsed_type = Type::Array(Box::new(parsed_type));
             }
-            return Ok(parsed_type);
+            return parsed_type;
         }
 
         let type_token = if let Some(name) = self.c_qualified_name() {
@@ -122,7 +124,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             && self.current_token().kind == TokenKind::SmallerThanToken
         {
             self.match_token(TokenKind::SmallerThanToken);
-            let args = self.parse_generic_args()?;
+            let args = self.parse_generic_args();
             parsed_type = Type::Struct(token.clone(), Some(args));
         }
 
@@ -133,6 +135,6 @@ impl<'a, 'b> Parser<'a, 'b> {
             parsed_type = Type::Array(Box::new(parsed_type));
         }
 
-        Ok(parsed_type)
+        parsed_type
     }
 }

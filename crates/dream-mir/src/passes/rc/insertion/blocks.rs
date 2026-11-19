@@ -154,14 +154,16 @@ pub(super) fn insert(func: &mut MirFunction, interner: &TypeInterner, state: &St
                         out.push(r);
                     }
                     out.push(Statement::Assign(Place::Local(tmp), rvalue));
+                    // `x = x` and `x = x.next` read an object the release may free, so the
+                    // new value is retained first.
+                    if retain {
+                        out.push(Statement::Retain(Operand::Copy(Place::Local(tmp))));
+                    }
                     out.push(release_one(dest.0));
                     out.push(Statement::Assign(
                         Place::Local(dest),
                         Rvalue::Use(Operand::Copy(Place::Local(tmp))),
                     ));
-                    if retain {
-                        out.push(Statement::Retain(Operand::Copy(Place::Local(dest))));
-                    }
                     // The temp handed its reference to `dest`. Leaving it set lets copy
                     // propagation rewrite later uses of `dest` back onto it, and an async
                     // frame spills it, so `drop_*` would release the pointer a second time.

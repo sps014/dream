@@ -22,6 +22,24 @@ fun main() {
 
 `.length` counts UTF-16 code units, not Unicode scalars. `.byte_size()` is that storage in bytes (`length * 2`).
 
+## Escapes
+
+Write special characters with a backslash in ordinary strings, interpolated strings, and `char` literals:
+
+| Escape | Character |
+|--------|-----------|
+| `\n`, `\r`, `\t` | Newline, carriage return, tab |
+| `\0` | The zero character |
+| `\\`, `\"`, `\'` | A backslash, double quote, or single quote |
+| `\u{1F600}` | The Unicode scalar with that hex code (1 to 6 digits) |
+
+```dream
+let smile = '\u{1F600}';
+let line = "name:\t\"Ada\"\n";
+```
+
+Any other backslash sequence, such as `\q` or `\uFFFF`, is a compile error. A `\u{...}` code must name a Unicode scalar value, so surrogates (`D800` through `DFFF`) and values above `10FFFF` are rejected. Use a raw string when the text has many backslashes.
+
 ## Raw strings
 
 A raw string starts and ends with three or more double quotes. Backslashes and `"` are ordinary characters, which suits paths, regular expressions, and JSON.
@@ -70,12 +88,13 @@ fun user_json(name: string, age: int): string {
 
 `user_json("Ada", 36)` returns a three-line JSON object. Values are inserted as text; escape them yourself when the surrounding format needs it, or build JSON with [`Json.serialize`](../serialization/json.md).
 
-## Look up and change
+## Look up characters
+
+Strings are immutable: `s[i] = c` is a compile error. Build changed text with `replace`, `substring`, or a [`StringBuilder`](#stringbuilder).
 
 | Call | Meaning |
 | --- | --- |
 | `s[i]` | UTF-16 code unit at index |
-| `s[i] = c` | replace a code unit |
 | `byte_at(i)` | one payload byte (UTF-16 LE) |
 | `for (let c in s)` | walk code units |
 

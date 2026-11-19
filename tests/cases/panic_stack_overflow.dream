@@ -1,0 +1,11 @@
+// Unbounded recursion reports a stack overflow panic and keeps the output printed before it.
+import system;
+
+fun depth(n: int): int {
+    return depth(n + 1) + 1;
+}
+
+fun main(): void {
+    System.println("before");
+    System.println(depth(0));
+}

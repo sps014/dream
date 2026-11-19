@@ -204,7 +204,8 @@ impl<'a> Analyzer<'a> {
             }
         }
 
-        let obj_type = self.analyze_expression(obj, parent_function, symbol_table, diagnostics)?;
+        let obj_type =
+            self.analyze_value_expression(obj, parent_function, symbol_table, diagnostics)?;
         let obj_hir = self.hir_take();
 
         // The receiver was already poisoned by an earlier error: stay quiet and stay poison.
@@ -299,6 +300,13 @@ impl<'a> Analyzer<'a> {
             }
         }
 
+        if self
+            .unsatisfied_instances
+            .contains(&self.type_ctx.lower(&obj_type))
+        {
+            self.hir_none();
+            return Ok(Type::Unknown);
+        }
         match self.resolve_member_field(&obj_type, member, parent_function, diagnostics) {
             MemberField::Field {
                 struct_ty,
@@ -331,10 +339,21 @@ impl<'a> Analyzer<'a> {
                             name.text
                         )
                     }
-                    _ => format!(
-                        "Cannot access member of non-class type {}",
-                        self.ty_display(&obj_type)
-                    ),
+                    _ => {
+                        let owner = self.type_ctx.lower(&obj_type);
+                        let notes = self.member_suggestions(owner, &member.text);
+                        return Err(report_noted(
+                            diagnostics,
+                            format!(
+                                "Type '{}' has no member '{}'",
+                                self.ty_display(&obj_type),
+                                member.text
+                            ),
+                            Some(member.position),
+                            notes,
+                            Some("missing-member"),
+                        ));
+                    }
                 };
                 Err(report(diagnostics, message, Some(member.position)))
             }
@@ -374,7 +393,8 @@ impl<'a> Analyzer<'a> {
                     Ok(func_ty)
                 } else {
                     self.hir_none();
-                    Err(report_with_code(
+                    let notes = self.member_suggestions(struct_ty, &member.text);
+                    Err(report_noted(
                         diagnostics,
                         format!(
                             "Field '{}' not found in class '{}'",
@@ -382,7 +402,8 @@ impl<'a> Analyzer<'a> {
                             self.ty_str_display(&struct_name)
                         ),
                         Some(member.position),
-                        "missing-member",
+                        notes,
+                        Some("missing-member"),
                     ))
                 }
             }
@@ -411,7 +432,8 @@ impl<'a> Analyzer<'a> {
             sig.is_async,
             Some(self.type_ctx.syntax_type(sig.resolved_return)),
         );
-        let func_ty = Type::Function(sig.parameter_types.clone(), Box::new(box_ret.clone()));
+        let params = self.function_value_params(&sig.parameters, &sig.is_ref);
+        let func_ty = Type::Function(params, Box::new(box_ret.clone()));
         self.hir_set_func_value_identity(&sig.identity, &func_ty, &box_ret);
         Some(func_ty)
     }
@@ -459,8 +481,22 @@ impl<'a> Analyzer<'a> {
         // wrapper stays synchronous and simply returns that Future handle (same as boxing a named
         // async function as a `fun(...): Future<T>` value).
         let param_types: Vec<Type> = sig.parameter_types.iter().skip(1).cloned().collect();
+        let param_refs: Vec<bool> = (1..sig.parameter_types.len())
+            .map(|i| sig.is_ref.get(i).copied().unwrap_or(false))
+            .collect();
         let box_ret = Self::async_return_type(sig.is_async, sig.return_type.clone());
-        let func_ty = Type::Function(param_types.clone(), Box::new(box_ret.clone()));
+        let value_params = param_types
+            .iter()
+            .zip(&param_refs)
+            .map(|(ty, &is_ref)| {
+                if is_ref {
+                    Self::ref_box_type(ty)
+                } else {
+                    ty.clone()
+                }
+            })
+            .collect();
+        let func_ty = Type::Function(value_params, Box::new(box_ret.clone()));
 
         let name = format!("__method_group_{}", self.lambda_counter);
         self.lambda_counter += 1;
@@ -474,8 +510,17 @@ impl<'a> Analyzer<'a> {
         let mut arg_exprs: Vec<ExpressionNode<'a>> = Vec::with_capacity(param_types.len());
         for (i, ty) in param_types.iter().enumerate() {
             let ptok = synthetic_token(TokenKind::IdentifierToken, &format!("__mg_arg{i}"));
-            parameters.push(ParameterNode::new(ptok.clone(), ty.clone()));
-            arg_exprs.push(ExpressionNode::Identifier(ptok));
+            let mut parameter = ParameterNode::new(ptok.clone(), ty.clone());
+            parameter.is_ref = param_refs[i];
+            parameters.push(parameter);
+            if param_refs[i] {
+                let ref_tok = synthetic_token(TokenKind::RefToken, "ref");
+                let target: &'a ExpressionNode<'a> =
+                    self.arena.alloc(ExpressionNode::Identifier(ptok));
+                arg_exprs.push(ExpressionNode::RefArgument(ref_tok, target));
+            } else {
+                arg_exprs.push(ExpressionNode::Identifier(ptok));
+            }
         }
 
         let member_tok = member.clone();
@@ -531,13 +576,39 @@ impl<'a> Analyzer<'a> {
         };
         self.closure_captures
             .insert(def, vec![(recv_name, receiver_ty.clone())]);
-        self.hir_set_capturing_func_value(&name, env, &func_ty, &box_ret);
+        self.hir_set_capturing_func_value(&(def, Vec::new()), env, &func_ty, &box_ret);
         Some(func_ty)
     }
 
     /// Resolves a field's declaration-order position (matching the
     /// auto-generated constructor's argument order and the backend's field indexing). Returns
     /// `None` if the struct or field is unknown.
+    /// `help:` notes naming the fields, properties and methods of `owner` close to `wanted`.
+    fn member_suggestions(&self, owner: dream_types::TypeId, wanted: &str) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .struct_info(owner)
+            .map(|info| info.fields.keys().cloned().collect())
+            .unwrap_or_default();
+        names.extend(
+            self.function_table
+                .methods
+                .keys()
+                .filter(|(receiver, member)| *receiver == owner && !member.starts_with("set$"))
+                .map(|(_, member)| member.strip_prefix("get$").unwrap_or(member).to_string()),
+        );
+        if matches!(
+            self.type_ctx.interner.kind(owner),
+            dream_types::TyKind::Array(_) | dream_types::TyKind::Prim(dream_types::PrimTy::String)
+        ) {
+            names.push(dream_abi::intrinsics::LENGTH.to_string());
+        }
+        let display = self.type_id_display(owner);
+        similar_names(wanted, names.iter().map(String::as_str))
+            .into_iter()
+            .map(|name| format!("similar member exists: '{display}.{name}'"))
+            .collect()
+    }
+
     pub(in crate::analyzer) fn struct_field_index(
         &self,
         struct_ty: dream_types::TypeId,

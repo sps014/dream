@@ -53,6 +53,8 @@ pub(super) struct Printer {
     attribute_end: Option<usize>,
     /// The `)` closing the arguments of an attribute inside a list, such as a parameter's.
     inline_attribute_close: Option<usize>,
+    /// Token index of the `>` that closed the most recent type-argument list.
+    type_args_close: Option<usize>,
     /// Armed after a `case`/`default` label; the next colon switches into its body indent.
     case_colon_pending: bool,
     prev_kind: Option<TokenKind>,
@@ -78,6 +80,7 @@ impl Printer {
             chain_indent: false,
             attribute_end: None,
             inline_attribute_close: None,
+            type_args_close: None,
             case_colon_pending: false,
             prev_kind: None,
             prev_prev_kind: None,
@@ -136,6 +139,7 @@ impl Printer {
                 while open_regions.last().map(|r| r.1) == Some(i) {
                     open_regions.pop();
                     self.ctxs.pop();
+                    self.type_args_close = Some(i);
                 }
                 i += 2;
                 continue;
@@ -146,6 +150,7 @@ impl Printer {
             while open_regions.last().map(|r| r.1) == Some(i) {
                 open_regions.pop();
                 self.ctxs.pop();
+                self.type_args_close = Some(i);
             }
 
             i += 1;
@@ -283,6 +288,17 @@ impl Printer {
             if i > 0 && self.inline_attribute_close == Some(i - 1) {
                 space = true;
                 self.inline_attribute_close = None;
+            }
+            // `f<T>(x)` calls with type arguments; `c > (d)` compares.
+            if matches!(
+                kind,
+                TokenKind::OpenParenthesisToken | TokenKind::OpenBracketToken
+            ) && matches!(
+                self.prev_kind,
+                Some(TokenKind::GreaterThanToken | TokenKind::ShiftRightToken)
+            ) && self.type_args_close != i.checked_sub(1)
+            {
+                space = true;
             }
             if kind == TokenKind::OpenParenthesisToken
                 && self.prev_prev_kind == Some(TokenKind::OperatorToken)

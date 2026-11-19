@@ -315,7 +315,7 @@ By convention `compare` returns a negative number, zero, or a positive number wh
 Every numeric primitive plus `char` and `string` already implements `Comparable` (via prelude `extend` blocks), so with `import system.collections;` — `List<int>().sort()`, `binary_search`, and comparisons in generic code work with no extra code.
 
 - **`==` / `!=` route to `equals`** when both operands are the same user type implementing `Equatable<Self>`. Primitives and strings keep built-in equality.
-- **`<` / `<=` / `>` / `>=` use `compare`** when the left operand's type implements `Comparable<Self>` (`a < b` means `a.compare(b) < 0`). A more specific [`@operator("...")`](operator-overloading.md#operator-overloading) for a different symbol is unaffected.
+- **`<` / `<=` / `>` / `>=` use `compare`** when the left operand's type implements `Comparable<Self>` (`a < b` means `a.compare(b) < 0`). A more specific [`fun operator`](operator-overloading.md#operator-overloading) method for a different symbol is unaffected.
 - **`compare` powers sorting** via `List<T : Comparable<T>>.sort()` and `List<T>.sort_by(cmp)`. See [List sorting](../../library/collections/list.md#copy-join-and-sort).
 
 Both interfaces work with [value structs](../types/classes-structs.md). A known concrete type calls that method directly, and assigning a value struct to an interface variable copies it onto the heap:

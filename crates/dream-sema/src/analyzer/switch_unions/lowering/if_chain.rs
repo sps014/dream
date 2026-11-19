@@ -16,6 +16,17 @@ use dream_syntax::token::token_kind::TokenKind;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// A switch subject together with the result of [`Analyzer::resolve_switch_subject`].
+pub(crate) struct ResolvedSwitchSubject<'s, 'a> {
+    pub subject: &'s ExpressionNode<'a>,
+    pub resolved: (
+        Type,
+        Option<dream_hir::HExpr>,
+        String,
+        Option<crate::union_table::UnionInfo>,
+    ),
+}
+
 impl<'a> Analyzer<'a> {
     /// General pattern-`switch` lowering (guards + nested/literal sub-patterns) as a flag-gated
     /// if-chain: evaluates the subject once, then for each arm emits `if (!done && <tests>) {
@@ -31,10 +42,32 @@ impl<'a> Analyzer<'a> {
         is_expression: bool,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<Type, SemanticError> {
-        use dream_hir::{BinOp, HStmt};
-
-        let (subject_type, subject_hir, subject_base, union_info) =
+        let resolved =
             self.resolve_switch_subject(subject, parent_function, symbol_table, diagnostics)?;
+        self.analyze_resolved_pattern_switch_chain(
+            ResolvedSwitchSubject { subject, resolved },
+            arms,
+            parent_function,
+            symbol_table,
+            is_expression,
+            diagnostics,
+        )
+    }
+
+    /// [`Self::analyze_pattern_switch_chain`] over a subject that was already analyzed.
+    pub(crate) fn analyze_resolved_pattern_switch_chain(
+        &mut self,
+        ResolvedSwitchSubject {
+            subject,
+            resolved: (subject_type, subject_hir, subject_base, union_info),
+        }: ResolvedSwitchSubject<'_, 'a>,
+        arms: &[SwitchArm<'a>],
+        parent_function: &FunctionNode<'a>,
+        symbol_table: &Rc<RefCell<SymbolTable>>,
+        is_expression: bool,
+        diagnostics: &mut DiagnosticBag,
+    ) -> Result<Type, SemanticError> {
+        use dream_hir::{BinOp, HStmt};
 
         let bool_type = Type::Boolean(synthetic_token(TokenKind::BooleanToken, "bool"));
         let bool_ty = self.type_ctx.interner.bool();
@@ -95,6 +128,7 @@ impl<'a> Analyzer<'a> {
 
             // then-branch: declare bindings, then (optionally guard and) run the body.
             self.hir_open_block();
+            let scope = self.hir_push_scope();
             for (name, ty, expr) in binds {
                 self.hir_declare_local(&name, &ty, Some(expr));
             }
@@ -142,6 +176,7 @@ impl<'a> Analyzer<'a> {
             } else {
                 run_body(self, diagnostics)?;
             }
+            self.hir_pop_scope(scope);
             let then_branch = self.hir_close_block();
 
             // cond = !done && conds[0] && conds[1] ...

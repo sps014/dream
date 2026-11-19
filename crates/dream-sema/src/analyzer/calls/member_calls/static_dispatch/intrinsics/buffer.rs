@@ -335,6 +335,8 @@ impl<'a> Analyzer<'a> {
                     ),
                     Some(method.position),
                 );
+                self.hir_none();
+                return Ok(Type::Unknown);
             }
             self.hir_set_force_free(arg_hirs.into_iter().next().flatten());
             return Ok(Type::Void);

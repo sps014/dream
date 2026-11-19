@@ -64,6 +64,10 @@ impl<'a> Analyzer<'a> {
                 .analyze_expression(&global.initializer, &init_fn, &gtable, diagnostics)
                 .unwrap_or(Type::Unknown);
             self.current_expected_type = saved_expected;
+            if let Some(declared) = &global.declared_type {
+                let target = self.type_ctx.lower(declared);
+                self.hir_coerce_last(target);
+            }
             self.hir_global_init_finish(&global.name.text);
 
             let resolved = match &global.declared_type {
@@ -71,9 +75,9 @@ impl<'a> Analyzer<'a> {
                     self.check_declared_type(declared, &[], diagnostics);
                     let expected = self.type_ctx.lower(declared);
                     let given = self.type_ctx.lower(&init_type);
-                    let numeric = matches!(self.type_ctx.interner.kind(expected), dream_types::TyKind::Prim(p) if p.is_numeric())
-                        && matches!(self.type_ctx.interner.kind(given), dream_types::TyKind::Prim(p) if p.is_numeric());
-                    if !numeric && !self.value_type_assignable(expected, given, diagnostics) {
+                    if !init_type.is_unknown()
+                        && !self.value_type_assignable(expected, given, diagnostics)
+                    {
                         diagnostics.report_error(
                             format!(
                                 "Top-level variable '{}' is declared '{}' but initialized with '{}'",

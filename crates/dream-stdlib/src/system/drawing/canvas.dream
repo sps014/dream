@@ -91,7 +91,7 @@ public class Canvas {
     ): void {
         this.values.push(7.0f);
         this.values.push(opacity);
-        let mode: int = blend;
+        let mode: int = (int)blend;
         this.values.push((float)mode);
         switch (effects) {
             Some(chain) => {
@@ -242,7 +242,7 @@ public class Canvas {
         this.values.push(style.size);
         this.values.push(style.weight);
         this.values.push(style.max_width);
-        let alignment: int = style.alignment;
+        let alignment: int = (int)style.alignment;
         this.values.push((float)alignment);
         this.values.push(x);
         this.values.push(y);

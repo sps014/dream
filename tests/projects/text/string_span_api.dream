@@ -145,38 +145,29 @@ fun string_span_map_lookup(): void {
 @test
 @timeout(180000)
 fun string_search_long(): void {
-    let h = " ".repeat(2048);
-    let n = " ".repeat(256);
-    for (let i = 0; i < h.length; i = i + 1) {
-        h[i] = 'a';
-    }
-    for (let i = 0; i < n.length; i = i + 1) {
-        n[i] = 'a';
-    }
-    n[255] = 'b';
-    Assert.eq(h.span().index_of(n).unwrap_or(-1), -1);
-    h[2047] = 'b';
+    let n = "a".repeat(255) + "b";
+    Assert.eq("a".repeat(2048).span().index_of(n).unwrap_or(-1), -1);
+    let h = "a".repeat(2047) + "b";
     Assert.eq(h.span().index_of(n).unwrap_or(-1), 1792);
     Assert.eq(h.span(23, 2048).index_of(n, -10).unwrap_or(-1), 1769);
     Assert.eq(h.span().index_of(n, 1793).unwrap_or(-1), -1);
     Assert.eq(h.span().index_of(n, 2147483647).unwrap_or(-1), -1);
     Assert.eq(h.span().index_of("", 2048).unwrap_or(-1), 2048);
     Assert.eq(h.span().index_of("", 2049).unwrap_or(-1), -1);
-    let observed = h.span();
-    h[2047] = 'a';
-    Assert.eq(observed.index_of(n).unwrap_or(-1), -1);
-    let binary = " ".repeat(96);
-    for (let i = 0; i < binary.length; i = i + 1) {
-        binary[i] = (char)(i & 1);
+    let binary_builder = StringBuilder();
+    for (let i = 0; i < 96; i = i + 1) {
+        binary_builder.append_char((char)(i & 1));
     }
+    let binary = binary_builder.build();
     let binary_needle = binary.substring(32, 96);
     Assert.eq(binary.span().index_of(binary_needle, 1).unwrap_or(-1), 2);
-    let unicode = " ".repeat(256);
-    for (let i = 0; i < unicode.length; i = i + 1) {
-        unicode[i] = (char)(55296 + (i & 1) * 1024);
+    let unicode_builder = StringBuilder();
+    for (let i = 0; i < 256; i = i + 1) {
+        unicode_builder.append_char((char)(55296 + (i & 1) * 1024));
     }
+    let unicode = unicode_builder.build();
     let unicode_needle = unicode.substring(128, 192);
     Assert.eq(unicode.span(1, 255).index_of(unicode_needle).unwrap_or(-1), 1);
-    unicode[1] = (char)0;
-    Assert.eq(unicode.span().index_of(unicode_needle).unwrap_or(-1), 2);
+    let broken = unicode.substring(0, 1) + ((char)0).to_string() + unicode.substring(2, unicode.length);
+    Assert.eq(broken.span().index_of(unicode_needle).unwrap_or(-1), 2);
 }

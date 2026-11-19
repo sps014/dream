@@ -11,7 +11,7 @@ void dream_lock_acquire(dream_ptr lock_addr) { *dream_i32(lock_addr) += 1; }
 void dream_lock_release(dream_ptr lock_addr) {
     int32_t *w = dream_i32(lock_addr);
     if (*w <= 0) {
-        dream_panic(dream_utf8_to_string("panic: lock release requires the owning thread"));
+        dream_panic(dream_utf8_to_string("lock release requires the owning thread"));
     }
     *w -= 1;
 }
@@ -38,7 +38,7 @@ int32_t dream_semaphore_try_acquire(dream_ptr semaphore) {
 void dream_semaphore_acquire(dream_ptr semaphore) {
     if (!dream_semaphore_try_acquire(semaphore)) {
         dream_panic(dream_utf8_to_string(
-            "panic: semaphore acquire would block forever (no other thread can release it)"));
+            "semaphore acquire would block forever (no other thread can release it)"));
     }
 }
 
@@ -95,7 +95,7 @@ void dream_lock_release(dream_ptr lock_addr) {
     int32_t *addr = dream_i32(lock_addr);
     int32_t cur = __atomic_load_n(addr, __ATOMIC_ACQUIRE);
     if ((cur & 65535) == 0 || (cur >> 16) != thread_id()) {
-        dream_panic(dream_utf8_to_string("panic: lock release requires the owning thread"));
+        dream_panic(dream_utf8_to_string("lock release requires the owning thread"));
     }
     if ((cur & 65535) == 1) {
         __atomic_store_n(addr, 0, __ATOMIC_RELEASE);

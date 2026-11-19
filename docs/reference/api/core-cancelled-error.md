@@ -28,6 +28,14 @@ Human-readable explanation of the cancellation, suitable for logs and error outp
 public fun message(): string
 ```
 
+## `to_string`
+
+Returns `message()`, so printing the error shows its explanation.
+
+```dream
+public override fun to_string(): string
+```
+
 ## `code`
 
 Stable machine code.

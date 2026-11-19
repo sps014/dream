@@ -81,11 +81,13 @@ pub(super) fn insert(
             }
             // A last-use field/index store in *this* block already took the token.
             // Loop-carried `token_out` can still look owned after that move. A sink in
-            // another block must not suppress leftover here (last-iteration future/funcbox).
+            // another block must not suppress leftover here (last-iteration future/funcbox),
+            // and neither does one followed by a re-assignment that owns a fresh token.
             if analysis
                 .sink_move
                 .iter()
                 .any(|&(b, _, l)| b == bi && l == local)
+                && !state.redefined_after_sink.contains(&(bi, local))
             {
                 continue;
             }

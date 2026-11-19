@@ -199,7 +199,15 @@ pub(super) fn perform_inline(mir: &mut crate::Mir, fi: usize, site: Site, intern
                     }
                 }
             }
-            other => bb.terminator = other,
+            other => {
+                // A callee tail call would jump out of the caller's frame from the spliced
+                // body; tail-call conversion runs after inlining, so none exist yet.
+                assert!(
+                    !matches!(other, Terminator::TailCall { .. }),
+                    "inlining runs before tail-call conversion"
+                );
+                bb.terminator = other;
+            }
         }
         f.blocks.push(bb);
     }

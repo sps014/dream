@@ -11,9 +11,7 @@ fn module_function_symbol(other_name: &str) -> String {
         .iter()
         .map(|(module, name)| {
             let source = format!("module {module}; fun {name}(): int {{ return 1; }}");
-            let parsed = Parser::new(Lexer::new(source.clone()), &arena, &mut diagnostics)
-                .parse()
-                .unwrap();
+            let parsed = Parser::new(Lexer::new(source.clone()), &arena, &mut diagnostics).parse();
             let mut program = parsed.get_root().clone();
             let path = format!("{module}.dream");
             program.functions[0].file_path = Some(Rc::from(path.as_str()));

@@ -1,7 +1,5 @@
-//! `@get_indexer` / `@set_indexer` / `@iterator` / `@next` registration: recognizes the
-//! indexer/enumerator protocol attributes on a struct/class/`extend` method (their generic shape —
-//! no args, method-only placement — is already validated by [`dream_abi::attributes`]), checks
-//! role-specific arity/return rules, and records the mangled + surface method names so `obj[i]`,
+//! `this[index]` indexer / `iterator()` / `next()` registration: recognizes the indexer and
+//! enumerator protocol methods on a struct/class/`extend`, checks role-specific arity/return rules, and records the mangled + surface method names so `obj[i]`,
 //! `obj[i] = v`, and `for..in` desugaring can dispatch without bare-name lookup. One
 //! [`ProtocolHooks`] table per registered type, keyed the same way as `register_methods_for`'s
 //! `target_type_str`.
@@ -60,6 +58,8 @@ impl ProtocolRole {
 pub struct ProtocolHook {
     pub identity: crate::function_table::FunctionIdentity,
     pub surface_name: String,
+    /// `(index, element)` types of a get/set indexer, which the paired indexer must agree with.
+    indexer_types: Option<(dream_types::TypeId, dream_types::TypeId)>,
 }
 
 /// Per-type protocol hooks. At most one method per role.
@@ -104,7 +104,7 @@ impl<'a> Analyzer<'a> {
             .map(|method| method.name.text.clone())
     }
 
-    /// Recognizes `@get_indexer`/`@set_indexer`/`@iterator`/`@next` on `method` and records it
+    /// Recognizes `this[index]` indexer / `iterator()` / `next()` on `method` and records it
     /// against `target_type_str`. Reports role-specific shape rules the generic attribute layer
     /// cannot know, and rejects a second method claiming the same role on the same type.
     pub(in crate::analyzer) fn validate_and_register_protocol_hook(
@@ -201,7 +201,9 @@ impl<'a> Analyzer<'a> {
             ProtocolRole::Next => {
                 let ok = match &method.return_type {
                     Some(t) => match Self::resolve_struct_parts(t) {
-                        Some((base, args)) => base == "Option" && args.len() == 1,
+                        Some((base, args)) => {
+                            base == dream_abi::core_items::OPTION_NAME && args.len() == 1
+                        }
                         None => false,
                     },
                     None => false,
@@ -217,12 +219,57 @@ impl<'a> Analyzer<'a> {
             ProtocolRole::Set => {}
         }
 
+        let indexer_types = match role {
+            ProtocolRole::Get => method.return_type.as_ref().map(|element| {
+                (
+                    self.type_ctx.lower(&method.parameters[0].type_),
+                    self.type_ctx.lower(element),
+                )
+            }),
+            ProtocolRole::Set => Some((
+                self.type_ctx.lower(&method.parameters[0].type_),
+                self.type_ctx.lower(&method.parameters[1].type_),
+            )),
+            ProtocolRole::Iterator | ProtocolRole::Next => None,
+        };
+        let paired = match role {
+            ProtocolRole::Get => self
+                .protocol_hooks
+                .get(&receiver)
+                .and_then(|h| h.set.as_ref()),
+            ProtocolRole::Set => self
+                .protocol_hooks
+                .get(&receiver)
+                .and_then(|h| h.get.as_ref()),
+            ProtocolRole::Iterator | ProtocolRole::Next => None,
+        };
+        if let (Some((index, element)), Some((paired_index, paired_element))) =
+            (indexer_types, paired.and_then(|hook| hook.indexer_types))
+            && (index != paired_index || element != paired_element)
+        {
+            let (get, set) = match role {
+                ProtocolRole::Get => ((index, element), (paired_index, paired_element)),
+                _ => ((paired_index, paired_element), (index, element)),
+            };
+            diagnostics.report_error(
+                format!(
+                    "the get and set indexers of '{}' disagree: get is [{}]: {}, set is [{}] = {}",
+                    self.type_id_display(receiver),
+                    self.type_id_display(get.0),
+                    self.type_id_display(get.1),
+                    self.type_id_display(set.0),
+                    self.type_id_display(set.1),
+                ),
+                Some(method.name.position),
+            );
+        }
+
         let target_display = self.type_id_display(receiver);
         let hooks = self.protocol_hooks.entry(receiver).or_default();
         if hooks.slot(role).is_some() {
             diagnostics.report_error(
                 format!(
-                    "'{}' already declares an '@{}' method",
+                    "'{}' already declares a {} method",
                     target_display,
                     role.role_name()
                 ),
@@ -233,6 +280,7 @@ impl<'a> Analyzer<'a> {
         *hooks.slot_mut(role) = Some(ProtocolHook {
             identity: identity.clone(),
             surface_name: method.name.text.clone(),
+            indexer_types,
         });
     }
 

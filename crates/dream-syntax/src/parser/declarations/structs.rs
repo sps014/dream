@@ -1,13 +1,12 @@
 use super::super::Parser;
 use crate::nodes::Visibility;
 use crate::token::token_kind::TokenKind;
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Parses a struct declaration
     pub(crate) fn parse_struct_declaration(
         &mut self,
-    ) -> Result<crate::nodes::struct_node::StructDeclarationNode<'a>, Error> {
+    ) -> crate::nodes::struct_node::StructDeclarationNode<'a> {
         let first_trivia = self.current_token().leading_trivia.clone();
 
         let attributes = self.parse_attributes();
@@ -79,7 +78,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::OpenParenthesisToken);
             primary_fields = self.parse_delimited_list(TokenKind::CloseParenthesisToken, |p| {
                 p.parse_primary_ctor_field()
-            })?;
+            });
         }
 
         // Optional `: Iface1, Container<int>, ...` implements clause. Each entry is a (possibly
@@ -90,7 +89,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             self.match_token(TokenKind::ColonToken);
             loop {
                 let iter = self.current_token_index;
-                implements.push(self.parse_type()?);
+                implements.push(self.parse_type());
                 if self.current_token().kind == TokenKind::CommaToken {
                     self.match_token(TokenKind::CommaToken);
                 } else {
@@ -160,7 +159,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     || is_ctor_dtor
                     || is_accessor
                 {
-                    methods.push(self.parse_function(Some(field_attributes))?);
+                    methods.push(self.parse_function(Some(field_attributes)));
                 } else {
                     // Fields are private by default; an explicit `public`/`internal` exposes them.
                     // `weak`/`unowned` are storage qualifiers that break ARC reference cycles (see
@@ -187,6 +186,13 @@ impl<'a, 'b> Parser<'a, 'b> {
                                 self.match_token(TokenKind::UnownedToken);
                                 field_unowned = true;
                             }
+                            TokenKind::StaticToken => {
+                                let token = self.match_token(TokenKind::StaticToken);
+                                self.diagnostics.report_error(
+                                    "a field cannot be 'static'; declare shared state as a module-level `let`, or expose it through a static property".to_string(),
+                                    Some(token.position),
+                                );
+                            }
                             _ => break,
                         }
                     }
@@ -201,7 +207,7 @@ impl<'a, 'b> Parser<'a, 'b> {
                     // Parse the full type (supporting generic args like `Map<string, JsonValue>`
                     // and arrays) and store its canonical spelling on the field.
                     let type_position = self.current_token().position;
-                    let parsed_type = self.parse_type()?;
+                    let parsed_type = self.parse_type();
                     let field_type_token = crate::token::syntax_token::SyntaxToken::new(
                         TokenKind::IdentifierToken,
                         type_position,
@@ -259,12 +265,10 @@ impl<'a, 'b> Parser<'a, 'b> {
         decl.is_static = is_static;
         decl.is_shared = is_shared;
         decl.generic_constraints = generic_constraints;
-        Ok(decl)
+        decl
     }
 
-    fn parse_primary_ctor_field(
-        &mut self,
-    ) -> Result<crate::nodes::struct_node::StructFieldNode, Error> {
+    fn parse_primary_ctor_field(&mut self) -> crate::nodes::struct_node::StructFieldNode {
         // Header params are the type's public surface (`class Point(x: int, y: int)`). Body
         // fields stay private unless marked. `internal` (or an explicit `public`) still binds.
         let mut field_visibility = Visibility::Private;
@@ -274,13 +278,13 @@ impl<'a, 'b> Parser<'a, 'b> {
         let field_name = self.match_token(TokenKind::IdentifierToken);
         self.match_token(TokenKind::ColonToken);
         let type_position = self.current_token().position;
-        let parsed_type = self.parse_type()?;
+        let parsed_type = self.parse_type();
         let field_type_token = crate::token::syntax_token::SyntaxToken::new(
             TokenKind::IdentifierToken,
             type_position,
             parsed_type.get_type(),
         );
-        Ok(crate::nodes::struct_node::StructFieldNode {
+        crate::nodes::struct_node::StructFieldNode {
             attributes: Vec::new(),
             name: field_name,
             visibility: field_visibility,
@@ -288,7 +292,7 @@ impl<'a, 'b> Parser<'a, 'b> {
             is_unowned: false,
             type_token: field_type_token,
             field_type: parsed_type,
-        })
+        }
     }
 
     fn synthesize_primary_init(

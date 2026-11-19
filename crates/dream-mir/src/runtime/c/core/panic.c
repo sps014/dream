@@ -20,12 +20,26 @@ void dream_panic_at(dream_ptr msg, const char *location) {
     if (hook && !in_panic_hook) {
         char message[PANIC_MESSAGE_MAX];
         size_t written;
-        dream_utf8_chunk(dream_str_units(msg), dream_str_len(msg), message, sizeof(message), 0, &written, 0);
+        dream_utf8_chunk(dream_str_units(msg), dream_str_len(msg), message, sizeof(message), 0, &written);
         in_panic_hook = 1;
         hook(message, location);
     } else {
-        dream_platform_current->write(2, dream_str_units(msg), (size_t)dream_str_len(msg), DREAM_TEXT_UTF16);
-        dream_platform_current->write(2, "\n", 1, DREAM_TEXT_UTF8);
+        /* Other threads may panic at the same time, so the prefix and the start of the message
+         * go out in one write rather than interleaving with theirs. */
+        char text[PANIC_MESSAGE_MAX];
+        const uint16_t *units = dream_str_units(msg);
+        int32_t len = dream_str_len(msg);
+        size_t prefix = 7;
+        int32_t position = 0;
+        memcpy(text, "panic: ", prefix);
+        do {
+            size_t written;
+            position = dream_utf8_chunk(units, len, text + prefix, sizeof(text) - prefix - 1, position, &written);
+            written += prefix;
+            if (position >= len) { text[written++] = '\n'; }
+            dream_platform_current->write(2, text, written, DREAM_TEXT_UTF8);
+            prefix = 0;
+        } while (position < len);
         if (location) {
             dream_platform_current->write(2, "  at ", 5, DREAM_TEXT_UTF8);
             dream_platform_current->write(2, location, strlen(location), DREAM_TEXT_UTF8);

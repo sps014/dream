@@ -57,7 +57,7 @@ static void timer_sift_down(TimerEntry *heap, uint32_t i) {
 static void timer_grow(void) {
     uint32_t capacity = timer_spill ? timer_capacity * 2 : TIMER_INLINE_CAPACITY * 4;
     TimerEntry *grown = dream_platform_current->allocate((size_t)capacity * sizeof(TimerEntry));
-    if (!grown) { DREAM_PANIC_LITERAL(u"panic: scheduler allocation failed"); }
+    if (!grown) { DREAM_PANIC_LITERAL(u"scheduler allocation failed"); }
     dream_count(DREAM_COUNT_TIMER_ALLOC, 1);
     memcpy(grown, timer_entries(), (size_t)timer_count * sizeof(TimerEntry));
     if (timer_spill) { dream_platform_current->deallocate(timer_spill); }

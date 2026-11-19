@@ -157,7 +157,8 @@ impl<'a> Analyzer<'a> {
 
     fn encode_body(&mut self, entries: &[journal::Entry]) -> Option<CachedBody> {
         self.refresh_def_index();
-        let (hir, tables) = portable::encode(|| serde_json::to_string(self.hir.functions.last()?).ok());
+        let (hir, tables) =
+            portable::encode(|| serde_json::to_string(self.hir.functions.last()?).ok());
         let hir = hir?;
         let types: Vec<_> = tables
             .get(IdSpace::Type)
@@ -167,7 +168,11 @@ impl<'a> Analyzer<'a> {
         let interfaces = tables
             .get(IdSpace::Interface)
             .iter()
-            .map(|&raw| self.interface_methods.get_index(raw as usize).map(|(&ty, _)| ty))
+            .map(|&raw| {
+                self.interface_methods
+                    .get_index(raw as usize)
+                    .map(|(&ty, _)| ty)
+            })
             .collect::<Option<Vec<_>>>()?;
         let mut closure = IndexSet::new();
         for &ty in types.iter().chain(&interfaces) {
@@ -184,7 +189,10 @@ impl<'a> Analyzer<'a> {
             globals: tables
                 .get(IdSpace::Global)
                 .iter()
-                .map(|&raw| self.hir_global_name(GlobalId(raw as u32)).map(str::to_string))
+                .map(|&raw| {
+                    self.hir_global_name(GlobalId(raw as u32))
+                        .map(str::to_string)
+                })
                 .collect::<Option<_>>()?,
             interfaces: interfaces.iter().map(|&ty| self.type_key(ty)).collect(),
             registered: closure
@@ -240,9 +248,11 @@ impl<'a> Analyzer<'a> {
         let hir: HFunction = portable::decode(tables, || serde_json::from_str(&cached.hir)).ok()?;
         let mut edges = HirEdges::default();
         hir_body_edges(&hir.body, &mut edges);
-        let unrequested = edges.callees.iter().chain(&edges.funcrefs).any(|key| {
-            !key.1.is_empty() && !self.instantiated_generics.contains_key(key)
-        });
+        let unrequested = edges
+            .callees
+            .iter()
+            .chain(&edges.funcrefs)
+            .any(|key| !key.1.is_empty() && !self.instantiated_generics.contains_key(key));
         if unrequested {
             return None;
         }

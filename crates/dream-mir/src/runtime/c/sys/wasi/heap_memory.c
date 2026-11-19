@@ -66,7 +66,7 @@ static void ensure_pages(int32_t new_heap) {
     need = ((new_heap - 1) >> 16) + 1;
     delta = need - wasm_memory_size();
     if (wasm_memory_grow(delta) == -1) {
-        DREAM_PANIC_LITERAL(u"panic: out of memory growing the WASI heap");
+        DREAM_PANIC_LITERAL(u"out of memory growing the WASI heap");
     }
 #else
     (void)new_heap;
@@ -82,11 +82,11 @@ int32_t dream_wasm_heap_claim_aligned(int32_t n, int32_t align, int32_t *gap) {
     start = __atomic_load_n(meta_i32(META_HEAP_PTR), __ATOMIC_RELAXED);
     for (;;) {
         if (n <= 0 || start < 0 || start > INT32_MAX - (align - 1)) {
-            DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+            DREAM_PANIC_LITERAL(u"allocation size exceeds the WASI heap limit");
         }
         aligned = (start + align - 1) & -align;
         if (n > INT32_MAX - aligned) {
-            DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+            DREAM_PANIC_LITERAL(u"allocation size exceeds the WASI heap limit");
         }
         if (__atomic_compare_exchange_n(meta_i32(META_HEAP_PTR), &start, aligned + n, 0,
                                        __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { break; }
@@ -94,11 +94,11 @@ int32_t dream_wasm_heap_claim_aligned(int32_t n, int32_t align, int32_t *gap) {
 #else
     start = dream_wasm_heap_ptr_get();
     if (n <= 0 || start < 0 || start > INT32_MAX - (align - 1)) {
-        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+        DREAM_PANIC_LITERAL(u"allocation size exceeds the WASI heap limit");
     }
     aligned = (start + align - 1) & -align;
     if (n > INT32_MAX - aligned) {
-        DREAM_PANIC_LITERAL(u"panic: allocation size exceeds the WASI heap limit");
+        DREAM_PANIC_LITERAL(u"allocation size exceeds the WASI heap limit");
     }
     heap_ptr_set(aligned + n);
 #endif

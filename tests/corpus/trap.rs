@@ -1,6 +1,16 @@
 use super::Case;
 
 pub(super) const CASES: &[Case] = &[
+    Case::trap(
+        "foreach_alias_mutation_trap",
+        "1\nList modified during for-in iteration\nforeach_alias_mutation_trap.dream:8",
+        true,
+    ),
+    Case::trap(
+        "invalid_downcast_trap",
+        "4\npanic: invalid cast\ninvalid_downcast_trap.dream:26",
+        true,
+    ),
     Case::trap("raw_ptr_size_overflow", "raw memory: size overflow", true),
     Case::trap(
         "raw_ptr_alignment_trap",
@@ -50,7 +60,7 @@ pub(super) const CASES: &[Case] = &[
     Case::trap("main_int_exit", "checking\nexit code 3", true),
     Case::trap(
         "main_result_err",
-        "port 8080\nError: ParseError\nexit code 1",
+        "port 8080\nError: cannot parse int: invalid digit\nexit code 1",
         true,
     ),
     Case::trap(
@@ -101,6 +111,16 @@ pub(super) const CASES: &[Case] = &[
     Case::trap(
         "panic_div_zero",
         "before\npanic: attempt to divide by zero",
+        true,
+    ),
+    Case::trap(
+        "panic_stack_overflow",
+        "before\npanic: stack overflow",
+        true,
+    ),
+    Case::trap(
+        "panic_rem_zero",
+        "before\npanic: attempt to calculate the remainder with a divisor of zero\npanic_rem_zero.dream:7",
         true,
     ),
     Case::trap(

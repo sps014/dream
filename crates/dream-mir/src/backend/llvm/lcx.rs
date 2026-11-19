@@ -65,6 +65,8 @@ pub(super) struct Lcx<'a> {
     pub next_info_index: i32,
     pub future_infos: IndexSet<dream_types::TypeId>,
     pub future_copies: IndexSet<dream_types::TypeId>,
+    /// Types whose generated structural `==` body has been requested (`glue/equality.rs`).
+    pub value_eq: IndexSet<dream_types::TypeId>,
     /// Library functions taking the caller's panic location as a trailing hidden `ptr`
     /// (`source_loc.rs`). Tables and itables point at their `__abi` wrapper, which passes NULL.
     pub tracked: IndexSet<String>,
@@ -114,6 +116,7 @@ impl<'a> Lcx<'a> {
             future_infos: IndexSet::new(),
             future_copies: IndexSet::new(),
             tracked: IndexSet::new(),
+            value_eq: IndexSet::new(),
             hosts: IndexMap::new(),
             intrinsics: IndexMap::new(),
             exports: IndexMap::new(),

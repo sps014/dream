@@ -7,17 +7,7 @@ fn parse_code<'a>(code: &str, arena: &'a bumpalo::Bump) -> (ProgramNode<'a>, Dia
     let mut diagnostics = DiagnosticBag::new(None);
     let lexer = Lexer::new(code.to_string());
     let mut parser = Parser::new(lexer, arena, &mut diagnostics);
-    let tree = parser.parse().unwrap_or_else(|_| {
-        crate::syntax_tree::SyntaxTree::new(ProgramNode::new(
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        ))
-    });
+    let tree = parser.parse();
     (tree.get_root().clone(), diagnostics)
 }
 
@@ -241,8 +231,8 @@ fn test_parse_unary_minus_after_comparison_and_arithmetic() {
     assert_eq!(op.kind, TokenKind::GreaterThanToken);
     assert!(matches!(**left, ExpressionNode::Identifier(_)));
     match &**right {
-        ExpressionNode::Unary(tok, _) => assert_eq!(tok.kind, TokenKind::MinusToken),
-        other => panic!("RHS of `>` should be unary minus, got {:?}", other),
+        ExpressionNode::Literal(Type::Integer(tok)) => assert_eq!(tok.text, "-2"),
+        other => panic!("RHS of `>` should be the literal -2, got {:?}", other),
     }
 }
 
@@ -642,7 +632,7 @@ fn test_parse_try_propagation_before_comparison_in_condition() {
 
 #[test]
 fn test_parse_try_propagation_disambiguated_with_parens() {
-    // Parenthesized try still works; parens are no longer required for `? +`.
+    // Parenthesized try also works; parens are optional for `? +`.
     let code = "fun f(): int { return (half(4)?) + 1; }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
@@ -887,7 +877,7 @@ fn test_parse_interpolated_string_brace_escapes() {
 
 #[test]
 fn test_match_is_an_ordinary_identifier() {
-    // `match` is no longer a keyword, so it is usable as a method name (the stdlib `regex.match`).
+    // `match` is not a keyword, so it is usable as a method name (the stdlib `regex.match`).
     let code = "fun f(r: Regex): string[] { return r.match(\"x\"); }";
     let arena = bumpalo::Bump::new();
     let (program, diagnostics) = parse_code(code, &arena);
@@ -1379,18 +1369,13 @@ impl XorShift {
     }
 }
 
-/// Parses `code` and asserts the parser produced a `ProgramNode` without panicking or erroring.
+/// Parses `code`; the parser must return its `ProgramNode` without panicking.
 fn assert_parses_without_panic(code: &str) {
     let arena = bumpalo::Bump::new();
     let mut diagnostics = DiagnosticBag::new(None);
     let lexer = Lexer::new(code.to_string());
     let mut parser = Parser::new(lexer, &arena, &mut diagnostics);
-    let result = parser.parse();
-    assert!(
-        result.is_ok(),
-        "parser returned Err (should always yield a ProgramNode) for input: {:?}",
-        code
-    );
+    parser.parse();
 }
 
 #[test]
@@ -2305,7 +2290,7 @@ fn exclusive_range_expressions() {
         panic!("expected a range binding");
     };
     assert_eq!(op.kind, TokenKind::DotDotToken);
-    assert!(matches!(left, ExpressionNode::Unary(..)));
+    assert!(matches!(left, ExpressionNode::Literal(Type::Integer(t)) if t.text == "-1"));
     assert!(matches!(right, ExpressionNode::Binary(_, op, _) if op.kind == TokenKind::MinusToken));
 }
 
@@ -2347,4 +2332,45 @@ fn default_export_accessors_are_member_names() {
         &arena,
     );
     assert!(!diagnostics.has_errors());
+}
+
+#[test]
+fn negative_decimal_literals_fold_but_radix_literals_stay_unary() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code(
+        "fun main(): void { let a = -2147483648; let b = -0x80; let c = -1.5; }",
+        &arena,
+    );
+    assert!(!diagnostics.has_errors(), "{diagnostics:?}");
+    let value = |i: usize| match &program.functions[0].body[i] {
+        StatementNode::Declaration(_, _, value, _, _) => value,
+        other => panic!("expected a declaration, got {other:?}"),
+    };
+    assert!(
+        matches!(value(0), ExpressionNode::Literal(Type::Integer(t)) if t.text == "-2147483648")
+    );
+    assert!(matches!(value(1), ExpressionNode::Unary(..)));
+    assert!(matches!(value(2), ExpressionNode::Literal(Type::Float(t)) if t.text == "-1.5"));
+}
+
+#[test]
+fn angle_list_before_paren_is_a_generic_call_unless_parenthesized() {
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code("fun f(): void { g(a < b, c > (d)); }", &arena);
+    assert!(!diagnostics.has_errors());
+    let StatementNode::FunctionInvocation(_, _, args) = &program.functions[0].body[0] else {
+        panic!("expected a call, got {:?}", program.functions[0].body[0]);
+    };
+    assert_eq!(args.len(), 1);
+    assert!(
+        matches!(&args[0], ExpressionNode::FunctionCall(name, Some(types), _) if name.text == "a" && types.len() == 2)
+    );
+
+    let arena = bumpalo::Bump::new();
+    let (program, diagnostics) = parse_code("fun f(): void { g((a < b), c > (d)); }", &arena);
+    assert!(!diagnostics.has_errors(), "{:?}", diagnostics.diagnostics);
+    let StatementNode::FunctionInvocation(_, _, args) = &program.functions[0].body[0] else {
+        panic!("expected a call, got {:?}", program.functions[0].body[0]);
+    };
+    assert_eq!(args.len(), 2);
 }

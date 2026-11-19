@@ -26,14 +26,12 @@ fn prelude_dream_host_names(include_native_only: bool) -> HashSet<String> {
         targets.push(dream_abi::target::TargetSpec::host().cfg_symbols(false));
     }
     for cfg in targets {
-        for (path, source) in dream_stdlib::all_prelude_files() {
+        for (_, source) in dream_stdlib::all_prelude_files() {
             let arena = bumpalo::Bump::new();
             let mut diagnostics = dream_diagnostics::DiagnosticBag::new(None);
             let mut parser =
                 Parser::new(Lexer::new(source.to_string()), &arena, &mut diagnostics).with_cfg(cfg);
-            let syntax = parser
-                .parse()
-                .unwrap_or_else(|_| panic!("invalid stdlib source: {path}"));
+            let syntax = parser.parse();
             let program = syntax.get_root();
             dream_stdlib::attributes::resolve_source_attribute_ids(program);
             let functions = program

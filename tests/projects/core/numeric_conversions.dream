@@ -75,3 +75,34 @@ fun numeric_widen_assign(): void {
     Assert.eq(arr[0].to_string(), "0");
     Assert.eq(arr[3].to_string(), "3");
 }
+
+fun nc_int(value: int): int {
+    return value;
+}
+
+fun nc_double(value: double): double {
+    return value;
+}
+
+@test
+@timeout(180000)
+fun narrowing_casts_wrap_to_target_width(): void {
+    Assert.eq((int)(byte)nc_int(300), 44);
+    Assert.eq((int)(sbyte)nc_int(200), -56);
+    Assert.eq((int)(short)nc_int(40000), -25536);
+    Assert.eq((int)(ushort)nc_int(70000), 4464);
+    Assert.eq((int)(sbyte)(byte)nc_int(250), -6);
+    Assert.eq((ulong)(long)nc_int(-1), 18446744073709551615ul);
+    Assert.eq((long)(uint)(long)4000000000l, 4000000000l);
+}
+
+@test
+@timeout(180000)
+fun float_to_integer_casts_saturate(): void {
+    Assert.eq((uint)nc_double(3.9e9), 3900000000u);
+    Assert.eq((uint)nc_double(-5.5), 0u);
+    Assert.eq((int)(byte)nc_double(300.7), 255);
+    Assert.eq((int)(short)nc_double(-40000.0), -32768);
+    Assert.eq((int)nc_double(3.9e10), 2147483647);
+    Assert.eq((int)(nc_double(0.0) / nc_double(0.0)), 0);
+}

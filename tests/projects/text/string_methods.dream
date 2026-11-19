@@ -28,10 +28,7 @@ fun string_methods(): void {
     Assert.eq(parts[2], "c");
     Assert.eq("hello world".replace("world", "dream"), "hello dream");
 
-    // `s[i] = c` writes in place; concat allocates a fresh heap buffer so no literal is mutated.
-    let written = "hel" + "lo";
-    written[0] = 'H';
-    written[4] = 'O';
+    let written = "H" + "hello".substring(1, 4) + "O";
     Assert.eq(written, "HellO");
     Assert.eq(written[0], 'H');
     Assert.eq(written[4], 'O');

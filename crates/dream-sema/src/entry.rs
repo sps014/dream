@@ -34,7 +34,7 @@ pub(crate) fn entry_tail_return(function: &FunctionNode<'_>) -> Option<EntryTail
     match function.return_type.as_ref()? {
         Type::Integer(_) => Some(EntryTail::Zero),
         Type::Struct(name, Some(args))
-            if name.text == "Result"
+            if name.text == dream_abi::core_items::RESULT_NAME
                 && args.len() == 2
                 && matches!(&args[0], Type::Struct(unit, None) if unit.text == UNIT_TYPE) =>
         {

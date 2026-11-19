@@ -250,8 +250,11 @@ impl<'a> Analyzer<'a> {
                 variant_infos.iter().partition(|v| !v.fields.is_empty());
             if payload_variants.len() == 1 && payload_variants[0].fields.len() == 1 {
                 let ftid = self.type_ctx.lower(&payload_variants[0].fields[0].type_);
+                // A niche payload already spends `NULL` on its own empty variant, so nesting a
+                // second niche (`Option<Option<string>>`) would make `Some(None)` read as `None`.
                 if !self.type_ctx.interner.is_value_type(ftid)
                     && self.type_ctx.interner.is_reference(ftid)
+                    && !self.type_ctx.interner.is_niche_union(ftid)
                 {
                     self.type_ctx.interner.mark_niche_union(union_tid);
                 }
@@ -322,13 +325,14 @@ impl<'a> Analyzer<'a> {
         diagnostics: &mut DiagnosticBag,
     ) {
         let instance = self.type_ctx.instantiate(def, ids.clone());
-        if self.union_info(instance).is_some() {
+        if self.union_info(instance).is_some() || self.unions_instantiating.contains(&instance) {
             return;
         }
         let template = match self.generic_union(def) {
             Some(template) => *template,
             None => return,
         };
+        self.unions_instantiating.insert(instance);
         let args: Vec<_> = ids
             .iter()
             .map(|&arg| self.type_ctx.syntax_type(arg))
@@ -378,6 +382,7 @@ impl<'a> Analyzer<'a> {
         );
         self.ref_struct_escape_muted = muted;
         self.type_ctx.set_scope(scope);
+        self.unions_instantiating.shift_remove(&instance);
     }
 
     /// If a generic `extend` block targets `base_name` (e.g. `extend Option<T> { ... }`),

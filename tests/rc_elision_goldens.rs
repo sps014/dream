@@ -970,3 +970,70 @@ fn rc_golden_split_span_literal_sources_are_rc_free() {
         body.body
     );
 }
+
+fn user_fn_body(ir: &str, name: &str) -> String {
+    ir_func_defs(ir)
+        .into_iter()
+        .find(|f| f.name == name)
+        .unwrap_or_else(|| panic!("no function '{name}' in:\n{ir}"))
+        .body
+}
+
+#[test]
+fn rc_golden_same_line_rebuild_keeps_the_new_value() {
+    let code = r#"
+        struct State {
+            public name: string;
+            public count: int;
+
+            public constructor(name: string, count: int) {
+                this.name = name;
+                this.count = count;
+            }
+        }
+        @noinline
+        fun rebuild(st: State): State {
+            st = State(st.name, st.count + 1);
+            return st;
+        }
+        fun main(): void {
+            System.println(rebuild(State("s" + "1", 1)).name);
+        }
+    "#;
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let body = user_fn_body(&c, "rebuild");
+    assert!(
+        count_in(&body, "@dream_release(") + count_in(&body, "call void @release_") <= 1,
+        "only the replaced field occupant may be released; the rebuilt value survives:\n{body}"
+    );
+    assert!(
+        count_in(&body, "@dream_retain(") <= 1,
+        "only the moved name needs a retain:\n{body}"
+    );
+}
+
+#[test]
+fn rc_golden_self_assignment_is_rc_free() {
+    let code = r#"
+        @noinline
+        fun keep(s: string): string {
+            let t = s + "x";
+            t = t;
+            return t;
+        }
+        fun main(): void {
+            System.println(keep("a"));
+        }
+    "#;
+    let c = emit_hir_to_module_optimized(&format!("{}\n{}", SYSTEM_STUB, code));
+    let body = user_fn_body(&c, "keep");
+    assert_eq!(
+        count_in(&body, "@dream_retain("),
+        0,
+        "'t = t' must not retain:\n{body}"
+    );
+    assert!(
+        count_in(&body, "@dream_release(") <= 1,
+        "only the consumed parameter is released:\n{body}"
+    );
+}

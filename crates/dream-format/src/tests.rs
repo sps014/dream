@@ -121,6 +121,14 @@ fn comparisons_stay_spaced() {
 }
 
 #[test]
+fn comparison_before_parenthesized_operand_stays_spaced() {
+    let out = format("let b = c > (d);\ncheck((a < b), c > (d));\nlet x = f<int>(1);");
+    assert!(out.contains("let b = c > (d);"), "got:\n{}", out);
+    assert!(out.contains("check((a < b), c > (d));"), "got:\n{}", out);
+    assert!(out.contains("f<int>(1)"), "got:\n{}", out);
+}
+
+#[test]
 fn nested_generic_call_arguments() {
     let out = format("process<Pair<Box<int>,int>,string>(pair);");
     assert!(

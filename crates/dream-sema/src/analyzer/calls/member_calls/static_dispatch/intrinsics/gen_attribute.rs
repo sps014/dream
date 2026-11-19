@@ -71,21 +71,21 @@ impl<'a> Analyzer<'a> {
             intrinsics::IntrinsicOp::GenAttributeId => Self::type_from_name("string"),
             intrinsics::IntrinsicOp::GenAttributeDecode => {
                 self.ensure_union_instantiated(
-                    "Option",
+                    dream_abi::core_items::OPTION_NAME,
                     std::slice::from_ref(&attr_ty),
                     &method.position,
                     diagnostics,
                 );
-                wrap("Option")
+                wrap(dream_abi::core_items::OPTION_NAME)
             }
             _ => {
                 self.ensure_struct_instantiated(
-                    "List",
+                    dream_abi::core_items::LIST_NAME,
                     std::slice::from_ref(&attr_ty),
                     &method.position,
                     diagnostics,
                 );
-                wrap("List")
+                wrap(dream_abi::core_items::LIST_NAME)
             }
         };
         if let Some(template) = decoder {

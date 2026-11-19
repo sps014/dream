@@ -6,9 +6,8 @@
 
 use super::*;
 use dream_abi::attributes::{OwnedResult, c_import_target, owned_result};
-use dream_abi::c_abi::{
-    C_PTR_TYPE, NATIVE_CALLBACK_TYPE, OWNED_C_PTR_TYPE, is_c_identifier, is_link_name,
-};
+use dream_abi::c_abi::{is_c_identifier, is_link_name};
+use dream_abi::core_items::{C_PTR_NAME, NATIVE_CALLBACK_NAME, OWNED_C_PTR_NAME};
 use dream_hir::CShape;
 use dream_syntax::nodes::{ConstraintKind, ExpressionNode, FunctionNode, ParameterNode, Type};
 use dream_types::CScalar;
@@ -235,11 +234,11 @@ impl<'a> Analyzer<'a> {
                 }
             }
             (Some(t), _) if self.is_owned_c_ptr(t) => Err(format!(
-                "returning `{OWNED_C_PTR_TYPE}` needs `@owned(\"free_fn\")` naming the C function \
+                "returning `{OWNED_C_PTR_NAME}` needs `@owned(\"free_fn\")` naming the C function \
                  that frees the pointer"
             )),
             (_, OwnedResult::FreedBy(_)) => Err(format!(
-                "`@owned(\"free_fn\")` applies only to a `@c` extern returning `{OWNED_C_PTR_TYPE}`"
+                "`@owned(\"free_fn\")` applies only to a `@c` extern returning `{OWNED_C_PTR_NAME}`"
             )),
             (Some(Type::String(_)), OwnedResult::Owned) => Ok(CShape::OwnedStr),
             (_, OwnedResult::Owned) => Err(
@@ -326,12 +325,14 @@ impl<'a> Analyzer<'a> {
                     optional: false,
                 })
             }
-            Type::Struct(tok, Some(args)) if tok.text == "Option" && args.len() == 1 => {
+            Type::Struct(tok, Some(args))
+                if tok.text == dream_abi::core_items::OPTION_NAME && args.len() == 1 =>
+            {
                 let inner = self.c_shape_inner(&args[0], pos)?;
                 optional(inner)
             }
             Type::Struct(tok, Some(args))
-                if tok.text == NATIVE_CALLBACK_TYPE && args.len() == 1 && pos == Pos::Param =>
+                if tok.text == NATIVE_CALLBACK_NAME && args.len() == 1 && pos == Pos::Param =>
             {
                 let Type::Function(params, ret) = &args[0] else {
                     return None;
@@ -362,7 +363,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn is_c_ptr(&self, ty: &Type) -> bool {
-        matches!(ty, Type::Struct(tok, None) if tok.text == C_PTR_TYPE)
+        matches!(ty, Type::Struct(tok, None) if tok.text == C_PTR_NAME)
             && self
                 .type_ctx
                 .resolved_type(dream_abi::core_items::C_PTR)
@@ -370,7 +371,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn is_owned_c_ptr(&self, ty: &Type) -> bool {
-        matches!(ty, Type::Struct(tok, None) if tok.text == OWNED_C_PTR_TYPE)
+        matches!(ty, Type::Struct(tok, None) if tok.text == OWNED_C_PTR_NAME)
             && self
                 .type_ctx
                 .resolved_type(dream_abi::core_items::OWNED_C_PTR)
@@ -419,7 +420,7 @@ impl<'a> Analyzer<'a> {
         let Type::Struct(tok, None) = ty else {
             return false;
         };
-        tok.text != C_PTR_TYPE
+        tok.text != C_PTR_NAME
             && self.type_ctx.resolved_type(&tok.text).is_some_and(|ty| {
                 self.struct_info(ty).is_some()
                     && self.type_id_satisfies_kind(

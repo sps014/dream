@@ -3,7 +3,6 @@ use crate::nodes::program::CImport;
 use crate::nodes::{ImportNode, ModuleDeclNode};
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
-use std::io::Error;
 
 impl<'a, 'b> Parser<'a, 'b> {
     /// Parses an import statement. Two forms, told apart by a trailing `as` clause:
@@ -11,9 +10,9 @@ impl<'a, 'b> Parser<'a, 'b> {
     ///   resolution can append the `.dream` extension later, exactly as before `as` existed.
     /// - `import a.b.c as x;` — keeps the path dot-joined (`a.b.c`): it names an item inside a
     ///   *declared* `module` namespace, not a file path, resolved separately after all files load.
-    pub(crate) fn parse_import(&mut self) -> Result<ImportNode, Error> {
+    pub(crate) fn parse_import(&mut self) -> ImportNode {
         if self.current_token().kind == TokenKind::CImportToken {
-            return Ok(self.parse_c_import());
+            return self.parse_c_import();
         }
         if self.current_token().kind == TokenKind::JsImportToken {
             self.next_token();
@@ -25,12 +24,12 @@ impl<'a, 'b> Parser<'a, 'b> {
                 None
             };
             self.match_token(TokenKind::SemicolonToken);
-            return Ok(ImportNode {
+            return ImportNode {
                 module_name,
                 alias,
                 is_js: true,
                 c: None,
-            });
+            };
         }
         self.match_token(TokenKind::ImportToken);
 
@@ -54,13 +53,13 @@ impl<'a, 'b> Parser<'a, 'b> {
             let alias = self.match_token(TokenKind::IdentifierToken);
             self.match_token(TokenKind::SemicolonToken);
             let module_path = SyntaxToken::new(TokenKind::IdentifierToken, position, dot_path);
-            return Ok(ImportNode::with_alias(module_path, alias));
+            return ImportNode::with_alias(module_path, alias);
         }
 
         self.match_token(TokenKind::SemicolonToken);
 
         let module_name = SyntaxToken::new(TokenKind::IdentifierToken, position, slash_path);
-        Ok(ImportNode::new(module_name))
+        ImportNode::new(module_name)
     }
 
     fn parse_c_import(&mut self) -> ImportNode {
@@ -154,7 +153,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     /// since a second occurrence would otherwise just parse as an ordinary statement-position
     /// error). The path is kept dot-joined, mirroring the `module` namespaces it names (never a
     /// filesystem path, unlike a plain `import`).
-    pub(crate) fn parse_module_decl(&mut self) -> Result<ModuleDeclNode, Error> {
+    pub(crate) fn parse_module_decl(&mut self) -> ModuleDeclNode {
         self.match_token(TokenKind::ModuleToken);
 
         let first = self.match_token(TokenKind::IdentifierToken);
@@ -172,19 +171,19 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.match_token(TokenKind::SemicolonToken);
 
         let path = SyntaxToken::new(TokenKind::IdentifierToken, position, path);
-        Ok(ModuleDeclNode {
+        ModuleDeclNode {
             attributes: Vec::new(),
             path,
-        })
+        }
     }
 
     /// Parses `@attrs module a.b.c;` — attributes are collected by the caller and passed in.
     pub(crate) fn parse_module_decl_with_attrs(
         &mut self,
         attributes: Vec<crate::nodes::AttributeNode>,
-    ) -> Result<ModuleDeclNode, Error> {
-        let mut decl = self.parse_module_decl()?;
+    ) -> ModuleDeclNode {
+        let mut decl = self.parse_module_decl();
         decl.attributes = attributes;
-        Ok(decl)
+        decl
     }
 }

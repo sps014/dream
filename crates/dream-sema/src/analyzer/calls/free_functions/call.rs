@@ -263,7 +263,7 @@ impl<'a> Analyzer<'a> {
         let (mut params_types, mut arg_hirs, mut arg_is_ref) = if let Some(args) = named_args {
             args
         } else {
-            let saved_target = self.current_call_target_name.replace(function_name.clone());
+            let saved_target = self.enter_call_target(function_name.clone(), false);
             let result = self.analyze_call_arguments_expecting_ref(
                 params,
                 expected_params.as_deref(),
@@ -271,7 +271,7 @@ impl<'a> Analyzer<'a> {
                 symbol_table,
                 diagnostics,
             );
-            self.current_call_target_name = saved_target;
+            self.current_call_target = saved_target;
             result?
         };
         // Calling a `js`-typed local (`cb(a, b)`) invokes the underlying JS value dynamically.
@@ -354,6 +354,7 @@ impl<'a> Analyzer<'a> {
                 &expected_strs,
                 &params_types,
                 name.position,
+                params,
                 diagnostics,
             );
             self.hir_set_indirect_call(&name.text, arg_hirs, ret.as_ref());
@@ -505,12 +506,15 @@ impl<'a> Analyzer<'a> {
             }
             // A constrained type parameter (`fun sort<T : Comparable<T>>(...)`) must be satisfied by
             // the concrete argument; report a clear error at the call site otherwise.
-            self.verify_generic_constraints(
+            if !self.verify_generic_constraints(
                 &template.generic_constraints,
                 &bindings,
                 &name.position,
                 diagnostics,
-            );
+            ) {
+                self.hir_none();
+                return Ok(Type::Unknown);
+            }
             self.reject_ref_struct_bindings(&bindings, &name.position, diagnostics);
             let mangled_name = self.register_generic_function_instance(template, &bindings);
             generic_instance = Some(mangled_name);
@@ -534,12 +538,40 @@ impl<'a> Analyzer<'a> {
         } else {
             match self.function_info(&function_name) {
                 Ok(sig) => sig,
+                Err(_)
+                    if generic_args.is_some() && symbol_table.borrow().get_symbol(name).is_ok() =>
+                {
+                    let message = format!(
+                        "'{function_name}' is a variable, but '{function_name}<…>(…)' is read as a generic call"
+                    );
+                    let diag = dream_diagnostics::Diagnostic::new(
+                        message.clone(),
+                        Some(name.position),
+                        diagnostics.file_path.clone(),
+                    )
+                    .with_note(format!(
+                        "a '<' and '>' around a list followed by '(' always mean type arguments; to compare, parenthesize it: '({function_name} < …)'"
+                    ));
+                    diagnostics.report(diag);
+                    return Err(SemanticError::reported(message, Some(name.position)));
+                }
                 Err(e) => {
-                    return Err(report_with_code(
+                    let notes = match import_note(&function_name) {
+                        Some(note) => vec![note],
+                        None => similar_names(
+                            &function_name,
+                            self.function_table.visible_names(&self.type_ctx),
+                        )
+                        .into_iter()
+                        .map(|name| format!("a function with a similar name exists: '{name}'"))
+                        .collect(),
+                    };
+                    return Err(report_noted(
                         diagnostics,
                         e.to_string(),
                         Some(name.position),
-                        "unresolved-name",
+                        notes,
+                        Some("unresolved-name"),
                     ));
                 }
             }
@@ -576,7 +608,12 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        self.check_unsafe_call(&store_sig, name.position, diagnostics);
+        self.check_unsafe_call(
+            &store_sig,
+            || name.text.to_string(),
+            name.position,
+            diagnostics,
+        );
         self.check_c_fun_args(store_sig.identity.0, params, 0, symbol_table, diagnostics);
 
         self.validate_ref_arguments(
@@ -623,6 +660,7 @@ impl<'a> Analyzer<'a> {
             &store_sig.parameters,
             &params_types,
             name.position,
+            params,
             diagnostics,
         );
         self.validate_js_callback_arguments(

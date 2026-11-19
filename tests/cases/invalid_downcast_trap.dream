@@ -1,0 +1,28 @@
+import system;
+
+interface Shape {
+    fun sides(): int;
+}
+
+class Square: Shape {
+    public constructor() {}
+
+    public fun sides(): int {
+        return 4;
+    }
+}
+
+class Triangle: Shape {
+    public constructor() {}
+
+    public fun sides(): int {
+        return 3;
+    }
+}
+
+fun main(): void {
+    let shape: Shape = Square();
+    System.println(((Square)shape).sides());
+    let wrong = (Triangle)shape;
+    System.println(wrong.sides());
+}

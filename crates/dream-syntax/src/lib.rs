@@ -7,10 +7,12 @@
 )]
 
 pub mod conditional;
+pub mod escape;
 pub mod lexer;
 pub mod nodes;
 pub mod number;
 pub mod parser;
 pub mod precedence;
+pub mod stack;
 pub mod syntax_tree;
 pub mod token;

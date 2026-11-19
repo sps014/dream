@@ -111,7 +111,7 @@ impl Backend {
         let mut locations: Vec<Location> = Vec::new();
 
         // Cross-document matches first (other open documents), so the primary document's
-        // entries keep the legacy ordering role below.
+        // entries follow them.
         if let Some(snapshot) = &sema
             && let Some(r) = snapshot.ref_covering(offset)
             && !matches!(
@@ -151,7 +151,7 @@ impl Backend {
             }
         }
 
-        // This document: sema-precise spans when available, legacy name-based otherwise.
+        // This document: sema-precise spans when available, name-based matches otherwise.
         let spans = match sema
             .as_ref()
             .and_then(|s| Self::precise_references(&idx, s, offset))

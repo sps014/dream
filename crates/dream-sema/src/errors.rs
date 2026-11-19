@@ -62,9 +62,3 @@ impl fmt::Display for SymbolError {
 }
 
 impl std::error::Error for SymbolError {}
-
-impl From<SymbolError> for std::io::Error {
-    fn from(err: SymbolError) -> Self {
-        std::io::Error::other(err.message)
-    }
-}

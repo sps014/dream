@@ -176,6 +176,22 @@ impl TypeInterner {
     pub fn error(&self) -> TypeId {
         self.find(&TyKind::Error)
     }
+
+    /// True when `id` is the poison type or mentions it anywhere in its structure.
+    pub fn contains_error(&self, id: TypeId) -> bool {
+        match self.kind(id) {
+            TyKind::Error => true,
+            TyKind::Array(inner) => self.contains_error(*inner),
+            TyKind::Struct(_, args)
+            | TyKind::Union(_, args)
+            | TyKind::Interface(_, args)
+            | TyKind::Tuple(args) => args.iter().any(|&arg| self.contains_error(arg)),
+            TyKind::Func(params, ret) => {
+                params.iter().any(|&p| self.contains_error(p)) || self.contains_error(*ret)
+            }
+            TyKind::Prim(_) | TyKind::Object | TyKind::Void | TyKind::Enum(_) | TyKind::Js => false,
+        }
+    }
     /// The dynamic JS-interop type `js` (a non-reference `i32` handle).
     pub fn js(&self) -> TypeId {
         self.find(&TyKind::Js)
@@ -210,11 +226,6 @@ impl TypeInterner {
         self.ref_struct_defs.insert(def);
     }
 
-    /// True when `def` names a `ref struct` type.
-    pub fn is_ref_struct_def(&self, def: DefId) -> bool {
-        self.ref_struct_defs.contains(&def)
-    }
-
     /// True when `ty` is (or resolves to) a `ref struct` type.
     pub fn is_ref_struct_type(&self, ty: TypeId) -> bool {
         matches!(self.kind(ty), TyKind::Struct(def, _) if self.ref_struct_defs.contains(def))
@@ -238,16 +249,6 @@ impl TypeInterner {
     /// Records `def` as a `static class`. Idempotent.
     pub fn mark_static_def(&mut self, def: DefId) {
         self.static_defs.insert(def);
-    }
-
-    /// True when `def` names a `static class`.
-    pub fn is_static_def(&self, def: DefId) -> bool {
-        self.static_defs.contains(&def)
-    }
-
-    /// True when `ty` is (or resolves to) a `static class`.
-    pub fn is_static_type(&self, ty: TypeId) -> bool {
-        matches!(self.kind(ty), TyKind::Struct(def, _) if self.static_defs.contains(def))
     }
 
     /// Records `id` as a value *union* type. Idempotent.

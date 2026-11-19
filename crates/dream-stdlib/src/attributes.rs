@@ -21,19 +21,18 @@ pub fn attribute_catalog() -> &'static UserAttributes {
                     &arena,
                     &mut diagnostics,
                 );
-                if let Ok(ast) = parser.parse() {
-                    let program = ast.get_root();
-                    modules.insert(path.to_string(), package.name.to_string());
-                    for s in &program.structs {
-                        let mut s = s.clone();
-                        s.file_path = Some(path.into());
-                        structs.push(s);
-                    }
-                    for e in &program.enums {
-                        let mut e = e.clone();
-                        e.file_path = Some(path.into());
-                        enums.push(e);
-                    }
+                let ast = parser.parse();
+                let program = ast.get_root();
+                modules.insert(path.to_string(), package.name.to_string());
+                for s in &program.structs {
+                    let mut s = s.clone();
+                    s.file_path = Some(path.into());
+                    structs.push(s);
+                }
+                for e in &program.enums {
+                    let mut e = e.clone();
+                    e.file_path = Some(path.into());
+                    enums.push(e);
                 }
             }
         }

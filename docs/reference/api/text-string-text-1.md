@@ -26,14 +26,6 @@ Gets the character at the specified index.
 public fun this[index: int]: char
 ```
 
-## `this`
-
-Replaces the UTF-16 code unit at `index`; an invalid index panics.
-
-```dream
-public fun this[index: int] = value: char
-```
-
 ## `iterator`
 
 Gets an iterator for the string's characters.
@@ -192,4 +184,12 @@ The index of the last occurrence of `target`, or `None`.
 
 ```dream
 public fun last_index_of(target: char): Option<int>
+```
+
+## `last_index_of`
+
+The index of the last occurrence of substring `sub`, or `None`. Empty `sub` is `Some(length)`. Byte-compare scan like `index_of` — allocates nothing per candidate.
+
+```dream
+public fun last_index_of(borrow sub: string): Option<int>
 ```

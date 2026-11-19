@@ -44,6 +44,10 @@ impl Lowerer<'_> {
 
     /// Lowers an expression to an operand, materializing computation into a fresh temporary.
     pub(super) fn lower_operand(&mut self, e: &HExpr) -> Operand {
+        dream_syntax::stack::grow(|| self.lower_operand_inner(e))
+    }
+
+    fn lower_operand_inner(&mut self, e: &HExpr) -> Operand {
         match &e.kind {
             HExprKind::IntLit(v) => Operand::Const(self.int_const(e.ty, *v)),
             HExprKind::SizeOf(ty) => Operand::Const(Const::Int(
@@ -87,6 +91,10 @@ impl Lowerer<'_> {
 
     /// Lowers an expression into an rvalue (the form usable on an assignment RHS).
     pub(super) fn lower_rvalue(&mut self, e: &HExpr) -> Rvalue {
+        dream_syntax::stack::grow(|| self.lower_rvalue_inner(e))
+    }
+
+    fn lower_rvalue_inner(&mut self, e: &HExpr) -> Rvalue {
         match &e.kind {
             HExprKind::Binary {
                 op,
@@ -413,6 +421,27 @@ impl Lowerer<'_> {
             HExprKind::Cast(inner) => {
                 let from = inner.ty;
                 Rvalue::Cast(self.lower_operand(inner), from, e.ty)
+            }
+            HExprKind::Downcast(inner) => {
+                let from = inner.ty;
+                let value = Operand::Copy(Place::Local(self.operand_into_local(inner)));
+                let matches = self.b.new_temp(self.interner.bool());
+                self.b
+                    .assign(Place::Local(matches), Rvalue::IsType(value.clone(), e.ty));
+                let ok = self.b.new_block();
+                let fail = self.b.new_block();
+                self.b.terminate(Terminator::If {
+                    cond: Operand::Copy(Place::Local(matches)),
+                    then_blk: ok,
+                    else_blk: fail,
+                });
+                self.b.switch_to(fail);
+                self.b.push(Statement::Panic(Operand::Const(Const::Str(
+                    crate::backend::shared::panic_msgs::INVALID_CAST.to_string(),
+                ))));
+                self.b.terminate(Terminator::Unreachable);
+                self.b.switch_to(ok);
+                Rvalue::Cast(value, from, e.ty)
             }
             // `await` as an rvalue routes through `lower_operand`, which suspends in a coroutine
             // (materializing the awaited result into a temp) or unwraps to the inner future otherwise.

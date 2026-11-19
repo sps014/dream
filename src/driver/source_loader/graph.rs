@@ -154,9 +154,7 @@ mod tests {
             (gpu, "module system.gpu; let registry: int = 1;", false),
         ] {
             let mut diagnostics = DiagnosticBag::new(None);
-            let tree = Parser::new(Lexer::new(source.into()), &arena, &mut diagnostics)
-                .parse()
-                .unwrap();
+            let tree = Parser::new(Lexer::new(source.into()), &arena, &mut diagnostics).parse();
             assert!(!diagnostics.has_errors());
             let program = tree.get_root();
             acc.file_contents.insert(path.into(), source.into());

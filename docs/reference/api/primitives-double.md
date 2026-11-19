@@ -62,7 +62,7 @@ public override fun to_string(): string
 
 ## `parse`
 
-Parses a decimal double from `text`.
+Parses the whole of `text` as a decimal double: an optional sign, digits with an optional fraction, and an optional exponent (`-12.5`, `.5`, `3e-4`). The spellings `nan`, `inf`, and `-inf` written by `to_string` parse back to the same values. Returns `ParseError` for empty text, text with no digits, an exponent with no digits, any other trailing character (including spaces), and a value too large to represent.
 
 ```dream
 public static fun parse(borrow text: string): Result<double, ParseError>

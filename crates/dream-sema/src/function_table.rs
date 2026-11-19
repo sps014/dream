@@ -153,6 +153,16 @@ impl FunctionTable {
             .unwrap_or(&[])
     }
 
+    /// Names of the free functions callable unqualified from the current scope.
+    pub fn visible_names(&self, ctx: &TypeCtx) -> Vec<&str> {
+        let visible = ctx.visible_modules();
+        self.scopes
+            .keys()
+            .filter(|(module, _)| visible.contains(module))
+            .map(|(_, name)| name.as_str())
+            .collect()
+    }
+
     pub fn candidates(&self, ctx: &TypeCtx, name: &str) -> Vec<FunctionIdentity> {
         if let Some((path, item)) = name.rsplit_once("::") {
             return self
@@ -254,16 +264,6 @@ impl FunctionTable {
                 .get(key)
                 .is_some_and(|info| !info.is_variadic && info.parameters == parameters)
         })
-    }
-
-    pub fn select_overload(
-        &self,
-        ctx: &TypeCtx,
-        base: &str,
-        args: &[TypeId],
-        mut compatible: impl FnMut(TypeId, TypeId) -> bool,
-    ) -> OverloadResolution {
-        self.select_candidates(ctx, self.candidates(ctx, base), args, &mut compatible)
     }
 
     pub fn select_candidates(

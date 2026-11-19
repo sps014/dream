@@ -58,8 +58,8 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Lowers `for (let <element> in <iterable>)` when `iterable` is typed as `Iterator<T>`,
-    /// `Collection<T>`, or `IndexedCollection<T>`. Uses interface dispatch (not `@iterator` /
-    /// `@next` protocol hooks):
+    /// `Collection<T>`, or `IndexedCollection<T>`. Uses interface dispatch (not `iterator()` /
+    /// `next()` protocol hooks):
     ///
     /// ```text
     /// // Collection / IndexedCollection:
@@ -88,50 +88,47 @@ impl<'a> Analyzer<'a> {
         if let Some((base, args)) = Self::resolve_struct_parts(iterable_type) {
             self.ensure_interface_instantiated(&base, &args, &element.position, diagnostics);
         }
-        let base = match self.type_ctx.interner.kind(iface_name) {
-            dream_types::TyKind::Interface(def, _) => self.type_ctx.defs.name(*def).to_string(),
+        let iface_def = match self.type_ctx.interner.kind(iface_name) {
+            dream_types::TyKind::Interface(def, _) => *def,
             _ => return Ok(()),
         };
+        let is_async_iterator = self.is_core_def(iface_def, dream_abi::core_items::ASYNC_ITERATOR);
 
-        let (enumerator_type, it_recv_hir) =
-            if matches!(base.as_str(), "Iterator" | "AsyncIterator") {
-                (iterable_type.clone(), iter_hir)
-            } else {
-                // Collection / IndexedCollection: `$it = recv.iterator()`.
-                let Some((slot, method)) = self.iface_method_slot(iface_name, "iterator") else {
-                    self.hir_fail();
-                    diagnostics.report_error(
-                        format!(
-                            "interface '{}' has no 0-arg 'iterator' method for for-each",
-                            dream_types::display_name(
-                                &self.type_ctx.interner,
-                                &self.type_ctx.defs,
-                                iface_name
-                            )
-                        ),
-                        Some(element.position),
-                    );
-                    return Ok(());
-                };
-                let enum_ty = method.return_type.clone().unwrap_or(Type::Unknown);
-                if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enum_ty)
-                    && !eargs.is_empty()
-                    && self
-                        .type_ctx
-                        .resolve(DefKind::Interface, &ebase)
-                        .is_some_and(|def| self.is_generic_interface(def))
-                {
-                    self.ensure_interface_instantiated(
-                        &ebase,
-                        &eargs,
-                        &element.position,
-                        diagnostics,
-                    );
-                }
-                self.hir_iface_call0(iter_hir, iface_name, method, slot, &enum_ty);
-                let it_call = self.hir_take();
-                (enum_ty, it_call)
+        let (enumerator_type, it_recv_hir) = if is_async_iterator
+            || self.is_core_def(iface_def, dream_abi::core_items::ITERATOR)
+        {
+            (iterable_type.clone(), iter_hir)
+        } else {
+            // Collection / IndexedCollection: `$it = recv.iterator()`.
+            let Some((slot, method)) = self.iface_method_slot(iface_name, "iterator") else {
+                self.hir_fail();
+                diagnostics.report_error(
+                    format!(
+                        "interface '{}' has no 0-arg 'iterator' method for for-each",
+                        dream_types::display_name(
+                            &self.type_ctx.interner,
+                            &self.type_ctx.defs,
+                            iface_name
+                        )
+                    ),
+                    Some(element.position),
+                );
+                return Ok(());
             };
+            let enum_ty = method.return_type.clone().unwrap_or(Type::Unknown);
+            if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enum_ty)
+                && !eargs.is_empty()
+                && self
+                    .type_ctx
+                    .resolve(DefKind::Interface, &ebase)
+                    .is_some_and(|def| self.is_generic_interface(def))
+            {
+                self.ensure_interface_instantiated(&ebase, &eargs, &element.position, diagnostics);
+            }
+            self.hir_iface_call0(iter_hir, iface_name, method, slot, &enum_ty);
+            let it_call = self.hir_take();
+            (enum_ty, it_call)
+        };
 
         let enum_iface = self.type_ctx.lower(&enumerator_type);
         if let Some((ebase, eargs)) = Self::resolve_struct_parts(&enumerator_type)
@@ -179,7 +176,12 @@ impl<'a> Analyzer<'a> {
             }
         };
 
-        self.ensure_union_instantiated("Option", &opt_args, &element.position, diagnostics);
+        self.ensure_union_instantiated(
+            dream_abi::core_items::OPTION_NAME,
+            &opt_args,
+            &element.position,
+            diagnostics,
+        );
         let opt_key = self.type_ctx.lower(&next_ret);
         let some_variant = match self
             .union_info(opt_key)
@@ -224,7 +226,8 @@ impl<'a> Analyzer<'a> {
             self.hir_assign_local_id(it_l, it_recv_hir);
         }
 
-        let asynchronous = matches!(base.as_str(), "AsyncIterable" | "AsyncIterator");
+        let asynchronous =
+            is_async_iterator || self.is_core_def(iface_def, dream_abi::core_items::ASYNC_ITERABLE);
         let cleanup = self.iterator_cleanup(
             &enumerator_type,
             &element_type,
@@ -301,8 +304,8 @@ impl<'a> Analyzer<'a> {
     }
 
     /// Lowers `for (let <element> in <iterable>)` where `iterable` is a class exposing the
-    /// enumerator protocol: a registered `@iterator` method (0-arg, returning an enumerator
-    /// object) whose type has a registered `@next` method yielding `Option<T>`. It desugars to
+    /// enumerator protocol: a registered `iterator()` method (0-arg, returning an enumerator
+    /// object) whose type has a registered `next()` method yielding `Option<T>`. It desugars to
     /// the following, built directly in HIR so that `break`/`continue` in the user body target
     /// this loop (a `switch`/`match` arm would not):
     ///
@@ -347,7 +350,7 @@ impl<'a> Analyzer<'a> {
             return self.analyze_foreach_indexed(element, iter_hir, acc, body, ctx, diagnostics);
         }
 
-        // 1. `@iterator`: an eligible 0-arg instance method returning an enumerator object.
+        // 1. `iterator()`: an eligible 0-arg instance method returning an enumerator object.
         let pretty_iterable = self.ty_display(iterable_type);
         let (_iterator_hook, iterator_info) = match self.resolve_hook_or_diagnose(
             iterable_type,
@@ -393,7 +396,7 @@ impl<'a> Analyzer<'a> {
             );
         }
 
-        // 2. `@next` on the enumerator: an eligible 0-arg instance method returning `Option<T>`.
+        // 2. `next()` on the enumerator: an eligible 0-arg instance method returning `Option<T>`.
         let pretty_enumerator = self.ty_display(&enumerator_type);
         let (_next_hook, next_info) = match self.resolve_hook_or_diagnose(
             &enumerator_type,
@@ -403,7 +406,7 @@ impl<'a> Analyzer<'a> {
             diagnostics,
             || {
                 format!(
-                    "enumerator '{}' must define '@next fun ...(): Option<T>' for for-each",
+                    "enumerator '{}' must define 'public fun next(): Option<T>' for for-each",
                     pretty_enumerator
                 )
             },
@@ -437,7 +440,12 @@ impl<'a> Analyzer<'a> {
         };
 
         // Ensure the concrete `Option<T>` layout is registered so its discriminant/field are known.
-        self.ensure_union_instantiated("Option", &opt_args, &element.position, diagnostics);
+        self.ensure_union_instantiated(
+            dream_abi::core_items::OPTION_NAME,
+            &opt_args,
+            &element.position,
+            diagnostics,
+        );
         let opt_key = self.type_ctx.lower(&next_ret);
         let some_variant = match self
             .union_info(opt_key)

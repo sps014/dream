@@ -51,8 +51,8 @@ impl<'a> Analyzer<'a> {
     }
     /// Analyzes one switch arm's body (`=> expr` or `=> { stmts }`) and, in expression position,
     /// desugars it into an assignment to the shared `__switch_result` temp (allocated from the
-    /// first arm's type; later arms are unified against it). Shared by both switch-lowering paths,
-    /// which previously each carried their own copy of this ~30-line desugaring. The caller owns
+    /// first arm's type; later arms are unified against it). Shared by both switch-lowering paths.
+    /// The caller owns
     /// `hir_open_block`/`hir_close_block` around this call so it can inject its own arm-body prefix
     /// statement first (a whole-subject-binding `let` for the `Switch` path, a `done = true` flag
     /// assignment for the if-chain path).

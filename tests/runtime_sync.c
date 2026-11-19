@@ -5,6 +5,7 @@
 
 void dream_future_fini(dream_ptr ptr) { (void)ptr; }
 void dream_panic(dream_ptr message) {
+    fputs("panic: ", stderr);
     for (int i = 0; i < dream_str_len(message); ++i) {
         fputc(dream_char_at_u(message, i), stderr);
     }

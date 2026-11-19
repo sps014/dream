@@ -39,10 +39,6 @@ impl IndentedTextWriter {
         self.indent += 1;
     }
 
-    pub fn unindent(&mut self) {
-        self.indent -= 1;
-    }
-
     pub fn write_line(&mut self, text: &str) {
         self.indent_string();
         self.string.push_str(text);
@@ -52,12 +48,6 @@ impl IndentedTextWriter {
     pub fn write(&mut self, text: &str) {
         self.indent_string();
         self.string.push_str(text);
-    }
-    /// Writes a multi-line block, applying the current indentation to each line.
-    pub fn write_block(&mut self, text: &str) {
-        for line in text.lines() {
-            self.write_line(line);
-        }
     }
 }
 

@@ -45,6 +45,9 @@ pub(super) struct State {
     pub(super) is_async: bool,
     pub(super) resume_futures: Vec<IndexSet<u32>>,
     pub(super) in_loop: IndexSet<usize>,
+    /// `(block, local)` pairs where the local is re-assigned after its last hand-off in that
+    /// block, so it owns a fresh token at the block's exit.
+    pub(super) redefined_after_sink: IndexSet<(usize, u32)>,
 }
 impl State {
     pub(super) fn new(
@@ -153,6 +156,21 @@ impl State {
             }
         }
 
+        let mut last_sink: IndexMap<(usize, u32), usize> = IndexMap::new();
+        for &(bi, si, local) in &analysis.sink_move {
+            let at = last_sink.entry((bi, local)).or_insert(si);
+            *at = (*at).max(si);
+        }
+        let redefined_after_sink = last_sink
+            .into_iter()
+            .filter(|&((bi, local), si)| {
+                func.blocks[bi].stmts[si + 1..].iter().any(
+                    |stmt| matches!(stmt, Statement::Assign(Place::Local(l), _) if l.0 == local),
+                )
+            })
+            .map(|(key, _)| key)
+            .collect();
+
         Self {
             local_is_ref,
             analysis,
@@ -168,6 +186,7 @@ impl State {
             is_async,
             resume_futures,
             in_loop,
+            redefined_after_sink,
         }
     }
 }

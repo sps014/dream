@@ -31,7 +31,11 @@ impl<'a> Analyzer<'a> {
                         diagnostics,
                     )?;
                     let key_hir = self.hir_take();
-                    let _ = key_type;
+                    if !self.check_js_index_key(&key_type, index_expr.position(), diagnostics) {
+                        self.hir_none();
+                        self.current_expected_type = saved_expected;
+                        return Ok(Type::Unknown);
+                    }
                     self.desugar_js_index_get(
                         array_hir,
                         key_hir,
@@ -87,26 +91,22 @@ impl<'a> Analyzer<'a> {
                     diagnostics,
                 )?;
                 let index_hir = self.hir_take();
-                if !index_type.is_unknown() && !index_type.is_int() {
-                    diagnostics.report_error(
-                        format!(
-                            "Array index must be of type int, got {}",
-                            self.ty_display(&index_type)
-                        ),
-                        index_expr.position(),
-                    );
-                }
+                self.check_array_index(&index_type, index_expr.position(), diagnostics);
 
                 self.hir_set_index(array_hir, index_hir, &inner_type);
                 self.current_expected_type = saved_expected;
                 Ok(inner_type)
             }
             ExpressionNode::Unary(opr, right) => {
-                let right_type =
-                    self.analyze_expression(right, parent_function, symbol_table, diagnostics)?;
+                let right_type = self.analyze_value_expression(
+                    right,
+                    parent_function,
+                    symbol_table,
+                    diagnostics,
+                )?;
                 let operand = self.hir_take();
-                // User-defined unary operator overload: `@operator("-")`/`@operator("!")`/
-                // `@operator("~")` on the operand's type, checked before the built-in
+                // User-defined unary operator overload: `fun operator -`/`fun operator !`/
+                // `fun operator ~` on the operand's type, checked before the built-in
                 // bool/numeric/integer rules below so a struct's overload always wins.
                 if let Some((base_name, generic_args)) = Self::resolve_struct_parts(&right_type) {
                     self.ensure_struct_instantiated(
@@ -139,24 +139,27 @@ impl<'a> Analyzer<'a> {
                         Ok(result)
                     }
                     TokenKind::PlusToken | TokenKind::MinusToken => {
-                        if !right_type.is_unknown()
-                            && !matches!(
+                        if opr.kind == TokenKind::MinusToken
+                            && matches!(
                                 right_type,
-                                Type::Integer(_)
-                                    | Type::Long(_)
-                                    | Type::UInt(_)
+                                Type::UInt(_)
                                     | Type::ULong(_)
-                                    | Type::ISize(_)
                                     | Type::USize(_)
                                     | Type::Byte(_)
-                                    | Type::SByte(_)
-                                    | Type::Short(_)
                                     | Type::UShort(_)
-                                    | Type::Float16(_)
-                                    | Type::Float(_)
-                                    | Type::Double(_)
                             )
                         {
+                            diagnostics.report_error(
+                                format!(
+                                    "unary '-' cannot be applied to unsigned type {}",
+                                    self.ty_display(&right_type)
+                                ),
+                                Some(opr.position),
+                            );
+                            self.hir_none();
+                            return Ok(Type::Unknown);
+                        }
+                        if !right_type.is_unknown() && !right_type.is_numeric() {
                             diagnostics.report_error(
                                 format!(
                                     "unary +/- requires a numeric type, got {}",

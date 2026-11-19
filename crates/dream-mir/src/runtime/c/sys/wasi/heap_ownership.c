@@ -39,8 +39,8 @@ void dream_pin_immortal(dream_ptr s) {
 __attribute__((cold, noinline)) void dream_retain_slow(int32_t *rc, int32_t v) {
     for (;;) {
         if (v == DREAM_RC_IMMORTAL) { return; }
-        if (v == 0) { DREAM_PANIC_LITERAL(u"panic: resurrection of a dying object"); }
-        if ((v & INT32_MAX) == INT32_MAX) { DREAM_PANIC_LITERAL(u"panic: reference count overflow"); }
+        if (v == 0) { DREAM_PANIC_LITERAL(u"resurrection of a dying object"); }
+        if ((v & INT32_MAX) == INT32_MAX) { DREAM_PANIC_LITERAL(u"reference count overflow"); }
         int32_t next = (int32_t)((uint32_t)v + 1u);
         if (__atomic_compare_exchange_n(rc, &v, next, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { return; }
     }
@@ -57,7 +57,7 @@ __attribute__((noinline)) int dream_rc_last_slow(int32_t *rc, int32_t v) {
             return last;
         }
     }
-    if (v == 0) { DREAM_PANIC_LITERAL(u"panic: reference count underflow"); }
+    if (v == 0) { DREAM_PANIC_LITERAL(u"reference count underflow"); }
     return 0;
 }
 

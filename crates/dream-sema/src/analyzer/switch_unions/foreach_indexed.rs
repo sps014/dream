@@ -17,6 +17,10 @@ pub(super) struct IndexedAccessors {
     length: crate::function_table::FunctionIdentity,
     at: crate::function_table::FunctionIdentity,
     live: Option<crate::function_table::FunctionIdentity>,
+    guard: Option<(
+        crate::function_table::FunctionIdentity,
+        crate::function_table::FunctionIdentity,
+    )>,
 }
 
 impl<'a> Analyzer<'a> {
@@ -43,6 +47,8 @@ impl<'a> Analyzer<'a> {
         let value_name = dream_abi::attributes::named_attr_string_arg(attrs, "slot_walk", 1)?;
         let live_name = dream_abi::attributes::named_attr_string_arg(attrs, "slot_walk", 2)
             .filter(|name| !name.is_empty());
+        let stamp_name = dream_abi::attributes::named_attr_string_arg(attrs, "slot_walk", 3)?;
+        let guard_name = dream_abi::attributes::named_attr_string_arg(attrs, "slot_walk", 4)?;
         let base = self.type_ctx.syntax_type(id);
         let (name, arguments) = Self::resolve_struct_parts(&base)?;
         self.ensure_type_instantiated(&name, &arguments, &empty_span(), diagnostics);
@@ -56,12 +62,22 @@ impl<'a> Analyzer<'a> {
         } else {
             None
         };
+        let guard = if stamp_name.is_empty() {
+            None
+        } else {
+            let stamp = self
+                .method_info(id, &getter_member_name(stamp_name))
+                .ok()?
+                .identity;
+            Some((stamp, self.method_info(id, guard_name).ok()?.identity))
+        };
         Some(IndexedAccessors {
             seq: ty.clone(),
             element,
             length,
             at,
             live,
+            guard,
         })
     }
 
@@ -70,7 +86,9 @@ impl<'a> Analyzer<'a> {
     /// ```text
     /// let $seq = <iterable>;
     /// let $i = 0;
+    /// let $stamp = $seq.<stamp>;
     /// while (true) {
+    ///     $seq.<guard>($stamp);
     ///     if (!($i < $seq.length)) { break; }
     ///     x = $seq.at_unchecked($i);
     ///     $i = $i + 1;
@@ -78,9 +96,9 @@ impl<'a> Analyzer<'a> {
     /// }
     /// ```
     ///
-    /// which is exactly `ListIterator.next()` inlined: `length` is re-read every step, so a list
-    /// mutated during iteration behaves identically, and the increment precedes the body so
-    /// `continue` still advances.
+    /// which is `ListIterator.next()` inlined, plus the guard that panics when the collection
+    /// changed length under the walk. The increment precedes the body so `continue` still
+    /// advances.
     pub(super) fn analyze_foreach_indexed(
         &mut self,
         element: &SyntaxToken,
@@ -111,18 +129,45 @@ impl<'a> Analyzer<'a> {
         let int_type = Type::Integer(synthetic_token(TokenKind::DataTypeToken, "int"));
         let seq_local = self.hir_alloc_local("$foreach_seq", &acc.seq);
         let idx_local = self.hir_alloc_local("$foreach_idx", &int_type);
+        let stamp_local = acc
+            .guard
+            .as_ref()
+            .and_then(|_| self.hir_alloc_local("$foreach_stamp", &int_type));
         let elem_slot = self.hir_alloc_local(&element.text, &acc.element);
+        let seq_ty = self.type_ctx.lower(&acc.seq);
+        let int = self.type_ctx.interner.int();
 
         if let (Some(seq_l), Some(idx_l)) = (seq_local, idx_local) {
             self.hir_assign_local_id(seq_l, iter_hir);
             let zero = self.hx_int(0);
             self.hir_assign_local_id(idx_l, Some(zero));
+            if let (Some((stamp, _)), Some(stamp_l)) = (&acc.guard, stamp_local) {
+                self.hir_set_method_call(
+                    Some(self.hx_local(seq_l, seq_ty)),
+                    stamp,
+                    vec![],
+                    &int_type,
+                );
+                let value = self.hir_take();
+                self.hir_assign_local_id(stamp_l, value);
+            }
         }
 
         self.hir_open_block();
         if let (Some(seq_l), Some(idx_l), Some(elem_l)) = (seq_local, idx_local, elem_slot) {
-            let seq_ty = self.type_ctx.lower(&acc.seq);
-            let int = self.type_ctx.interner.int();
+            if let (Some((_, guard)), Some(stamp_l)) = (&acc.guard, stamp_local) {
+                let void_type = self.type_ctx.syntax_type(self.type_ctx.interner.void());
+                self.hir_set_method_call(
+                    Some(self.hx_local(seq_l, seq_ty)),
+                    guard,
+                    vec![Some(self.hx_local(stamp_l, int))],
+                    &void_type,
+                );
+                match self.hir_take() {
+                    Some(check) => self.hir_push_stmt(dream_hir::HStmt::Expr(check)),
+                    None => self.hir_fail(),
+                }
+            }
 
             self.hir_set_method_call(
                 Some(self.hx_local(seq_l, seq_ty)),

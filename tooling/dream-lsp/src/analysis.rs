@@ -86,83 +86,81 @@ pub fn analyze_document_for_target(
     };
     diagnostics.extend(&user_bag);
 
-    if let Ok(ast) = &user_ast {
-        let program = ast.get_root();
-        acc.parsed_files
-            .insert(MAIN_FILE.to_string(), program.clone());
-        acc.file_contents
-            .insert(MAIN_FILE.to_string(), text.to_string());
-        if let Some(module_decl) = &program.module {
-            acc.file_modules.insert(
-                MAIN_FILE.to_string(),
-                std::rc::Rc::from(module_decl.path.text.as_str()),
-            );
-        }
-        collect_declarations(
-            program,
-            MAIN_FILE,
-            &mut acc.all_functions,
-            &mut acc.all_structs,
-            &mut acc.all_interfaces,
-            &mut acc.all_enums,
-            &mut acc.all_extends,
-            &mut acc.all_globals,
+    let ast = &user_ast;
+    let program = ast.get_root();
+    acc.parsed_files
+        .insert(MAIN_FILE.to_string(), program.clone());
+    acc.file_contents
+        .insert(MAIN_FILE.to_string(), text.to_string());
+    if let Some(module_decl) = &program.module {
+        acc.file_modules.insert(
+            MAIN_FILE.to_string(),
+            std::rc::Rc::from(module_decl.path.text.as_str()),
         );
+    }
+    collect_declarations(
+        program,
+        MAIN_FILE,
+        &mut acc.all_functions,
+        &mut acc.all_structs,
+        &mut acc.all_interfaces,
+        &mut acc.all_enums,
+        &mut acc.all_extends,
+        &mut acc.all_globals,
+    );
+
+    for import in &program.imports {
+        if import.is_js || import.c.is_some() || import.alias.is_some() {
+            continue;
+        }
+        let module_name = import.module_name.text.as_str();
+        if let Some(pkg) = std_package_from_slash_path(module_name) {
+            acc.requested_std_packages.insert(pkg.name.to_string());
+        }
+    }
+
+    if let Some(path_str) = file_path {
+        let parent_dir = std::path::Path::new(path_str)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new(""));
+        acc.visited.insert(path_str.to_string());
+        acc.visited.insert(MAIN_FILE.to_string());
 
         for import in &program.imports {
             if import.is_js || import.c.is_some() || import.alias.is_some() {
                 continue;
             }
             let module_name = import.module_name.text.as_str();
-            if let Some(pkg) = std_package_from_slash_path(module_name) {
-                acc.requested_std_packages.insert(pkg.name.to_string());
+            if std_package_from_slash_path(module_name).is_some() {
+                continue;
+            }
+            let import_path =
+                dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
+
+            if let Some(import_path_str) = import_path.to_str()
+                && import_path.exists()
+            {
+                let resolved =
+                    dunce::canonicalize(&import_path).unwrap_or_else(|_| import_path.clone());
+                acc.import_edges
+                    .entry(MAIN_FILE.to_string())
+                    .or_default()
+                    .push(resolved.to_string_lossy().into_owned());
+                let _ = dream::driver::source_loader::parse_file_recursive(
+                    &import_path_str.to_string(),
+                    &mut acc,
+                    &arena,
+                    &mut diagnostics,
+                );
             }
         }
 
-        if let Some(path_str) = file_path {
-            let parent_dir = std::path::Path::new(path_str)
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new(""));
-            acc.visited.insert(path_str.to_string());
-            acc.visited.insert(MAIN_FILE.to_string());
-
-            for import in &program.imports {
-                if import.is_js || import.c.is_some() || import.alias.is_some() {
-                    continue;
-                }
-                let module_name = import.module_name.text.as_str();
-                if std_package_from_slash_path(module_name).is_some() {
-                    continue;
-                }
-                let import_path =
-                    dream::driver::source_loader::resolve_import_path(parent_dir, module_name);
-
-                if let Some(import_path_str) = import_path.to_str()
-                    && import_path.exists()
-                {
-                    let resolved =
-                        dunce::canonicalize(&import_path).unwrap_or_else(|_| import_path.clone());
-                    acc.import_edges
-                        .entry(MAIN_FILE.to_string())
-                        .or_default()
-                        .push(resolved.to_string_lossy().into_owned());
-                    let _ = dream::driver::source_loader::parse_file_recursive(
-                        &import_path_str.to_string(),
-                        &mut acc,
-                        &arena,
-                        &mut diagnostics,
-                    );
-                }
-            }
-
-            if let Ok(mut graph) =
-                dream::driver::native_sets::NativeGraph::load(path_str, &acc, target)
-            {
-                graph
-                    .aliases
-                    .insert(MAIN_FILE.to_string(), path_str.to_string());
-                native_graph = Some(graph);
-            }
+        if let Ok(mut graph) = dream::driver::native_sets::NativeGraph::load(path_str, &acc, target)
+        {
+            graph
+                .aliases
+                .insert(MAIN_FILE.to_string(), path_str.to_string());
+            native_graph = Some(graph);
         }
     }
 
@@ -247,64 +245,61 @@ pub fn analyze_document_for_target(
     // Unlike the batch compiler (which stops at the first phase with errors), the editor keeps
     // semantic diagnostics flowing even while the user is mid-edit: the parser recovers and always
     // yields a `ProgramNode`, and the analyzer's poison/`Unknown` type stops a few broken spans
-    // from cascading into noise. We only require that the user's document itself parsed into a
-    // tree (`user_ast` is `Ok`); a half-formed tree still yields useful semantic diagnostics for
+    // from cascading into noise. A half-formed tree still yields useful semantic diagnostics for
     // the parts that did parse. The analysis is wrapped so any residual panic degrades to
     // "syntax diagnostics only" instead of taking down the language server.
-    if user_ast.is_ok() {
-        let graph = acc.module_graph();
-        // The snapshot is extracted inside the same scope as the analyzer (it borrows the
-        // arena); a panic degrades to "syntax diagnostics only" with no snapshot.
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            stacker::maybe_grow(64 * 1024, 16 * 1024 * 1024, || {
-                let mut analyzer = Analyzer::new(&graph, &arena)
-                    .with_aliased_imports(acc.aliased_imports.clone())
-                    .with_target_layout(dream_hir::TargetLayout {
-                        ptr_size: target.ptr_size,
-                        ptr_align: target.ptr_align,
-                    })
-                    .with_unverified_consumption();
-                let _ = analyzer.analyze(&mut diagnostics);
-                analyzer.ide_snapshot()
-            })
-        }));
-        match result {
-            Ok(mut snapshot) => {
-                if let Some(program) = acc.parsed_files.get(MAIN_FILE) {
-                    snapshot
-                        .c_namespaces
-                        .extend(program.imports.iter().filter_map(|import| {
-                            Some((
-                                import.alias.as_ref()?.text.clone(),
-                                import.c.as_ref()?.prefix.clone(),
-                            ))
-                        }));
-                }
-                snapshot.refs.retain(|reference| {
-                    reference
-                        .file
-                        .as_deref()
-                        .is_none_or(|file| file == MAIN_FILE)
-                });
-                snapshot.primary_file = Some(MAIN_FILE.to_string());
-                if let Some(path) = file_path {
-                    let path = dunce::canonicalize(path)
-                        .map(|path| path.to_string_lossy().into_owned())
-                        .unwrap_or_else(|_| path.to_string());
-                    snapshot.primary_file = Some(path.clone());
-                    for reference in &mut snapshot.refs {
-                        if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } =
-                            &mut reference.target
-                            && source.file.as_deref() == Some(MAIN_FILE)
-                        {
-                            source.file = Some(path.clone());
-                        }
+    let graph = acc.module_graph();
+    // The snapshot is extracted inside the same scope as the analyzer (it borrows the
+    // arena); a panic degrades to "syntax diagnostics only" with no snapshot.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        stacker::maybe_grow(64 * 1024, 16 * 1024 * 1024, || {
+            let mut analyzer = Analyzer::new(&graph, &arena)
+                .with_aliased_imports(acc.aliased_imports.clone())
+                .with_target_layout(dream_hir::TargetLayout {
+                    ptr_size: target.ptr_size,
+                    ptr_align: target.ptr_align,
+                })
+                .with_unverified_consumption();
+            let _ = analyzer.analyze(&mut diagnostics);
+            analyzer.ide_snapshot()
+        })
+    }));
+    match result {
+        Ok(mut snapshot) => {
+            if let Some(program) = acc.parsed_files.get(MAIN_FILE) {
+                snapshot
+                    .c_namespaces
+                    .extend(program.imports.iter().filter_map(|import| {
+                        Some((
+                            import.alias.as_ref()?.text.clone(),
+                            import.c.as_ref()?.prefix.clone(),
+                        ))
+                    }));
+            }
+            snapshot.refs.retain(|reference| {
+                reference
+                    .file
+                    .as_deref()
+                    .is_none_or(|file| file == MAIN_FILE)
+            });
+            snapshot.primary_file = Some(MAIN_FILE.to_string());
+            if let Some(path) = file_path {
+                let path = dunce::canonicalize(path)
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .unwrap_or_else(|_| path.to_string());
+                snapshot.primary_file = Some(path.clone());
+                for reference in &mut snapshot.refs {
+                    if let dream_sema::analyzer::ide::IdeTarget::Resolved { source, .. } =
+                        &mut reference.target
+                        && source.file.as_deref() == Some(MAIN_FILE)
+                    {
+                        source.file = Some(path.clone());
                     }
                 }
-                sema = Some(snapshot);
             }
-            Err(payload) => report_analyzer_panic(&mut diagnostics, &payload),
+            sema = Some(snapshot);
         }
+        Err(payload) => report_analyzer_panic(&mut diagnostics, &payload),
     }
 
     let consumed = acc
@@ -319,10 +314,7 @@ pub fn analyze_document_for_target(
         })
         .collect();
 
-    let inactive = user_ast
-        .as_ref()
-        .map(|ast| ast.get_root().inactive_spans.clone())
-        .unwrap_or_default();
+    let inactive = user_ast.get_root().inactive_spans.clone();
     let diagnostics: Vec<DiagnosticOut> = diagnostics
         .diagnostics
         .iter()

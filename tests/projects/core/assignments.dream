@@ -1,0 +1,119 @@
+import system.testing;
+import system.collections;
+import system;
+
+struct c3a2_Point {
+    public x: int;
+
+    public constructor(x: int) {
+        this.x = x;
+    }
+}
+
+class c3a2_Cell {
+    _value: int;
+    public count: int;
+
+    public constructor() {
+        this._value = 1;
+        this.count = 0;
+    }
+
+    public get value(): int {
+        return this._value;
+    }
+
+    public set value(value: int) {
+        this._value = value;
+    }
+
+    public fun advance(): int {
+        return this.count++;
+    }
+
+    public fun add(ref target: int, by: int): void {
+        target = target + by;
+    }
+}
+
+let c3a2_calls: int = 0;
+
+fun c3a2_index(): int {
+    c3a2_calls = c3a2_calls + 1;
+    return 0;
+}
+
+fun c3a2_pick(cell: c3a2_Cell): c3a2_Cell {
+    c3a2_calls = c3a2_calls + 1;
+    return cell;
+}
+
+fun c3a2_bump(ref value: int): void {
+    value = value + 1;
+}
+
+@test
+@timeout(180000)
+fun compound_targets_evaluate_once(): void {
+    c3a2_calls = 0;
+    let values = [1, 2];
+    values[c3a2_index()] += 1;
+    values[c3a2_index()]++;
+    Assert.eq(c3a2_calls, 2);
+    Assert.eq(values[0], 3);
+
+    c3a2_calls = 0;
+    let cell = c3a2_Cell();
+    c3a2_pick(cell).count += 3;
+    c3a2_pick(cell).count++;
+    Assert.eq(c3a2_calls, 2);
+    Assert.eq(cell.count, 4);
+}
+
+@test
+@timeout(180000)
+fun increments_use_indexers_and_properties(): void {
+    let list = List<int>();
+    list.push(5);
+    let old = list[0]++;
+    Assert.eq(old, 5);
+    Assert.eq(list[0], 6);
+
+    let counts = Map<string, int>();
+    counts["a"] = 1;
+    counts["a"]++;
+    counts["a"] += 5;
+    Assert.eq(counts["a"], 7);
+
+    let cell = c3a2_Cell();
+    cell.value++;
+    cell.value += 10;
+    Assert.eq(++cell.value, 13);
+    Assert.eq(cell.advance(), 0);
+    Assert.eq(cell.count, 1);
+
+    let points = [c3a2_Point(1), c3a2_Point(2)];
+    points[0].x += 5;
+    points[1].x++;
+    Assert.eq(points[0].x + points[1].x, 9);
+
+    let small: byte = 254;
+    small++;
+    Assert.eq(small, (byte)255);
+}
+
+@test
+@timeout(180000)
+fun ref_parameters_survive_function_values(): void {
+    let n = 3;
+    let bump = c3a2_bump;
+    bump(ref n);
+    let typed: fun(ref int): void = c3a2_bump;
+    typed(ref n);
+    Assert.eq(n, 5);
+
+    let cell = c3a2_Cell();
+    let add = cell.add;
+    add(ref n, 10);
+    Assert.eq(n, 15);
+}

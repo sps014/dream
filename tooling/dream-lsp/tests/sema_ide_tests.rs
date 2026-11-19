@@ -286,8 +286,7 @@ fn c_namespace_completion_and_definition_use_cached_bindings() {
     let lexer = dream::syntax::lexer::Lexer::new(source.into());
     let ast = dream::syntax::parser::Parser::new(lexer, &arena, &mut diagnostics)
         .with_c_import_scope(dream::driver::c_imports::source_scope(&path))
-        .parse()
-        .unwrap();
+        .parse();
     let import = ast.get_root().imports[0].c.as_ref().unwrap();
     let target = dream_abi::target::TargetSpec::parse("wasm32-wasip2").unwrap();
     let cache = root.join("target/obj/cimport").join("wasm32-wasip2");

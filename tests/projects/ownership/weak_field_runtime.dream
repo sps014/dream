@@ -2,6 +2,7 @@ import system.testing;
 // Runtime semantics of `weak`: a `weak` field does not keep its referent alive, and is reset to
 // `None` once the referent's last strong reference is released — see `docs/language/memory.md`.
 import system;
+import system.collections;
 
 class c2a4_Node {
     public value: int;
@@ -194,4 +195,52 @@ fun arc_weak_forest(): void {
         }
         None => {}
     }
+}
+
+class wuf_Owner {
+    public n: int;
+
+    public constructor(n: int) {
+        this.n = n;
+    }
+}
+
+class wuf_Holder {
+    public unowned owner: wuf_Owner;
+    public weak backup: Option<wuf_Owner>;
+
+    public constructor(owner: wuf_Owner) {
+        this.owner = owner;
+        this.backup = None;
+    }
+
+    public fun swap(next: wuf_Owner): int {
+        let before = this.owner;
+        this.owner = next;
+        this.backup = Some(before);
+        return before.n + this.owner.n;
+    }
+}
+
+@test
+@timeout(180000)
+fun unowned_field_reassigned_while_owners_live(): void {
+    let keep = List<wuf_Owner>();
+    let owner = wuf_Owner(1);
+    keep.push(owner);
+    let holder = wuf_Holder(owner);
+    let first = holder.owner;
+
+    owner = wuf_Owner(2);
+    keep.push(owner);
+    holder.owner = owner;
+    let second = holder.owner;
+    Assert.eq(first.n + second.n, 3);
+    Assert.eq(holder.swap(keep[0]), 3);
+
+    switch (holder.backup) {
+        Some(previous) => Assert.eq(previous.n, 2),
+        None => Assert.fail("backup should still be alive"),
+    }
+    Assert.eq(keep.length, 2);
 }

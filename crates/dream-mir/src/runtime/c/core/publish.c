@@ -107,7 +107,7 @@ static void publish_enqueue(PublishGraph *graph, dream_ptr ptr) {
         return;
     }
     if (__atomic_load_n(dream_rc_word(ptr), __ATOMIC_RELAXED) == 0) {
-        DREAM_PANIC_LITERAL(u"panic: publication of a dying object");
+        DREAM_PANIC_LITERAL(u"publication of a dying object");
     }
     if (!graph->hashed && graph->count < PUBLISH_INLINE) {
         for (size_t i = 0; i < graph->count; i++) {

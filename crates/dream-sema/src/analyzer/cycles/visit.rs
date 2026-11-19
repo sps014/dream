@@ -95,10 +95,12 @@ fn place(p: &HPlace, f: &mut impl FnMut(&HExpr)) {
 }
 
 pub(super) fn expr(e: &HExpr, f: &mut impl FnMut(&HExpr)) {
-    f(e);
-    for child in children(e) {
-        expr(child, f);
-    }
+    dream_syntax::stack::grow(|| {
+        f(e);
+        for child in children(e) {
+            expr(child, f);
+        }
+    })
 }
 
 pub(super) type Children<'e> = SmallVec<[&'e HExpr; 4]>;

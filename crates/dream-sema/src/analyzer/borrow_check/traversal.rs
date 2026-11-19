@@ -224,6 +224,10 @@ impl<'s> Extractor<'s> {
     }
 
     pub(super) fn walk_expr(&mut self, e: &ExpressionNode, class_fields: &[String]) {
+        dream_syntax::stack::grow(|| self.walk_expr_inner(e, class_fields))
+    }
+
+    fn walk_expr_inner(&mut self, e: &ExpressionNode, class_fields: &[String]) {
         match e {
             ExpressionNode::Identifier(t) => {
                 self.events.push(Ev::Ref {

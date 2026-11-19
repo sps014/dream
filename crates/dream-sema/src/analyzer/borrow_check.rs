@@ -68,6 +68,10 @@ fn is_self_expr(expr: &ExpressionNode, aliases: &[String]) -> bool {
 /// Builds a dotted-chain key from any member-access expression rooted at an identifier.
 /// `o.inner.items` -> `"o.inner.items"`; non-member roots return the expression's own key.
 fn canonical_chain_from(expr: &ExpressionNode) -> Option<String> {
+    dream_syntax::stack::grow(|| canonical_chain_from_inner(expr))
+}
+
+fn canonical_chain_from_inner(expr: &ExpressionNode) -> Option<String> {
     match expr {
         ExpressionNode::Identifier(t) => Some(t.text.clone()),
         ExpressionNode::MemberAccess(base, member) => {

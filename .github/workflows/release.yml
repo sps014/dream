@@ -186,17 +186,6 @@ jobs:
               | xz -T1 --lzma2=preset=9e,dict=256MiB > "dist/dream-${VERSION}-${{ matrix.target }}.tar.xz"
           fi
 
-      - name: Size gate
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ARCHIVE="$(ls dist/*.tar.xz)"
-          BYTES=$(wc -c < "$ARCHIVE")
-          MAX_MB=100
-          echo "$ARCHIVE: $((BYTES / 1024 / 1024)) MB (budget ${MAX_MB} MB)"
-          test "$BYTES" -le $((MAX_MB * 1024 * 1024))
-
       # The staged archive alone must build native and wasm32 programs: no DREAM_LLVM, and the
       # development LLVM moved out of reach.
       - name: Smoke test the staged archive

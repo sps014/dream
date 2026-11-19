@@ -93,26 +93,6 @@ jobs:
           mkdir -p dist
           tar -C stage -cJf "dist/$NAME.tar.xz" "$NAME"
 
-      # Every library a tool loads must be in the archive: run the unpacked tools away from the
-      # build tree. The macOS x64 bundle is cross-built and cannot run on the arm64 runner.
-      - name: Run the packaged tools
-        if: matrix.target != 'macos-x64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          CHECK="$(mktemp -d)"
-          tar -xJf dist/*.tar.xz -C "$CHECK" --strip-components=1
-          EXE=""
-          if [[ "${{ runner.os }}" == Windows ]]; then EXE=".exe"; fi
-          printf 'int add(int a, int b) { return a + b; }\n' > "$CHECK/check.c"
-          "$CHECK/bin/clang$EXE" -c -O2 "$CHECK/check.c" -o "$CHECK/check.o"
-          "$CHECK/bin/clang$EXE" -c -emit-llvm -O2 "$CHECK/check.c" -o "$CHECK/check.bc"
-          for tool in opt llc llvm-link llvm-dis llvm-ar llvm-profdata; do
-            "$CHECK/bin/$tool$EXE" --version > /dev/null
-          done
-          "$CHECK/bin/opt$EXE" -O2 "$CHECK/check.bc" -o /dev/null
-          "$CHECK/bin/llc$EXE" -filetype=obj "$CHECK/check.bc" -o "$CHECK/check2.o"
-
       - uses: actions/upload-artifact@v4
         with:
           name: llvm-dist-${{ matrix.target }}

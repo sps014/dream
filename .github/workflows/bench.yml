@@ -1,9 +1,26 @@
 name: Benchmark regression gate
 
+# Changes that only touch docs or other workflows' files cannot move a benchmark.
 on:
   pull_request:
+    paths-ignore: &unrelated
+      - "docs/**"
+      - "**/*.md"
+      - "mkdocs.yml"
+      - "tooling/docs/**"
+      - ".github/dependabot.yml"
+      - ".github/workflows/bench-languages.yml"
+      - ".github/workflows/bench-profile.yml"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/llvm-dist.yml"
+      - ".github/workflows/mobile-validation.yml"
+      - ".github/workflows/release.yml"
+      - "scripts/build-llvm-dist.sh"
+      - "scripts/test-release.py"
   push:
     branches: [main]
+    paths-ignore: *unrelated
   workflow_dispatch:
 
 permissions:

@@ -72,6 +72,7 @@ fun main(): void {
         print('PASS Node ' + name, flush=True)
     audio = work / 'audio.dream'
     audio.write_text('''import system.audio;
+import system.js;
 async fun main(): void {
     let bytes: byte[] = [0];
     let result = AudioBuffer.decode(bytes).await;

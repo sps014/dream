@@ -1,3 +1,9 @@
+/// The compiler release: the tag the release workflow builds from, else the crate version.
+pub const VERSION: &str = match option_env!("DREAM_RELEASE_VERSION") {
+    Some(version) => version,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 pub mod driver;
 #[cfg(feature = "native")]
 pub mod execution;

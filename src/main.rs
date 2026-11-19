@@ -40,7 +40,7 @@ enum CrateTypeArg {
 #[derive(Parser)]
 #[command(
     name = "dream",
-    version,
+    version = dream::VERSION,
     about = "The Dream programming language compiler",
     after_help = EXAMPLES,
     after_long_help = EXAMPLES

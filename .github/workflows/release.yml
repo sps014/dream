@@ -104,12 +104,15 @@ jobs:
           cargo install wasm-bindgen-cli --version 0.2.129 --locked
           ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/build-drawing-web.py
 
-      - name: Package archive
+      - name: Stage release files and LLVM
+        id: stage
         shell: bash
+        timeout-minutes: 15
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          VERSION="${TAG#v}"
+          VERSION="${RELEASE_TAG#v}"
           STAGE="dist/dream-${VERSION}-${{ matrix.target }}"
           mkdir -p "$STAGE"
           EXT=""
@@ -150,11 +153,10 @@ jobs:
           cp -R runtime/src "$STAGE/lib/runtime/js"
           cp -R target/drawing-web "$STAGE/lib/runtime/drawing"
           cp crates/dream-drawing/fonts/OFL.txt "$STAGE/NotoSans-OFL.txt"
-          # lib/dream: the minimal LLVM from the llvm-dist release (.github/workflows/llvm-dist.yml)
-          # and the runtime prebuilt for every level, which `dream` finds beside itself.
+          # dream resolves the minimal LLVM and prebuilt runtimes relative to its executable.
           LLVM_VERSION="$(sed -n 's/^pub const LLVM_VERSION: &str = "\(.*\)";/\1/p' crates/dream-abi/src/toolchain.rs)"
           LLVM_DIST="dream-llvm-${LLVM_VERSION}-${{ matrix.target }}"
-          curl -fL --retry 3 -o "${LLVM_DIST}.tar.xz" \
+          curl -fL --retry 3 --connect-timeout 30 --max-time 180 -o "${LLVM_DIST}.tar.xz" \
             "https://github.com/${{ github.repository }}/releases/download/llvm-dist-${LLVM_VERSION}/${LLVM_DIST}.tar.xz"
           mkdir -p "$STAGE/lib/dream/llvm"
           tar -xJf "${LLVM_DIST}.tar.xz" -C "$STAGE/lib/dream/llvm" --strip-components=1
@@ -163,28 +165,57 @@ jobs:
           if [ "$RUNNER_OS" != "Windows" ]; then
             cp -R "${HOME}/.dream/toolchains/mold-${MOLD_VERSION}" "$STAGE/lib/dream/mold"
           fi
+          {
+            printf 'path=%s\n' "$STAGE"
+            printf 'compiler=%s\n' "${BIN_DIR}/dream${EXT}"
+            printf 'llvm-version=%s\n' "$LLVM_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pack release runtimes
+        shell: bash
+        timeout-minutes: 90
+        env:
+          STAGE: ${{ steps.stage.outputs.path }}
+          COMPILER: ${{ steps.stage.outputs.compiler }}
+          LLVM_VERSION: ${{ steps.stage.outputs.llvm-version }}
+        run: |
+          set -euo pipefail
           DREAM_LLVM="${HOME}/.dream/toolchains/llvm-${LLVM_VERSION}/bin" \
-            "${BIN_DIR}/dream${EXT}" pack-runtime "$STAGE/lib/dream/rt"
+            "$COMPILER" pack-runtime "$STAGE/lib/dream/rt"
           du -sh "$STAGE" "$STAGE/lib/dream/llvm" "$STAGE/lib/dream/rt"
-          mkdir -p dist
-          if [[ "${{ matrix.archive }}" == "zip" ]]; then
-            # Windows runners have no `zip`; use PowerShell Compress-Archive.
-            if command -v powershell.exe >/dev/null 2>&1; then
-              powershell.exe -NoProfile -Command \
-                "Compress-Archive -Path 'dist/dream-${VERSION}-${{ matrix.target }}' -DestinationPath 'dist/dream-${VERSION}-${{ matrix.target }}.zip' -Force"
-            elif command -v pwsh >/dev/null 2>&1; then
-              pwsh -NoProfile -Command \
-                "Compress-Archive -Path 'dist/dream-${VERSION}-${{ matrix.target }}' -DestinationPath 'dist/dream-${VERSION}-${{ matrix.target }}.zip' -Force"
-            else
-              tar -C dist -a -cf "dist/dream-${VERSION}-${{ matrix.target }}.zip" "dream-${VERSION}-${{ matrix.target }}"
-            fi
-          else
-            # A large xz dictionary sees the near-identical prebuilt runtime trees as repeats;
-            # gzip's 32 KB window cannot. Piped through xz because macOS bsdtar ignores XZ_OPT,
-            # and single-threaded because threaded blocks cannot match across each other.
-            tar -C dist -cf - "dream-${VERSION}-${{ matrix.target }}" \
-              | xz -T1 --lzma2=preset=9e,dict=256MiB > "dist/dream-${VERSION}-${{ matrix.target }}.tar.xz"
-          fi
+
+      - name: Create Windows ZIP
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        timeout-minutes: 20
+        env:
+          STAGE: ${{ steps.stage.outputs.path }}
+        run: |
+          Push-Location (Split-Path -Parent $env:STAGE)
+          try {
+            $name = Split-Path -Leaf $env:STAGE
+            if (Test-Path -LiteralPath "$name.zip") {
+              Remove-Item -LiteralPath "$name.zip" -Force
+            }
+            & "$env:ProgramFiles\7-Zip\7z.exe" a -tzip -mx=1 -bd "$name.zip" "$name"
+            if ($LASTEXITCODE -ne 0) { throw "7-Zip failed with exit code $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Create Unix archive
+        if: matrix.archive != 'zip'
+        shell: bash
+        timeout-minutes: 45
+        env:
+          STAGE: ${{ steps.stage.outputs.path }}
+        run: |
+          set -euo pipefail
+          # A large xz dictionary sees the near-identical prebuilt runtime trees as repeats;
+          # gzip's 32 KB window cannot. Piped through xz because macOS bsdtar ignores XZ_OPT,
+          # and single-threaded because threaded blocks cannot match across each other.
+          tar -C "$(dirname "$STAGE")" -cf - "$(basename "$STAGE")" \
+            | xz -T1 --lzma2=preset=9e,dict=256MiB > "$STAGE.tar.xz"
 
       # The staged archive alone must build native and wasm32 programs: no DREAM_LLVM, and the
       # development LLVM moved out of reach.

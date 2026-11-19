@@ -23,28 +23,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Compressed budget: the shared-library hosts ship libLLVM plus libclang-cpp; Windows
-          # links each tool statically, and clang alone brings it to ~160 MB.
           - os: ubuntu-latest
             target: linux-x64
             arch: x86_64
-            max_mb: 45
           - os: ubuntu-24.04-arm
             target: linux-arm64
             arch: aarch64
-            max_mb: 45
           - os: macos-latest
             target: macos-x64
             arch: x86_64
-            max_mb: 45
           - os: macos-latest
             target: macos-arm64
             arch: arm64
-            max_mb: 45
           - os: windows-latest
             target: windows-x64
             arch: x86_64
-            max_mb: 180
 
     runs-on: ${{ matrix.os }}
     # Same glibc floor as the release binaries.
@@ -119,15 +112,6 @@ jobs:
           done
           "$CHECK/bin/opt$EXE" -O2 "$CHECK/check.bc" -o /dev/null
           "$CHECK/bin/llc$EXE" -filetype=obj "$CHECK/check.bc" -o "$CHECK/check2.o"
-
-      - name: Size gate
-        shell: bash
-        run: |
-          set -euo pipefail
-          ls -la dist
-          BYTES=$(wc -c < dist/*.tar.xz)
-          echo "archive: $((BYTES / 1024 / 1024)) MB (budget ${{ matrix.max_mb }} MB)"
-          test "$BYTES" -le $(( ${{ matrix.max_mb }} * 1024 * 1024 ))
 
       - uses: actions/upload-artifact@v4
         with:

@@ -1,10 +1,25 @@
 name: CI
 
+# Changes that only touch other workflows' files do not build or test the compiler. Markdown
+# stays included: the formatter test checks the Dream code fences in it.
 on:
   pull_request:
+    paths-ignore: &unrelated
+      - "mkdocs.yml"
+      - "tooling/docs/**"
+      - ".github/dependabot.yml"
+      - ".github/workflows/bench-languages.yml"
+      - ".github/workflows/bench-profile.yml"
+      - ".github/workflows/docs.yml"
+      - ".github/workflows/llvm-dist.yml"
+      - ".github/workflows/mobile-validation.yml"
+      - ".github/workflows/release.yml"
+      - "scripts/build-llvm-dist.sh"
+      - "scripts/test-release.py"
   merge_group:
   push:
     branches: [main]
+    paths-ignore: *unrelated
   workflow_dispatch:
     inputs:
       compile_baseline:

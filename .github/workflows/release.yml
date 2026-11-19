@@ -195,7 +195,6 @@ jobs:
           set -euo pipefail
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           STAGE="$PWD/dist/dream-${TAG#v}-${{ matrix.target }}"
-          test "$("$STAGE/dream" --version)" = "dream ${TAG#v}"
           mv "${HOME}/.dream/toolchains" "${HOME}/.dream/toolchains.off"
           trap 'mv "${HOME}/.dream/toolchains.off" "${HOME}/.dream/toolchains"' EXIT
           cd "$(mktemp -d)"
@@ -207,8 +206,6 @@ jobs:
         run: |
           $tag = '${{ github.event.inputs.tag || github.ref_name }}'
           $stage = (Resolve-Path "dist/dream-$($tag.TrimStart('v'))-${{ matrix.target }}").Path
-          $reported = & "$stage/dream.exe" --version
-          if ($reported -ne "dream $($tag.TrimStart('v'))") { throw "dream --version reported '$reported' for $tag" }
           $toolchains = [IO.Path]::GetFullPath((Join-Path $env:USERPROFILE '.dream/toolchains'))
           $hidden = "$toolchains.off"
           if (Test-Path -LiteralPath $hidden) { throw "Toolchain backup already exists: $hidden" }

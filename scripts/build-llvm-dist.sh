@@ -5,8 +5,9 @@
 # built by scripts/fetch-dev-llvm.sh.
 #
 # opt/llc/llvm-link/llvm-dis/llvm-profdata cannot join LLVM's multi-call `llvm` driver, so the
-# tools share one `libLLVM` instead (each tool binary is then a few hundred KB). MSVC cannot build
-# `libLLVM`, so Windows links the tools statically.
+# tools share one `libLLVM` instead (each tool binary is then a few hundred KB), and clang links
+# `libclang-cpp`, which must ship beside it. MSVC cannot build `libLLVM`, so Windows links the
+# tools statically.
 #
 # Usage: scripts/build-llvm-dist.sh <llvm-project-src> <install-prefix>
 #   LLVM_DIST_ARCH=x86_64|arm64   target CPU (default: this machine; macOS may cross via Rosetta)
@@ -32,7 +33,7 @@ case "$(uname -s)" in
       -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded)
     ;;
   Darwin)
-    COMPONENTS="LLVM;${COMPONENTS}"
+    COMPONENTS="LLVM;clang-cpp;${COMPONENTS}"
     EXTRA+=(-DLLVM_BUILD_LLVM_DYLIB=ON -DLLVM_LINK_LLVM_DYLIB=ON
       -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0)
     if [[ "$ARCH" != "$(uname -m)" ]]; then
@@ -40,7 +41,7 @@ case "$(uname -s)" in
     fi
     ;;
   *)
-    COMPONENTS="LLVM;${COMPONENTS}"
+    COMPONENTS="LLVM;clang-cpp;${COMPONENTS}"
     EXTRA+=(-DLLVM_BUILD_LLVM_DYLIB=ON -DLLVM_LINK_LLVM_DYLIB=ON
       -DLLVM_STATIC_LINK_CXX_STDLIB=ON)
     ;;

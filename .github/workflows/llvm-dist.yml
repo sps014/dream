@@ -23,24 +23,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Compressed budget: the shared-libLLVM hosts come to ~12 MB (macOS arm64); Windows
+          # Compressed budget: the shared-library hosts ship libLLVM plus libclang-cpp; Windows
           # links each tool statically, and clang alone brings it to ~160 MB.
           - os: ubuntu-latest
             target: linux-x64
             arch: x86_64
-            max_mb: 25
+            max_mb: 45
           - os: ubuntu-24.04-arm
             target: linux-arm64
             arch: aarch64
-            max_mb: 25
+            max_mb: 45
           - os: macos-latest
             target: macos-x64
             arch: x86_64
-            max_mb: 25
+            max_mb: 45
           - os: macos-latest
             target: macos-arm64
             arch: arm64
-            max_mb: 25
+            max_mb: 45
           - os: windows-latest
             target: windows-x64
             arch: x86_64
@@ -99,6 +99,26 @@ jobs:
             ./scripts/build-llvm-dist.sh "$PWD/llvm-project-${LLVM_VERSION}.src" "$PWD/stage/$NAME"
           mkdir -p dist
           tar -C stage -cJf "dist/$NAME.tar.xz" "$NAME"
+
+      # Every library a tool loads must be in the archive: run the unpacked tools away from the
+      # build tree. The macOS x64 bundle is cross-built and cannot run on the arm64 runner.
+      - name: Run the packaged tools
+        if: matrix.target != 'macos-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHECK="$(mktemp -d)"
+          tar -xJf dist/*.tar.xz -C "$CHECK" --strip-components=1
+          EXE=""
+          if [[ "${{ runner.os }}" == Windows ]]; then EXE=".exe"; fi
+          printf 'int add(int a, int b) { return a + b; }\n' > "$CHECK/check.c"
+          "$CHECK/bin/clang$EXE" -c -O2 "$CHECK/check.c" -o "$CHECK/check.o"
+          "$CHECK/bin/clang$EXE" -c -emit-llvm -O2 "$CHECK/check.c" -o "$CHECK/check.bc"
+          for tool in opt llc llvm-link llvm-dis llvm-ar llvm-profdata; do
+            "$CHECK/bin/$tool$EXE" --version > /dev/null
+          done
+          "$CHECK/bin/opt$EXE" -O2 "$CHECK/check.bc" -o /dev/null
+          "$CHECK/bin/llc$EXE" -filetype=obj "$CHECK/check.bc" -o "$CHECK/check2.o"
 
       - name: Size gate
         shell: bash

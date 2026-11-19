@@ -26,7 +26,7 @@ pub fn compiler_identity(config: &ToolchainConfig) -> String {
 fn identity_with_sources(config: &ToolchainConfig, sources: &[(&str, &str)]) -> String {
     let mut hash = blake3::Hasher::new();
     for part in [
-        env!("CARGO_PKG_VERSION"),
+        crate::VERSION,
         exe_fingerprint(),
         &crate::driver::rt_stamp::fingerprint(crate::driver::rt_stamp::files_under(
             &config.runtime_c,

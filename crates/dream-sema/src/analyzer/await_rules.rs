@@ -219,6 +219,15 @@ impl<'a> Analyzer<'a> {
         message: &str,
         diagnostics: &mut DiagnosticBag,
     ) {
+        dream_syntax::stack::grow(|| self.scan_expr_await_inner(expr, message, diagnostics))
+    }
+
+    fn scan_expr_await_inner(
+        &self,
+        expr: &ExpressionNode<'a>,
+        message: &str,
+        diagnostics: &mut DiagnosticBag,
+    ) {
         match expr {
             ExpressionNode::Await(_, inner) => {
                 diagnostics.report_error(message.to_string(), inner.position());

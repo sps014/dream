@@ -1,11 +1,17 @@
 // Unbounded recursion reports a stack overflow panic and keeps the output printed before it.
+// The base case depends on the argument count, which the optimizer cannot see is never reached,
+// and the result feeds a non-commutative operation, so release builds keep every frame.
 import system;
 
-fun depth(n: int): int {
-    return depth(n + 1) + 1;
+fun depth(n: int, stop: int): int {
+    if (n == stop) {
+        return 0;
+    }
+    return depth(n + 1, stop) - n;
 }
 
 fun main(): void {
+    let count = System.args.length;
     System.println("before");
-    System.println(depth(0));
+    System.println(depth(count, count - 1));
 }

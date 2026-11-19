@@ -178,6 +178,10 @@ fn walk_stmt_for_ref_targets(stmt: &StatementNode, out: &mut BindingWrites) {
 }
 
 fn walk_expr_for_ref_targets(expr: &ExpressionNode, out: &mut BindingWrites) {
+    dream_syntax::stack::grow(|| walk_expr_for_ref_targets_inner(expr, out))
+}
+
+fn walk_expr_for_ref_targets_inner(expr: &ExpressionNode, out: &mut BindingWrites) {
     match expr {
         ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
         ExpressionNode::RefArgument(_, inner) => {
@@ -387,6 +391,10 @@ fn walk_stmt_for_lambdas(stmt: &StatementNode, out: &mut HashSet<String>) {
 }
 
 fn walk_expr_for_lambdas(expr: &ExpressionNode, out: &mut HashSet<String>) {
+    dream_syntax::stack::grow(|| walk_expr_for_lambdas_inner(expr, out))
+}
+
+fn walk_expr_for_lambdas_inner(expr: &ExpressionNode, out: &mut HashSet<String>) {
     match expr {
         ExpressionNode::Literal(_) | ExpressionNode::Identifier(_) => {}
         ExpressionNode::ArrayLiteral(_, es)
@@ -670,6 +678,14 @@ fn collect_names_stmt(
 }
 
 fn collect_names_expr(
+    expr: &ExpressionNode,
+    scopes: &mut Vec<HashSet<String>>,
+    referenced: &mut HashSet<String>,
+) {
+    dream_syntax::stack::grow(|| collect_names_expr_inner(expr, scopes, referenced))
+}
+
+fn collect_names_expr_inner(
     expr: &ExpressionNode,
     scopes: &mut Vec<HashSet<String>>,
     referenced: &mut HashSet<String>,

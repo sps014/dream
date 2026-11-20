@@ -78,8 +78,17 @@ async fun main(): int {
 
     let title = find_widget(window, "title");
     let detail = find_widget(window, "detail");
-    let next = find_widget(window, "next");
     let art = find_widget(window, "art");
+    let backdrop = find_widget(window, "backdrop");
+    let mini_art = find_widget(window, "mini_art");
+    let mini_title = find_widget(window, "mini_title");
+    let mini_detail = find_widget(window, "mini_detail");
+    let rows = [
+        find_widget(window, "row_0"),
+        find_widget(window, "row_1"),
+        find_widget(window, "row_2"),
+        find_widget(window, "row_3")
+    ];
     let elapsed = find_widget(window, "elapsed");
     let duration = find_widget(window, "duration");
     let seek = find_widget(window, "seek");
@@ -114,7 +123,12 @@ async fun main(): int {
         "Bright synth sequence",
         "Alex Hagen · NCS"
     ];
-    let colors = ["#A878FF", "#58DFDA", "#FF966C", "#F078A8"];
+    let covers = [
+        "covers/violet_hour.jpg",
+        "covers/glass_tides.jpg",
+        "covers/signal_bloom.jpg",
+        "covers/superhero.jpg"
+    ];
     let track = 0;
     let shown_track = -1;
     let audio = load_track(track).await.unwrap();
@@ -196,8 +210,14 @@ async fun main(): int {
         if shown_track != track {
             label(title, titles[track]);
             label(detail, details[track]);
-            label(next, titles[(track + 1) % titles.length]);
-            attribute(art, "EffectColor", colors[track]);
+            label(mini_title, titles[track]);
+            label(mini_detail, details[track]);
+            attribute(art, "Source", covers[track]);
+            attribute(backdrop, "Source", covers[track]);
+            attribute(mini_art, "Source", covers[track]);
+            for (let i = 0; i < rows.length; i = i + 1) {
+                attribute(rows[i], "Background", i == track ? "#FFFFFF1A" : "#00000000");
+            }
             let length = audio.duration.unwrap_or(0.0d);
             controls.Rslider_set_range(seek, 0.0f, (float)length);
             label(duration, timestamp(length));
@@ -225,7 +245,7 @@ async fun main(): int {
             label(elapsed, timestamp(time));
             shown_second = (int)time;
         }
-        core.Rwait_frame(0.05d);
+        core.Rwait_frame(0.016d);
         Time.delay(1).await;
     }
 

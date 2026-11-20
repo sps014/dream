@@ -1,83 +1,194 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Window Title="Afterglow" Width="1120" Height="720" MinWidth="1040" MinHeight="680"
-    Theme="GlassDark" ClearColor="#100F19" Hidden="true">
-    <Overlay>
-        <Border Effect="aurora" EffectColor="#342844" EffectColor2="#131525"
-            EffectAnimate="false" EffectPointer="false" Opacity="0.5"/>
-        <HBox Spacing="0" Color.Accent="#D4C0FF" Color.AccentHovered="#E2D4FF"
-            Color.AccentText="#191225" Color.Text="#F4F0FA" Color.Track="#FFFFFF18"
-            Color.Control="#FFFFFF0A" Color.ControlBorder="#FFFFFF12" Metric.FontSize="14">
-            <Border Width="214" Material="FrostedGlass" CornerRadius="0" Padding="24,30"
-                Background="#191622B8" BorderWidth="0">
-                <VBox Spacing="18">
-                    <Label Text="afterglow" TextSize="25"/>
-                    <Separator Slot.Padding="0,12"/>
-                    <Label Text="Your library" TextSize="12" Opacity="0.5"/>
-                    <Button Text="Superhero" Style="Flat" OnClicked="track.3" Height="38"
-                        Tooltip="Alex Hagen · Music provided by NoCopyrightSounds"/>
-                    <Button Text="Violet Hour" Style="Flat" OnClicked="track.0" Height="38"/>
-                    <Button Text="Glass Tides" Style="Flat" OnClicked="track.1" Height="38"/>
-                    <Button Text="Signal Bloom" Style="Flat" OnClicked="track.2" Height="38"/>
-                    <Spacer Slot.Fill="1"/>
-                    <Label Text="Volume" TextSize="12" Opacity="0.55"/>
-                    <Slider Name="volume" Min="0" Max="1" Value="0.6" OnChanged="player.volume"/>
-                    <Label Name="status" Wrap="true" Opacity="0.8"/>
+<Window Title="Afterglow" Width="1280" Height="800" MinWidth="1180" MinHeight="740"
+    Theme="GlassDark" ClearColor="#07060C" CustomHeader="true" Hidden="true">
+
+    <Widget Name="NavItem" Icon="" Label="" Fill="#00000000" Dim="0.72">
+        <Border CornerRadius="10" Padding="14,10" Background="{Fill}" BorderWidth="0" Material="Solid">
+            <HBox Spacing="14">
+                <Image Source="{Icon}" Width="20" Height="20" Slot.VAlign="Center" Opacity="{Dim}"/>
+                <Label Text="{Label}" TextSize="14" Font="fonts/Inter-SemiBold.ttf"
+                    Slot.VAlign="Center" Opacity="{Dim}"/>
+            </HBox>
+        </Border>
+    </Widget>
+
+    <Widget Name="PlaylistItem" Cover="" Label="" Artist="" Action="">
+        <Button Style="Flat" OnClicked="{Action}" Height="58" Cursor="Hand" Tooltip="{Label}">
+            <HBox Spacing="12" HitTestable="false">
+                <Image Source="{Cover}" Width="40" Height="40" CornerRadius="6" Stretch="Cover"
+                    Slot.VAlign="Center"/>
+                <VBox Spacing="3" Slot.VAlign="Center" Slot.Fill="1">
+                    <Label Text="{Label}" TextSize="13" Font="fonts/Inter-SemiBold.ttf"/>
+                    <Label Text="{Artist}" TextSize="11" Opacity="0.5"/>
                 </VBox>
-            </Border>
-            <VBox Spacing="26" Slot.Fill="1" Slot.Padding="36,30">
-                <Label Text="Now playing" TextSize="16" Opacity="0.65"/>
-                <HBox Spacing="30" Slot.Fill="1">
-                    <Border Name="art" Width="330" Height="330" Slot.VAlign="Center"
-                        Effect="aurora" EffectColor="#A878FF" EffectColor2="#244C84"
-                        EffectAnimate="false" EffectPointer="false" CornerRadius="12" Shadow="28"/>
-                    <VBox Spacing="16" Slot.Fill="1" Slot.VAlign="Center">
-                        <Label Name="title" TextSize="38" Wrap="true"/>
-                        <Label Name="detail" TextSize="15" Opacity="0.55" Wrap="true"/>
-                        <Spacer Height="12"/>
-                        <HBox Spacing="10">
-                            <Button Name="previous" Style="Flat" OnClicked="player.previous" Width="44" Height="52"
+            </HBox>
+        </Button>
+    </Widget>
+
+    <Widget Name="QueueRow" Cover="" Label="" Artist="" Length="" Action="">
+        <Border CornerRadius="12" Padding="10,8" Background="#00000000" BorderWidth="0" Material="Solid">
+            <Button Style="Flat" OnClicked="{Action}" Height="56" Cursor="Hand">
+                <HBox Spacing="14" HitTestable="false">
+                    <Image Source="{Cover}" Width="48" Height="48" CornerRadius="8" Stretch="Cover"
+                        Slot.VAlign="Center"/>
+                    <VBox Spacing="4" Slot.VAlign="Center" Slot.Fill="1">
+                        <Label Text="{Label}" TextSize="15" Font="fonts/Inter-SemiBold.ttf"/>
+                        <Label Text="{Artist}" TextSize="12" Opacity="0.55"/>
+                    </VBox>
+                    <Label Text="{Length}" Font="monospace" TextSize="12" Opacity="0.5"
+                        Slot.VAlign="Center"/>
+                </HBox>
+            </Button>
+        </Border>
+    </Widget>
+
+    <Overlay Color.Accent="#C9B2FF" Color.AccentHovered="#DCCBFF" Color.AccentText="#120C1E"
+        Color.Text="#F6F3FB" Color.Track="#FFFFFF22" Color.Control="#FFFFFF0E"
+        Color.ControlBorder="#FFFFFF10" Metric.FontSize="14">
+        <Image Name="backdrop" Source="covers/violet_hour.jpg" Stretch="Cover"/>
+        <BackgroundBlur Style="Plain" Radius="96" Tint="#08070EA8" Saturation="1.7">
+            <Spacer/>
+        </BackgroundBlur>
+
+        <VBox Spacing="0">
+            <HeaderBar Title="" Background="false" Buttons="All">
+                <Spacer Width="72"/>
+                <Label Text="afterglow" TextSize="20" Font="fonts/Inter-Bold.ttf" Slot.VAlign="Center"
+                    Color="#FFFFFF"/>
+                <Spacer Width="104"/>
+                <Border CornerRadius="10" Padding="14,8" Background="#FFFFFF12" BorderWidth="0" Material="Solid" Width="420"
+                    Slot.VAlign="Center">
+                    <HBox Spacing="10">
+                        <Image Source="icons/search.svg" Width="16" Height="16" Tint="#FFFFFF90"
+                            Slot.VAlign="Center"/>
+                        <Label Text="Search songs, albums, artists" TextSize="13" Opacity="0.55"
+                            Slot.VAlign="Center"/>
+                    </HBox>
+                </Border>
+            </HeaderBar>
+
+            <HBox Spacing="0" Slot.Fill="1">
+                <VBox Width="250" Spacing="4" Slot.Padding="16,8,12,16">
+                    <NavItem Icon="icons/home.svg" Label="Home" Fill="#FFFFFF16" Dim="1"/>
+                    <NavItem Icon="icons/explore.svg" Label="Explore"/>
+                    <NavItem Icon="icons/library.svg" Label="Library"/>
+                    <Spacer Height="14"/>
+                    <Border CornerRadius="20" Padding="14,9" Background="#FFFFFF14" BorderWidth="0" Material="Solid">
+                        <HBox Spacing="10" Slot.HAlign="Center">
+                            <Image Source="icons/plus.svg" Width="16" Height="16" Slot.VAlign="Center"/>
+                            <Label Text="New playlist" TextSize="13" Font="fonts/Inter-SemiBold.ttf"
+                                Slot.VAlign="Center"/>
+                        </HBox>
+                    </Border>
+                    <Spacer Height="14"/>
+                    <Label Text="YOUR MIX" TextSize="11" Font="fonts/Inter-SemiBold.ttf" Opacity="0.45"
+                        Slot.Padding="14,0"/>
+                    <PlaylistItem Cover="covers/violet_hour.jpg" Label="Violet Hour" Artist="Afterglow Originals"
+                        Action="track.0"/>
+                    <PlaylistItem Cover="covers/glass_tides.jpg" Label="Glass Tides" Artist="Afterglow Originals"
+                        Action="track.1"/>
+                    <PlaylistItem Cover="covers/signal_bloom.jpg" Label="Signal Bloom" Artist="Afterglow Originals"
+                        Action="track.2"/>
+                    <PlaylistItem Cover="covers/superhero.jpg" Label="Superhero" Artist="Alex Hagen · NCS"
+                        Action="track.3"/>
+                    <Spacer Slot.Fill="1"/>
+                    <Label Name="status" Wrap="true" TextSize="12" Opacity="0.7" Slot.Padding="14,0"/>
+                </VBox>
+
+                <VBox Spacing="0" Slot.Fill="1" Slot.Padding="24,8,24,20">
+                    <Spacer Slot.Fill="1"/>
+                    <Border CornerRadius="18" Shadow="48,0,22" Width="440" Height="440"
+                        Slot.HAlign="Center" Appear="Zoom">
+                        <Image Name="art" Source="covers/violet_hour.jpg" Stretch="Cover" CornerRadius="18"/>
+                    </Border>
+                    <Spacer Height="30"/>
+                    <Label Name="title" TextSize="34" Font="fonts/Inter-Bold.ttf" TextAlign="Center"/>
+                    <Spacer Height="8"/>
+                    <Label Name="detail" TextSize="15" Opacity="0.6" TextAlign="Center"/>
+                    <Spacer Slot.Fill="1"/>
+                </VBox>
+
+                <BackgroundBlur Style="Glass" Width="420" CornerRadius="22" Radius="40"
+                    Tint="#FFFFFF0C" Shadow="30" Padding="18,20" Slot.Padding="0,8,24,20">
+                    <VBox Spacing="10">
+                        <HBox Spacing="8">
+                            <Border CornerRadius="14" Padding="14,7" Background="#FFFFFF1C" BorderWidth="0" Material="Solid">
+                                <Label Text="UP NEXT" TextSize="11" Font="fonts/Inter-Bold.ttf"/>
+                            </Border>
+                            <Border CornerRadius="14" Padding="14,7" BorderWidth="0" Material="Solid">
+                                <Label Text="LYRICS" TextSize="11" Font="fonts/Inter-Bold.ttf" Opacity="0.5"/>
+                            </Border>
+                            <Border CornerRadius="14" Padding="14,7" BorderWidth="0" Material="Solid">
+                                <Label Text="RELATED" TextSize="11" Font="fonts/Inter-Bold.ttf" Opacity="0.5"/>
+                            </Border>
+                        </HBox>
+                        <Spacer Height="6"/>
+                        <Label Text="Playing from Your Mix" TextSize="12" Opacity="0.5" Slot.Padding="10,0"/>
+                        <QueueRow Name="row_0" Cover="covers/violet_hour.jpg" Label="Violet Hour"
+                            Artist="Soft arpeggio" Length="0:29" Action="track.0"/>
+                        <QueueRow Name="row_1" Cover="covers/glass_tides.jpg" Label="Glass Tides"
+                            Artist="Slow ambient pulse" Length="0:34" Action="track.1"/>
+                        <QueueRow Name="row_2" Cover="covers/signal_bloom.jpg" Label="Signal Bloom"
+                            Artist="Bright synth sequence" Length="0:26" Action="track.2"/>
+                        <QueueRow Name="row_3" Cover="covers/superhero.jpg" Label="Superhero"
+                            Artist="Alex Hagen · NCS" Action="track.3"/>
+                        <Spacer Slot.Fill="1"/>
+                    </VBox>
+                </BackgroundBlur>
+            </HBox>
+
+            <Border Height="92" Background="#0A0910E6" BorderWidth="0" Material="Solid" Padding="0">
+                <VBox Spacing="0">
+                    <Slider Name="seek" Color.Accent="#C9B2FF" Color.AccentHovered="#DCCBFF" Color.AccentPressed="#B79CF5" Color.AccentText="#120C1E" Min="0" Max="1" OnChanged="player.seek" Height="14"
+                        Metric.SliderHandleSize="10"/>
+                    <HBox Spacing="0" Slot.Fill="1" Slot.Padding="20,0">
+                        <HBox Spacing="6" Width="340" Slot.VAlign="Center">
+                            <Button Name="previous" Style="Flat" OnClicked="player.previous" Width="44" Height="44"
                                 Tooltip="Previous track" AccessibleName="Previous track" Cursor="Hand">
                                 <Image Source="icons/previous.svg" Width="22" Height="22"
                                     Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
                             </Button>
-                            <Button Name="play" Style="Primary" Width="56" Height="56" OnClicked="player.toggle"
-                                Tooltip="Play" AccessibleName="Play" Cursor="Hand">
-                                <Image Name="play_icon" Source="icons/play.svg" Width="26" Height="26"
+                            <Button Name="play" Style="Primary" Color.Accent="#C9B2FF" Color.AccentHovered="#DCCBFF" Color.AccentPressed="#B79CF5" Color.AccentText="#120C1E" Width="52" Height="52" OnClicked="player.toggle"
+                                Tooltip="Play" AccessibleName="Play" Cursor="Hand" Metric.CornerRadius="26">
+                                <Image Name="play_icon" Source="icons/play.svg" Width="24" Height="24" Tint="#120C1E"
                                     Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
                             </Button>
-                            <Button Name="skip" Style="Flat" OnClicked="player.next" Width="44" Height="52"
+                            <Button Name="skip" Style="Flat" OnClicked="player.next" Width="44" Height="44"
                                 Tooltip="Next track" AccessibleName="Next track" Cursor="Hand">
                                 <Image Source="icons/next.svg" Width="22" Height="22"
                                     Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
                             </Button>
+                            <Spacer Width="10"/>
+                            <Label Name="elapsed" Font="monospace" TextSize="12" Slot.VAlign="Center" Opacity="0.6"/>
+                            <Label Text=" / " Font="monospace" TextSize="12" Slot.VAlign="Center" Opacity="0.35"/>
+                            <Label Name="duration" Font="monospace" TextSize="12" Slot.VAlign="Center" Opacity="0.6"/>
                         </HBox>
-                    </VBox>
-                </HBox>
-                <Border Material="FrostedGlass" CornerRadius="12" Padding="18,14"
-                    Background="#211C2C70" BorderColor="#FFFFFF12" BorderWidth="1">
-                    <HBox Spacing="20">
-                        <VBox Spacing="6" Slot.Fill="1">
-                            <Label Text="Up next" TextSize="11" Opacity="0.45"/>
-                            <Label Name="next" TextSize="16"/>
-                        </VBox>
-                        <Button Text="Play next" Style="Flat" OnClicked="player.next"
-                            Slot.VAlign="Center"/>
+                        <Spacer Slot.Fill="1"/>
+                        <HBox Spacing="14" Slot.VAlign="Center">
+                            <Image Name="mini_art" Source="covers/violet_hour.jpg" Width="48" Height="48"
+                                CornerRadius="6" Stretch="Cover" Slot.VAlign="Center"/>
+                            <VBox Spacing="4" Slot.VAlign="Center">
+                                <Label Name="mini_title" TextSize="14" Font="fonts/Inter-SemiBold.ttf"/>
+                                <Label Name="mini_detail" TextSize="12" Opacity="0.55"/>
+                            </VBox>
+                        </HBox>
+                        <Spacer Slot.Fill="1"/>
+                        <HBox Spacing="12" Width="340" Slot.VAlign="Center">
+                            <Spacer Slot.Fill="1"/>
+                            <Image Source="icons/volume.svg" Width="20" Height="20" Tint="#FFFFFFB0"
+                                Slot.VAlign="Center"/>
+                            <Slider Name="volume" Color.Accent="#C9B2FF" Color.AccentHovered="#DCCBFF" Color.AccentPressed="#B79CF5" Color.AccentText="#120C1E" Min="0" Max="1" Value="0.6" Width="120"
+                                OnChanged="player.volume" Slot.VAlign="Center"/>
+                            <Button Name="repeat" Style="Flat" Width="40" Height="40"
+                                OnClicked="player.repeat" Cursor="Hand"
+                                Tooltip="Repeat off" AccessibleName="Repeat off">
+                                <Image Name="repeat_icon" Source="icons/repeat.svg" Width="20" Height="20"
+                                    Tint="#FFFFFF70" Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
+                            </Button>
+                        </HBox>
                     </HBox>
-                </Border>
-                <VBox Spacing="12">
-                    <HBox Spacing="12">
-                        <Label Name="elapsed" Font="monospace" TextSize="12" Width="40" Slot.VAlign="Center" Opacity="0.55"/>
-                        <Slider Name="seek" Min="0" Max="1" Slot.Fill="1" OnChanged="player.seek"/>
-                        <Label Name="duration" Font="monospace" TextSize="12" Width="40" Slot.VAlign="Center" Opacity="0.55"/>
-                    </HBox>
-                    <Button Name="repeat" Style="Flat" Width="40" Height="36"
-                        Slot.HAlign="Right" OnClicked="player.repeat" Cursor="Hand"
-                        Tooltip="Repeat off" AccessibleName="Repeat off">
-                        <Image Name="repeat_icon" Source="icons/repeat.svg" Width="20" Height="20"
-                            Tint="#FFFFFF70" Slot.HAlign="Center" Slot.VAlign="Center" HitTestable="false"/>
-                    </Button>
                 </VBox>
-            </VBox>
-        </HBox>
+            </Border>
+        </VBox>
     </Overlay>
 </Window>

@@ -10,43 +10,64 @@ use super::wasm::{build_wasm_runtime, flavor};
 use dream_mir::runtime::RuntimeNeed;
 use std::path::Path;
 
+/// The halves of the runtime tree. The native half (`native/`, `clang_rt/`) is specific to the
+/// host; the wasm32 half (`wasm32*/`, `wasi-sysroot/`) is the same on every host, so a release
+/// can build it once and merge it into each host's tree.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PackPart {
+    Native,
+    Wasm,
+}
+
+/// Builds the requested halves of the tree into `out`; `None` builds both.
 pub fn pack_runtime(
     config: &std::sync::Arc<crate::driver::toolchain::ToolchainConfig>,
     out: &Path,
+    only: Option<PackPart>,
 ) -> Result<(), String> {
+    let native = only != Some(PackPart::Wasm);
+    let wasm = only != Some(PackPart::Native);
     let tools = resolve_llvm(config)?;
     let clang = tools.clang()?;
+    super::runtime_cache::freeze_sources();
     let sets = RuntimeNeed::all_sets();
     let total = LEVELS.len() * sets.len();
     let started = std::time::Instant::now();
     for (level, opt) in LEVELS.into_iter().enumerate() {
         for (index, &need) in sets.iter().enumerate() {
-            build_native_runtime(
-                &tools,
-                &dream_abi::target::TargetSpec::host(),
-                opt,
-                need,
-                &out.join(rt_rel_dir("native", opt, need)),
-            )?;
-            if opt == crate::driver::wasm_opt::OptLevel::O0 {
-                let objects = super::runtime_objects::native(
+            if native {
+                build_native_runtime(
                     &tools,
                     &dream_abi::target::TargetSpec::host(),
+                    opt,
                     need,
-                    false,
+                    &out.join(rt_rel_dir("native", opt, need)),
                 )?;
-                super::runtime_objects::store_prebuilt(
-                    &out.join(rt_rel_dir("native", opt, need))
-                        .join("unit-objects"),
-                    &objects,
-                )?;
-            }
-            for threads in [false, true] {
-                let dir = out.join(rt_rel_dir(flavor(threads), opt, need));
-                build_wasm_runtime(&tools, opt, need, threads, &dir)?;
                 if opt == crate::driver::wasm_opt::OptLevel::O0 {
-                    let objects = super::runtime_objects::wasm(&tools, need, threads)?;
-                    super::runtime_objects::store_prebuilt(&dir.join("unit-objects"), &objects)?;
+                    let objects = super::runtime_objects::native(
+                        &tools,
+                        &dream_abi::target::TargetSpec::host(),
+                        need,
+                        false,
+                    )?;
+                    super::runtime_objects::store_prebuilt(
+                        &out.join(rt_rel_dir("native", opt, need))
+                            .join("unit-objects"),
+                        &objects,
+                    )?;
+                }
+            }
+            if wasm {
+                for threads in [false, true] {
+                    let dir = out.join(rt_rel_dir(flavor(threads), opt, need));
+                    build_wasm_runtime(&tools, opt, need, threads, &dir)?;
+                    if opt == crate::driver::wasm_opt::OptLevel::O0 {
+                        let objects = super::runtime_objects::wasm(&tools, need, threads)?;
+                        super::runtime_objects::store_prebuilt(
+                            &dir.join("unit-objects"),
+                            &objects,
+                        )?;
+                    }
                 }
             }
             // Release CI has no other signal of whether this hours-long step is still advancing.
@@ -58,34 +79,42 @@ pub fn pack_runtime(
             );
         }
     }
-    let crt = out.join("clang_rt");
-    std::fs::create_dir_all(&crt).map_err(|e| format!("{}: {e}", crt.display()))?;
-    for kind in ClangRt::ALL {
-        let src = dev_clang_rt(&clang, kind)?;
-        let dst = crt.join(kind.bundled_name());
-        std::fs::copy(&src, &dst).map_err(|e| format!("copying {}: {e}", src.display()))?;
+    if native {
+        let crt = out.join("clang_rt");
+        std::fs::create_dir_all(&crt).map_err(|e| format!("{}: {e}", crt.display()))?;
+        for kind in ClangRt::ALL {
+            let src = dev_clang_rt(&clang, kind)?;
+            let dst = crt.join(kind.bundled_name());
+            std::fs::copy(&src, &dst).map_err(|e| format!("copying {}: {e}", src.display()))?;
+        }
     }
-    let sysroot = super::wasm::wasi_sysroot(&clang)?;
-    for dir in [
-        "include/wasm32-wasip1",
-        "lib/wasm32-wasip1",
-        "include/wasm32-wasip1-threads",
-        "lib/wasm32-wasip1-threads",
-    ] {
-        copy_tree(&sysroot.join(dir), &out.join("wasi-sysroot").join(dir))?;
+    if wasm {
+        let sysroot = super::wasm::wasi_sysroot(&clang)?;
+        for dir in [
+            "include/wasm32-wasip1",
+            "lib/wasm32-wasip1",
+            "include/wasm32-wasip1-threads",
+            "lib/wasm32-wasip1-threads",
+        ] {
+            copy_tree(&sysroot.join(dir), &out.join("wasi-sysroot").join(dir))?;
+        }
     }
     remove_bookkeeping(out)?;
-    remove_unread_signatures(out)
+    let flavors: Vec<&str> = FLAVORS
+        .into_iter()
+        .filter(|&flavor| if flavor == "native" { native } else { wasm })
+        .collect();
+    remove_unread_signatures(out, &flavors)
 }
 
 /// `signatures::load` reads a prebuilt tree's O0 signatures for every level.
-fn remove_unread_signatures(out: &Path) -> Result<(), String> {
+fn remove_unread_signatures(out: &Path, flavors: &[&str]) -> Result<(), String> {
     for opt in LEVELS
         .into_iter()
         .filter(|&opt| opt != crate::driver::wasm_opt::OptLevel::O0)
     {
         for need in RuntimeNeed::all_sets() {
-            for flavor in FLAVORS {
+            for &flavor in flavors {
                 let sigs = out
                     .join(rt_rel_dir(flavor, opt, need))
                     .join("dream_rt.sigs");
@@ -185,7 +214,7 @@ mod tests {
         }
 
         remove_bookkeeping(out).unwrap();
-        remove_unread_signatures(out).unwrap();
+        remove_unread_signatures(out, &FLAVORS).unwrap();
 
         for opt in LEVELS {
             for need in RuntimeNeed::all_sets() {

@@ -37,6 +37,12 @@ enum CrateTypeArg {
     Bin,
 }
 
+#[derive(Copy, Clone, ValueEnum)]
+enum PackPartArg {
+    Native,
+    Wasm,
+}
+
 #[derive(Parser)]
 #[command(
     name = "dream",
@@ -268,6 +274,9 @@ enum Command {
     PackRuntime {
         /// Output directory
         out: PathBuf,
+        /// Build only the host-specific native half or only the host-independent wasm32 half
+        #[arg(long, value_enum)]
+        only: Option<PackPartArg>,
     },
 }
 
@@ -307,8 +316,12 @@ fn main() -> ExitCode {
             }
         };
     }
-    if let Some(Command::PackRuntime { out }) = &cli.command {
-        return match dream::execution::llvm::pack_runtime(&config, out) {
+    if let Some(Command::PackRuntime { out, only }) = &cli.command {
+        let only = only.map(|part| match part {
+            PackPartArg::Native => dream::execution::llvm::PackPart::Native,
+            PackPartArg::Wasm => dream::execution::llvm::PackPart::Wasm,
+        });
+        return match dream::execution::llvm::pack_runtime(&config, out, only) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 ui.error(&e);

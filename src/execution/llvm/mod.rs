@@ -23,6 +23,6 @@ pub mod wasm_opt;
 mod wasm_sources;
 
 pub use build::{NativeBuildOptions, Toolchain, compile_llvm};
-pub use pack::pack_runtime;
+pub use pack::{PackPart, pack_runtime};
 pub use runtime::{LlvmRuntime, llvm_runtime};
 pub use tools::{LlvmTools, resolve_llvm};

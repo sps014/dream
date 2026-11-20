@@ -161,7 +161,48 @@ fn include_namespace(path: &Path, cache: Option<&Path>) -> Option<String> {
     Some(digest)
 }
 
+type FrozenUnits = std::sync::Mutex<std::collections::BTreeMap<String, (PathBuf, Vec<PathBuf>)>>;
+
+static FROZEN: std::sync::OnceLock<FrozenUnits> = std::sync::OnceLock::new();
+
+/// Lets this process reuse a unit it already compiled without revalidating its inputs. Only for
+/// a one-shot build whose runtime sources and tools nothing rewrites while it runs
+/// (`pack-runtime`, which compiles the same units for every module set).
+pub(super) fn freeze_sources() {
+    FROZEN.get_or_init(Default::default);
+}
+
 pub(super) fn compile(
+    command: Command,
+    config: &ToolchainConfig,
+    output: &Path,
+    namespaces: &IncludeInventory,
+) -> Result<CompiledUnit, String> {
+    let Some(frozen) = FROZEN.get() else {
+        return compile_unit(command, config, output, namespaces);
+    };
+    let key = format!("{:?}|{command:?}", output.extension());
+    let reused = frozen
+        .lock()
+        .map_err(|_| "runtime unit memo poisoned")?
+        .get(&key)
+        .cloned();
+    if let Some((object, dependencies)) = reused {
+        std::fs::copy(&object, output).map_err(|e| e.to_string())?;
+        return Ok(CompiledUnit {
+            dependencies,
+            object,
+        });
+    }
+    let unit = compile_unit(command, config, output, namespaces)?;
+    frozen
+        .lock()
+        .map_err(|_| "runtime unit memo poisoned")?
+        .insert(key, (unit.object.clone(), unit.dependencies.clone()));
+    Ok(unit)
+}
+
+fn compile_unit(
     mut command: Command,
     config: &ToolchainConfig,
     output: &Path,

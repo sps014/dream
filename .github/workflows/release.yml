@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   build:
@@ -180,9 +181,57 @@ jobs:
           LLVM_VERSION: ${{ steps.stage.outputs.llvm-version }}
         run: |
           set -euo pipefail
+          # The wasm32 half of the tree is the same on every host. Windows merges linux-x64's
+          # instead of building it, which would not finish within the step's time limit.
+          ONLY=""
+          if [[ "${{ matrix.target }}" == windows-* ]]; then
+            ONLY="--only native"
+          fi
           DREAM_LLVM="${HOME}/.dream/toolchains/llvm-${LLVM_VERSION}/bin" \
-            "$COMPILER" pack-runtime "$STAGE/lib/dream/rt"
+            "$COMPILER" pack-runtime $ONLY "$STAGE/lib/dream/rt"
           du -sh "$STAGE" "$STAGE/lib/dream/llvm" "$STAGE/lib/dream/rt"
+
+      - name: Share the wasm32 runtime
+        if: matrix.target == 'linux-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-runtime
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            ${{ steps.stage.outputs.path }}/lib/dream/rt/wasm32
+            ${{ steps.stage.outputs.path }}/lib/dream/rt/wasm32-threads
+            ${{ steps.stage.outputs.path }}/lib/dream/rt/wasi-sysroot
+
+      # The artifact is uploaded while the run is still going, so this waits for it rather than
+      # making the whole Windows job wait for linux-x64.
+      - name: Merge the shared wasm32 runtime
+        if: matrix.target == 'windows-x64'
+        shell: bash
+        timeout-minutes: 60
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RT: ${{ steps.stage.outputs.path }}/lib/dream/rt
+        run: |
+          set -euo pipefail
+          RUN="repos/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          shared() {
+            gh api "$RUN/artifacts?name=wasm-runtime" --jq '.artifacts[0].id // empty'
+          }
+          until ID="$(shared)" && [[ -n "$ID" ]]; do
+            LINUX="$(gh api "$RUN/jobs?per_page=100" --jq '[.jobs[] | select(.name | contains("linux-x64"))][0].status')"
+            if [[ "$LINUX" == completed ]]; then
+              ID="$(shared)"
+              [[ -n "$ID" ]] && break
+              echo "error: the linux-x64 job finished without sharing its wasm32 runtime" >&2
+              exit 1
+            fi
+            sleep 30
+          done
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ID/zip" > wasm-runtime.zip
+          "/c/Program Files/7-Zip/7z.exe" x -y -bd -o"$RT" wasm-runtime.zip > /dev/null
+          rm wasm-runtime.zip
+          du -sh "$RT"
 
       - name: Create Windows ZIP
         if: matrix.archive == 'zip'

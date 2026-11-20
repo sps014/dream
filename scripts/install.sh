@@ -86,23 +86,33 @@ EOF
 fi
 
 VERSION="${TAG#v}"
-if [ "$TARGET" = "windows-x64" ] || [ "$TARGET" = "windows-arm64" ]; then
-  ARCHIVE="dream-${VERSION}-${TARGET}.zip"
-  EXTRACT=zip
-else
-  ARCHIVE="dream-${VERSION}-${TARGET}.tar.xz"
-  EXTRACT=tar
-  # GNU tar delegates -J to the xz program; macOS bsdtar decodes xz itself.
-  case "$TARGET" in
-    linux-*) need xz ;;
-  esac
-fi
-
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
-URL="${BASE}/${ARCHIVE}"
 SUM_URL="${BASE}/SHA256SUMS"
 
 echo "Installing Dream ${VERSION} (${TARGET}) → ${PREFIX}"
+if ! curl -fsSL "$SUM_URL" -o "${WORK}/SHA256SUMS"; then
+  echo "error: failed to download ${SUM_URL}" >&2
+  exit 1
+fi
+ARCHIVE="dream-${VERSION}-${TARGET}.tar.xz"
+EXPECTED="$(awk -v archive="$ARCHIVE" '$2 == archive {print $1; exit}' "${WORK}/SHA256SUMS")"
+case "$TARGET" in
+  windows-*)
+    if [ -z "$EXPECTED" ]; then
+      ARCHIVE="dream-${VERSION}-${TARGET}.zip"
+      EXPECTED="$(awk -v archive="$ARCHIVE" '$2 == archive {print $1; exit}' "${WORK}/SHA256SUMS")"
+    fi
+    ;;
+esac
+if [ -z "$EXPECTED" ]; then
+  echo "error: SHA256SUMS has no entry for ${ARCHIVE}" >&2
+  exit 1
+fi
+case "${TARGET}:${ARCHIVE}" in
+  linux-*:*.tar.xz) need xz ;;
+esac
+
+URL="${BASE}/${ARCHIVE}"
 echo "Downloading ${URL}"
 
 if ! curl -fsSL "$URL" -o "${WORK}/${ARCHIVE}"; then
@@ -115,15 +125,6 @@ EOF
   exit 1
 fi
 
-if ! curl -fsSL "$SUM_URL" -o "${WORK}/SHA256SUMS"; then
-  echo "error: failed to download ${SUM_URL}" >&2
-  exit 1
-fi
-EXPECTED="$(grep -E "  ${ARCHIVE}\$" "${WORK}/SHA256SUMS" | awk '{print $1}' || true)"
-if [ -z "$EXPECTED" ]; then
-  echo "error: SHA256SUMS has no entry for ${ARCHIVE}" >&2
-  exit 1
-fi
 if command -v shasum >/dev/null 2>&1; then
   ACTUAL="$(shasum -a 256 "${WORK}/${ARCHIVE}" | awk '{print $1}')"
 elif command -v sha256sum >/dev/null 2>&1; then
@@ -141,12 +142,13 @@ fi
 echo "Checksum OK"
 
 mkdir -p "${WORK}/out"
-if [ "$EXTRACT" = tar ]; then
-  tar -xJf "${WORK}/${ARCHIVE}" -C "${WORK}/out"
-else
-  need unzip
-  unzip -q "${WORK}/${ARCHIVE}" -d "${WORK}/out"
-fi
+case "$ARCHIVE" in
+  *.tar.xz) tar -xJf "${WORK}/${ARCHIVE}" -C "${WORK}/out" ;;
+  *.zip)
+    need unzip
+    unzip -q "${WORK}/${ARCHIVE}" -d "${WORK}/out"
+    ;;
+esac
 
 # Drop the previous compiler/runtime payload so leftover binaries and headers
 # cannot mix with this version. Keep `toolchains/`.

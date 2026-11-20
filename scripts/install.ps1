@@ -53,27 +53,32 @@ Publish a tagged release, or build from source with Rust:
 }
 
 $Version = $Tag.TrimStart('v')
-$Archive = "dream-$Version-$Target.zip"
 $Base = "https://github.com/$Repo/releases/download/$Tag"
-$Url = "$Base/$Archive"
 $Work = Join-Path ([System.IO.Path]::GetTempPath()) ("dream-install-" + [guid]::NewGuid().ToString("n"))
 New-Item -ItemType Directory -Path $Work | Out-Null
 try {
     Write-Host "Installing Dream $Version ($Target) -> $Prefix"
-    Write-Host "Downloading $Url"
-    $ArchivePath = Join-Path $Work $Archive
-    Invoke-WebRequest -Uri $Url -OutFile $ArchivePath
-
     $SumUrl = "$Base/SHA256SUMS"
     try {
         $sums = Invoke-WebRequest -Uri $SumUrl
     } catch {
         throw "failed to download $SumUrl"
     }
-    $line = ($sums.Content -split "`n" | Where-Object { $_ -match [regex]::Escape($Archive) } | Select-Object -First 1)
+    $lines = $sums.Content -split '\r?\n'
+    $Archive = "dream-$Version-$Target.tar.xz"
+    $line = $lines | Where-Object { $_.EndsWith("  $Archive") } | Select-Object -First 1
+    if (-not $line -and $Target -like "windows-*") {
+        $Archive = "dream-$Version-$Target.zip"
+        $line = $lines | Where-Object { $_.EndsWith("  $Archive") } | Select-Object -First 1
+    }
     if (-not $line) {
         throw "SHA256SUMS has no entry for $Archive"
     }
+    $Url = "$Base/$Archive"
+    Write-Host "Downloading $Url"
+    $ArchivePath = Join-Path $Work $Archive
+    Invoke-WebRequest -Uri $Url -OutFile $ArchivePath
+
     $expected = ($line -split '\s+')[0].Trim()
     $actual = (Get-FileHash -Algorithm SHA256 -Path $ArchivePath).Hash.ToLowerInvariant()
     if ($actual -ne $expected.ToLowerInvariant()) {
@@ -81,7 +86,15 @@ try {
     }
     Write-Host "Checksum OK"
 
-    Expand-Archive -Path $ArchivePath -DestinationPath (Join-Path $Work "out") -Force
+    $OutDir = Join-Path $Work "out"
+    if ($Archive.EndsWith(".tar.xz")) {
+        $tar = if ($Target -like "windows-*") { Join-Path $env:SystemRoot "System32\tar.exe" } else { "tar" }
+        New-Item -ItemType Directory -Path $OutDir | Out-Null
+        & $tar -xf $ArchivePath -C $OutDir
+        if ($LASTEXITCODE -ne 0) { throw "tar could not extract $Archive" }
+    } else {
+        Expand-Archive -Path $ArchivePath -DestinationPath $OutDir -Force
+    }
     $extractedDream = Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |
         Where-Object { $_.Name -eq "dream" -or $_.Name -eq "dream.exe" } |
         Select-Object -First 1
@@ -99,7 +112,7 @@ try {
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -File |
         Where-Object {
             $_.Name -match '^(dream|dreamer|dream-lsp)(\.exe)?$' -or
-            $_.Name -match '^(lib)?dream_host_(core|unicode|crypto|process|timezone|net|cli)\.(so|dylib|dll|dll\.lib)$'
+            $_.Name -match '^(lib)?dream_host_[a-z_]+\.(so|dylib|dll|dll\.lib)$'
         } |
         ForEach-Object { Copy-Item $_.FullName -Destination $BinDir -Force }
     Get-ChildItem -Path (Join-Path $Work "out") -Recurse -Directory |

@@ -122,6 +122,7 @@ fn cli_reports_cached_builds_without_rewriting_the_artifact() {
     std::fs::write(&source, "fun main(): void {}\n").unwrap();
     let run = || {
         std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+            .arg("-v")
             .arg("--object")
             .arg("--output")
             .arg(&out)
@@ -156,8 +157,9 @@ fn builds_with_warnings_are_cached_and_replay_their_warnings() {
         "import system;\nfun main(): void { let unused = 1; System.println(\"w\"); }\n",
     )
     .unwrap();
-    let run = || {
+    let run = |verbose: bool| {
         let output = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+            .args(verbose.then_some("-v"))
             .arg("--object")
             .arg("--output")
             .arg(&out)
@@ -169,9 +171,11 @@ fn builds_with_warnings_are_cached_and_replay_their_warnings() {
         assert!(output.status.success(), "{log}");
         log
     };
-    let first = run();
+    let first = run(false);
     assert!(first.contains("unused variable 'unused'"), "{first}");
-    let second = run();
+    assert!(!first.contains("Building"), "{first}");
+    assert!(!first.contains("Finished"), "{first}");
+    let second = run(true);
     assert!(second.contains("Finished cached in"), "{second}");
     assert!(second.contains("unused variable 'unused'"), "{second}");
 }

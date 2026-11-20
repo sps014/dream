@@ -7,6 +7,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 pub fn run(start_dir: &Path) -> Result<()> {
+    sync(start_dir, true)
+}
+
+/// Resolves and materializes dependencies; `report` prints the installed-package summary.
+pub fn sync(start_dir: &Path, report: bool) -> Result<()> {
     let (install_root, members) = workspace::discover_install_root(start_dir)?;
 
     let lock_path = install_root.join(crate::lockfile::LOCKFILE_FILE_NAME);
@@ -28,6 +33,9 @@ pub fn run(start_dir: &Path) -> Result<()> {
     lockfile.save(&lock_path)?;
 
     warn_unsandboxed_generators(&install_root);
+    if !report {
+        return Ok(());
+    }
     println!(
         "Installed {} package(s) into {}",
         lockfile.packages.len(),

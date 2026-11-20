@@ -44,7 +44,7 @@ pub fn run_with(
     package: Option<&str>,
 ) -> Result<()> {
     let Selection { target, device } = selection;
-    super::install::run(start_dir)?;
+    super::install::sync(start_dir, flags.verbose)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
     let pkg = workspace.manifest.package()?;
     match pkg.package_type {

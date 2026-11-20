@@ -52,7 +52,7 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Print per-phase progress detail
+    /// Print build progress, the artifact table, and per-phase detail
     #[arg(short, long, global = true)]
     verbose: bool,
 
@@ -291,7 +291,7 @@ fn main() -> ExitCode {
         .finish();
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
-    let ui = Ui::new();
+    let ui = Ui::new().with_progress(cli.verbose);
 
     if let Some(Command::ToolchainDoctor { json }) = &cli.command {
         return match dream::execution::llvm::doctor::run(

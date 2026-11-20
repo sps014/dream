@@ -49,7 +49,7 @@ pub fn run_with(
     package: Option<&str>,
     hosts: Hosts,
 ) -> Result<()> {
-    super::install::run(start_dir)?;
+    super::install::sync(start_dir, flags.verbose)?;
     let suites = select_suites(start_dir, package)?;
     let dream_bin = crate::dream_bin::locate()?;
     let command = |suite: &Suite| {

@@ -16,6 +16,8 @@ pub struct CompileFlags {
     /// `--use-profile[=<path>]`: `Some("")` merges the recorded `--profile` runs.
     pub use_profile: Option<String>,
     pub relocatable: bool,
+    /// `-v`: show `dream`'s build progress and artifact table.
+    pub verbose: bool,
 }
 
 impl Default for CompileFlags {
@@ -27,6 +29,7 @@ impl Default for CompileFlags {
             profile: false,
             use_profile: None,
             relocatable: false,
+            verbose: false,
         }
     }
 }
@@ -48,6 +51,7 @@ impl CompileFlags {
             profile: false,
             use_profile: None,
             relocatable: false,
+            verbose: false,
         })
     }
 
@@ -80,6 +84,9 @@ impl CompileFlags {
     }
 
     pub fn apply(&self, cmd: &mut Command) {
+        if self.verbose {
+            cmd.arg("-v");
+        }
         if self.relocatable {
             cmd.arg("--relocatable");
         }
@@ -200,6 +207,15 @@ mod tests {
         assert!(!flags.compile_profile.is_debug());
         assert_eq!(flags.optimize.as_deref(), Some("2"));
         assert_eq!(flags.native_artifact_subdir(), "release");
+    }
+
+    #[test]
+    fn apply_forwards_verbose() {
+        let mut flags = CompileFlags::from_cli(true, None, false).unwrap();
+        flags.verbose = true;
+        let mut cmd = Command::new("dream");
+        flags.apply(&mut cmd);
+        assert_eq!(cmd.get_args().collect::<Vec<_>>(), ["-v", "--release"]);
     }
 
     #[test]

@@ -27,7 +27,7 @@ pub fn run(
     package: Option<&str>,
     mut flags: CompileFlags,
 ) -> Result<()> {
-    super::install::run(start_dir)?;
+    super::install::sync(start_dir, flags.verbose)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
     let pkg = workspace.manifest.package()?;
     if pkg.package_type != PackageType::Bin {

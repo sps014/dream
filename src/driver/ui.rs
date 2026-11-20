@@ -79,13 +79,22 @@ impl BuildReporter for ConsoleReporter {
 /// Renders status lines and diagnostics to stderr.
 pub struct Ui {
     color: bool,
+    progress: bool,
 }
 
 impl Ui {
     pub fn new() -> Self {
         Self {
             color: color_enabled(),
+            progress: true,
         }
+    }
+
+    /// Whether [`step`](Self::step), [`finish`](Self::finish), and
+    /// [`debug_build_note`](Self::debug_build_note) print; errors, warnings, and notes always do.
+    pub fn with_progress(mut self, progress: bool) -> Self {
+        self.progress = progress;
+        self
     }
 
     fn paint(&self, code: &str, text: &str) -> String {
@@ -98,6 +107,9 @@ impl Ui {
 
     /// One progress line: a bold-green verb plus its detail, flush left.
     pub fn step(&self, label: &str, detail: &str) {
+        if !self.progress {
+            return;
+        }
         eprintln!(
             "{} {}",
             self.paint(&format!("{BOLD}{GREEN}"), label),
@@ -146,6 +158,9 @@ impl Ui {
 
     /// End-of-build summary: a green `Finished` line followed by the artifact table with sizes.
     pub fn finish(&self, elapsed_secs: f64, detail: &str, artifacts: &[PathBuf]) {
+        if !self.progress {
+            return;
+        }
         self.step(
             "Finished",
             &format!(
@@ -180,6 +195,9 @@ impl Ui {
     /// Friendly reminder that a non-`--release`/`-O` build ships unoptimized code. Wasm wording
     /// points at download size instead of runtime speed.
     pub fn debug_build_note(&self, wasm: bool) {
+        if !self.progress {
+            return;
+        }
         eprintln!();
         self.note("note: this is an unoptimized debug build");
         if wasm {

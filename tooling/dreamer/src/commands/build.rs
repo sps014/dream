@@ -24,7 +24,7 @@ pub fn run_with(
     package: Option<&str>,
     target: Option<&str>,
 ) -> Result<()> {
-    super::install::run(start_dir)?;
+    super::install::sync(start_dir, flags.verbose)?;
     let workspace = Workspace::discover_package(start_dir, package)?;
     if workspace.is_test() {
         bail!(

@@ -16,6 +16,8 @@ dream run hello.dream -- first second
 
 The first command builds and runs the file. The second only builds it. The third passes arguments to the program. With no file, Dream uses the entry file from the nearest `dream.toml`.
 
+A successful build prints nothing, so `dream run` shows only your program's output. Errors and warnings always appear. Add `-v` to see each build step, the output files with their sizes, and the build time.
+
 ## Common commands
 
 | Command | Purpose |
@@ -39,7 +41,7 @@ The first command builds and runs the file. The second only builds it. The third
 | `-g`, `--debug-info` | Include debugger information and favor stepping through source and inspecting locals |
 | `--release --perf-symbols` | Include source and function names for profiling while keeping release optimizations |
 | `-o path`, `--output path` | Choose an output path |
-| `-v`, `--verbose` | Show more build progress |
+| `-v`, `--verbose` | Show build steps, output files with sizes, and compiler timing |
 | `--relocatable` | Put required native libraries beside the program for sharing |
 | `--crate-type lib` or `bin` | Choose a library or runnable program |
 | `--release --profile`, `--release --use-profile[=path]` | Record or use measurements to improve native builds |

@@ -1,7 +1,7 @@
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::toolchain::ToolchainConfig;
-use crate::driver::wasi::{GuestUnitOutput, guest_include_dirs, unit_command};
+use crate::driver::wasi::{GuestUnitOutput, guest_include_dirs, stable_unit_name, unit_command};
 use crate::driver::wasm_opt::OptLevel;
 use dream_abi::target::TargetSpec;
 use dream_mir::runtime::RuntimeNeed;
@@ -13,10 +13,10 @@ use std::path::PathBuf;
 /// (`Debug.live_objects` and the exit-time leak report). Release links counter-free bitcode.
 const HEAP_COUNTERS_DEFINE: &str = "-DDREAM_HEAP_COUNTERS=1";
 
-pub(super) fn compile_objects<T: Sync>(
+pub(super) fn compile_objects<T: Sync, R: Send>(
     units: &[T],
-    compile: impl Fn(usize, &T) -> Result<PathBuf, String> + Sync,
-) -> Result<Vec<PathBuf>, String> {
+    compile: impl Fn(usize, &T) -> Result<R, String> + Sync,
+) -> Result<Vec<R>, String> {
     let workers = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(workers)
@@ -146,7 +146,7 @@ pub(super) fn wasm(
             threads,
             OptLevel::O0,
             GuestUnitOutput {
-                stable_name: &format!("rt{index}.c"),
+                stable_name: &stable_unit_name(&config.runtime_c, &unit.path),
                 bitcode: false,
             },
         );

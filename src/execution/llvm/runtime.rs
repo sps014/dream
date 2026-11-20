@@ -312,11 +312,13 @@ pub(super) fn build_native_runtime(
     let namespaces = Default::default();
     let mut dependencies = Vec::new();
     let mut parts = Vec::new();
-    for (i, u) in bc_units.iter().enumerate() {
+    let compiled = super::runtime_objects::compile_objects(&bc_units, |i, u| {
         let out = dir.join(format!("{i}.bc"));
-        dependencies.extend(
-            clang_unit(config, spec, &clang, u, &bc_flags, &out, &namespaces)?.dependencies,
-        );
+        let unit = clang_unit(config, spec, &clang, u, &bc_flags, &out, &namespaces)?;
+        Ok((out, unit.dependencies))
+    })?;
+    for (out, unit_dependencies) in compiled {
+        dependencies.extend(unit_dependencies);
         parts.push(out);
     }
     let mut link = tools.command("llvm-link");
@@ -336,11 +338,13 @@ pub(super) fn build_native_runtime(
 
     if let Some(archive) = &archive {
         let mut objs = Vec::new();
-        for (i, u) in vendored.iter().enumerate() {
+        let compiled = super::runtime_objects::compile_objects(&vendored, |i, u| {
             let obj = dir.join(format!("v{i}.o"));
-            dependencies.extend(
-                clang_unit(config, spec, &clang, u, &level, &obj, &namespaces)?.dependencies,
-            );
+            let unit = clang_unit(config, spec, &clang, u, &level, &obj, &namespaces)?;
+            Ok((obj, unit.dependencies))
+        })?;
+        for (obj, unit_dependencies) in compiled {
+            dependencies.extend(unit_dependencies);
             objs.push(obj);
         }
         let _ = std::fs::remove_file(archive);

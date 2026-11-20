@@ -26,26 +26,21 @@ jobs:
             container: debian:bookworm
             target: linux-x64
             rust_target: ""
-            archive: tar.gz
           - os: ubuntu-24.04-arm
             container: debian:bookworm
             target: linux-arm64
             rust_target: ""
-            archive: tar.gz
           # Intel macOS: cross-compile from Apple Silicon. macos-13 runners often sit
           # queued indefinitely on free/public repos.
           - os: macos-latest
             target: macos-x64
             rust_target: x86_64-apple-darwin
-            archive: tar.gz
           - os: macos-latest
             target: macos-arm64
             rust_target: ""
-            archive: tar.gz
           - os: windows-latest
             target: windows-x64
             rust_target: ""
-            archive: zip
 
     runs-on: ${{ matrix.os }}
     container: ${{ contains(matrix.target, 'linux') && 'debian:bookworm' || fromJSON('null') }}
@@ -233,38 +228,21 @@ jobs:
           rm wasm-runtime.zip
           du -sh "$RT"
 
-      - name: Create Windows ZIP
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        timeout-minutes: 20
-        env:
-          STAGE: ${{ steps.stage.outputs.path }}
-        run: |
-          Push-Location (Split-Path -Parent $env:STAGE)
-          try {
-            $name = Split-Path -Leaf $env:STAGE
-            if (Test-Path -LiteralPath "$name.zip") {
-              Remove-Item -LiteralPath "$name.zip" -Force
-            }
-            & "$env:ProgramFiles\7-Zip\7z.exe" a -tzip -mx=1 -bd "$name.zip" "$name"
-            if ($LASTEXITCODE -ne 0) { throw "7-Zip failed with exit code $LASTEXITCODE" }
-          } finally {
-            Pop-Location
-          }
-
-      - name: Create Unix archive
-        if: matrix.archive != 'zip'
+      - name: Create release archive
         shell: bash
         timeout-minutes: 45
         env:
           STAGE: ${{ steps.stage.outputs.path }}
         run: |
           set -euo pipefail
-          # A large xz dictionary sees the near-identical prebuilt runtime trees as repeats;
-          # gzip's 32 KB window cannot. Piped through xz because macOS bsdtar ignores XZ_OPT,
-          # and single-threaded because threaded blocks cannot match across each other.
-          tar -C "$(dirname "$STAGE")" -cf - "$(basename "$STAGE")" \
-            | xz -T1 --lzma2=preset=9e,dict=256MiB > "$STAGE.tar.xz"
+          # A single xz block can match repeated LLVM and runtime bytes across files.
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            /usr/bin/tar.exe --sort=name -C "$(dirname "$STAGE")" -cf - "$(basename "$STAGE")" \
+              | xz -T1 --lzma2=preset=3,dict=256MiB > "$STAGE.tar.xz"
+          else
+            tar -C "$(dirname "$STAGE")" -cf - "$(basename "$STAGE")" \
+              | xz -T1 --lzma2=preset=9e,dict=256MiB > "$STAGE.tar.xz"
+          fi
 
       # The staged archive alone must build native and wasm32 programs: no DREAM_LLVM, and the
       # development LLVM moved out of reach.
@@ -283,9 +261,14 @@ jobs:
       - name: Smoke test the staged Windows archive
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          STAGE: ${{ steps.stage.outputs.path }}
         run: |
-          $tag = '${{ github.event.inputs.tag || github.ref_name }}'
-          $stage = (Resolve-Path "dist/dream-$($tag.TrimStart('v'))-${{ matrix.target }}").Path
+          $unpacked = Join-Path $env:RUNNER_TEMP 'dream-release-smoke'
+          New-Item -ItemType Directory -Path $unpacked | Out-Null
+          & "$env:SystemRoot\System32\tar.exe" -xf "$env:STAGE.tar.xz" -C $unpacked
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract the Windows release archive' }
+          $stage = Join-Path $unpacked (Split-Path -Leaf $env:STAGE)
           $toolchains = [IO.Path]::GetFullPath((Join-Path $env:USERPROFILE '.dream/toolchains'))
           $hidden = "$toolchains.off"
           if (Test-Path -LiteralPath $hidden) { throw "Toolchain backup already exists: $hidden" }
@@ -302,9 +285,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dream-${{ matrix.target }}
-          path: |
-            dist/*.tar.xz
-            dist/*.zip
+          path: dist/*.tar.xz
 
   vscode:
     runs-on: ubuntu-latest
@@ -354,7 +335,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          find artifacts -type f \( -name '*.tar.xz' -o -name '*.zip' -o -name '*.vsix' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name '*.tar.xz' -o -name '*.vsix' \) -exec cp {} release/ \;
           cd release
           sha256sum * > SHA256SUMS
           ls -la

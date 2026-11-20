@@ -110,31 +110,66 @@ fn file_stamp(path: &std::path::Path) -> Option<String> {
     ))
 }
 
-/// Unix change timestamps let one process reuse verified contents, including shared headers.
-pub fn tool_identity(path: &std::path::Path) -> Option<String> {
-    #[cfg(unix)]
-    {
-        type ToolCache = std::collections::BTreeMap<PathBuf, (String, String)>;
-        static CACHE: std::sync::OnceLock<std::sync::Mutex<ToolCache>> = std::sync::OnceLock::new();
-        let before = file_stamp(path)?;
-        let cache = CACHE.get_or_init(Default::default);
-        if let Some((recorded, identity)) = cache.lock().ok()?.get(path)
-            && *recorded == before
-        {
-            return Some(identity.clone());
-        }
-        let identity = content_hash(path)?.to_hex().to_string();
-        if file_stamp(path)? != before {
-            return None;
-        }
-        cache
-            .lock()
-            .ok()?
-            .insert(path.to_path_buf(), (before, identity.clone()));
-        Some(identity)
+/// Size plus the NTFS write and change timestamps. Every write moves `ChangeTime`, which
+/// copy and archive tools do not restore, unlike the write timestamp `std` exposes.
+#[cfg(all(windows, feature = "native"))]
+fn file_stamp(path: &std::path::Path) -> Option<String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_BASIC_INFO, FileBasicInfo, GetFileInformationByHandleEx,
+    };
+    let file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let mut info = std::mem::MaybeUninit::<FILE_BASIC_INFO>::uninit();
+    // SAFETY: `file` keeps the handle open for the call, and `info` is a writable buffer of
+    // exactly the size passed for the `FileBasicInfo` class.
+    let ok = unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileBasicInfo,
+            info.as_mut_ptr().cast(),
+            std::mem::size_of::<FILE_BASIC_INFO>() as u32,
+        )
+    };
+    if ok == 0 {
+        return None;
     }
-    #[cfg(not(unix))]
-    content_hash(path).map(|hash| hash.to_hex().to_string())
+    // SAFETY: a successful call filled the whole structure.
+    let info = unsafe { info.assume_init() };
+    Some(format!(
+        "{len}:{}:{}:{}",
+        info.CreationTime, info.LastWriteTime, info.ChangeTime
+    ))
+}
+
+/// Without a change timestamp no stamp is trusted, so every identity rehashes the contents.
+#[cfg(not(any(unix, all(windows, feature = "native"))))]
+fn file_stamp(_: &std::path::Path) -> Option<String> {
+    None
+}
+
+/// File stamps let one process reuse verified contents, including shared headers.
+pub fn tool_identity(path: &std::path::Path) -> Option<String> {
+    type ToolCache = std::collections::BTreeMap<PathBuf, (String, String)>;
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<ToolCache>> = std::sync::OnceLock::new();
+    let Some(before) = file_stamp(path) else {
+        return content_hash(path).map(|hash| hash.to_hex().to_string());
+    };
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some((recorded, identity)) = cache.lock().ok()?.get(path)
+        && *recorded == before
+    {
+        return Some(identity.clone());
+    }
+    let identity = content_hash(path)?.to_hex().to_string();
+    if file_stamp(path)? != before {
+        return None;
+    }
+    cache
+        .lock()
+        .ok()?
+        .insert(path.to_path_buf(), (before, identity.clone()));
+    Some(identity)
 }
 
 /// A file whose change timestamp is this close to the time it was hashed may still be rewritten

@@ -110,6 +110,17 @@ pub(crate) struct GuestUnitOutput<'a> {
     pub bitcode: bool,
 }
 
+/// `source`'s path under the runtime tree, the name its output records. It is part of the unit's
+/// cache key, so it must not depend on which other modules a runtime set links.
+pub(crate) fn stable_unit_name(root: &Path, source: &Path) -> String {
+    let relative = source.strip_prefix(root).unwrap_or(source);
+    let parts: Vec<_> = relative
+        .components()
+        .map(|part| part.as_os_str().to_string_lossy())
+        .collect();
+    format!("rt/{}", parts.join("/"))
+}
+
 /// The clang invocation for one guest runtime unit (output and input not yet added). C
 /// units become LLVM bitcode for the whole-program link; assembly units stay objects. `sysroot`
 /// supplies the libc headers (`string.h`, …) the guest libc implements itself.

@@ -12,7 +12,8 @@ use super::runtime_build::{RuntimeCache, Unit, write_signatures};
 use super::tools::LlvmTools;
 use crate::driver::rt_stamp;
 use crate::driver::wasi::{
-    GuestUnitOutput, guest_include_dirs, run_captured, unit_command, wasm_ld_command,
+    GuestUnitOutput, guest_include_dirs, run_captured, stable_unit_name, unit_command,
+    wasm_ld_command,
 };
 use crate::driver::wasm_opt::OptLevel;
 use dream_mir::backend::llvm::RuntimeSigs;
@@ -172,9 +173,7 @@ pub(super) fn build_wasm_runtime(
     }
 
     let namespaces = Default::default();
-    let mut parts = Vec::new();
-    let mut dependencies = Vec::new();
-    for (i, u) in units.iter().enumerate() {
+    let compiled = super::runtime_objects::compile_objects(&units, |i, u| {
         let asm = is_asm(&u.path);
         let out = dir.join(format!("{i}.{}", if asm { "o" } else { "bc" }));
         let mut cmd = unit_command(
@@ -187,7 +186,7 @@ pub(super) fn build_wasm_runtime(
             threads,
             opt,
             GuestUnitOutput {
-                stable_name: &format!("rt{i}.c"),
+                stable_name: &stable_unit_name(&tools.config.runtime_c, &u.path),
                 bitcode: true,
             },
         );
@@ -200,15 +199,17 @@ pub(super) fn build_wasm_runtime(
                 cmd.arg("-o").arg(&out),
                 &format!("clang ({})", u.path.display()),
             )?;
-            dependencies.push(u.path.clone());
+            Ok((None, vec![u.path.clone()]))
         } else {
-            dependencies.extend(
-                super::runtime_cache::compile(cmd, &tools.config, &out, &namespaces)?.dependencies,
-            );
+            let unit = super::runtime_cache::compile(cmd, &tools.config, &out, &namespaces)?;
+            Ok((Some(out), unit.dependencies))
         }
-        if !asm {
-            parts.push(out);
-        }
+    })?;
+    let mut parts = Vec::new();
+    let mut dependencies = Vec::new();
+    for (part, unit_dependencies) in compiled {
+        parts.extend(part);
+        dependencies.extend(unit_dependencies);
     }
     let mut link = tools.command("llvm-link");
     let inputs = super::tools::input_response(&parts).map_err(|error| error.to_string())?;

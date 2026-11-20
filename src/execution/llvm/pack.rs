@@ -16,8 +16,11 @@ pub fn pack_runtime(
 ) -> Result<(), String> {
     let tools = resolve_llvm(config)?;
     let clang = tools.clang()?;
-    for opt in LEVELS {
-        for need in RuntimeNeed::all_sets() {
+    let sets = RuntimeNeed::all_sets();
+    let total = LEVELS.len() * sets.len();
+    let started = std::time::Instant::now();
+    for (level, opt) in LEVELS.into_iter().enumerate() {
+        for (index, &need) in sets.iter().enumerate() {
             build_native_runtime(
                 &tools,
                 &dream_abi::target::TargetSpec::host(),
@@ -46,6 +49,13 @@ pub fn pack_runtime(
                     super::runtime_objects::store_prebuilt(&dir.join("unit-objects"), &objects)?;
                 }
             }
+            // Release CI has no other signal of whether this hours-long step is still advancing.
+            eprintln!(
+                "pack-runtime: {}/{total} {opt:?} need_{:x} ({:.0?} elapsed)",
+                level * sets.len() + index + 1,
+                need.bits(),
+                started.elapsed()
+            );
         }
     }
     let crt = out.join("clang_rt");

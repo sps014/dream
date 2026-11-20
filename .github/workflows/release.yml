@@ -1,9 +1,6 @@
-name: Release toolchain
+name: Validate compact Windows release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -12,7 +9,7 @@ on:
         default: ""
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
@@ -25,18 +22,6 @@ jobs:
           - os: ubuntu-latest
             container: debian:bookworm
             target: linux-x64
-            rust_target: ""
-          - os: ubuntu-24.04-arm
-            container: debian:bookworm
-            target: linux-arm64
-            rust_target: ""
-          # Intel macOS: cross-compile from Apple Silicon. macos-13 runners often sit
-          # queued indefinitely on free/public repos.
-          - os: macos-latest
-            target: macos-x64
-            rust_target: x86_64-apple-darwin
-          - os: macos-latest
-            target: macos-arm64
             rust_target: ""
           - os: windows-latest
             target: windows-x64
@@ -286,72 +271,3 @@ jobs:
         with:
           name: dream-${{ matrix.target }}
           path: dist/*.tar.xz
-
-  vscode:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Build and package VS Code extension
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          VERSION="${TAG#v}"
-          cd tooling/vscode
-          npm ci
-          npm run compile
-          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            npx @vscode/vsce package "$VERSION" --no-git-tag-version
-          else
-            npx @vscode/vsce package --no-git-tag-version
-          fi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vscode-extension
-          path: tooling/vscode/*.vsix
-
-  publish:
-    needs: [build, vscode]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Collect archives + checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release
-          find artifacts -type f \( -name '*.tar.xz' -o -name '*.vsix' \) -exec cp {} release/ \;
-          cd release
-          sha256sum * > SHA256SUMS
-          ls -la
-
-      - name: Attest release artifacts
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: release/*
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: Dream ${{ github.event.inputs.tag || github.ref_name }}
-          generate_release_notes: true
-          files: |
-            release/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

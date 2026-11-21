@@ -8,6 +8,7 @@ mod const_blob;
 mod construction;
 mod debug;
 mod debug_views;
+mod function_bodies;
 mod fx;
 mod glue;
 mod int_ops;
@@ -25,6 +26,7 @@ mod source_loc;
 mod statements;
 mod terminator;
 mod types;
+mod unit_plan;
 mod value_refs;
 
 pub use runtime_sigs::RuntimeSigs;
@@ -80,6 +82,8 @@ pub enum Sanitizer {
 pub struct EmitOptions<'a> {
     pub std_sources: Option<&'a std::path::Path>,
     pub sanitizer: Option<Sanitizer>,
+    /// Splits the module into codegen units: each source file maps to its module's group,
+    /// numbered from 1. Large groups are further split by symbol hash.
     pub codegen_units: Option<&'a std::collections::BTreeMap<&'a str, usize>>,
 }
 
@@ -192,47 +196,10 @@ fn emit_llvm_module_unchecked(
 
     glue::tables::emit_strings(&mut l);
     glue::tables::emit_globals(&mut l);
-    let mut async_i = 0usize;
-    for f in &mir.functions {
-        if let Some(files) = options.codegen_units {
-            let unit = f.file.as_deref().and_then(|path| files.get(path)).copied();
-            l.m.set_unit(unit.unwrap_or(0));
-        }
-        if !f.is_async {
-            body::build_sync(&mut l, f, construction::InitMode::Ordinary);
-            if fresh_initializers.contains(&f.def) {
-                body::build_sync(&mut l, f, construction::InitMode::Fresh);
-            }
-            body::build_abi_wrapper(&mut l, f);
-            continue;
-        }
-        let poll_idx = mir.functions.len() + 1 + async_i;
-        let pre_lowered = &mir.polls[async_i];
-        async_i += 1;
-        if f.hir_fn.is_none() {
-            body::build_sync(&mut l, f, construction::InitMode::Ordinary);
-            if fresh_initializers.contains(&f.def) {
-                body::build_sync(&mut l, f, construction::InitMode::Fresh);
-            }
-            body::build_empty_poll_drop(&mut l, f);
-            continue;
-        }
-        let (offs, frame_size) = body::async_offsets(&l, pre_lowered);
-        let environment =
-            crate::async_emit::captures_environment(pre_lowered).then_some((frame_size + 7) & !7);
-        let frame_size = environment.map_or(frame_size, |offset| offset + 8);
-        body::build_async_stub(
-            &mut l,
-            f,
-            pre_lowered,
-            &offs,
-            frame_size,
-            poll_idx as i32,
-            environment,
-        );
-        body::build_poll(&mut l, f, pre_lowered, &offs, environment);
-        body::build_future_drop(&mut l, f, pre_lowered, &offs, environment);
-    }
+    let units = options
+        .codegen_units
+        .map(|files| unit_plan::assign(mir, files));
+    function_bodies::build_all(&mut l, units.as_deref(), &fresh_initializers);
     l.m.set_unit(0);
     glue::release::emit_all(&mut l);
     glue::ownership::emit_all(&mut l);

@@ -23,7 +23,11 @@ fn taken_globals_and_duplicate_projections_get_distinct_typed_tokens() {
         functions: vec![f.finish()],
         ..Mir::default()
     };
-    mir.globals.push(crate::MirGlobal { id: Global(0), ty });
+    mir.globals.push(crate::MirGlobal {
+        id: Global(0),
+        name: "g".into(),
+        ty,
+    });
     run(&mut mir, &ctx.interner);
     let f = &mir.functions[0];
     assert_eq!(f.locals.len(), 2);

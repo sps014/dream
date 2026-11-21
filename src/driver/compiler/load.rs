@@ -7,6 +7,14 @@ pub(super) struct LoadedProgram<'a> {
     pub cpp_bridge: crate::driver::ffi_shim::CppBridge,
 }
 
+/// Where the program's nodes live: generated and synthesized nodes in `bump`, parsed source files
+/// in `herd` so they can be parsed in parallel.
+#[derive(Default)]
+pub(super) struct SourceArenas {
+    pub bump: Bump,
+    pub herd: bumpalo_herd::Herd,
+}
+
 /// The program as generators see it: parsed, prelude merged, attributes validated.
 struct FrontEnd<'a> {
     acc: ProgramAccumulator<'a>,
@@ -32,12 +40,14 @@ impl Compiler {
     fn load_front<'a>(
         &self,
         main_file_path: &String,
-        arena: &'a Bump,
+        arenas: &'a SourceArenas,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<FrontEnd<'a>, CompileError> {
+        let arena = &arenas.bump;
         let mut acc = ProgramAccumulator {
             cfg: self.cfg_symbols(),
             track_build_inputs: self.build_cache.is_some(),
+            parse_herd: Some(&arenas.herd),
             ..ProgramAccumulator::default()
         };
         if acc.track_build_inputs
@@ -128,20 +138,7 @@ impl Compiler {
         // Opt-in stdlib packages (`import system.io;`, etc.) plus always-on bootstrap
         // (`system.core` / `system.primitives`).
         let prelude_phase = tracing::info_span!("compile_phase", phase = "prelude_parse").entered();
-        merge_prelude(
-            arena,
-            &mut acc.all_functions,
-            &mut acc.all_structs,
-            &mut acc.all_interfaces,
-            &mut acc.all_enums,
-            &mut acc.all_extends,
-            &mut acc.all_globals,
-            diagnostics,
-            &mut acc.file_contents,
-            &mut acc.file_modules,
-            &acc.requested_std_packages,
-            acc.cfg,
-        )?;
+        merge_prelude(&mut acc)?;
         drop(prelude_phase);
         let _attributes_phase =
             tracing::info_span!("compile_phase", phase = "attributes").entered();
@@ -178,15 +175,16 @@ impl Compiler {
     pub(super) fn load_program<'a>(
         &self,
         main_file_path: &String,
-        arena: &'a Bump,
+        arenas: &'a SourceArenas,
         diagnostics: &mut DiagnosticBag,
     ) -> Result<LoadedProgram<'a>, CompileError> {
+        let arena = &arenas.bump;
         let FrontEnd {
             mut acc,
             attributes,
             native_graph,
             cpp_bridge,
-        } = self.load_front(main_file_path, arena, diagnostics)?;
+        } = self.load_front(main_file_path, arenas, diagnostics)?;
 
         let _generators_phase =
             tracing::info_span!("compile_phase", phase = "generators").entered();
@@ -232,10 +230,10 @@ impl Compiler {
         &self,
         main_file_path: &str,
     ) -> Result<crate::driver::generate::GenInspection, CompileError> {
-        let arena = Bump::new();
+        let arenas = SourceArenas::default();
         let entry = main_file_path.to_string();
         let mut diagnostics = DiagnosticBag::new(Some(entry.clone()));
-        let front = self.load_front(&entry, &arena, &mut diagnostics)?;
+        let front = self.load_front(&entry, &arenas, &mut diagnostics)?;
         let inspection = crate::driver::generate::inspect(
             &self.generate_request(main_file_path),
             &front.acc,

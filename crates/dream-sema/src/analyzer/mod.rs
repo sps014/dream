@@ -18,6 +18,7 @@ use indexmap::IndexMap;
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 mod await_rules;
 mod borrow_check;
@@ -156,7 +157,7 @@ pub struct GlobalSymbol {
     pub visibility: dream_syntax::nodes::Visibility,
     /// Source file this global was declared in, for file/module-level visibility. `None` for
     /// synthesized globals (always visible).
-    pub file_path: Option<Rc<str>>,
+    pub file_path: Option<Arc<str>>,
 }
 
 pub struct SemanticInfo<'a> {
@@ -216,6 +217,10 @@ pub struct Analyzer<'a> {
     graph: &'a ModuleGraph<'a>,
     generator_facts: Option<crate::gen_facts::GenFacts>,
     cached_typed_bodies: HashMap<dream_types::ModuleId, TypedBodies>,
+    changed_typed_bodies: HashSet<dream_types::ModuleId>,
+    /// Cache key of each module by path, which generic instance bodies add for the modules that
+    /// declare their type arguments.
+    module_cache_keys: IndexMap<String, [u8; 32]>,
     reused_typed_bodies: usize,
     def_index: typed_hir_cache::DefIndex,
     journal: Option<typed_hir_cache::Journal>,
@@ -375,7 +380,7 @@ pub struct Analyzer<'a> {
     /// table): type name -> (declaring file, visibility). A non-public entry is only referenceable
     /// per [`Analyzer::visible_across_files`]. Absent or `None` file means always visible.
     type_visibility:
-        HashMap<dream_types::DefId, (Option<Rc<str>>, dream_syntax::nodes::Visibility)>,
+        HashMap<dream_types::DefId, (Option<Arc<str>>, dream_syntax::nodes::Visibility)>,
     /// Sink RC params moved into a field/index store; further uses of the binding are errors.
     moved_locals: HashSet<String>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
@@ -420,13 +425,13 @@ pub struct Analyzer<'a> {
     /// The source file of the function whose body is currently being analyzed, used for
     /// file/module-level visibility checks at sites that do not thread `parent_function` (e.g.
     /// bare-identifier global reads). `None` outside any function body.
-    current_file: Option<Rc<str>>,
+    current_file: Option<Arc<str>>,
     /// Maps each source file that declared a `module a.b.c;` to its dot-joined module path.
     /// Files absent from this map (the overwhelming majority: anyone who never writes `module`)
     /// belong to the implicit, unnamed root module. Derived from the module graph.
-    file_modules: HashMap<Rc<str>, Rc<str>>,
-    generated_files: HashSet<Rc<str>>,
-    stdlib_files: HashSet<Rc<str>>,
+    file_modules: HashMap<Arc<str>, Arc<str>>,
+    generated_files: HashSet<Arc<str>>,
+    stdlib_files: HashSet<Arc<str>>,
     /// Every aliased `import a.b.c as x;` collected across all files (module path, item name,
     /// alias token, importing file path), populated once via [`Self::with_aliased_imports`] before
     /// [`Self::analyze`] runs. Drained by `register_import_aliases` (see `declarations::imports`)
@@ -541,6 +546,8 @@ impl<'a> Analyzer<'a> {
             current_file: None,
             generator_facts: None,
             cached_typed_bodies: HashMap::new(),
+            changed_typed_bodies: HashSet::new(),
+            module_cache_keys: IndexMap::new(),
             reused_typed_bodies: 0,
             def_index: Default::default(),
             journal: None,
@@ -552,19 +559,19 @@ impl<'a> Analyzer<'a> {
                 .filter_map(|file| {
                     let path = &graph.modules[file.module.0 as usize].path;
                     (!path.is_empty())
-                        .then(|| (Rc::from(file.path.as_str()), Rc::from(path.as_str())))
+                        .then(|| (Arc::from(file.path.as_str()), Arc::from(path.as_str())))
                 })
                 .collect(),
             generated_files: graph
                 .generated_files
                 .iter()
-                .map(|path| Rc::from(path.as_str()))
+                .map(|path| Arc::from(path.as_str()))
                 .collect(),
             stdlib_files: graph
                 .files
                 .iter()
                 .filter(|file| dream_stdlib::package_for_source(&file.path).is_some())
-                .map(|file| Rc::from(file.path.as_str()))
+                .map(|file| Arc::from(file.path.as_str()))
                 .collect(),
             aliased_imports: Vec::new(),
             globals: Vec::new(),
@@ -585,6 +592,11 @@ impl<'a> Analyzer<'a> {
         &self.type_ctx.interner
     }
 
+    /// Every declaration the emitted HIR refers to, in allocation order.
+    pub fn defs(&self) -> &dream_types::DefTable {
+        &self.type_ctx.defs
+    }
+
     /// Reuses successful syntax-only body checks for exact snapshots of named source modules.
     pub fn set_cached_body_checks(&mut self, modules: HashSet<dream_types::ModuleId>) {
         self.cached_body_checks = modules;
@@ -597,16 +609,28 @@ impl<'a> Analyzer<'a> {
 
     /// Persisted typed bodies of the modules whose cache key matched. Modules without an entry
     /// neither reuse nor record bodies.
+    /// `module_cache_keys` holds every module's cache key by module path.
     pub fn set_cached_typed_bodies(
         &mut self,
         modules: HashMap<dream_types::ModuleId, TypedBodies>,
+        module_cache_keys: IndexMap<String, [u8; 32]>,
     ) {
         self.cached_typed_bodies = modules;
+        self.module_cache_keys = module_cache_keys;
     }
 
-    /// The reused and newly recorded typed bodies, by module.
-    pub fn take_typed_bodies(&mut self) -> HashMap<dream_types::ModuleId, TypedBodies> {
-        std::mem::take(&mut self.cached_typed_bodies)
+    /// The reused and newly recorded typed bodies by module, and the modules whose bodies
+    /// changed.
+    pub fn take_typed_bodies(
+        &mut self,
+    ) -> (
+        HashMap<dream_types::ModuleId, TypedBodies>,
+        HashSet<dream_types::ModuleId>,
+    ) {
+        (
+            std::mem::take(&mut self.cached_typed_bodies),
+            std::mem::take(&mut self.changed_typed_bodies),
+        )
     }
 
     /// Number of bodies taken from the persisted cache instead of analyzed.

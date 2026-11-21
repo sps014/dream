@@ -2,7 +2,7 @@
 //! native set that compiles their shim. Built from the parsed program before semantic analysis.
 
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use dream_abi::attributes::{
     ALLOW_CYCLE, AttributeTarget, OwnedResult, allows_cycle, cpp_attr, cpp_header, cpp_member_name,
@@ -69,7 +69,7 @@ pub(super) struct Struct {
 /// Everything one source file declares with `@cpp`; the unit the desugarer replaces.
 #[derive(Debug, Clone)]
 pub(super) struct FileDecls {
-    pub file: Rc<str>,
+    pub file: Arc<str>,
     pub set: String,
     pub classes: Vec<Class>,
     pub free: Vec<Member>,
@@ -80,7 +80,7 @@ pub(super) struct FileDecls {
 pub(super) struct SetDecls {
     pub headers: IndexSet<String>,
     pub files: Vec<FileDecls>,
-    pub structs: Vec<(Rc<str>, Struct)>,
+    pub structs: Vec<(Arc<str>, Struct)>,
 }
 
 #[derive(Debug, Default)]
@@ -97,7 +97,7 @@ struct Ctx<'g> {
 impl Ctx<'_> {
     fn set_for(
         &mut self,
-        file: Option<&Rc<str>>,
+        file: Option<&Arc<str>>,
         what: &str,
         at: &SyntaxToken,
         diagnostics: &mut DiagnosticBag,
@@ -129,7 +129,7 @@ impl Ctx<'_> {
     }
 }
 
-fn report(diagnostics: &mut DiagnosticBag, file: Option<&Rc<str>>, msg: String, at: &SyntaxToken) {
+fn report(diagnostics: &mut DiagnosticBag, file: Option<&Arc<str>>, msg: String, at: &SyntaxToken) {
     let saved = diagnostics.file_path.clone();
     diagnostics.file_path = file.map(|f| f.to_string());
     diagnostics.report_error(msg, Some(at.position));
@@ -192,7 +192,7 @@ pub(super) fn collect(
         cx.header(&set, &s.attributes);
         if s.is_value {
             if let Some(st) = value_struct(s, diagnostics) {
-                let file = s.file_path.clone().unwrap_or_else(|| Rc::from(""));
+                let file = s.file_path.clone().unwrap_or_else(|| Arc::from(""));
                 cx.program
                     .sets
                     .entry(set)
@@ -292,9 +292,9 @@ pub(super) fn collect(
 fn file_decls<'p>(
     program: &'p mut Program,
     set: &str,
-    file: Option<&Rc<str>>,
+    file: Option<&Arc<str>>,
 ) -> &'p mut FileDecls {
-    let file = file.cloned().unwrap_or_else(|| Rc::from(""));
+    let file = file.cloned().unwrap_or_else(|| Arc::from(""));
     let decls = &mut program.sets.entry(set.to_string()).or_default().files;
     let i = match decls.iter().position(|d| d.file == file) {
         Some(i) => i,

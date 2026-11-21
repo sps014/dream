@@ -6,6 +6,7 @@ impl Compiler {
         mut mir: dream_mir::Mir,
         interner: &dream_types::TypeInterner,
         dump: &mut dream_mir::passes::MirDump,
+        ownership: Option<&mut dream_mir::ownership_cache::OwnershipCache>,
     ) -> dream_mir::Mir {
         mir.profile = self.profile();
         mir.optimize_for_size = matches!(
@@ -20,13 +21,14 @@ impl Compiler {
         {
             let _phase = tracing::info_span!("compile_phase", phase = "module_passes").entered();
             if self.profile().is_debug() {
-                dream_mir::passes::prepare_debug_module(&mut mir, interner, dump);
+                dream_mir::passes::prepare_debug_module(&mut mir, interner, dump, ownership);
             } else {
                 dream_mir::passes::optimize_module_opts(
                     &mut mir,
                     interner,
                     !self.debug_info && !self.output_kind.is_library(),
                     dump,
+                    ownership,
                 );
             }
         }

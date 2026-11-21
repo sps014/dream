@@ -8,13 +8,19 @@ use indexmap::IndexMap;
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(super) enum Edge {
     Call(DefId, Vec<TypeId>, Vec<Option<BTreeSet<usize>>>),
-    Iface(usize, usize, Vec<Option<BTreeSet<usize>>>),
+    Iface(
+        #[serde(with = "dream_hir::interface_index")] usize,
+        usize,
+        Vec<Option<BTreeSet<usize>>>,
+    ),
     Ctor(DefId),
 }
 
-pub(super) struct LocalSummary {
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct LocalSummary {
     pub(super) observes_rc: bool,
     pub(super) may_destroy: bool,
     pub(super) own: ModRef,

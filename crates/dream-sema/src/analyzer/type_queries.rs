@@ -229,7 +229,7 @@ impl<'a> Analyzer<'a> {
                 }
                 let mut ok = true;
                 if written {
-                    let caller = diagnostics.file_path.as_deref().map(Rc::<str>::from);
+                    let caller = diagnostics.file_path.as_deref().map(Arc::<str>::from);
                     self.check_type_visible(
                         &token.text,
                         caller.as_ref(),

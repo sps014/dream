@@ -20,7 +20,7 @@ enum RecvKind {
 struct Entry {
     owner: TypeId,
     name: String,
-    file: Option<Rc<str>>,
+    file: Option<Arc<str>>,
     explicit: Option<ReceiverMode>,
     decl_span: TextSpan,
     direct_unique: bool,

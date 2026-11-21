@@ -59,12 +59,12 @@ pub struct FunctionTableInfo {
     /// Source file the declaration came from, used for file/module-level visibility: a non-public
     /// declaration is only reachable from its own file. `None` for synthesized/stdlib entries,
     /// which are always visible.
-    pub declaring_file: Option<std::rc::Rc<str>>,
+    pub declaring_file: Option<std::sync::Arc<str>>,
     /// The declaring file's `module a.b.c;` path, if any — `None` for a file with no `module`
     /// declaration (the implicit root module) as well as for synthesized/stdlib entries. Set by
     /// the analyzer's registration pass (`FunctionTableInfo::from` cannot see the file/module map
     /// on its own); drives the cross-module duplicate-name resolution in [`FunctionTable::add_overload`].
-    pub declaring_module: Option<std::rc::Rc<str>>,
+    pub declaring_module: Option<std::sync::Arc<str>>,
 }
 
 impl FunctionTableInfo {

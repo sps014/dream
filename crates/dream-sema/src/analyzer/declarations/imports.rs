@@ -45,7 +45,7 @@ impl<'a> Analyzer<'a> {
             diagnostics.file_path = Some(importing_file.clone());
             if visibility == Some(Visibility::Private)
                 && !self.trusted_generated_file(importing_file.as_str())
-                && !self.generator_can_access(&qualified, Some(&Rc::from(importing_file.as_str())))
+                && !self.generator_can_access(&qualified, Some(&Arc::from(importing_file.as_str())))
             {
                 diagnostics.report_error(format!("'{item}' in module '{module_path}' is private; only 'public'/'internal' items can be imported with 'as'"), Some(alias.position));
                 continue;
@@ -78,7 +78,7 @@ impl<'a> Analyzer<'a> {
             if !generated
                 && !self.generator_can_access(
                     &qualified,
-                    diagnostics.file_path.as_deref().map(Rc::from).as_ref(),
+                    diagnostics.file_path.as_deref().map(Arc::from).as_ref(),
                 )
                 && identities.iter().any(|key| {
                     self.function_table

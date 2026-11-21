@@ -1,4 +1,4 @@
-//! Persisted typed bodies of non-generic functions and methods.
+//! Persisted typed bodies of functions and methods, including generic instances.
 //!
 //! A body is stored only when it reported nothing and every program-wide change its analysis
 //! made is accounted for by the [`journal`]: the types it interned and the generic types and
@@ -27,12 +27,16 @@ pub(super) use journal::{Journal, Request};
 pub(super) use keys::DefIndex;
 use keys::TypeKey;
 
-/// Source file, name offset and name of a declaration.
-pub type BodyKey = (String, usize, String);
+/// Source file, name offset and name of a declaration, and the generic bindings it was analyzed
+/// under.
+pub type BodyKey = (String, usize, String, Vec<(String, TypeKey)>);
 pub type TypedBodies = IndexMap<BodyKey, CachedBody>;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CachedBody {
+    /// Cache keys of the modules declaring the bindings' types, which the body's module key does
+    /// not cover.
+    environment: Option<String>,
     hir: String,
     types: Vec<TypeKey>,
     defs: Vec<keys::DefKey>,
@@ -43,7 +47,8 @@ pub struct CachedBody {
 }
 
 impl<'a> Analyzer<'a> {
-    /// Analyzes a non-generic body, replaying or recording its persisted HIR when possible.
+    /// Analyzes a body under the current generic bindings, replaying or recording its persisted
+    /// HIR when possible.
     pub(in crate::analyzer) fn analyze_cacheable_body(
         &mut self,
         function: &FunctionNode<'a>,
@@ -51,8 +56,8 @@ impl<'a> Analyzer<'a> {
     ) -> Result<(), SemanticError> {
         let module = self.graph.module_for_file(function.file_path.as_deref());
         let key = self.typed_body_key(module, function, diagnostics);
-        if let Some(key) = &key
-            && let Some(hir) = self.reuse_body(module, key, function, diagnostics)
+        if let Some((key, environment)) = &key
+            && let Some(hir) = self.reuse_body(module, key, environment, function, diagnostics)
         {
             self.current_file = function.file_path.clone();
             self.type_ctx.set_scope(module);
@@ -69,41 +74,94 @@ impl<'a> Analyzer<'a> {
         analyzed?;
         if reported != diagnostics.diagnostics.len() {
             self.body_checks_with_diagnostics.insert(module);
-        } else if let Some(key) = key
+        } else if let Some((key, environment)) = key
             && let Some(entries) = entries
-            && let Some(body) = self.encode_body(&entries)
+            && let Some(body) = self.encode_body(&entries, environment)
             && let Some(bodies) = self.cached_typed_bodies.get_mut(&module)
         {
             bodies.insert(key, body);
+            self.changed_typed_bodies.insert(module);
         }
         Ok(())
     }
 
+    /// The body's key and, for a generic instance, the environment its bindings depend on.
     fn typed_body_key(
-        &self,
+        &mut self,
         module: ModuleId,
         function: &FunctionNode<'_>,
         diagnostics: &DiagnosticBag,
-    ) -> Option<BodyKey> {
+    ) -> Option<(BodyKey, Option<String>)> {
+        let instance = !self.current_generic_bindings.is_empty();
         if diagnostics.has_errors()
             || self.journal.is_some()
             || !self.cached_typed_bodies.contains_key(&module)
             || !self.graph.consumed.is_empty()
             || self.generator_facts.is_some()
             || self.generator_scope.active()
-            || !self.current_generic_bindings.is_empty()
             || function.is_extern
-            || function.generic_parameters.is_some()
+            || (function.generic_parameters.is_some() && !instance)
             || function.name.text == crate::entry::ENTRY_NAME
             || function.body.iter().any(StatementNode::contains_yield)
         {
             return None;
         }
+        let (bindings, environment) = if instance {
+            let (bindings, environment) = self.binding_environment()?;
+            (bindings, Some(environment))
+        } else {
+            (Vec::new(), None)
+        };
         Some((
-            function.file_path.as_ref()?.to_string(),
-            function.name.position.start,
-            function.name.text.clone(),
+            (
+                function.file_path.as_ref()?.to_string(),
+                function.name.position.start,
+                function.name.text.clone(),
+                bindings,
+            ),
+            environment,
         ))
+    }
+
+    /// The current bindings as keys, and a digest of the cache keys of every module declaring a
+    /// type they mention. A body only names its own module's dependencies, but an instance
+    /// also observes the members of its type arguments, wherever they are declared.
+    fn binding_environment(&mut self) -> Option<(Vec<(String, TypeKey)>, String)> {
+        self.refresh_def_index();
+        let bindings: Vec<(String, TypeId)> = self
+            .current_generic_bindings
+            .clone()
+            .into_iter()
+            .map(|(name, ty)| (name, self.type_ctx.lower(&ty)))
+            .collect();
+        let mut closure = IndexSet::new();
+        for (_, ty) in &bindings {
+            self.collect_components(*ty, &mut closure);
+        }
+        let mut modules = std::collections::BTreeSet::new();
+        for ty in closure {
+            match self.type_ctx.interner.kind(ty) {
+                TyKind::Struct(def, _)
+                | TyKind::Union(def, _)
+                | TyKind::Interface(def, _)
+                | TyKind::Enum(def) => {
+                    modules.insert(self.type_ctx.defs.get(*def).module_path.clone());
+                }
+                TyKind::Error => return None,
+                _ => {}
+            }
+        }
+        let mut digest = blake3::Hasher::new();
+        for module in &modules {
+            digest.update(&(module.len() as u64).to_le_bytes());
+            digest.update(module.as_bytes());
+            digest.update(self.module_cache_keys.get(module)?);
+        }
+        let bindings = bindings
+            .into_iter()
+            .map(|(name, ty)| (name, self.type_key(ty)))
+            .collect();
+        Some((bindings, digest.finalize().to_hex().to_string()))
     }
 
     /// Sizes of the program-wide tables body analysis can grow. The emitted functions come last.
@@ -155,7 +213,11 @@ impl<'a> Analyzer<'a> {
         ]
     }
 
-    fn encode_body(&mut self, entries: &[journal::Entry]) -> Option<CachedBody> {
+    fn encode_body(
+        &mut self,
+        entries: &[journal::Entry],
+        environment: Option<String>,
+    ) -> Option<CachedBody> {
         self.refresh_def_index();
         let (hir, tables) =
             portable::encode(|| serde_json::to_string(self.hir.functions.last()?).ok());
@@ -179,6 +241,7 @@ impl<'a> Analyzer<'a> {
             self.collect_components(ty, &mut closure);
         }
         Some(CachedBody {
+            environment,
             hir,
             types: types.iter().map(|&ty| self.type_key(ty)).collect(),
             defs: tables
@@ -208,10 +271,16 @@ impl<'a> Analyzer<'a> {
         &mut self,
         module: ModuleId,
         key: &BodyKey,
+        environment: &Option<String>,
         function: &FunctionNode<'_>,
         diagnostics: &mut DiagnosticBag,
     ) -> Option<HFunction> {
-        let cached = self.cached_typed_bodies.get(&module)?.get(key)?.clone();
+        let cached = self
+            .cached_typed_bodies
+            .get(&module)?
+            .get(key)
+            .filter(|cached| cached.environment == *environment)?
+            .clone();
         self.current_file = function.file_path.clone();
         self.type_ctx.set_scope(module);
         self.replay_events(&cached.events, diagnostics)?;
@@ -266,16 +335,20 @@ impl<'a> Analyzer<'a> {
     ) -> Option<HFunction> {
         let identity = self.function_table.declaration_node(function)?;
         let info = self.function_table.functions.get(&identity)?;
-        if !identity.1.is_empty()
-            || hir.def != identity.0
-            || !hir.instance.is_empty()
+        if hir.def != identity.0
+            || hir.instance != identity.1
             || hir.ret != info.resolved_return
             || hir.file.as_deref() != function.file_path.as_deref()
         {
             return None;
         }
         let lookup = self.function_table.emitted_name(&self.type_ctx, &identity);
-        hir.symbol = self.hir_function_symbol(&lookup, function.file_path.as_ref(), &[]);
+        let args: Vec<String> = identity
+            .1
+            .iter()
+            .map(|&ty| dream_types::type_symbol(&self.type_ctx.interner, &self.type_ctx.defs, ty))
+            .collect();
+        hir.symbol = self.hir_function_symbol(&lookup, function.file_path.as_ref(), &args);
         hir.name = lookup;
         Some(hir)
     }

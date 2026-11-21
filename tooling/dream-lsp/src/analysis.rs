@@ -95,7 +95,7 @@ pub fn analyze_document_for_target(
     if let Some(module_decl) = &program.module {
         acc.file_modules.insert(
             MAIN_FILE.to_string(),
-            std::rc::Rc::from(module_decl.path.text.as_str()),
+            std::sync::Arc::from(module_decl.path.text.as_str()),
         );
     }
     collect_declarations(
@@ -181,20 +181,7 @@ pub fn analyze_document_for_target(
         let _ = dream::driver::c_imports::replay(&mut acc, &arena, &mut diagnostics, path, target);
     }
 
-    let _ = dream::driver::prelude::merge_prelude(
-        &arena,
-        &mut acc.all_functions,
-        &mut acc.all_structs,
-        &mut acc.all_interfaces,
-        &mut acc.all_enums,
-        &mut acc.all_extends,
-        &mut acc.all_globals,
-        &mut diagnostics,
-        &mut acc.file_contents,
-        &mut acc.file_modules,
-        &acc.requested_std_packages,
-        acc.cfg,
-    );
+    let _ = dream::driver::prelude::merge_prelude(&mut acc);
 
     // Skip compiled-in copies of prelude files the user is actively editing in the compiler repo.
     if let Some(path) = file_path {

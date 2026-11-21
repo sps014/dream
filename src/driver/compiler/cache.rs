@@ -448,9 +448,9 @@ mod tests {
         let out = output.to_str().unwrap();
         let compiler = Compiler::new(Target::native()).with_build_cache(Some("test".into()));
         fs::write(&path, "fun main(): int { return 1; }").unwrap();
-        let arena = Bump::new();
+        let arenas = super::load::SourceArenas::default();
         let loaded = compiler
-            .load_program(&source, &arena, &mut DiagnosticBag::new(None))
+            .load_program(&source, &arenas, &mut DiagnosticBag::new(None))
             .unwrap();
         assert!(
             compiler

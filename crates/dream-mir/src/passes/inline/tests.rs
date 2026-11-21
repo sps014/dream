@@ -613,6 +613,7 @@ fn optimize_module_rc_after_inline_moves_returned_string() {
         true,
         &mut crate::passes::MirDump::disabled(),
         1,
+        None,
     );
     assert_eq!(
         crate::passes::limits::hits(crate::passes::limits::Limit::Inline),

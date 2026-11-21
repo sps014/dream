@@ -284,7 +284,7 @@ fn interpret_events(
     analyzer: &Analyzer<'_>,
     owner: Option<TypeId>,
     local_types: &IndexMap<String, TypeId>,
-    file_path: &Option<Rc<str>>,
+    file_path: &Option<Arc<str>>,
     diagnostics: &mut DiagnosticBag,
 ) {
     use indexmap::IndexMap as StdHashMap;

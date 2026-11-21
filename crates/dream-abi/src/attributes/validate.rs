@@ -6,7 +6,7 @@ use dream_syntax::nodes::interface_node::InterfaceDeclarationNode;
 use dream_syntax::nodes::program::{EnumDeclarationNode, ExtendNode};
 use dream_syntax::nodes::struct_node::{StructDeclarationNode, StructFieldNode};
 use dream_syntax::nodes::types::{CONSTRUCTOR_NAME, DESTRUCTOR_NAME};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub(super) fn arg_matches_kind(arg: &AttributeArg, kind: ArgKind) -> bool {
     match (kind, arg) {
@@ -78,7 +78,7 @@ pub fn validate_attributes(
     }
 }
 
-fn file_path_string(file_path: &Option<Rc<str>>) -> Option<String> {
+fn file_path_string(file_path: &Option<Arc<str>>) -> Option<String> {
     file_path.as_ref().map(|p| p.to_string())
 }
 

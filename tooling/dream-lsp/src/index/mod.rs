@@ -182,20 +182,7 @@ impl Index {
             }
         }
 
-        let _ = dream::driver::prelude::merge_prelude(
-            &arena,
-            &mut acc.all_functions,
-            &mut acc.all_structs,
-            &mut acc.all_interfaces,
-            &mut acc.all_enums,
-            &mut acc.all_extends,
-            &mut acc.all_globals,
-            &mut scratch,
-            &mut acc.file_contents,
-            &mut acc.file_modules,
-            &acc.requested_std_packages,
-            acc.cfg,
-        );
+        let _ = dream::driver::prelude::merge_prelude(&mut acc);
 
         builder.file_namespaces.extend(
             acc.file_modules

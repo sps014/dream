@@ -1,7 +1,7 @@
 use crate::nodes::Type;
 use crate::nodes::Visibility;
 use crate::token::syntax_token::SyntaxToken;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct StructFieldNode {
@@ -64,7 +64,7 @@ pub struct StructDeclarationNode<'a> {
     pub is_shared: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
-    pub file_path: Option<Rc<str>>,
+    pub file_path: Option<Arc<str>>,
 }
 
 impl<'a> StructDeclarationNode<'a> {

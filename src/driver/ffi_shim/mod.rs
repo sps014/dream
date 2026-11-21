@@ -19,7 +19,7 @@ mod types;
 use std::collections::BTreeMap;
 use std::io::Error;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use bumpalo::Bump;
 use dream_abi::attributes::cpp_attr;
@@ -42,7 +42,7 @@ pub struct CppBridge {
 pub struct CppOrigin {
     /// `Class.member`, `Class` (its destructor), or a free function name.
     pub what: String,
-    pub file: Rc<str>,
+    pub file: Arc<str>,
     pub at: TextSpan,
 }
 

@@ -7,20 +7,20 @@ use indexmap::IndexSet;
 use std::collections::{HashMap, HashSet};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use dream_diagnostics::DiagnosticBag;
 use dream_stdlib::std_package_from_slash_path;
-use dream_syntax::lexer::Lexer;
 use dream_syntax::nodes::struct_node::StructDeclarationNode;
 use dream_syntax::nodes::{
     EnumDeclarationNode, ExtendNode, FunctionNode, GlobalVariableNode, InterfaceDeclarationNode,
     ProgramNode,
 };
-use dream_syntax::parser::Parser;
+use dream_syntax::parser::AstArena;
 use dream_syntax::token::syntax_token::SyntaxToken;
 
 mod graph;
+mod prefetch;
 
 /// Collects every top-level declaration from all parsed files (user code + imports + prelude +
 /// `@json` derives), tagged with its originating file so semantic diagnostics attribute errors
@@ -49,7 +49,7 @@ pub struct ProgramAccumulator<'a> {
     /// Every file that declared a `module a.b.c;`, mapped to its dot-joined module path. Files
     /// absent from this map belong to the implicit, unnamed root module. Used when assembling
     /// graph modules for embedded and generated source files.
-    pub file_modules: HashMap<String, Rc<str>>,
+    pub file_modules: HashMap<String, Arc<str>>,
     /// Every aliased `import a.b.c as x;` encountered across all files, as
     /// `(module path "a.b", item name "c", alias token "x")`. Resolved by the analyzer in a second
     /// pass, after every file (and its `module` declaration) is loaded, since the referenced module
@@ -71,6 +71,10 @@ pub struct ProgramAccumulator<'a> {
     pub untracked_generator_inputs: bool,
     /// Symbols every file's `@cfg` conditions are evaluated against.
     pub cfg: dream_syntax::conditional::CfgSymbols,
+    /// When set, the files reachable from the entry are parsed in parallel into this herd before
+    /// the sequential walk.
+    pub parse_herd: Option<&'a bumpalo_herd::Herd>,
+    pub(crate) prefetched: HashMap<String, prefetch::Prefetched<'a>>,
 }
 
 impl ProgramAccumulator<'_> {
@@ -222,7 +226,7 @@ pub fn collect_declarations<'a>(
     all_extends: &mut Vec<ExtendNode<'a>>,
     all_globals: &mut Vec<GlobalVariableNode<'a>>,
 ) {
-    let tag: Rc<str> = Rc::from(file_tag);
+    let tag: Arc<str> = Arc::from(file_tag);
 
     for function in program.functions.iter().cloned() {
         let mut function = function;
@@ -297,8 +301,11 @@ pub fn parse_file_recursive<'a>(
         return Ok(()); // Already processed
     }
 
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| Error::new(e.kind(), format!("{}: {e}", path.display())))?;
+    let text = match acc.prefetched.get(&path_str) {
+        Some(file) => file.text.clone(),
+        None => std::fs::read_to_string(&path)
+            .map_err(|e| Error::new(e.kind(), format!("{}: {e}", path.display())))?,
+    };
     acc.record_file_input(path, text.as_bytes());
     parse_source_recursive(path_str, text, acc, arena, diagnostics)
 }
@@ -320,33 +327,33 @@ pub fn parse_source_recursive<'a>(
             format!("{path_str}: '<std>/' paths are reserved for the embedded standard library"),
         ));
     }
-    if !acc.visited.insert(path_str.clone()) {
-        return Ok(());
-    }
     let path = Path::new(&path_str).to_path_buf();
-
-    acc.file_contents.insert(path_str.clone(), text.clone());
-
-    let mut file_diagnostics = DiagnosticBag::new(Some(path_str.clone()));
-
-    let lexer = Lexer::new(text);
-    let mut parser = Parser::new(lexer, arena, &mut file_diagnostics)
-        .with_cfg(acc.cfg)
-        .with_c_import_scope(super::c_imports::source_scope(&path));
-
-    let ast = parser.parse();
-
-    diagnostics.extend(&file_diagnostics);
-
-    let program = ast.get_root();
-    acc.parsed_files.insert(path_str.clone(), program.clone());
-    if let Some(module_decl) = &program.module {
-        acc.file_modules
-            .insert(path_str.clone(), Rc::from(module_decl.path.text.as_str()));
-    }
     let parent_dir = path.parent().unwrap_or_else(|| Path::new(""));
     if acc.package_base.is_none() {
         acc.package_base = Some(std::path::absolute(parent_dir)?);
+    }
+    if acc.visited.is_empty()
+        && let Some(herd) = acc.parse_herd
+    {
+        prefetch::prefetch(acc, herd, path_str.clone(), text.clone());
+    }
+    if !acc.visited.insert(path_str.clone()) {
+        return Ok(());
+    }
+
+    acc.file_contents.insert(path_str.clone(), text.clone());
+
+    let file = match acc.prefetched.remove(&path_str) {
+        Some(file) if file.text == text => file,
+        _ => prefetch::parse(AstArena::Bump(arena), &path_str, text, acc.cfg),
+    };
+    diagnostics.extend(&file.diagnostics);
+
+    let program = &file.program;
+    acc.parsed_files.insert(path_str.clone(), program.clone());
+    if let Some(module_decl) = &program.module {
+        acc.file_modules
+            .insert(path_str.clone(), Arc::from(module_decl.path.text.as_str()));
     }
 
     for import in &program.imports {

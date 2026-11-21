@@ -51,6 +51,11 @@ pub fn enforce_shared(config: &crate::driver::toolchain::ToolchainConfig) {
         128 * 1024 * 1024,
         &[],
     );
+    enforce(
+        &config.prefix.join("cache").join("ownership"),
+        256 * 1024 * 1024,
+        &[],
+    );
     enforce(&config.std_sources_root(), STD_SOURCES, &[]);
     enforce(&config.tool_identity_cache_root(), TOOL_IDENTITIES, &[]);
 }

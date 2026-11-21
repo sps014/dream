@@ -163,6 +163,7 @@ pub fn lower_program(hir: &Hir, interner: &TypeInterner) -> Mir {
         .iter()
         .map(|g| super::MirGlobal {
             id: super::Global(g.id.0),
+            name: g.name.clone(),
             ty: g.ty,
         })
         .collect();

@@ -4,9 +4,12 @@
 //! compilation registered and interned everything. A persisted body therefore never stores them
 //! directly: [`encode`] replaces every id with an index into a per-space table that the caller
 //! converts to stable keys, and [`decode`] maps those indices back to the ids of the current
-//! compilation. Outside either scope, ids serialize as their raw values.
+//! compilation. [`encode_stable`] and [`decode_stable`] instead write each id as a stable
+//! identity that names it in every compilation, through a [`StableIds`] map. Outside every scope,
+//! ids serialize as their raw values.
 
 use std::cell::RefCell;
+use std::sync::Arc;
 
 /// The kinds of compilation-local ids, each with its own translation table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,9 +32,18 @@ impl IdTables {
     }
 }
 
+/// Identities of compilation-local ids that are equal across compilations exactly when the ids
+/// name the same thing. Within one compilation the mapping must be one to one.
+pub trait StableIds: Send + Sync {
+    fn stable(&self, space: IdSpace, raw: u64) -> Option<u128>;
+    fn local(&self, space: IdSpace, stable: u128) -> Option<u64>;
+}
+
 enum Scope {
     Encode([indexmap::IndexSet<u64>; SPACES]),
     Decode(IdTables),
+    /// The raw ids written so far, in first-use order.
+    Stable(Arc<dyn StableIds>, [indexmap::IndexSet<u64>; SPACES]),
 }
 
 thread_local! {
@@ -69,22 +81,64 @@ pub fn decode<T>(tables: IdTables, deserialize: impl FnOnce() -> T) -> T {
     deserialize()
 }
 
+/// Runs `serialize` with every id written as its stable identity and returns the raw ids it
+/// wrote. Serializing an id that `ids` cannot name fails.
+pub fn encode_stable<T>(ids: Arc<dyn StableIds>, serialize: impl FnOnce() -> T) -> (T, IdTables) {
+    let reset = enter(Scope::Stable(ids, Default::default()));
+    let value = serialize();
+    let used = SCOPE.with(|scope| match scope.borrow_mut().take() {
+        Some(Scope::Stable(_, sets)) => IdTables(sets.map(|set| set.into_iter().collect())),
+        _ => IdTables::default(),
+    });
+    drop(reset);
+    (value, used)
+}
+
+/// Runs `deserialize` with stable identities resolved to the ids of this compilation.
+pub fn decode_stable<T>(ids: Arc<dyn StableIds>, deserialize: impl FnOnce() -> T) -> T {
+    let _reset = enter(Scope::Stable(ids, Default::default()));
+    deserialize()
+}
+
+enum Written {
+    Raw(u64),
+    Stable(Option<u128>),
+}
+
 pub fn serialize_id<S: serde::Serializer>(
     space: IdSpace,
     raw: u64,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    let value = SCOPE.with(|scope| match &mut *scope.borrow_mut() {
-        Some(Scope::Encode(sets)) => sets[space as usize].insert_full(raw).0 as u64,
-        _ => raw,
+    let written = SCOPE.with(|scope| match &mut *scope.borrow_mut() {
+        Some(Scope::Encode(sets)) => Written::Raw(sets[space as usize].insert_full(raw).0 as u64),
+        Some(Scope::Stable(ids, used)) => {
+            used[space as usize].insert(raw);
+            Written::Stable(ids.stable(space, raw))
+        }
+        _ => Written::Raw(raw),
     });
-    serializer.serialize_u64(value)
+    match written {
+        Written::Raw(value) => serializer.serialize_u64(value),
+        Written::Stable(Some(stable)) => serializer.serialize_u128(stable),
+        Written::Stable(None) => Err(serde::ser::Error::custom("id without a stable identity")),
+    }
 }
 
 pub fn deserialize_id<'de, D: serde::Deserializer<'de>>(
     space: IdSpace,
     deserializer: D,
 ) -> Result<u64, D::Error> {
+    let ids = SCOPE.with(|scope| match &*scope.borrow() {
+        Some(Scope::Stable(ids, _)) => Some(ids.clone()),
+        _ => None,
+    });
+    if let Some(ids) = ids {
+        let stable = <u128 as serde::Deserialize>::deserialize(deserializer)?;
+        return ids
+            .local(space, stable)
+            .ok_or_else(|| serde::de::Error::custom("unknown stable id"));
+    }
     let value = <u64 as serde::Deserialize>::deserialize(deserializer)?;
     SCOPE.with(|scope| match &*scope.borrow() {
         Some(Scope::Decode(tables)) => tables
@@ -160,5 +214,32 @@ mod tests {
             decode(current, || serde_json::from_str(&json).unwrap());
         assert_eq!(decoded, (TypeId(5), DefId::root(2), TypeId(6), TypeId(5)));
         assert_eq!(serde_json::to_string(&TypeId(40)).unwrap(), "40");
+    }
+
+    /// A compilation that numbers every type the given offset higher. Type 13 has no identity.
+    struct Shifted(u64);
+
+    impl StableIds for Shifted {
+        fn stable(&self, space: IdSpace, raw: u64) -> Option<u128> {
+            (space == IdSpace::Type && raw != 13).then(|| (raw - self.0) as u128)
+        }
+
+        fn local(&self, space: IdSpace, stable: u128) -> Option<u64> {
+            (space == IdSpace::Type).then(|| stable as u64 + self.0)
+        }
+    }
+
+    #[test]
+    fn stable_identities_carry_ids_between_numberings() {
+        let (json, used) = encode_stable(Arc::new(Shifted(0)), || {
+            serde_json::to_string(&(TypeId(7), TypeId(9), TypeId(7))).unwrap()
+        });
+        assert_eq!(used.get(IdSpace::Type), &[7, 9]);
+        let decoded: (TypeId, TypeId, TypeId) =
+            decode_stable(Arc::new(Shifted(1000)), || serde_json::from_str(&json).unwrap());
+        assert_eq!(decoded, (TypeId(1007), TypeId(1009), TypeId(1007)));
+        let (unnamed, _) =
+            encode_stable(Arc::new(Shifted(0)), || serde_json::to_string(&TypeId(13)));
+        assert!(unnamed.is_err());
     }
 }

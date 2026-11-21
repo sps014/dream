@@ -123,7 +123,7 @@ mod tests {
         let mut parser = Parser::new(Lexer::new(source.into()), &arena, &mut diagnostics);
         let mut program = parser.parse().get_root().clone();
         for f in &mut program.functions {
-            f.file_path = Some(std::rc::Rc::from("facts.dream"));
+            f.file_path = Some(std::sync::Arc::from("facts.dream"));
         }
         assert!(!diagnostics.has_errors());
         let graph = crate::module_graph::ModuleGraph::new(

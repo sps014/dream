@@ -14,6 +14,7 @@ fn unread_managed_global_stores_preserve_ownership_and_publication() {
             .enumerate()
             .map(|(id, ty)| MirGlobal {
                 id: Global(id as u32),
+                name: format!("g{id}"),
                 ty,
             })
             .collect(),
@@ -56,6 +57,7 @@ fn unread_constant_array_tables_are_dropped() {
             .enumerate()
             .map(|(id, ty)| MirGlobal {
                 id: Global(id as u32),
+                name: format!("g{id}"),
                 ty,
             })
             .collect(),

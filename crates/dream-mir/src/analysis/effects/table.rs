@@ -1,7 +1,8 @@
 //! Whole-module closure over concrete functions, constructors and closed interface targets.
 
 use super::intrinsics::{host_summary, intrinsic_summary};
-use super::local::LocalSummary;
+pub(crate) use super::local::LocalSummary;
+use super::log::{self, Answer, Query};
 use super::{Known, ModRef, strong_children};
 use crate::analysis::function_key::FunctionKeyRef;
 use crate::{Callee, Global, Mir, MirFunction, Place, Rvalue, Statement};
@@ -10,6 +11,10 @@ use dream_hir::LayoutTable;
 use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
 use std::collections::{BTreeMap, BTreeSet};
+
+/// A function's persisted local summary, by function index and whether its own cleanup may run
+/// a destructor.
+pub(crate) type CachedSummaries<'a> = &'a dyn Fn(usize, bool) -> Option<LocalSummary>;
 
 /// Module-wide summaries. A lookup that misses (an empty table in unit tests, a pruned callee)
 /// answers [`ModRef::Top`].
@@ -59,14 +64,29 @@ impl Default for ModRefTable {
 
 impl ModRefTable {
     pub(crate) fn compute(mir: &Mir, interner: &TypeInterner) -> Self {
-        Self::build(mir, interner, true)
+        Self::build(mir, interner, true, None).0
+    }
+
+    /// Like [`Self::compute`], taking each function's local summary from `cached` when it has
+    /// one; also returns every function's summary with the cleanup bit it was computed for.
+    pub(crate) fn compute_with(
+        mir: &Mir,
+        interner: &TypeInterner,
+        cached: CachedSummaries<'_>,
+    ) -> (Self, Vec<(bool, LocalSummary)>) {
+        Self::build(mir, interner, true, Some(cached))
     }
 
     pub(crate) fn after_rc(mir: &Mir, interner: &TypeInterner) -> Self {
-        Self::build(mir, interner, false)
+        Self::build(mir, interner, false, None).0
     }
 
-    fn build(mir: &Mir, interner: &TypeInterner, implicit_cleanup: bool) -> Self {
+    fn build(
+        mir: &Mir,
+        interner: &TypeInterner,
+        implicit_cleanup: bool,
+        cached: Option<CachedSummaries<'_>>,
+    ) -> (Self, Vec<(bool, LocalSummary)>) {
         let _effects =
             tracing::info_span!("heap_effects", functions = mir.functions.len()).entered();
         let intrinsics: IndexMap<DefId, ModRef> = mir
@@ -146,10 +166,11 @@ impl ModRefTable {
             ),
         };
         let mut cleanup_types = BTreeMap::new();
-        let locals: Vec<LocalSummary> = mir
+        let (cleanup, locals): (Vec<bool>, Vec<LocalSummary>) = mir
             .functions
             .iter()
-            .map(|f| {
+            .enumerate()
+            .map(|(index, f)| {
                 let may_destroy = f.locals.iter().enumerate().any(|(index, local)| {
                     let borrowed_parameter =
                         f.params.contains(&crate::Local(index as u32)) && !local.is_take;
@@ -167,16 +188,21 @@ impl ModRefTable {
                         .iter()
                         .flat_map(|block| &block.stmts)
                         .any(|stmt| table.statement_may_destroy(f, stmt, interner, &mir.layouts));
-                LocalSummary::of(
-                    f,
-                    interner,
-                    &globals,
-                    may_destroy,
-                    table.release_proofs,
-                    &table.rc_event_counters,
-                )
+                let summary = cached
+                    .and_then(|cached| cached(index, may_destroy))
+                    .unwrap_or_else(|| {
+                        LocalSummary::of(
+                            f,
+                            interner,
+                            &globals,
+                            may_destroy,
+                            table.release_proofs,
+                            &table.rc_event_counters,
+                        )
+                    });
+                (may_destroy, summary)
             })
-            .collect();
+            .unzip();
         for (f, s) in mir.functions.iter().zip(&locals) {
             table.fns.insert((f.def, f.instance.clone()), s.own.clone());
             let entry = table.ctors.entry(f.def).or_default();
@@ -209,49 +235,66 @@ impl ModRefTable {
             table.del_observes |= table.observes_def(*def, &[]);
         }
         table.del = del;
-        table
+        (table, cleanup.into_iter().zip(locals).collect())
     }
 
     pub(crate) fn call_def(&self, def: DefId, args: &[TypeId]) -> ModRef {
-        if let Some(s) = self.fns.get(&FunctionKeyRef { def, args }) {
-            return s.clone();
-        }
-        self.intrinsics.get(&def).cloned().unwrap_or(ModRef::Top)
+        let answer = match self.fns.get(&FunctionKeyRef { def, args }) {
+            Some(s) => s.clone(),
+            None => self.intrinsics.get(&def).cloned().unwrap_or(ModRef::Top),
+        };
+        log::note(|| Query::Call(def, args.to_vec()), Answer::ModRef(&answer));
+        answer
     }
 
     pub(crate) fn observes_def(&self, def: DefId, args: &[TypeId]) -> bool {
-        self.observers
+        let answer = self
+            .observers
             .get(&FunctionKeyRef { def, args })
             .copied()
             .unwrap_or_else(|| match self.intrinsics.get(&def) {
                 Some(ModRef::Known(k)) => k.observes_ownership(),
                 _ => true,
-            })
+            });
+        log::note(|| Query::Observes(def, args.to_vec()), Answer::Bool(answer));
+        answer
     }
 
     pub(crate) fn observes_ctor(&self, def: DefId) -> bool {
-        self.observers
+        let answer = self
+            .observers
             .iter()
             .filter(|((candidate, _), _)| *candidate == def)
             .map(|(_, &observes)| observes)
             .reduce(|a, b| a || b)
-            .unwrap_or(true)
+            .unwrap_or(true);
+        log::note(|| Query::ObservesCtor(def), Answer::Bool(answer));
+        answer
     }
 
     pub(crate) fn ctor_may_destroy(&self, def: DefId) -> bool {
-        self.cleanup
+        let answer = self
+            .cleanup
             .iter()
             .filter(|((candidate, _), _)| *candidate == def)
             .map(|(_, &destroys)| destroys)
             .reduce(|a, b| a || b)
-            .unwrap_or(true)
+            .unwrap_or(true);
+        log::note(|| Query::CtorMayDestroy(def), Answer::Bool(answer));
+        answer
     }
 
     pub(crate) fn call_may_destroy(&self, def: DefId, args: &[TypeId]) -> bool {
-        self.cleanup
+        let answer = self
+            .cleanup
             .get(&FunctionKeyRef { def, args })
             .copied()
-            .unwrap_or_else(|| self.call_def(def, args).may_destroy())
+            .unwrap_or_else(|| self.call_def(def, args).may_destroy());
+        log::note(
+            || Query::CallMayDestroy(def, args.to_vec()),
+            Answer::Bool(answer),
+        );
+        answer
     }
 
     pub(crate) fn call(&self, callee: &Callee) -> ModRef {
@@ -289,19 +332,42 @@ impl ModRefTable {
     }
 
     pub(crate) fn ctor(&self, def: DefId) -> ModRef {
-        self.ctors.get(&def).cloned().unwrap_or(ModRef::Top)
+        let answer = self.ctors.get(&def).cloned().unwrap_or(ModRef::Top);
+        log::note(|| Query::Ctor(def), Answer::ModRef(&answer));
+        answer
     }
 
     pub(crate) fn iface(&self, iface_id: usize, slot: usize) -> ModRef {
-        self.ifaces
+        let answer = self
+            .ifaces
             .get(&(iface_id, slot))
             .cloned()
-            .unwrap_or(ModRef::Top)
+            .unwrap_or(ModRef::Top);
+        log::note(|| Query::Iface(iface_id, slot), Answer::ModRef(&answer));
+        answer
     }
 
     /// What any `del` may do; a `Release` anywhere may run one.
     pub(crate) fn del(&self) -> &ModRef {
+        log::note(|| Query::Del, Answer::ModRef(&self.del));
         &self.del
+    }
+
+    pub(crate) fn global_type(&self, global: Global) -> Option<TypeId> {
+        let answer = self.globals.get(&global).copied();
+        log::note(|| Query::GlobalType(global), Answer::Type(answer));
+        answer
+    }
+
+    /// Digest of the table-wide switches every query answer depends on.
+    pub(crate) fn switches(&self, ids: &dyn dream_types::portable::StableIds) -> Option<Vec<u8>> {
+        let mut counters = self
+            .rc_event_counters
+            .iter()
+            .map(|def| ids.stable(dream_types::portable::IdSpace::Def, def.to_raw()))
+            .collect::<Option<Vec<_>>>()?;
+        counters.sort_unstable();
+        postcard::to_allocvec(&(self.del_observes, self.release_proofs, counters)).ok()
     }
 
     /// Whether freeing a `ty` graph may run a `del` (walking strong fields; opaque types may
@@ -320,7 +386,7 @@ impl ModRefTable {
         }
         let place_type = |place: &Place| match place {
             Place::Local(local) => Some(f.local_ty(*local)),
-            Place::Global(global) => self.globals.get(global).copied(),
+            Place::Global(global) => self.global_type(*global),
             Place::Field { base, field } => layouts
                 .get(f.local_ty(*base))
                 .and_then(|layout| layout.fields.get(*field))
@@ -363,6 +429,12 @@ impl ModRefTable {
         interner: &TypeInterner,
         layouts: &LayoutTable,
     ) -> bool {
+        let answer = self.graph_may_run_del(ty, interner, layouts);
+        log::note(|| Query::MayRunDel(ty), Answer::Bool(answer));
+        answer
+    }
+
+    fn graph_may_run_del(&self, ty: TypeId, interner: &TypeInterner, layouts: &LayoutTable) -> bool {
         if matches!(
             interner.kind(ty),
             TyKind::Prim(_) | TyKind::Void | TyKind::Error | TyKind::Enum(_)

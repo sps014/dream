@@ -2,7 +2,7 @@ use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 use dream_sema::analyzer::Analyzer;
 use dream_syntax::{lexer::Lexer, parser::Parser};
-use std::rc::Rc;
+use std::sync::Arc;
 
 fn module_function_symbol(other_name: &str) -> String {
     let arena = Bump::new();
@@ -14,7 +14,7 @@ fn module_function_symbol(other_name: &str) -> String {
             let parsed = Parser::new(Lexer::new(source.clone()), &arena, &mut diagnostics).parse();
             let mut program = parsed.get_root().clone();
             let path = format!("{module}.dream");
-            program.functions[0].file_path = Some(Rc::from(path.as_str()));
+            program.functions[0].file_path = Some(Arc::from(path.as_str()));
             (path, source, program)
         })
         .collect();

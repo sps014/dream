@@ -107,11 +107,9 @@ impl Compiler {
                 .graph
                 .files
                 .iter()
-                .filter(|file| file.module.0 > 0 && !file.path.starts_with('<'))
-                .map(|file| (file.path.as_str(), file.module.0 as usize))
+                .map(|file| (file.path.as_str(), file.module.0 as usize + 1))
                 .collect::<std::collections::BTreeMap<_, _>>()
-        })
-        .filter(|files| !files.is_empty());
+        });
         let module = dream_mir::backend::llvm::emit_llvm_module(
             mir,
             interner,

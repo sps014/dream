@@ -184,6 +184,55 @@ fn codegen_is_deterministic() {
     }
 }
 
+/// Function bodies are built in chunks on several threads and merged in function order. The
+/// module must be the one a single thread builds, also when a chunk creates future glue and
+/// everything from that chunk on is built in order.
+#[test]
+fn parallel_body_emission_matches_one_thread() {
+    for combinator_at in [0, 1100] {
+        let directory = tempfile::tempdir().unwrap();
+        let main = directory.path().join("main.dream");
+        let mut source = String::from(
+            "import system;\n\
+             class Node {\n    public value: int;\n    public constructor(value: int) {\n        this.value = value;\n    }\n}\n\
+             async fun step(n: int): int {\n    return n + 1;\n}\n",
+        );
+        let mut calls = String::new();
+        for i in 0..1200 {
+            if i == combinator_at {
+                source.push_str(
+                    "async fun combine(): void {\n    let both = Promise.all([step(1), step(2)]).await;\n    System.println(both[0] + both[1]);\n}\n",
+                );
+            }
+            source.push_str(&format!(
+                "fun work_{i}(seed: int): int {{\n    let node = Node(seed);\n    if (seed == {i}) {{\n        System.println(\"hit {i}\");\n    }}\n    return node.value + {i};\n}}\n"
+            ));
+            calls.push_str(&format!("    total += work_{i}({i});\n"));
+        }
+        source.push_str(&format!(
+            "async fun main(): void {{\n    let total = 0;\n{calls}    System.println(total);\n    combine().await;\n}}\n"
+        ));
+        fs::write(&main, source).unwrap();
+        let out = directory.path().join("main.wat");
+        let emit = |threads: usize| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap()
+                .install(|| {
+                    Compiler::new(Target::wasm32())
+                        .with_release(true)
+                        .compile(&main.to_str().unwrap().to_owned(), out.to_str().unwrap())
+                        .unwrap_or_else(|error| panic!("{error:?}"))
+                });
+            fs::read_to_string(out.with_extension("ll")).unwrap()
+        };
+        let sequential = emit(1);
+        assert!(sequential.matches("\ndefine ").count() > 1024);
+        assert!(sequential == emit(4), "parallel emission differs (combinator at {combinator_at})");
+    }
+}
+
 #[test]
 fn cross_module_generic_codegen_is_deterministic() {
     let directory = tempfile::tempdir().unwrap();

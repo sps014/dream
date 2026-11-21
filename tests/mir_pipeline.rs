@@ -469,7 +469,7 @@ fn source_weak_forest_builder_batches_niche_null_initialization() {
     common::compile_test_pipeline(&source, |hir, interner| {
         let mut mir = lower_program(hir, interner);
         let mut dump = dream_mir::passes::MirDump::default();
-        dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump);
+        dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump, None);
         dream_mir::passes::run_function_pipelines(
             &mut mir,
             interner,
@@ -529,7 +529,7 @@ fn recursive_builder_uses_plain_arc_without_collector_clones() {
         let mut mir = lower_program(hir, interner);
         mir.profile = dream_abi::profile::CompileProfile::Release;
         let mut dump = dream_mir::passes::MirDump::disabled();
-        dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump);
+        dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump, None);
         dream_mir::passes::run_function_pipelines(
             &mut mir,
             interner,

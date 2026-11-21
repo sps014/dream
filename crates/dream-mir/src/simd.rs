@@ -5,7 +5,7 @@ use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 use crate::BinOp;
 
 /// 16-byte SIMD lane layout selected by the array / `Vector<T>` element type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SimdLane {
     I8,
     I32,

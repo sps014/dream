@@ -3,12 +3,14 @@ use crate::nodes::{ProgramNode, Type};
 use crate::syntax_tree::SyntaxTree;
 use crate::token::syntax_token::SyntaxToken;
 use crate::token::token_kind::TokenKind;
-use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 use dream_text::line_text::LineText;
 use dream_text::text_span::TextSpan;
 use std::collections::HashMap;
 
+pub use arena::AstArena;
+
+mod arena;
 mod cfg;
 mod declarations;
 mod expressions;
@@ -21,7 +23,7 @@ pub struct Parser<'a, 'b> {
     lexer: Lexer,
     tokens: Vec<SyntaxToken>,
     current_token_index: usize,
-    arena: &'a Bump,
+    arena: AstArena<'a, 'b>,
     diagnostics: &'b mut DiagnosticBag,
     /// Monotonic counter used to generate unique synthetic local names for `for-each` lowering.
     foreach_counter: usize,
@@ -57,12 +59,16 @@ const MAX_NESTING_DEPTH: u32 = 256;
 
 impl<'a, 'b> Parser<'a, 'b> {
     ///creates a new instance of the parser from a lexer instance
-    pub fn new(lexer: Lexer, arena: &'a Bump, diagnostics: &'b mut DiagnosticBag) -> Self {
+    pub fn new(
+        lexer: Lexer,
+        arena: impl Into<AstArena<'a, 'b>>,
+        diagnostics: &'b mut DiagnosticBag,
+    ) -> Self {
         Self {
             lexer,
             tokens: Vec::new(),
             current_token_index: 0,
-            arena,
+            arena: arena.into(),
             diagnostics,
             foreach_counter: 0,
             node_spans: std::collections::BTreeMap::new(),

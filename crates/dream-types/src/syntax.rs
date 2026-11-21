@@ -78,7 +78,7 @@ impl TypeCtx {
         let nominal = |def, args: &[TypeId]| {
             let info = self.defs.get(def);
             let name = if info.name.starts_with(&format!("{}::", info.module_path))
-                || self.resolves_everywhere(def, &info.name)
+                || self.resolves_everywhere(def)
             {
                 info.name.clone()
             } else {

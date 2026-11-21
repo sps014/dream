@@ -122,10 +122,16 @@ pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirD
     let modref = module_stage("modref", || {
         crate::analysis::effects::ModRefTable::compute(mir, interner)
     });
+    // Each function's insertion reads only shared tables, so functions run together and keep
+    // their order.
     module_stage(MirPass::name(&RcInsertion), || {
-        for f in mir.functions.iter_mut().chain(mir.polls.iter_mut()) {
-            RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
-        }
+        use rayon::prelude::*;
+        mir.functions
+            .par_iter_mut()
+            .chain(mir.polls.par_iter_mut())
+            .for_each(|f| {
+                RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
+            });
     });
     dump.module(MirPass::name(&RcInsertion), mir, interner);
     mir.ownership_prepared = true;

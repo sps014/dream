@@ -2,7 +2,7 @@ use super::statement::StatementNode;
 use super::types::Type;
 use crate::nodes::Visibility;
 use crate::token::syntax_token::SyntaxToken;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Represents a function parameter in the AST
 #[derive(Debug, Clone)]
@@ -192,7 +192,7 @@ pub struct FunctionNode<'a> {
     pub is_async: bool,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
-    pub file_path: Option<Rc<str>>,
+    pub file_path: Option<Arc<str>>,
     /// `Some` when this is a TypeScript-style property accessor (`get`/`set`) rather than an
     /// ordinary method; `name` then holds the property name. `None` for normal methods/functions.
     pub accessor: Option<AccessorKind>,

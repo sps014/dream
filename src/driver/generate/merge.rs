@@ -8,7 +8,7 @@ use bumpalo::Bump;
 use dream_diagnostics::DiagnosticBag;
 use indexmap::IndexMap;
 use std::io::Error;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Parses one generated file into `acc`. Its `extend` blocks may read private members of the
 /// types they extend, as if declared beside them. Imports may only reference already-loaded
@@ -36,7 +36,7 @@ pub fn merge_generated_file<'a>(
     acc.parsed_files.insert(path.to_string(), program.clone());
     if let Some(module_decl) = &program.module {
         acc.file_modules
-            .insert(path.to_string(), Rc::from(module_decl.path.text.as_str()));
+            .insert(path.to_string(), Arc::from(module_decl.path.text.as_str()));
     }
     let first_extend = acc.all_extends.len();
     collect_declarations(

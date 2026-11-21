@@ -1,6 +1,6 @@
 use crate::nodes::Visibility;
 use crate::token::syntax_token::SyntaxToken;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// An `interface` declaration: a named set of methods a class can implement. Methods are usually
 /// signature-only, but may supply a *default* body (`fun f() { ... }`) that implementing classes
@@ -31,7 +31,7 @@ pub struct InterfaceDeclarationNode<'a> {
     pub visibility: Visibility,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
-    pub file_path: Option<Rc<str>>,
+    pub file_path: Option<Arc<str>>,
 }
 
 impl<'a> InterfaceDeclarationNode<'a> {

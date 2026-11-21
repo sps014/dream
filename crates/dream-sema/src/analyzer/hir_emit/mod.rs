@@ -542,7 +542,7 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn hir_function_symbol(
         &self,
         lookup: &str,
-        file: Option<&std::rc::Rc<str>>,
+        file: Option<&std::sync::Arc<str>>,
         args: &[String],
     ) -> String {
         let module = self.module_of(file);
@@ -574,7 +574,7 @@ impl<'a> Analyzer<'a> {
         if emittable {
             if let (Some(def), Some(ret)) = (self.hir.def, self.hir.ret) {
                 let body = self.hir.blocks.pop().unwrap_or_default();
-                let source_file = self.hir.file.as_deref().map(std::rc::Rc::from);
+                let source_file = self.hir.file.as_deref().map(std::sync::Arc::from);
                 let args = self
                     .hir
                     .instance

@@ -38,7 +38,7 @@ pub struct StructInfo {
     pub packed: bool,
     /// Source file this type was declared in, for file/module-level visibility: a non-public type
     /// is only referenceable from its own file. `None` for synthesized types (always visible).
-    pub file_path: Option<std::rc::Rc<str>>,
+    pub file_path: Option<std::sync::Arc<str>>,
     /// Name of the declaring `struct`/`class`; a generic instance shares its template's. `None` for unions.
     pub name_span: Option<dream_text::text_span::TextSpan>,
 }
@@ -153,7 +153,7 @@ impl StructTable {
         ty: TypeId,
         name: &str,
         visibility: Visibility,
-        file_path: Option<std::rc::Rc<str>>,
+        file_path: Option<std::sync::Arc<str>>,
     ) -> Result<(), String> {
         if self.structs.contains_key(&ty) {
             return Err(format!("Type '{}' is already defined", name));

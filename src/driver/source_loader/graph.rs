@@ -154,13 +154,13 @@ mod tests {
             (gpu, "module system.gpu; let registry: int = 1;", false),
         ] {
             let mut diagnostics = DiagnosticBag::new(None);
-            let tree = Parser::new(Lexer::new(source.into()), &arena, &mut diagnostics).parse();
+            let tree = dream_syntax::parser::Parser::new(dream_syntax::lexer::Lexer::new(source.into()), &arena, &mut diagnostics).parse();
             assert!(!diagnostics.has_errors());
             let program = tree.get_root();
             acc.file_contents.insert(path.into(), source.into());
             if let Some(module) = &program.module {
                 acc.file_modules
-                    .insert(path.into(), Rc::from(module.path.text.as_str()));
+                    .insert(path.into(), std::sync::Arc::from(module.path.text.as_str()));
             }
             if parsed {
                 acc.parsed_files.insert(path.into(), program.clone());

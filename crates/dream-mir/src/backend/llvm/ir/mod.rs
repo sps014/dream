@@ -12,7 +12,7 @@ pub mod value;
 pub use attrs::{CallConv, FnAttr, Linkage, ParamAttr};
 pub use function::{BlockRef, CallArg, FunctionWriter, Tail};
 pub use metadata::{MdRef, Metadata};
-pub use module::{Decl, GlobalDef, ModuleWriter};
+pub use module::{Decl, GlobalDef, ModuleSizes, ModuleWriter};
 pub use ty::{FnTy, Ty};
 pub use value::{Repr, Value};
 

@@ -256,7 +256,7 @@ pub(crate) fn parse_synthesized_extends<'a>(
     let ast = parser.parse();
     diagnostics.extend(&local);
     let program = ast.get_root();
-    let file_tag: std::rc::Rc<str> = std::rc::Rc::from(synthetic_path);
+    let file_tag: std::sync::Arc<str> = std::sync::Arc::from(synthetic_path);
     Ok(program
         .extends
         .iter()

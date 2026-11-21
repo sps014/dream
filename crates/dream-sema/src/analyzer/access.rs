@@ -8,7 +8,7 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn generator_can_access(
         &self,
         id: &str,
-        caller: Option<&Rc<str>>,
+        caller: Option<&Arc<str>>,
     ) -> bool {
         caller
             .and_then(|file| self.graph.generator_output_files.get(file.as_ref()))
@@ -19,7 +19,7 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn generator_can_access_type(
         &self,
         name: &str,
-        caller: Option<&Rc<str>>,
+        caller: Option<&Arc<str>>,
     ) -> bool {
         let Some(generator) =
             caller.and_then(|file| self.graph.generator_output_files.get(file.as_ref()))
@@ -59,7 +59,7 @@ impl<'a> Analyzer<'a> {
     /// implicit root module). Two `None`s are *not* automatically "the same module" by identity —
     /// callers compare `(file, module_of(file))` pairs (see [`Self::same_module`]) so unmoded files
     /// keep today's plain "same file" rule instead of becoming one giant shared "root module".
-    pub(in crate::analyzer) fn module_of(&self, file: Option<&Rc<str>>) -> Option<Rc<str>> {
+    pub(in crate::analyzer) fn module_of(&self, file: Option<&Arc<str>>) -> Option<Arc<str>> {
         file.and_then(|f| self.file_modules.get(f).cloned())
     }
 
@@ -70,8 +70,8 @@ impl<'a> Analyzer<'a> {
     /// file in the program.
     pub(in crate::analyzer) fn same_module(
         &self,
-        decl_file: Option<&Rc<str>>,
-        caller_file: Option<&Rc<str>>,
+        decl_file: Option<&Arc<str>>,
+        caller_file: Option<&Arc<str>>,
     ) -> bool {
         match (self.module_of(decl_file), self.module_of(caller_file)) {
             (Some(a), Some(b)) => a == b,
@@ -81,8 +81,8 @@ impl<'a> Analyzer<'a> {
 
     fn internal_access_allowed(
         &self,
-        decl_file: Option<&Rc<str>>,
-        caller_file: Option<&Rc<str>>,
+        decl_file: Option<&Arc<str>>,
+        caller_file: Option<&Arc<str>>,
     ) -> bool {
         self.same_module(decl_file, caller_file)
             || caller_file.is_some_and(|c| self.trusted_generated_file(c))
@@ -104,9 +104,9 @@ impl<'a> Analyzer<'a> {
     /// visible.
     pub(in crate::analyzer) fn visible_across_files(
         &self,
-        decl_file: &Option<Rc<str>>,
+        decl_file: &Option<Arc<str>>,
         visibility: dream_syntax::nodes::Visibility,
-        caller_file: Option<&Rc<str>>,
+        caller_file: Option<&Arc<str>>,
     ) -> bool {
         use dream_syntax::nodes::Visibility;
         if visibility == Visibility::Public
@@ -131,8 +131,8 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn member_accessible(
         &self,
         visibility: dream_syntax::nodes::Visibility,
-        decl_file: &Option<Rc<str>>,
-        caller_file: Option<&Rc<str>>,
+        decl_file: &Option<Arc<str>>,
+        caller_file: Option<&Arc<str>>,
         in_declaring_type: bool,
     ) -> bool {
         use dream_syntax::nodes::Visibility;
@@ -155,7 +155,7 @@ impl<'a> Analyzer<'a> {
         &self,
         kind: &str,
         name: &str,
-        decl_file: &Option<Rc<str>>,
+        decl_file: &Option<Arc<str>>,
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {
@@ -180,7 +180,7 @@ impl<'a> Analyzer<'a> {
     pub(in crate::analyzer) fn check_type_visible(
         &self,
         type_name: &str,
-        caller_file: Option<&Rc<str>>,
+        caller_file: Option<&Arc<str>>,
         position: TextSpan,
         diagnostics: &mut DiagnosticBag,
     ) {

@@ -23,6 +23,11 @@ pub struct Metadata {
 }
 
 impl Metadata {
+    /// How many nodes exist; a change means a node was added.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len() + self.ordered.len() + self.named.len() + self.module_flags.len()
+    }
+
     /// A uniqued node; `body` is the text after `!N = ` (e.g. `!{!"dream tbaa"}`).
     pub fn node(&mut self, body: impl Into<String>) -> MdRef {
         let body = body.into();

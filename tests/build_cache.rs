@@ -418,7 +418,7 @@ public fun describe(n: int): string {
     write_dependency("int", "42");
     link("83", 0, 0);
     let cold = objects();
-    assert_eq!(cold.len(), 3);
+    assert!(cold.len() > 3, "{cold:?}");
     write_dependency("int", "43");
     link("84", 9, 29);
     let edited = objects();

@@ -34,11 +34,12 @@ impl Compiler {
             return Ok(BuildOutcome::Cached(artifacts));
         }
         info!("starting parsing and multi-file resolution");
-        let arena = Bump::new();
+        let arenas = super::load::SourceArenas::default();
+        let arena = &arenas.bump;
         let mut diagnostics = DiagnosticBag::new(None);
         let loaded = {
             let _phase = tracing::info_span!("compile_phase", phase = "parse").entered();
-            self.load_program(main_file_path, &arena, &mut diagnostics)?
+            self.load_program(main_file_path, &arenas, &mut diagnostics)?
         };
         info!("finished parsing");
         let modules = self
@@ -64,7 +65,7 @@ impl Compiler {
             return Ok(BuildOutcome::Cached(artifacts));
         }
 
-        let mut analyzer = self.prepare_analyzer(&loaded, &arena);
+        let mut analyzer = self.prepare_analyzer(&loaded, arena);
         let mut body_cache = modules.as_ref().and_then(|modules| {
             body_cache::BodyCache::new(
                 self.toolchain_config(),

@@ -30,20 +30,7 @@ fn expand(tag: &str, source: &str, with_native: bool) -> (Option<String>, String
     let path = main.to_str().unwrap().to_string();
     parse_file_recursive(&path, &mut acc, &arena, &mut diagnostics).unwrap();
     let graph = NativeGraph::load(&path, &acc, &dream_abi::target::TargetSpec::host()).unwrap();
-    crate::driver::prelude::merge_prelude(
-        &arena,
-        &mut acc.all_functions,
-        &mut acc.all_structs,
-        &mut acc.all_interfaces,
-        &mut acc.all_enums,
-        &mut acc.all_extends,
-        &mut acc.all_globals,
-        &mut diagnostics,
-        &mut acc.file_contents,
-        &mut acc.file_modules,
-        &acc.requested_std_packages,
-        acc.cfg,
-    )
+    crate::driver::prelude::merge_prelude(&mut acc)
     .unwrap();
     let attributes =
         crate::driver::attributes::prepare(&arena, &mut acc, &mut diagnostics).unwrap();

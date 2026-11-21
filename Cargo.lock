@@ -482,6 +482,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
+name = "bumpalo-herd"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a57952053bc5530247762011239f17c49e82376130cdcd03da0dc49ab8bd6c3"
+dependencies = [
+ "bumpalo",
+]
+
+[[package]]
 name = "bytecount"
 version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1282,6 +1291,7 @@ dependencies = [
  "blake3",
  "brotli",
  "bumpalo",
+ "bumpalo-herd",
  "bytes",
  "clap",
  "depfile",
@@ -1621,6 +1631,7 @@ dependencies = [
 name = "dream-mir"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "bumpalo",
  "dream-abi",
  "dream-diagnostics",
@@ -1683,6 +1694,7 @@ name = "dream-syntax"
 version = "0.1.0"
 dependencies = [
  "bumpalo",
+ "bumpalo-herd",
  "dream-diagnostics",
  "dream-text",
  "logos 0.16.1",

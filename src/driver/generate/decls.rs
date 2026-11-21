@@ -55,7 +55,7 @@ pub fn module_of(acc: &ProgramAccumulator<'_>, file: Option<&str>) -> String {
 }
 
 pub fn module_of_files(
-    files: &std::collections::HashMap<String, std::rc::Rc<str>>,
+    files: &std::collections::HashMap<String, std::sync::Arc<str>>,
     file: Option<&str>,
 ) -> String {
     file.and_then(|f| files.get(f))

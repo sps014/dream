@@ -54,15 +54,15 @@ impl<'a> Analyzer<'a> {
             if rest.len() > 1 {
                 continue;
             }
-            let module_ok = |file: &Option<Rc<str>>| {
+            let module_ok = |file: &Option<Arc<str>>| {
                 split == 0 || self.module_of(file.as_ref()).as_deref() == Some(module.as_str())
             };
-            let decl_module = |file: &Option<Rc<str>>| {
+            let decl_module = |file: &Option<Arc<str>>| {
                 self.module_of(file.as_ref())
                     .map(|m| m.to_string())
                     .unwrap_or_default()
             };
-            let identity = |file: &Option<Rc<str>>| {
+            let identity = |file: &Option<Arc<str>>| {
                 let base = dream_abi::attributes::decl_identity(&decl_module(file), name);
                 match rest.first() {
                     Some(member) => format!("{base}.{member}"),

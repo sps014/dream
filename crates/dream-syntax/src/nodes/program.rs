@@ -5,7 +5,7 @@ use super::struct_node::{StructDeclarationNode, StructFieldNode};
 use super::types::Type;
 use crate::nodes::Visibility;
 use crate::token::syntax_token::SyntaxToken;
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// A top-level variable declaration: `let`/`const` written outside any class or function. The
 /// initializer is an arbitrary expression evaluated once, in declaration order, by the generated
@@ -23,7 +23,7 @@ pub struct GlobalVariableNode<'a> {
     pub visibility: Visibility,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
-    pub file_path: Option<Rc<str>>,
+    pub file_path: Option<Arc<str>>,
 }
 
 /// Represents an import declaration in the AST. Two forms share this node, told apart by
@@ -124,7 +124,7 @@ pub struct EnumDeclarationNode<'a> {
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics and cross-file visibility checks can identify the declaring module. `None`
     /// for synthesized nodes.
-    pub file_path: Option<Rc<str>>,
+    pub file_path: Option<Arc<str>>,
 }
 
 impl<'a> EnumDeclarationNode<'a> {
@@ -175,7 +175,7 @@ pub struct ExtendNode<'a> {
     pub implements: Vec<Type>,
     /// Source file this declaration came from; set during multi-file merge so semantic
     /// diagnostics can report the correct file. `None` for synthesized nodes.
-    pub file_path: Option<Rc<str>>,
+    pub file_path: Option<Arc<str>>,
     /// True for compiler-synthesized `extend` blocks (interface default methods, `@json`
     /// converters) rather than user source. These bypass the `sealed` restriction, so a sealed
     /// type may still implement interfaces with defaults or derive `@json`.

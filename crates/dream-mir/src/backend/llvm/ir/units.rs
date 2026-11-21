@@ -1,7 +1,9 @@
 use super::{Decl, Linkage, ModuleWriter, fmt, write_declaration, write_global};
+use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
+#[derive(Clone)]
 pub(super) struct Definition {
     pub(super) group: usize,
     pub(super) name: String,
@@ -29,6 +31,9 @@ impl ModuleWriter {
 }
 
 impl Units {
+    /// Units are scanned and written in parallel; every step that depends on unit order (which
+    /// unit owns a symbol, which symbols are shared) runs in that order, so the text is the same
+    /// for any thread count.
     pub(super) fn render(&self, module: &ModuleWriter, header: &str) -> Vec<String> {
         let mut groups = BTreeMap::<usize, Vec<&Definition>>::new();
         for definition in &self.definitions {
@@ -37,38 +42,49 @@ impl Units {
         if groups.len() < 2 {
             return Vec::new();
         }
+        let groups: Vec<(usize, Vec<&Definition>)> = groups.into_iter().collect();
+        let idents: Vec<String> = self
+            .definitions
+            .iter()
+            .map(|definition| fmt::ident(&definition.name))
+            .collect();
 
-        let mut refs = BTreeMap::new();
-        let mut last_group = BTreeMap::<&str, usize>::new();
-        let mut shared = BTreeSet::new();
-        for (&group, definitions) in &groups {
-            let mut names = BTreeSet::new();
-            for definition in definitions {
-                names.extend(global_references(&module.bodies[definition.range.clone()]));
-            }
-            if group == 0 {
-                for g in module.globals.values() {
-                    if let Some(init) = &g.init {
-                        names.extend(global_references(init));
+        let refs: Vec<BTreeSet<&str>> = groups
+            .par_iter()
+            .map(|(group, definitions)| {
+                let mut names = BTreeSet::new();
+                for definition in definitions {
+                    names.extend(global_references(&module.bodies[definition.range.clone()]));
+                }
+                if *group == 0 {
+                    for g in module.globals.values() {
+                        if let Some(init) = &g.init {
+                            names.extend(global_references(init));
+                        }
                     }
                 }
-            }
-            for &name in &names {
-                if let Some(previous) = last_group.insert(name, group)
-                    && previous != group
+                names
+            })
+            .collect();
+        let mut last_group = BTreeMap::<&str, usize>::new();
+        let mut shared = BTreeSet::new();
+        for ((group, _), names) in groups.iter().zip(&refs) {
+            for &name in names {
+                if let Some(previous) = last_group.insert(name, *group)
+                    && previous != *group
                 {
                     shared.insert(name);
                 }
             }
-            refs.insert(group, names);
         }
 
         let mut metadata = String::new();
         module.md.write(&mut metadata);
         groups
-            .into_iter()
-            .map(|(group, definitions)| {
-                let names = &refs[&group];
+            .par_iter()
+            .zip(refs.par_iter())
+            .map(|((group, definitions), names)| {
+                let group = *group;
                 let mut out = header.to_owned();
                 for (name, global) in &module.globals {
                     let ident = fmt::ident(name);
@@ -93,10 +109,8 @@ impl Units {
                         write_declaration(&mut out, name, declaration);
                     }
                 }
-                for definition in &self.definitions {
-                    if group != definition.group
-                        && names.contains(fmt::ident(&definition.name).as_str())
-                    {
+                for (definition, ident) in self.definitions.iter().zip(&idents) {
+                    if group != definition.group && names.contains(ident.as_str()) {
                         write_declaration(&mut out, &definition.name, &definition.declaration);
                     }
                 }

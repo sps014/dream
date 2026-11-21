@@ -37,10 +37,11 @@ dream-stdlib = { path = "crates/dream-stdlib" }
 dream-sema = { path = "crates/dream-sema" }
 dream-mir = { path = "crates/dream-mir" }
 bumpalo = "3.20.3"
+bumpalo-herd = "0.1"
 # Content keys and artifact hashes for the build cache.
 blake3 = "1"
 depfile = { version = "0.1.1", optional = true }
-rayon = { version = "1", optional = true }
+rayon = "1"
 # Insertion-ordered map used for the codegen tables whose iteration order reaches emitted
 # `.wat` output, so compilation is reproducible (std `HashMap` randomizes iteration per run).
 indexmap = "2"
@@ -81,7 +82,7 @@ which = "8.0.6"
 [features]
 default = ["native"]
 # Native compiler execution/linking tools; runtime hosts are built separately.
-native = ["dep:tempfile", "dep:rayon", "dep:depfile", "dep:image", "dep:object", "dep:libc", "dep:windows-sys"]
+native = ["dep:tempfile", "dep:depfile", "dep:image", "dep:object", "dep:libc", "dep:windows-sys"]
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2", optional = true }
 

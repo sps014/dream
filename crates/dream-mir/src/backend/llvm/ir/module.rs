@@ -8,6 +8,7 @@ use super::metadata::Metadata;
 use super::ty::{FnTy, Ty};
 use indexmap::{IndexMap, IndexSet};
 
+#[derive(Clone)]
 pub struct GlobalDef {
     pub linkage: Linkage,
     pub thread_local: bool,
@@ -19,12 +20,22 @@ pub struct GlobalDef {
     pub align: u32,
 }
 
+#[derive(Clone)]
 pub struct Decl {
     pub fty: FnTy,
     pub ret_attrs: Vec<ParamAttr>,
     pub param_attrs: Vec<Vec<ParamAttr>>,
     pub attrs: Vec<FnAttr>,
     pub cc: CallConv,
+}
+
+/// Table sizes of a writer at the moment it was forked.
+#[derive(Clone, Copy)]
+pub struct ModuleSizes {
+    types: usize,
+    globals: usize,
+    decls: usize,
+    defined: usize,
 }
 
 #[path = "units.rs"]
@@ -105,34 +116,97 @@ impl ModuleWriter {
         }
     }
 
+    /// A writer with this one's tables and no definitions, to build some functions on another
+    /// thread. `merge` appends what it added.
+    pub fn fork(&self) -> ModuleWriter {
+        ModuleWriter {
+            source_name: self.source_name.clone(),
+            triple: self.triple.clone(),
+            datalayout: self.datalayout.clone(),
+            types: self.types.clone(),
+            globals: self.globals.clone(),
+            decls: self.decls.clone(),
+            defined: self.defined.clone(),
+            bodies: String::new(),
+            units: self.units.as_ref().map(|units| Units {
+                current: units.current,
+                definitions: Vec::new(),
+            }),
+            md: Metadata::default(),
+            definition_attrs: self.definition_attrs.clone(),
+        }
+    }
+
+    pub fn sizes(&self) -> ModuleSizes {
+        ModuleSizes {
+            types: self.types.len(),
+            globals: self.globals.len(),
+            decls: self.decls.len(),
+            defined: self.defined.len(),
+        }
+    }
+
+    /// Appends what `fork` added since `base`, in the order it added it; entries this writer
+    /// already has keep their place, as if the fork's functions had been built here.
+    pub fn merge(&mut self, fork: ModuleWriter, base: ModuleSizes) {
+        for (name, ty) in fork.types.into_iter().skip(base.types) {
+            self.types.entry(name).or_insert(ty);
+        }
+        for (name, global) in fork.globals.into_iter().skip(base.globals) {
+            self.globals.entry(name).or_insert(global);
+        }
+        for (name, decl) in fork.decls.into_iter().skip(base.decls) {
+            self.decls.entry(name).or_insert(decl);
+        }
+        for name in fork.defined.into_iter().skip(base.defined) {
+            assert!(
+                self.defined.insert(name.clone()),
+                "ICE: LLVM function {name} defined twice"
+            );
+        }
+        let offset = self.bodies.len();
+        self.bodies.push_str(&fork.bodies);
+        if let (Some(units), Some(forked)) = (&mut self.units, fork.units) {
+            units.definitions.extend(forked.definitions.into_iter().map(|mut definition| {
+                definition.range = definition.range.start + offset..definition.range.end + offset;
+                definition
+            }));
+        }
+    }
+
     pub fn finish(self) -> String {
         self.finish_with_units().0
     }
 
     pub fn finish_with_units(self) -> (String, Vec<String>) {
         let header = self.header();
-        let mut out = header.clone();
-        for (name, g) in &self.globals {
-            write_global(&mut out, name, g, g.linkage, g.init.as_deref());
-        }
-        if !self.globals.is_empty() {
-            out.push('\n');
-        }
-        for (name, d) in &self.decls {
-            if !self.defined.contains(name) {
-                write_declaration(&mut out, name, d);
-            }
-        }
-        if !self.decls.is_empty() {
-            out.push('\n');
-        }
-        out.push_str(&self.bodies);
-        self.md.write(&mut out);
-        let units = self
-            .units
-            .as_ref()
-            .map_or_else(Vec::new, |units| units.render(&self, &header));
-        (out, units)
+        rayon::join(
+            || {
+                let mut out = header.clone();
+                for (name, g) in &self.globals {
+                    write_global(&mut out, name, g, g.linkage, g.init.as_deref());
+                }
+                if !self.globals.is_empty() {
+                    out.push('\n');
+                }
+                for (name, d) in &self.decls {
+                    if !self.defined.contains(name) {
+                        write_declaration(&mut out, name, d);
+                    }
+                }
+                if !self.decls.is_empty() {
+                    out.push('\n');
+                }
+                out.push_str(&self.bodies);
+                self.md.write(&mut out);
+                out
+            },
+            || {
+                self.units
+                    .as_ref()
+                    .map_or_else(Vec::new, |units| units.render(&self, &header))
+            },
+        )
     }
 
     fn header(&self) -> String {

@@ -11,6 +11,7 @@ use crate::backend::shared::cx::Cx;
 use crate::{Mir, MirFunction};
 use dream_types::TypeInterner;
 use indexmap::{IndexMap, IndexSet};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub(super) struct FnSig {
@@ -49,7 +50,7 @@ impl FnSig {
 }
 
 pub(super) struct Lcx<'a> {
-    pub cx: Cx<'a>,
+    pub cx: Arc<Cx<'a>>,
     pub mir: &'a Mir,
     pub requirements: crate::backend::RuntimeRequirements,
     pub interner: &'a TypeInterner,
@@ -102,7 +103,7 @@ impl<'a> Lcx<'a> {
             .max()
             .map_or(crate::abi::TAG_STRUCT_BASE, |tag| tag + 1);
         Self {
-            cx,
+            cx: Arc::new(cx),
             mir,
             requirements: crate::backend::RuntimeRequirements::from_mir(mir, interner),
             interner,
@@ -342,7 +343,7 @@ impl<'a> Lcx<'a> {
         if let Some(name) = self.cstrs.get(s) {
             return Value::global(name.clone());
         }
-        let name = format!(".cstr{}", self.cstrs.len());
+        let name = constant_name(".cstr", s.as_bytes());
         let bytes: Vec<u8> = s.bytes().chain(std::iter::once(0)).collect();
         self.m.global(
             &name,
@@ -365,7 +366,7 @@ impl<'a> Lcx<'a> {
         if let Some(name) = self.byte_blobs.get(bytes) {
             return Value::global(name.clone());
         }
-        let name = format!(".bytes{}", self.byte_blobs.len());
+        let name = constant_name(".bytes", bytes);
         self.m.global(
             &name,
             GlobalDef {
@@ -417,4 +418,125 @@ impl<'a> Lcx<'a> {
     pub fn user_fn(&self, f: &MirFunction) -> String {
         crate::backend::shared::abi_types::c_ident(&crate::backend::shared::func_symbol(f))
     }
+
+    /// A copy that builds some function bodies on another thread; `merge` folds it back.
+    pub fn fork(&self) -> Lcx<'a> {
+        Lcx {
+            cx: Arc::clone(&self.cx),
+            mir: self.mir,
+            requirements: self.requirements,
+            interner: self.interner,
+            sigs: self.sigs,
+            m: self.m.fork(),
+            own: self.own.clone(),
+            sret: self.sret.clone(),
+            borrowed_results: self.borrowed_results.clone(),
+            type_infos: self.type_infos.clone(),
+            next_info_index: self.next_info_index,
+            future_infos: self.future_infos.clone(),
+            future_copies: self.future_copies.clone(),
+            value_eq: self.value_eq.clone(),
+            tracked: self.tracked.clone(),
+            hosts: self.hosts.clone(),
+            intrinsics: self.intrinsics.clone(),
+            exports: self.exports.clone(),
+            shim_callees: self.shim_callees.clone(),
+            byte_blobs: self.byte_blobs.clone(),
+            cstrs: self.cstrs.clone(),
+            dbg_cu: self.dbg_cu,
+            dbg_views: self.dbg_views.clone(),
+            std_sources: self.std_sources.clone(),
+        }
+    }
+
+    pub fn sizes(&self) -> LcxSizes {
+        LcxSizes {
+            m: self.m.sizes(),
+            own: self.own.len(),
+            sret: self.sret.len(),
+            borrowed_results: self.borrowed_results.len(),
+            type_infos: self.type_infos.len(),
+            next_info_index: self.next_info_index,
+            future_infos: self.future_infos.len(),
+            future_copies: self.future_copies.len(),
+            value_eq: self.value_eq.len(),
+            tracked: self.tracked.len(),
+            hosts: self.hosts.len(),
+            intrinsics: self.intrinsics.len(),
+            exports: self.exports.len(),
+            shim_callees: self.shim_callees.len(),
+            byte_blobs: self.byte_blobs.len(),
+            cstrs: self.cstrs.len(),
+            dbg_views: self.dbg_views.len(),
+        }
+    }
+
+    /// Whether `fork`, forked at `base`, touched state numbered in build order (type metadata
+    /// tags, future glue, debug metadata). Such a fork cannot be merged: its numbers would
+    /// depend on which functions other threads built first.
+    pub fn order_dependent(&self, fork: &Lcx<'_>, base: &LcxSizes) -> bool {
+        fork.type_infos.len() != base.type_infos
+            || fork.next_info_index != base.next_info_index
+            || fork.future_infos.len() != base.future_infos
+            || fork.future_copies.len() != base.future_copies
+            || fork.dbg_views.len() != base.dbg_views
+            || fork.dbg_cu != self.dbg_cu
+            || fork.m.md.node_count() != 0
+            || fork.sret.len() != base.sret
+            || fork.borrowed_results.len() != base.borrowed_results
+            || fork.tracked.len() != base.tracked
+    }
+
+    /// Appends what `fork` added since `base`, in the order it added it, as if its functions had
+    /// been built here.
+    pub fn merge(&mut self, fork: Lcx<'_>, base: &LcxSizes) {
+        fn extend<K: std::hash::Hash + Eq, V>(
+            into: &mut IndexMap<K, V>,
+            from: IndexMap<K, V>,
+            skip: usize,
+        ) {
+            for (key, value) in from.into_iter().skip(skip) {
+                into.entry(key).or_insert(value);
+            }
+        }
+        fn extend_set<K: std::hash::Hash + Eq>(into: &mut IndexSet<K>, from: IndexSet<K>, skip: usize) {
+            into.extend(from.into_iter().skip(skip));
+        }
+        self.m.merge(fork.m, base.m);
+        extend(&mut self.own, fork.own, base.own);
+        extend_set(&mut self.value_eq, fork.value_eq, base.value_eq);
+        extend(&mut self.hosts, fork.hosts, base.hosts);
+        extend(&mut self.intrinsics, fork.intrinsics, base.intrinsics);
+        extend(&mut self.exports, fork.exports, base.exports);
+        extend_set(&mut self.shim_callees, fork.shim_callees, base.shim_callees);
+        extend(&mut self.byte_blobs, fork.byte_blobs, base.byte_blobs);
+        extend(&mut self.cstrs, fork.cstrs, base.cstrs);
+    }
+}
+
+/// Named by contents, so a constant's name does not depend on which function used it first.
+fn constant_name(prefix: &str, bytes: &[u8]) -> String {
+    let digest = blake3::hash(bytes).to_hex();
+    format!("{prefix}.{}", &digest[..32])
+}
+
+/// Table sizes of an `Lcx` at the moment it was forked.
+pub(super) struct LcxSizes {
+    m: super::ir::ModuleSizes,
+    own: usize,
+    sret: usize,
+    borrowed_results: usize,
+    type_infos: usize,
+    next_info_index: i32,
+    future_infos: usize,
+    future_copies: usize,
+    value_eq: usize,
+    tracked: usize,
+    hosts: usize,
+    intrinsics: usize,
+    exports: usize,
+    shim_callees: usize,
+    byte_blobs: usize,
+    cstrs: usize,
+    dbg_views: usize,
 }

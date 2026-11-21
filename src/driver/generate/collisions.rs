@@ -77,7 +77,7 @@ mod tests {
             all_structs: ast.get_root().structs.clone(),
             ..Default::default()
         };
-        acc.all_structs[0].file_path = Some(std::rc::Rc::from("user.dream"));
+        acc.all_structs[0].file_path = Some(std::sync::Arc::from("user.dream"));
         let mut parser = Parser::new(
             Lexer::new("class Original {}".into()),
             &arena,

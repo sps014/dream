@@ -18,6 +18,7 @@ use indexmap::IndexMap;
 use indexmap::{IndexMap as HashMap, IndexSet as HashSet};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 mod await_rules;
 mod borrow_check;
@@ -156,7 +157,7 @@ pub struct GlobalSymbol {
     pub visibility: dream_syntax::nodes::Visibility,
     /// Source file this global was declared in, for file/module-level visibility. `None` for
     /// synthesized globals (always visible).
-    pub file_path: Option<Rc<str>>,
+    pub file_path: Option<Arc<str>>,
 }
 
 pub struct SemanticInfo<'a> {
@@ -375,7 +376,7 @@ pub struct Analyzer<'a> {
     /// table): type name -> (declaring file, visibility). A non-public entry is only referenceable
     /// per [`Analyzer::visible_across_files`]. Absent or `None` file means always visible.
     type_visibility:
-        HashMap<dream_types::DefId, (Option<Rc<str>>, dream_syntax::nodes::Visibility)>,
+        HashMap<dream_types::DefId, (Option<Arc<str>>, dream_syntax::nodes::Visibility)>,
     /// Sink RC params moved into a field/index store; further uses of the binding are errors.
     moved_locals: HashSet<String>,
     /// An optional expected type for the expression currently being analyzed (from a `let`
@@ -420,13 +421,13 @@ pub struct Analyzer<'a> {
     /// The source file of the function whose body is currently being analyzed, used for
     /// file/module-level visibility checks at sites that do not thread `parent_function` (e.g.
     /// bare-identifier global reads). `None` outside any function body.
-    current_file: Option<Rc<str>>,
+    current_file: Option<Arc<str>>,
     /// Maps each source file that declared a `module a.b.c;` to its dot-joined module path.
     /// Files absent from this map (the overwhelming majority: anyone who never writes `module`)
     /// belong to the implicit, unnamed root module. Derived from the module graph.
-    file_modules: HashMap<Rc<str>, Rc<str>>,
-    generated_files: HashSet<Rc<str>>,
-    stdlib_files: HashSet<Rc<str>>,
+    file_modules: HashMap<Arc<str>, Arc<str>>,
+    generated_files: HashSet<Arc<str>>,
+    stdlib_files: HashSet<Arc<str>>,
     /// Every aliased `import a.b.c as x;` collected across all files (module path, item name,
     /// alias token, importing file path), populated once via [`Self::with_aliased_imports`] before
     /// [`Self::analyze`] runs. Drained by `register_import_aliases` (see `declarations::imports`)
@@ -552,19 +553,19 @@ impl<'a> Analyzer<'a> {
                 .filter_map(|file| {
                     let path = &graph.modules[file.module.0 as usize].path;
                     (!path.is_empty())
-                        .then(|| (Rc::from(file.path.as_str()), Rc::from(path.as_str())))
+                        .then(|| (Arc::from(file.path.as_str()), Arc::from(path.as_str())))
                 })
                 .collect(),
             generated_files: graph
                 .generated_files
                 .iter()
-                .map(|path| Rc::from(path.as_str()))
+                .map(|path| Arc::from(path.as_str()))
                 .collect(),
             stdlib_files: graph
                 .files
                 .iter()
                 .filter(|file| dream_stdlib::package_for_source(&file.path).is_some())
-                .map(|file| Rc::from(file.path.as_str()))
+                .map(|file| Arc::from(file.path.as_str()))
                 .collect(),
             aliased_imports: Vec::new(),
             globals: Vec::new(),

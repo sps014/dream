@@ -12,7 +12,7 @@ crate-type = ["cdylib", "rlib"]
 dream-drawing = { path = "../dream-drawing" }
 dream-host-core = { path = "../dream-host-core" }
 dream-host-abi = { path = "../dream-host-abi" }
-pollster = "0.4"
+pollster = "1.0"
 
 # `dream-host-core` is a link-time dependency: this cdylib calls core's C ABI through the shared
 # library, so no Rust item is imported and a Rust import would duplicate core's state.

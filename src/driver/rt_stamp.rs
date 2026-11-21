@@ -92,13 +92,14 @@ pub fn content_hash(path: &std::path::Path) -> Option<blake3::Hash> {
     Some(hash.finalize())
 }
 
-/// Filesystem identity plus modification and change timestamps. Rewriting a file always moves
-/// its change timestamp, which user code cannot set.
+/// Filesystem identity plus modification and change timestamps, and the change time in seconds
+/// since the Unix epoch. Rewriting a file always moves its change timestamp, which user code
+/// cannot set.
 #[cfg(unix)]
-fn file_stamp(path: &std::path::Path) -> Option<String> {
+fn file_stamp(path: &std::path::Path) -> Option<(String, i64)> {
     use std::os::unix::fs::MetadataExt;
     let m = std::fs::metadata(path).ok()?;
-    Some(format!(
+    let stamp = format!(
         "{}:{}:{}:{}:{}:{}:{}",
         m.dev(),
         m.ino(),
@@ -107,13 +108,15 @@ fn file_stamp(path: &std::path::Path) -> Option<String> {
         m.mtime_nsec(),
         m.ctime(),
         m.ctime_nsec()
-    ))
+    );
+    Some((stamp, m.ctime()))
 }
 
-/// Size plus the NTFS write and change timestamps. Every write moves `ChangeTime`, which
-/// copy and archive tools do not restore, unlike the write timestamp `std` exposes.
+/// Size plus the NTFS write and change timestamps, and the change time in seconds since the
+/// Unix epoch. Every write moves `ChangeTime`, which copy and archive tools do not restore,
+/// unlike the write timestamp `std` exposes.
 #[cfg(all(windows, feature = "native"))]
-fn file_stamp(path: &std::path::Path) -> Option<String> {
+fn file_stamp(path: &std::path::Path) -> Option<(String, i64)> {
     use std::os::windows::io::AsRawHandle;
     use windows_sys::Win32::Storage::FileSystem::{
         FILE_BASIC_INFO, FileBasicInfo, GetFileInformationByHandleEx,
@@ -136,23 +139,27 @@ fn file_stamp(path: &std::path::Path) -> Option<String> {
     }
     // SAFETY: a successful call filled the whole structure.
     let info = unsafe { info.assume_init() };
-    Some(format!(
+    let stamp = format!(
         "{len}:{}:{}:{}",
         info.CreationTime, info.LastWriteTime, info.ChangeTime
-    ))
+    );
+    // `ChangeTime` counts 100 ns ticks since 1601.
+    Some((stamp, info.ChangeTime / 10_000_000 - 11_644_473_600))
 }
 
 /// Without a change timestamp no stamp is trusted, so every identity rehashes the contents.
 #[cfg(not(any(unix, all(windows, feature = "native"))))]
-fn file_stamp(_: &std::path::Path) -> Option<String> {
+fn file_stamp(_: &std::path::Path) -> Option<(String, i64)> {
     None
 }
 
-/// File stamps let one process reuse verified contents, including shared headers.
+/// File stamps let one process reuse verified contents, including shared headers. A file
+/// changed within [`RACY_WINDOW`] may be rewritten again within the same timestamp tick, so its
+/// identity is not remembered.
 pub fn tool_identity(path: &std::path::Path) -> Option<String> {
     type ToolCache = std::collections::BTreeMap<PathBuf, (String, String)>;
     static CACHE: std::sync::OnceLock<std::sync::Mutex<ToolCache>> = std::sync::OnceLock::new();
-    let Some(before) = file_stamp(path) else {
+    let Some((before, changed)) = file_stamp(path) else {
         return content_hash(path).map(|hash| hash.to_hex().to_string());
     };
     let cache = CACHE.get_or_init(Default::default);
@@ -162,19 +169,27 @@ pub fn tool_identity(path: &std::path::Path) -> Option<String> {
         return Some(identity.clone());
     }
     let identity = content_hash(path)?.to_hex().to_string();
-    if file_stamp(path)? != before {
+    if file_stamp(path)?.0 != before {
         return None;
     }
-    cache
-        .lock()
-        .ok()?
-        .insert(path.to_path_buf(), (before, identity.clone()));
+    if settled(changed) {
+        cache
+            .lock()
+            .ok()?
+            .insert(path.to_path_buf(), (before, identity.clone()));
+    }
     Some(identity)
 }
 
+fn settled(changed: i64) -> bool {
+    std::time::SystemTime::now()
+        .checked_sub(RACY_WINDOW)
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .is_some_and(|t| changed < t.as_secs() as i64)
+}
+
 /// A file whose change timestamp is this close to the time it was hashed may still be rewritten
-/// within the same timestamp tick on filesystems with coarse timestamps, so it is not persisted.
-#[cfg(unix)]
+/// within the same timestamp tick on filesystems with coarse timestamps, so it is not remembered.
 const RACY_WINDOW: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// [`tool_identity`] for large, rarely changing executables and libraries, remembered across
@@ -182,8 +197,7 @@ const RACY_WINDOW: std::time::Duration = std::time::Duration::from_secs(2);
 pub fn persistent_tool_identity(path: &std::path::Path, store: &std::path::Path) -> Option<String> {
     #[cfg(unix)]
     {
-        use std::os::unix::fs::MetadataExt;
-        let before = file_stamp(path)?;
+        let (before, _) = file_stamp(path)?;
         let key = path.to_string_lossy();
         let entry = store.join(&blake3::hash(key.as_bytes()).to_hex()[..32]);
         if let Ok(recorded) = std::fs::read_to_string(&entry)
@@ -196,12 +210,8 @@ pub fn persistent_tool_identity(path: &std::path::Path, store: &std::path::Path)
             return Some(identity.to_string());
         }
         let identity = tool_identity(path)?;
-        let changed = std::fs::metadata(path).ok()?.ctime();
-        let settled = std::time::SystemTime::now()
-            .checked_sub(RACY_WINDOW)
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .is_some_and(|t| changed < t.as_secs() as i64);
-        if settled && std::fs::create_dir_all(store).is_ok() {
+        let (_, changed) = file_stamp(path)?;
+        if settled(changed) && std::fs::create_dir_all(store).is_ok() {
             let partial = entry.with_extension(format!("{}.partial", std::process::id()));
             if std::fs::write(&partial, format!("{key}\n{before}\n{identity}")).is_ok()
                 && std::fs::rename(&partial, &entry).is_err()
@@ -309,7 +319,7 @@ mod tests {
         std::fs::create_dir_all(&store).unwrap();
         std::fs::write(
             &entry,
-            format!("{key}\n{}\n{remembered}", super::file_stamp(&path).unwrap()),
+            format!("{key}\n{}\n{remembered}", super::file_stamp(&path).unwrap().0),
         )
         .unwrap();
         assert_eq!(

@@ -511,10 +511,25 @@ fun main(): void {
         )
         .unwrap();
     };
+    let config = dream::driver::toolchain::ToolchainConfig::default();
+    let tool = |name| {
+        config
+            .locate_tool(dream_abi::toolchain::compiler_tool(name).unwrap())
+            .unwrap()
+            .root
+    };
+    let llvm = tool("llvm");
+    let mold = (!cfg!(windows)).then(|| tool("mold"));
     let compile = |expected: &str| {
-        let result = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_dream"));
+        command
             .current_dir(root)
             .env("DREAM_PREFIX", root)
+            .env("DREAM_LLVM", &llvm);
+        if let Some(mold) = &mold {
+            command.env("DREAM_MOLD", mold);
+        }
+        let result = command
             .args([
                 "-v",
                 "--release",

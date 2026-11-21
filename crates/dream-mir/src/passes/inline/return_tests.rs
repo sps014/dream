@@ -79,6 +79,7 @@ fn owning_returns_transfer_into_every_destination() {
                 functions: vec![caller.finish(), make],
                 globals: vec![crate::MirGlobal {
                     id: crate::Global(0),
+                    name: "g".into(),
                     ty,
                 }],
                 ..Default::default()

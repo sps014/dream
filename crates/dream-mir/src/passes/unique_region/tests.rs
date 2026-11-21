@@ -82,6 +82,7 @@ fn recursive_safety_resolves_entire_component_before_caching() {
                 functions,
                 globals: vec![crate::MirGlobal {
                     id: crate::Global(0),
+                    name: "g".into(),
                     ty,
                 }],
                 ..Default::default()

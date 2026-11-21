@@ -40,7 +40,7 @@ fn verified_ir(source: &str, target: Target) -> Option<String> {
     let interner = analyzer.interner();
     let mut mir = dream_mir::lower::lower_program(&hir, interner);
     let mut dump = MirDump::disabled();
-    dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump);
+    dream_mir::passes::optimize_module_opts(&mut mir, interner, true, &mut dump, None);
     dream_mir::passes::run_function_pipelines(
         &mut mir,
         interner,

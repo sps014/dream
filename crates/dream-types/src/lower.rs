@@ -21,6 +21,9 @@ pub struct TypeCtx {
     imports: IndexMap<ModuleId, Vec<ModuleId>>,
     functions: IndexMap<(ModuleId, String, Vec<TypeId>), DefId>,
     methods: IndexMap<(TypeId, String, Vec<TypeId>), DefId>,
+    /// Answers of [`Self::resolves_everywhere`] for nominal defs, valid until a nominal
+    /// declaration, alias or module import changes.
+    everywhere: std::sync::Mutex<IndexMap<DefId, bool>>,
 }
 
 impl TypeCtx {
@@ -34,7 +37,15 @@ impl TypeCtx {
             imports: IndexMap::new(),
             functions: IndexMap::new(),
             methods: IndexMap::new(),
+            everywhere: Default::default(),
         }
+    }
+
+    fn forget_resolutions(&mut self) {
+        self.everywhere
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
     }
 
     pub fn register(
@@ -56,6 +67,9 @@ impl TypeCtx {
             .defs
             .allocate(self.scope, path, kind, name, generic_params);
         self.declarations.insert(key, def);
+        if kind != DefKind::Function {
+            self.forget_resolutions();
+        }
         match kind {
             DefKind::Struct => {
                 self.interner.struct_ty(def, vec![]);
@@ -89,6 +103,7 @@ impl TypeCtx {
     pub fn define_module(&mut self, id: ModuleId, path: String, imports: Vec<ModuleId>) {
         self.modules.insert(id, path);
         self.imports.insert(id, imports);
+        self.forget_resolutions();
     }
 
     /// Binds a source alias to an existing nominal definition without allocating a new type.
@@ -105,6 +120,7 @@ impl TypeCtx {
         }
         self.declarations
             .insert((scope, self.defs.get(def).kind, alias.to_owned()), def);
+        self.forget_resolutions();
         Ok(())
     }
 
@@ -200,13 +216,25 @@ impl TypeCtx {
         matches.all(|other| other == def).then_some(def)
     }
 
-    /// True when the unqualified `name` denotes `def` from every module's lexical scope, so a
-    /// syntax type can spell it bare without changing meaning wherever it is lowered.
-    pub fn resolves_everywhere(&self, def: DefId, name: &str) -> bool {
-        let kind = self.defs.get(def).kind;
-        std::iter::once(ModuleId::ROOT)
+    /// True when the bare name of nominal `def` denotes it from every module's lexical scope, so
+    /// a syntax type can spell it bare without changing meaning wherever it is lowered.
+    pub fn resolves_everywhere(&self, def: DefId) -> bool {
+        let lock = || {
+            self.everywhere
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+        };
+        if let Some(&known) = lock().get(&def) {
+            return known;
+        }
+        let info = self.defs.get(def);
+        let everywhere = std::iter::once(ModuleId::ROOT)
             .chain(self.modules.keys().copied())
-            .all(|module| self.resolve_from(module, kind, name) == Some(def))
+            .all(|module| self.resolve_from(module, info.kind, &info.name) == Some(def));
+        if info.kind != DefKind::Function {
+            lock().insert(def, everywhere);
+        }
+        everywhere
     }
 
     /// Resolves a lexical source name; composite types must already have a structural shape.

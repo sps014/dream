@@ -716,6 +716,7 @@ fn rc_golden_parameter_borrowing_is_independent_of_returned_aliases() {
             interner,
             false,
             &mut dream_mir::passes::MirDump::disabled(),
+            None,
         );
         let select = mir
             .functions

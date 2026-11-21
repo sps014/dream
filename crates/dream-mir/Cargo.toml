@@ -17,6 +17,8 @@ dream-syntax = { path = "../dream-syntax" }
 blake3 = "1"
 half = "2"
 indexmap = "2"
+postcard = { version = "1", features = ["use-std"] }
+serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 rayon = "1"
 wasmprinter = "0.252"

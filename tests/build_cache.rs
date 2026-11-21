@@ -272,6 +272,7 @@ fn native_debug_reuses_unchanged_codegen_units_and_matches_a_clean_link() {
         .artifact_path(&ir, &dream_abi::target::TargetSpec::host());
     let cache = root.join("cache/native-rt/program-objects");
     let body_cache = root.join("cache/body-checks");
+    let ownership = root.join("cache/ownership");
     std::fs::write(
         &source,
         "import system; import caller; import numbers; fun main(): void { System.println(describe(3)); System.println(compute() + (int)answer()); }",
@@ -400,6 +401,7 @@ public fun describe(n: int): string {
             trace.contains(&format!("reused typed HIR functions={reused_functions}")),
             "{trace}"
         );
+        reused_ownership(&trace)
     };
     let objects = || {
         std::fs::read_dir(&cache)
@@ -416,31 +418,126 @@ public fun describe(n: int): string {
     };
 
     write_dependency("int", "42");
-    link("83", 0, 0);
+    assert_eq!(link("83", 0, 0), 0);
     let cold = objects();
     assert!(cold.len() > 3, "{cold:?}");
     write_dependency("int", "43");
-    link("84", 9, 29);
+    assert!(link("84", 9, 43) > 0);
     let edited = objects();
     assert_eq!(edited.difference(&cold).count(), 1);
     let incremental = std::fs::read(&bin).unwrap();
     let saved = root.join("saved-body-checks");
+    let saved_ownership = root.join("saved-ownership");
     std::fs::rename(&body_cache, &saved).unwrap();
+    std::fs::rename(&ownership, &saved_ownership).unwrap();
     std::fs::remove_file(&bin).unwrap();
     std::fs::remove_dir_all(&cache).unwrap();
-    link("84", 0, 0);
+    assert_eq!(link("84", 0, 0), 0);
     assert_eq!(std::fs::read(&bin).unwrap(), incremental);
     std::fs::remove_dir_all(&body_cache).unwrap();
     std::fs::rename(saved, &body_cache).unwrap();
+    std::fs::remove_dir_all(&ownership).unwrap();
+    std::fs::rename(saved_ownership, &ownership).unwrap();
 
     write_dependency("long", "44L");
-    link("85", 7, 23);
+    assert!(link("85", 7, 28) > 0);
     let interface_edit = objects();
     assert!(interface_edit.difference(&edited).count() >= 2);
     let cached = std::fs::read(&bin).unwrap();
     std::fs::remove_file(&bin).unwrap();
     std::fs::remove_dir_all(cache).unwrap();
     std::fs::remove_dir_all(body_cache).unwrap();
-    link("85", 0, 0);
+    std::fs::remove_dir_all(&ownership).unwrap();
+    assert_eq!(link("85", 0, 0), 0);
     assert_eq!(std::fs::read(&bin).unwrap(), cached);
+}
+
+fn reused_ownership(trace: &str) -> usize {
+    trace
+        .lines()
+        .find_map(|line| line.split("reused ownership functions=").nth(1))
+        .and_then(|count| count.split_whitespace().next()?.parse().ok())
+        .unwrap_or_else(|| panic!("{trace}"))
+}
+
+#[test]
+fn release_ownership_reuse_matches_a_clean_build() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let source = root.join("main.dream");
+    let dependency = root.join("numbers.dream");
+    let ir = root.join("main.ll");
+    let bin = dream::driver::output::OutputKind::Executable
+        .artifact_path(&ir, &dream_abi::target::TargetSpec::host());
+    std::fs::write(
+        &source,
+        r#"import system;
+import numbers;
+
+class Node {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+fun chain(n: int): List<Node> {
+    let nodes = List<Node>();
+    for (let i = 0; i < n; i += 1) {
+        nodes.push(Node(i));
+    }
+    return nodes;
+}
+
+fun sum(nodes: List<Node>): int {
+    let total = 0;
+    for (let node in nodes) {
+        total += node.value;
+    }
+    return total;
+}
+
+fun main(): void {
+    System.println(sum(chain(10)) + answer());
+}
+"#,
+    )
+    .unwrap();
+    let write_dependency = |value: i32| {
+        std::fs::write(
+            &dependency,
+            format!("module numbers; public fun answer(): int {{ return {value}; }}"),
+        )
+        .unwrap();
+    };
+    let compile = |expected: &str| {
+        let result = std::process::Command::new(env!("CARGO_BIN_EXE_dream"))
+            .current_dir(root)
+            .env("DREAM_PREFIX", root)
+            .args([
+                "-v",
+                "--release",
+                "-o",
+                ir.to_str().unwrap(),
+                "run",
+                source.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        let trace = format!("{stdout}\n{}", String::from_utf8_lossy(&result.stderr));
+        assert!(result.status.success(), "{trace}");
+        assert!(stdout.lines().any(|line| line == expected), "{trace}");
+        reused_ownership(&trace)
+    };
+    write_dependency(1);
+    assert_eq!(compile("46"), 0);
+    write_dependency(2);
+    assert!(compile("47") > 0);
+    let incremental = std::fs::read(&bin).unwrap();
+    std::fs::remove_dir_all(root.join("cache/ownership")).unwrap();
+    std::fs::remove_file(&bin).unwrap();
+    assert_eq!(compile("47"), 0);
+    assert_eq!(std::fs::read(&bin).unwrap(), incremental);
 }

@@ -1,6 +1,7 @@
 //! Module transformations invalidate function caches by ending their scope.
 
 use super::*;
+use crate::ownership_cache::OwnershipCache;
 
 /// Whole-module optimization: reference-counting insertion, then aggressive tree-shaking interleaved
 /// with function inlining, run to a fixpoint.
@@ -17,21 +18,23 @@ use super::*;
 /// `New` whose args are all treated as sinks. Then
 /// [`crate::driver`] runs the per-function [`PassManager`].
 pub fn optimize_module(mir: &mut Mir, interner: &TypeInterner) {
-    optimize_module_opts(mir, interner, true, &mut MirDump::disabled())
+    optimize_module_opts(mir, interner, true, &mut MirDump::disabled(), None)
 }
 
 /// Like [`optimize_module`], but `inline` can be disabled. Debug-info builds turn inlining off so
 /// each user function keeps its own body (and thus its own call-stack frame + local variables),
 /// which the interactive debugger relies on. Reference-counting insertion + dead-function pruning
 /// still run in both modes since they are correctness-relevant, not just optimizations. Every
-/// module stage is reported to `dump` under its pass name.
+/// module stage is reported to `dump` under its pass name. `cache` supplies and receives
+/// persisted reference-count insertion results.
 pub fn optimize_module_opts(
     mir: &mut Mir,
     interner: &TypeInterner,
     inline: bool,
     dump: &mut MirDump,
+    cache: Option<&mut OwnershipCache>,
 ) {
-    optimize_module_rounds(mir, interner, inline, dump, 8);
+    optimize_module_rounds(mir, interner, inline, dump, 8, cache);
 }
 
 pub(super) fn optimize_module_rounds(
@@ -40,12 +43,13 @@ pub(super) fn optimize_module_rounds(
     inline: bool,
     dump: &mut MirDump,
     max_rounds: usize,
+    cache: Option<&mut OwnershipCache>,
 ) {
     // Debug-info builds keep each async body in its own poll frame for the debugger.
     if inline && module_stage(ready_await::STAGE, || ready_await::run(mir, interner)) {
         dump.module(ready_await::STAGE, mir, interner);
     }
-    prepare_ownership(mir, interner, dump);
+    prepare_ownership(mir, interner, dump, cache);
     // RC must be inserted before any inlining, or callee scope-exit releases won't be baked into
     // the bodies the inliner copies.
     debug_assert!(mir.ownership_prepared, "RcInsertion must run before the inliner");
@@ -86,7 +90,12 @@ pub(super) fn optimize_module_rounds(
 }
 
 /// Ownership lowering is mandatory even when every optional optimization is disabled.
-pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
+fn prepare_ownership(
+    mir: &mut Mir,
+    interner: &TypeInterner,
+    dump: &mut MirDump,
+    cache: Option<&mut OwnershipCache>,
+) {
     module_stage("prune", || crate::prune_module(mir, interner));
     module_stage(ExpandSimpleCtors.name(), || {
         ExpandSimpleCtors.run(mir, interner)
@@ -119,19 +128,31 @@ pub fn prepare_ownership(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirD
             );
         }
     });
-    let modref = module_stage("modref", || {
-        crate::analysis::effects::ModRefTable::compute(mir, interner)
+    let mut cache = cache.and_then(|cache| {
+        let session = module_stage("ownership-digests", || cache.begin(mir, interner))?;
+        Some((cache, session))
+    });
+    let modref = module_stage("modref", || match &mut cache {
+        Some((cache, session)) => cache.modref(session, mir, interner),
+        None => crate::analysis::effects::ModRefTable::compute(mir, interner),
     });
     // Each function's insertion reads only shared tables, so functions run together and keep
     // their order.
     module_stage(MirPass::name(&RcInsertion), || {
         use rayon::prelude::*;
-        mir.functions
-            .par_iter_mut()
-            .chain(mir.polls.par_iter_mut())
-            .for_each(|f| {
-                RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
-            });
+        let insert = |f: &mut MirFunction| {
+            RcInsertion::run_with_layouts(f, interner, &layouts, &holds, &modref);
+        };
+        match cache {
+            Some((cache, session)) => {
+                cache.insert(session, mir, (interner, &layouts, &modref), &holds, insert)
+            }
+            None => mir
+                .functions
+                .par_iter_mut()
+                .chain(mir.polls.par_iter_mut())
+                .for_each(insert),
+        }
     });
     dump.module(MirPass::name(&RcInsertion), mir, interner);
     mir.ownership_prepared = true;
@@ -145,8 +166,13 @@ fn module_stage<T>(pass: &'static str, run: impl FnOnce() -> T) -> T {
     run()
 }
 
-pub fn prepare_debug_module(mir: &mut Mir, interner: &TypeInterner, dump: &mut MirDump) {
-    prepare_ownership(mir, interner, dump);
+pub fn prepare_debug_module(
+    mir: &mut Mir,
+    interner: &TypeInterner,
+    dump: &mut MirDump,
+    cache: Option<&mut OwnershipCache>,
+) {
+    prepare_ownership(mir, interner, dump, cache);
     module_stage(value_borrow::STAGE, || value_borrow::run(mir, interner));
     module_stage("verify-tokens", || {
         crate::verify::assert_inserted_tokens(mir, interner)

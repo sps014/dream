@@ -6,10 +6,14 @@ mod analyze;
 mod body_cache;
 #[path = "cache.rs"]
 mod cache;
+#[path = "checked_file.rs"]
+mod checked_file;
 #[path = "emit.rs"]
 mod emit;
 #[path = "lower.rs"]
 mod lower;
+#[path = "ownership_store.rs"]
+mod ownership_store;
 
 pub use cache::{BuildOutcome, BuildStamp};
 
@@ -74,11 +78,17 @@ impl Compiler {
                 (self.target.spec(), self.crate_type, self.debug_info),
             )
         });
-        if let Some(cache) = &mut body_cache {
+        if let Some(cache) = &mut body_cache
+            && let Some(modules) = &modules
+        {
             let (hits, typed) = cache.load();
             tracing::info!(modules = hits.len(), "reusing syntax-only body checks");
             analyzer.set_cached_body_checks(hits);
-            analyzer.set_cached_typed_bodies(typed);
+            let keys = modules
+                .iter()
+                .map(|module| (module.path.clone(), module.cache_key()))
+                .collect();
+            analyzer.set_cached_typed_bodies(typed, keys);
         }
         let mut dump = match &self.emit_mir {
             Some(spec) => dream_mir::passes::MirDump::new(spec.clone()),
@@ -92,19 +102,43 @@ impl Compiler {
             stacker::maybe_grow(64 * 1024, 16 * 1024 * 1024, || {
                 let analyzed = self.analyze_graph(&mut analyzer, &loaded, &mut diagnostics)?;
                 if let Some(cache) = &body_cache {
-                    let typed = analyzer.take_typed_bodies();
+                    let (typed, changed) = analyzer.take_typed_bodies();
                     tracing::info!(
                         functions = analyzer.reused_typed_bodies(),
                         "reused typed HIR"
                     );
-                    cache.store(analyzer.body_checks_with_diagnostics(), &typed);
+                    cache.store(analyzer.body_checks_with_diagnostics(), &typed, &changed);
                 }
                 let interner = analyzer.interner();
                 let mut mir = self.lower_hir(&analyzed.hir, interner, &mut dump);
                 if self.output_kind.is_library() {
                     library::relativize_sources(&mut mir, main_file_path)?;
                 }
-                let mir = self.optimize_mir(mir, interner, &mut dump);
+                let store = modules.as_ref().and_then(|_| {
+                    ownership_store::OwnershipStore::new(
+                        self.toolchain_config(),
+                        main_file_path,
+                        &loaded.acc.cfg.key(),
+                        (
+                            self.target.spec(),
+                            self.profile(),
+                            self.crate_type,
+                            self.output_kind,
+                            self.debug_info,
+                            self.perf_symbols,
+                            self.effective_optimize(),
+                        ),
+                    )
+                });
+                let mut ownership = store.as_ref().map(|store| {
+                    let mut cache = dream_mir::ownership_cache::OwnershipCache::new(analyzer.defs());
+                    store.load(&mut cache, &mir);
+                    cache
+                });
+                let mir = self.optimize_mir(mir, interner, &mut dump, ownership.as_mut());
+                if let (Some(store), Some(cache)) = (&store, &ownership) {
+                    store.store(cache);
+                }
                 let live_imports: Vec<_> = mir
                     .imports
                     .iter()

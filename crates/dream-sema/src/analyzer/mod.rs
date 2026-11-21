@@ -217,6 +217,10 @@ pub struct Analyzer<'a> {
     graph: &'a ModuleGraph<'a>,
     generator_facts: Option<crate::gen_facts::GenFacts>,
     cached_typed_bodies: HashMap<dream_types::ModuleId, TypedBodies>,
+    changed_typed_bodies: HashSet<dream_types::ModuleId>,
+    /// Cache key of each module by path, which generic instance bodies add for the modules that
+    /// declare their type arguments.
+    module_cache_keys: IndexMap<String, [u8; 32]>,
     reused_typed_bodies: usize,
     def_index: typed_hir_cache::DefIndex,
     journal: Option<typed_hir_cache::Journal>,
@@ -542,6 +546,8 @@ impl<'a> Analyzer<'a> {
             current_file: None,
             generator_facts: None,
             cached_typed_bodies: HashMap::new(),
+            changed_typed_bodies: HashSet::new(),
+            module_cache_keys: IndexMap::new(),
             reused_typed_bodies: 0,
             def_index: Default::default(),
             journal: None,
@@ -586,6 +592,11 @@ impl<'a> Analyzer<'a> {
         &self.type_ctx.interner
     }
 
+    /// Every declaration the emitted HIR refers to, in allocation order.
+    pub fn defs(&self) -> &dream_types::DefTable {
+        &self.type_ctx.defs
+    }
+
     /// Reuses successful syntax-only body checks for exact snapshots of named source modules.
     pub fn set_cached_body_checks(&mut self, modules: HashSet<dream_types::ModuleId>) {
         self.cached_body_checks = modules;
@@ -598,16 +609,28 @@ impl<'a> Analyzer<'a> {
 
     /// Persisted typed bodies of the modules whose cache key matched. Modules without an entry
     /// neither reuse nor record bodies.
+    /// `module_cache_keys` holds every module's cache key by module path.
     pub fn set_cached_typed_bodies(
         &mut self,
         modules: HashMap<dream_types::ModuleId, TypedBodies>,
+        module_cache_keys: IndexMap<String, [u8; 32]>,
     ) {
         self.cached_typed_bodies = modules;
+        self.module_cache_keys = module_cache_keys;
     }
 
-    /// The reused and newly recorded typed bodies, by module.
-    pub fn take_typed_bodies(&mut self) -> HashMap<dream_types::ModuleId, TypedBodies> {
-        std::mem::take(&mut self.cached_typed_bodies)
+    /// The reused and newly recorded typed bodies by module, and the modules whose bodies
+    /// changed.
+    pub fn take_typed_bodies(
+        &mut self,
+    ) -> (
+        HashMap<dream_types::ModuleId, TypedBodies>,
+        HashSet<dream_types::ModuleId>,
+    ) {
+        (
+            std::mem::take(&mut self.cached_typed_bodies),
+            std::mem::take(&mut self.changed_typed_bodies),
+        )
     }
 
     /// Number of bodies taken from the persisted cache instead of analyzed.

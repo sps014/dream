@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 type SlotWrites = Option<BTreeSet<(usize, Option<i64>)>>;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Known {
     /// `(base type, field)` slots that may be overwritten.
     pub(crate) fields: BTreeSet<(TypeId, u32)>,
@@ -65,7 +65,7 @@ impl Known {
 }
 
 /// What a region of code may do to the heap.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) enum ModRef {
     Known(Known),
     Top,

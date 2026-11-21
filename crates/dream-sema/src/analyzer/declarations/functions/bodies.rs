@@ -62,7 +62,7 @@ impl<'a> Analyzer<'a> {
                 };
                 diagnostics.file_path = file_path_string(&template.file_path);
                 self.with_generic_bindings(bindings.clone(), |s| {
-                    s.analyze_function(template, diagnostics)
+                    s.analyze_cacheable_body(template, diagnostics)
                 })?;
                 progressed = true;
                 items_processed += 1;

@@ -15,6 +15,7 @@ pub mod backend;
 pub mod build;
 pub mod int_ty;
 pub mod lower;
+pub mod ownership_cache;
 pub mod passes;
 pub mod pretty;
 mod prune;
@@ -49,17 +50,41 @@ macro_rules! internal_error {
 }
 
 /// A basic block within a function body.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct BlockId(pub u32);
 
 /// An SSA-style local. Locals are the only values; every intermediate result is materialized into a
 /// local, so operands are either locals or constants.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 pub struct Local(pub u32);
 
 /// A module-level global slot (mirrors `hir::GlobalId`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Global(pub u32);
+
+impl serde::Serialize for Global {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        dream_types::portable::serialize_id(
+            dream_types::portable::IdSpace::Global,
+            self.0 as u64,
+            serializer,
+        )
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Global {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw =
+            dream_types::portable::deserialize_id(dream_types::portable::IdSpace::Global, deserializer)?;
+        u32::try_from(raw)
+            .map(Global)
+            .map_err(serde::de::Error::custom)
+    }
+}
 
 /// A whole program in MIR form.
 #[derive(Debug, Default)]
@@ -122,10 +147,12 @@ pub struct Mir {
 #[derive(Debug)]
 pub struct MirGlobal {
     pub id: Global,
+    /// The program-unique source name, which identifies the slot across compilations.
+    pub name: String,
     pub ty: TypeId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct MirFunction {
     /// Returns a +0 alias anchored by the first borrowed parameter.
     pub borrowed_result: bool,
@@ -166,7 +193,7 @@ impl MirFunction {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LocalDecl {
     pub ty: TypeId,
     /// Optional source name (params/user `let`s); synthetic temporaries have `None`.
@@ -193,14 +220,14 @@ pub struct LocalDecl {
     pub borrows_refs: bool,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BasicBlock {
     pub stmts: Vec<Statement>,
     pub terminator: Terminator,
 }
 
 /// A straight-line operation with no control-flow effect.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Statement {
     RawStore {
         address: Operand,
@@ -241,6 +268,7 @@ pub enum Statement {
     /// [`Rvalue::InterfaceCall`].
     InterfaceCall {
         receiver: Operand,
+        #[serde(with = "dream_hir::interface_index")]
         iface_id: usize,
         method_slot: usize,
         sig: TypeId,
@@ -357,7 +385,7 @@ pub enum Statement {
 }
 
 /// How a block transfers control. Every block ends in exactly one terminator.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub enum Terminator {
     Goto(BlockId),
     /// Two-way branch on a boolean operand.
@@ -424,7 +452,7 @@ impl Terminator {
 }
 
 /// An assignable location.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Place {
     Local(Local),
     Global(Global),
@@ -466,13 +494,13 @@ impl Place {
 }
 
 /// A readable value: a local/global read or a constant. (All complex computation is an [`Rvalue`].)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Operand {
     Copy(Place),
     Const(Const),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Const {
     /// A 32-bit integer literal (`int`/`uint`/`byte` — anything that lowers to `i32`).
     Int(i64),
@@ -495,7 +523,7 @@ pub enum Const {
 }
 
 /// The right-hand side of an assignment: any computation producing a single value.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Rvalue {
     RawLoad {
         address: Operand,
@@ -601,6 +629,7 @@ pub enum Rvalue {
     /// `sig` the `fun(this, params): ret` signature type, and `ret` the result type at this site.
     InterfaceCall {
         receiver: Operand,
+        #[serde(with = "dream_hir::interface_index")]
         iface_id: usize,
         method_slot: usize,
         sig: TypeId,
@@ -717,7 +746,7 @@ pub enum Rvalue {
 }
 
 /// The user constructor and its ownership argument contract.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NewCtor {
     pub def: DefId,
     pub take_params: Vec<bool>,
@@ -727,7 +756,7 @@ pub struct NewCtor {
 
 /// A resolved call target carried into MIR. The backend derives the emitted symbol from
 /// `(def, args)`; `ret` is the concrete return type at this site.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Callee {
     /// Direct-call result is +0 and must be retained by an owning destination.
     pub borrowed_result: bool,

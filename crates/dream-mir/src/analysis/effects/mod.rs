@@ -8,6 +8,7 @@ mod closure_tests;
 mod elements;
 mod intrinsics;
 mod local;
+pub(crate) mod log;
 mod model;
 mod table;
 

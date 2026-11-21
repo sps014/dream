@@ -30,8 +30,9 @@ impl<'de> serde::Deserialize<'de> for GlobalId {
     }
 }
 
-/// Serde adapter for [`crate::HExprKind::InterfaceCall`]'s position in the interface table.
-pub(crate) mod interface_index {
+/// Serde adapter for a position in the interface table, such as
+/// [`crate::HExprKind::InterfaceCall`]'s.
+pub mod interface_index {
     use dream_types::portable::{self, IdSpace};
 
     pub fn serialize<S: serde::Serializer>(

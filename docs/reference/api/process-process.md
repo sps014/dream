@@ -100,6 +100,16 @@ public static async fun run_checked(
 ): Result<ProcessOutput, ProcessError>
 ```
 
+## `list`
+
+Lists operating-system processes, ordered by pid. A name the OS will not reveal is empty. Browser and hosts without a process table return `EUNSUPPORTED`.
+
+```dream
+public static fun list(
+    token: Option<CancellationToken> = Option.None
+): Future<Result<ProcessInfo[], ProcessError>>
+```
+
 ## `which`
 
 Finds an existing nondirectory command path, directly or by searching `PATH`. This does not validate execute permissions or expand platform-specific extensions.

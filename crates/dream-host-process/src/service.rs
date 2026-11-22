@@ -51,6 +51,7 @@ enum Request {
     Close {
         handle: i32,
     },
+    List,
 }
 struct Child {
     stdin: AsyncMutex<Option<ChildStdin>>,
@@ -61,11 +62,24 @@ struct Child {
 }
 static CHILDREN: Mutex<HandleTable<Arc<Child>>> = Mutex::new(HandleTable::new());
 use dream_host_abi::lock;
-fn error(code: &'static str, message: impl ToString) -> Failure {
+pub(crate) fn error(code: &'static str, message: impl ToString) -> Failure {
     (code, message.to_string())
 }
 fn io(error: std::io::Error) -> Failure {
     ("EIO", error.to_string())
+}
+fn exit_code(status: std::process::ExitStatus) -> i32 {
+    if let Some(code) = status.code() {
+        return code;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return -signal;
+        }
+    }
+    -2
 }
 fn child(id: i32) -> Result<Arc<Child>, Failure> {
     lock(&CHILDREN)
@@ -80,6 +94,7 @@ pub(crate) fn close(id: i32) {
 }
 pub(crate) struct OwnedChild {
     id: i32,
+    pid: u32,
     child: Arc<Child>,
     detached: bool,
 }
@@ -144,6 +159,7 @@ async fn spawn(command: &str, wire: &[u8], options: &Options) -> Result<OwnedChi
         });
     }
     let mut process = command.spawn().map_err(|e| error("ESPAWN", e))?;
+    let pid = process.id().unwrap_or(0);
     let (cancel, mut cancellation) = watch::channel(false);
     let (exited, exit) = watch::channel(None);
     let state = Arc::new(Child {
@@ -166,10 +182,10 @@ async fn spawn(command: &str, wire: &[u8], options: &Options) -> Result<OwnedChi
             }
         };
         let status = tokio::select! {
-            result = process.wait() => result.map(|s| s.code().unwrap_or(-2)).map_err(io),
+            result = process.wait() => result.map(exit_code).map_err(io),
             _ = cancellation.changed() => {
                 let _ = process.start_kill();
-                process.wait().await.map(|s| s.code().unwrap_or(-2)).map_err(io)
+                process.wait().await.map(exit_code).map_err(io)
             }
             _ = deadline => {
                 let _ = process.start_kill();
@@ -181,6 +197,7 @@ async fn spawn(command: &str, wire: &[u8], options: &Options) -> Result<OwnedChi
     });
     Ok(OwnedChild {
         id,
+        pid,
         child: state,
         detached: false,
     })
@@ -316,21 +333,16 @@ pub(crate) fn start(request: String, bytes: Vec<u8>) -> i32 {
         }
         let request: Request = serde_json::from_str(&request).map_err(|e| error("EINVAL", e))?;
         match request {
+            Request::List => crate::list::list_processes().map(Output::bytes),
             Request::Run { command, options } => run(command, bytes, options, cancellation)
                 .await
                 .map(Output::bytes),
             Request::Spawn { command, options } => {
-                let mut launch = Options {
-                    cwd: options.cwd.clone(),
-                    env: options.env.clone(),
-                    clear_env: options.clear_env,
-                    ..Options::default()
-                };
-                launch.timeout_ms = 0;
-                let owned = spawn(&command, &bytes, &launch).await?;
+                let owned = spawn(&command, &bytes, &options).await?;
                 let id = owned.id;
+                let pid = owned.pid;
                 Ok(Output {
-                    bytes: id.to_string().into_bytes(),
+                    bytes: format!("{id}\n{pid}").into_bytes(),
                     child: Some(owned),
                 })
             }
@@ -357,8 +369,11 @@ pub(crate) fn start(request: String, bytes: Vec<u8>) -> i32 {
             Request::Close { handle } => {
                 let child = child(handle)?;
                 close(handle);
-                let _ = wait(&child).await?;
-                Ok(Output::bytes(Vec::new()))
+                // A deadline already stopped the child. Reaping it is still a successful close.
+                match wait(&child).await {
+                    Err(("ETIMEOUT", _)) => Ok(Output::bytes(Vec::new())),
+                    other => other.map(|_| Output::bytes(Vec::new())),
+                }
             }
         }
     })

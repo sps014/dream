@@ -12,6 +12,14 @@ Owns a child and its pipes; explicit close terminates and reaps unfinished work.
 public class ChildProcess
 ```
 
+## `pid`
+
+Operating-system process id, or `0` when the host did not report one.
+
+```dream
+public get pid(): int
+```
+
 ## `stdout`
 
 Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.

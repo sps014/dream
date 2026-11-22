@@ -2,7 +2,7 @@ import system.testing;
 import system;
 import system.text;
 
-// Built from fixed instants (never `now()`) so the results are deterministic.
+// Calendar assertions use fixed instants. `datetime_now_has_local_offset` is the clock link check.
 @test
 @timeout(180000)
 fun datetime_basic(): void {
@@ -105,4 +105,12 @@ fun datetime_parse_rejects_impossible_dates(): void {
     Assert.is_true(DateTime.parse("1900-02-29T00:00:00Z").is_err());
     Assert.is_true(DateTime.parse("2024-04-31T00:00:00Z").is_err());
     Assert.is_true(DateTime.parse("2024-02-30T00:00:00Z").is_err());
+}
+
+@test
+fun datetime_now_has_local_offset(): void {
+    let now = DateTime.now();
+    Assert.is_true(now.epoch_millis > 0L);
+    Assert.is_true(now.offset_minutes >= 0 - (18 * 60));
+    Assert.is_true(now.offset_minutes <= 18 * 60);
 }

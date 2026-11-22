@@ -1,6 +1,7 @@
 //! Optional native process services. Guest state remains in the core cdylib.
 
 mod exports;
+mod list;
 mod operations;
 mod process_host;
 mod service;

@@ -36,6 +36,11 @@ async fun main(): int {
     if Encoding.utf8_decode(decoded.read(100).unwrap()) != "hello browser compression" { return 6; }
     decoder.close();
     if TempCapabilities.supported || TempFile.create().unwrap_err().code() != "EUNSUPPORTED" { return 7; }
+    if System.set_env("DREAM_BROWSER_ENV", "1").is_ok() { return 10; }
+    if System.set_cwd("/tmp").is_err() { return 11; }
+    File.write("notes.txt", "hi").await.unwrap();
+    if File.read("/tmp/notes.txt").await.unwrap() != "hi" { return 12; }
+    File.delete("/tmp/notes.txt").await.unwrap();
     if SocketCapabilities.supported || TcpStream.connect("127.0.0.1", 9000).await.unwrap_err().code() != "EUNSUPPORTED" { return 8; }
     if UdpSocket.bind("127.0.0.1", 0).await.unwrap_err().code() != "EUNSUPPORTED" { return 9; }
     return 0;

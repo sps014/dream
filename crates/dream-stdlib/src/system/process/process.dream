@@ -119,12 +119,18 @@ public static class Process {
             operation.close();
             return Result.Err(result.unwrap_err());
         }
-        let id = int.parse(Encoding.utf8_decode(result.unwrap()));
+        let text = Encoding.utf8_decode(result.unwrap());
+        let parts = text.split('\n');
+        let id = int.parse(parts[0]);
         if id.is_err() {
             operation.close();
             return Result.Err(ProcessError.io("invalid child handle"));
         }
-        let child = ChildProcess(id.unwrap());
+        let pid = 0;
+        if parts.length > 1 {
+            pid = int.parse(parts[1]).unwrap_or(0);
+        }
+        let child = ChildProcess(id.unwrap(), pid);
         operation.claim();
         operation.close();
         return Result.Ok(child);
@@ -155,6 +161,41 @@ public static class Process {
             );
         }
         return Result.Ok(output);
+    }
+
+    /// Lists operating-system processes, ordered by pid. A name the OS will not reveal is empty.
+    /// Browser and hosts without a process table return `EUNSUPPORTED`.
+    public static fun list(
+        token: Option<CancellationToken> = Option.None
+    ): Future<Result<ProcessInfo[], ProcessError>> {
+        let request = JsonValue.dict();
+        request["action"] = JsonValue.from_string("list");
+        return Process.list_owned(request, CancellationToken.resolve(token));
+    }
+
+    static async fun list_owned(
+        request: JsonValue,
+        token: Option<CancellationToken>
+    ): Result<ProcessInfo[], ProcessError> {
+        CancellationToken.rejected(token, ProcessError.cancelled())?;
+        let operation = ProcessOperation(request, Buffer.alloc<byte>(0));
+        let completed = operation.wait(token).await;
+        operation.close();
+        let raw = completed?;
+        let reader = ProcessWireReader(raw);
+        let count = int.parse(reader.read_line()).unwrap_or(-1);
+        if count < 0 || count > 1000000 {
+            return Result.Err(ProcessError.io("invalid process list"));
+        }
+        let rows = Buffer.alloc<ProcessInfo>(count);
+        let i = 0;
+        while i < count {
+            let pid = int.parse(reader.read_line()).unwrap_or(0);
+            let parent = int.parse(reader.read_line()).unwrap_or(0);
+            rows[i] = ProcessInfo(pid, parent, reader.read_line());
+            i = i + 1;
+        }
+        return Result.Ok(rows);
     }
 
     /// Finds an existing nondirectory command path, directly or by searching `PATH`.

@@ -39,6 +39,10 @@ pub(super) const PACKAGE: StdPackage = StdPackage {
             include_str!("../system/process/process_error.dream"),
         ),
         (
+            "<std>/system/process/process_info.dream",
+            include_str!("../system/process/process_info.dream"),
+        ),
+        (
             "<std>/system/process/process_output.dream",
             include_str!("../system/process/process_output.dream"),
         ),

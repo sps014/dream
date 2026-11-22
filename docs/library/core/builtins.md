@@ -43,7 +43,7 @@ fun main() {
 | `System.args` | command-line arguments |
 | `System.exe_path` | path of this executable, if any |
 | `System.env(name)` / `env_keys` | environment variables; `env` returns `Option<string>`, so use `unwrap_or(fallback)` for a default and `is_some()` to test presence |
-| `System.set_env(name, value)` / `unset_env(name)` | set or clear an env var |
+| `System.set_env(name, value)` / `unset_env(name)` | set or clear an env var. `set_env` returns `EINVAL` when the host does not keep the value, including in the browser |
 | `System.cwd` / `set_cwd(path)` | working directory |
 | `System.temp_dir` / `home_dir` | temp and home paths |
 | `System.cpu_time_nanos` | process user+system CPU time since start |

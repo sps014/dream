@@ -1,0 +1,29 @@
+module system.process;
+
+/// One row from `Process.list`: an operating-system process id, its parent, and its name.
+public class ProcessInfo {
+    _pid: int;
+    _parent_pid: int;
+    _name: string;
+
+    internal constructor(pid: int, parent_pid: int, name: string) {
+        this._pid = pid;
+        this._parent_pid = parent_pid;
+        this._name = name;
+    }
+
+    /// Operating-system process id.
+    public get pid(): int {
+        return this._pid;
+    }
+
+    /// Parent process id, or `0` when the host does not report one.
+    public get parent_pid(): int {
+        return this._parent_pid;
+    }
+
+    /// Process name. Empty when the operating system does not reveal it.
+    public get name(): string {
+        return this._name;
+    }
+}

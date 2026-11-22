@@ -117,6 +117,25 @@ async fun run_options(): void {
     options.timeout_ms = 20;
     let timeout = Process.run(executable, process_fixture_args("sleep"), options: options).await;
     Assert.eq(timeout.unwrap_err().code(), "ETIMEOUT");
+    let child = Process.spawn(executable, process_fixture_args("sleep"), options: options).await.unwrap();
+    Assert.is_true(child.pid > 0);
+    let listed = Process.list().await;
+    if listed.is_ok() {
+        let rows = listed.unwrap();
+        let found = false;
+        let index = 0;
+        while index < rows.length {
+            if rows[index].pid == child.pid {
+                found = true;
+            }
+            index = index + 1;
+        }
+        Assert.is_true(found);
+    } else {
+        Assert.eq(listed.unwrap_err().code(), "EUNSUPPORTED");
+    }
+    Assert.eq(child.wait().await.unwrap_err().code(), "ETIMEOUT");
+    child.close().await.unwrap();
     options.timeout_ms = 0;
     let source = CancellationSource();
     let pending = Process.run(executable, process_fixture_args("sleep"), options: options, token: Option.Some(source.token));

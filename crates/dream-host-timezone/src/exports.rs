@@ -12,3 +12,9 @@ pub unsafe extern "C" fn dateZoneOffsetMinutes(zone_name: DreamPtr, epoch_millis
 pub extern "C" fn dateLocalZoneName() -> DreamPtr {
     alloc_string(&crate::tz::local_zone_name())
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn dateLocalOffsetMinutes(epoch_millis: i64) -> i32 {
+    let offset = crate::tz::zone_offset_minutes(&crate::tz::local_zone_name(), epoch_millis);
+    if offset == -999_999 { 0 } else { offset }
+}

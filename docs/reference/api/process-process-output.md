@@ -14,7 +14,7 @@ public class ProcessOutput
 
 ## `exit_code`
 
-Process exit status; negative values represent signal termination.
+Process exit status. On Unix a negative value is the signal number negated.
 
 ```dream
 public get exit_code(): int

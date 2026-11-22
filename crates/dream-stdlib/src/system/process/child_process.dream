@@ -3,12 +3,14 @@ module system.process;
 /// Owns a child and its pipes; explicit close terminates and reaps unfinished work.
 public class ChildProcess {
     id: int;
+    _pid: int;
     closing: bool;
     closed: Option<Result<Unit, ProcessError>>;
     completed: CancellationSource;
 
-    internal constructor(id: int) {
+    internal constructor(id: int, pid: int) {
         this.id = id;
+        this._pid = pid;
         this.closing = false;
         this.closed = Option.None;
         this.completed = CancellationSource();
@@ -16,6 +18,11 @@ public class ChildProcess {
 
     internal get handle(): int {
         return this.id;
+    }
+
+    /// Operating-system process id, or `0` when the host did not report one.
+    public get pid(): int {
+        return this._pid;
     }
 
     /// Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.

@@ -5,7 +5,7 @@ public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
     @runtime("dateNowMillis", "core", RuntimeTrait.Component, RuntimeTrait.Quiet)
     static extern fun now_millis(): long;
 
-    @runtime("dateLocalOffsetMinutes")
+    @runtime("dateLocalOffsetMinutes", "timezone")
     static extern fun local_offset_minutes(epoch_millis: long): int;
 
     // The instant this value represents, as UTC epoch milliseconds.

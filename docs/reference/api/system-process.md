@@ -5,6 +5,7 @@ Choose the type or helper you need. For an introduction, read the [usage guide](
 - [ChildProcess](process-child-process.md)
 - [Process](process-process.md)
 - [ProcessError](process-process-error.md)
+- [ProcessInfo](process-process-info.md)
 - [ProcessOptions](process-process-options.md)
 - [ProcessOutput](process-process-output.md)
 - [ProcessReader](process-process-reader.md)

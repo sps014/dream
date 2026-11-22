@@ -9,6 +9,29 @@ import { getNodeFs } from "../platform.js";
 const memFiles = new Map(); // path -> Uint8Array
 const memDirs = new Set(); // explicit directory markers
 const memTimes = new Map(); // path -> epoch millis
+let virtualCwd = "/";
+
+function normalizeVirtualPath(path) {
+  const raw = path == null ? "" : String(path);
+  const base = virtualCwd === "/" ? "" : virtualCwd;
+  const absolute = raw.startsWith("/") ? raw : `${base}/${raw}`;
+  const parts = [];
+  for (const part of absolute.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return `/${parts.join("/")}`;
+}
+
+export function browserCwd() {
+  return virtualCwd;
+}
+
+export function browserSetCwd(path) {
+  virtualCwd = normalizeVirtualPath(path);
+  return true;
+}
 
 function memTouch(path) {
   memTimes.set(path, Date.now());
@@ -25,11 +48,16 @@ function memStatWire(path) {
 
 function nodeStatWire(path) {
   try {
-    const st = getNodeFs().statSync(path);
+    const fs = getNodeFs();
+    const link = fs.lstatSync(path);
     let kind = 3;
-    if (st.isFile()) kind = 0;
-    else if (st.isDirectory()) kind = 1;
-    else if (st.isSymbolicLink()) kind = 2;
+    if (link.isFile()) kind = 0;
+    else if (link.isDirectory()) kind = 1;
+    else if (link.isSymbolicLink()) kind = 2;
+    let st = link;
+    if (link.isSymbolicLink()) {
+      try { st = fs.statSync(path); } catch (_) { st = link; }
+    }
     const mode = typeof process !== "undefined" && process.platform === "win32" ? 0 : (st.mode & 0xffff);
     const ms = (v) => Math.trunc(Number(v) || 0);
     return `${Number(st.size)}\n${ms(st.mtimeMs)}\n${ms(st.ctimeMs)}\n${ms(st.atimeMs)}\n${mode}\n${kind}`;
@@ -39,15 +67,18 @@ function nodeStatWire(path) {
 }
 const memFs = {
   readBytes(path) {
+    path = normalizeVirtualPath(path);
     const bytes = memFiles.get(path);
     if (!bytes) throw new Error(`ENOENT: no such file '${path}'`);
     return bytes;
   },
   write(path, bytes) {
+    path = normalizeVirtualPath(path);
     memFiles.set(path, Uint8Array.from(bytes));
     memTouch(path);
   },
   append(path, bytes) {
+    path = normalizeVirtualPath(path);
     const prev = memFiles.get(path) || new Uint8Array(0);
     const next = new Uint8Array(prev.length + bytes.length);
     next.set(prev, 0);
@@ -56,27 +87,34 @@ const memFs = {
     memTouch(path);
   },
   exists(path) {
-    return memFiles.has(path) || memDirs.has(path) || this.isDir(path);
+    path = normalizeVirtualPath(path);
+    return path === "/" || memFiles.has(path) || memDirs.has(path) || this.isDir(path);
   },
   remove(path) {
-    memDirs.delete(path);
+    path = normalizeVirtualPath(path);
+    if (path === "/") return false;
+    const hadFile = memFiles.delete(path);
+    const hadDir = memDirs.delete(path);
     memTimes.delete(path);
-    return memFiles.delete(path);
+    return hadFile || hadDir;
   },
   size(path) {
+    path = normalizeVirtualPath(path);
     const bytes = memFiles.get(path);
     return bytes ? bytes.length : -1;
   },
   isDir(path) {
-    if (memDirs.has(path)) return true;
-    const prefix = path.endsWith("/") ? path : path + "/";
+    path = normalizeVirtualPath(path);
+    if (path === "/" || memDirs.has(path)) return true;
+    const prefix = path + "/";
     for (const key of memFiles.keys()) {
       if (key.startsWith(prefix)) return true;
     }
     return false;
   },
   list(path) {
-    const prefix = path === "" || path === "." ? "" : path.endsWith("/") ? path : path + "/";
+    path = normalizeVirtualPath(path);
+    const prefix = path === "/" ? "/" : path + "/";
     const names = new Set();
     for (const key of memFiles.keys()) {
       if (!key.startsWith(prefix)) continue;
@@ -94,16 +132,20 @@ const memFs = {
     return Array.from(names).sort();
   },
   mkdir(path) {
-    if (memFiles.has(path) || memDirs.has(path)) throw new Error(`EEXIST: '${path}'`);
+    path = normalizeVirtualPath(path);
+    if (path === "/" || memFiles.has(path) || memDirs.has(path)) throw new Error(`EEXIST: '${path}'`);
     memDirs.add(path);
     memTouch(path);
   },
   mkdirAll(path) {
+    path = normalizeVirtualPath(path);
+    if (path === "/") return;
     const parts = path.split("/").filter(Boolean);
-    let cur = path.startsWith("/") ? "" : "";
+    let cur = "";
     for (const part of parts) {
-      cur = cur === "" ? (path.startsWith("/") ? "/" + part : part) : cur + "/" + part;
-      if (!memDirs.has(cur) && !memFiles.has(cur)) {
+      cur = `${cur}/${part}`;
+      if (memFiles.has(cur)) throw new Error(`ENOTDIR: '${cur}'`);
+      if (!memDirs.has(cur)) {
         memDirs.add(cur);
         memTouch(cur);
       }
@@ -114,6 +156,8 @@ const memFs = {
     this.write(to, this.readBytes(from));
   },
   rename(from, to) {
+    from = normalizeVirtualPath(from);
+    to = normalizeVirtualPath(to);
     if (memFiles.has(from)) {
       memFiles.set(to, memFiles.get(from));
       memFiles.delete(from);
@@ -153,6 +197,7 @@ const memFs = {
     }
   },
   rmdir(path) {
+    path = normalizeVirtualPath(path);
     if (!this.isDir(path)) throw new Error(`ENOTDIR: '${path}'`);
     const names = this.list(path);
     if (names.length > 0) throw new Error(`ENOTEMPTY: '${path}'`);
@@ -160,6 +205,7 @@ const memFs = {
     memTimes.delete(path);
   },
   rmAll(path) {
+    path = normalizeVirtualPath(path);
     if (memFiles.has(path)) {
       this.remove(path);
       return;
@@ -370,21 +416,33 @@ function fileHandleCloseHost(id) {
 
 export function makeFsHost() {
   return {
-    fileRead: (path) => new TextDecoder("utf-8").decode(fsBackend().readBytes(path)),
+    fileRead: (path) => {
+      try { return new TextDecoder("utf-8").decode(fsBackend().readBytes(path)); }
+      catch (_) { return ""; }
+    },
     fileWrite: (path, content) => {
-      const bytes = new TextEncoder().encode(content);
-      fsBackend().write(path, bytes);
-      return BigInt(bytes.length);
+      try {
+        const bytes = new TextEncoder().encode(content);
+        fsBackend().write(path, bytes);
+        return BigInt(bytes.length);
+      } catch (_) { return -1n; }
     },
     fileAppend: (path, content) => {
-      const bytes = new TextEncoder().encode(content);
-      fsBackend().append(path, bytes);
-      return BigInt(bytes.length);
+      try {
+        const bytes = new TextEncoder().encode(content);
+        fsBackend().append(path, bytes);
+        return BigInt(bytes.length);
+      } catch (_) { return -1n; }
     },
-    fileReadBytes: (path) => fsBackend().readBytes(path),
+    fileReadBytes: (path) => {
+      try { return fsBackend().readBytes(path); }
+      catch (_) { return new Uint8Array(); }
+    },
     fileWriteBytes: (path, data) => {
-      fsBackend().write(path, Uint8Array.from(data));
-      return BigInt(data.length);
+      try {
+        fsBackend().write(path, Uint8Array.from(data));
+        return BigInt(data.length);
+      } catch (_) { return -1n; }
     },
     fileExists: (path) => fsBackend().exists(path),
     fileDelete: (path) => fsBackend().remove(path),

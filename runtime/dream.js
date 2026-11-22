@@ -2017,6 +2017,29 @@ function makeFileOperationHost(files) {
 const memFiles = new Map(); // path -> Uint8Array
 const memDirs = new Set(); // explicit directory markers
 const memTimes = new Map(); // path -> epoch millis
+let virtualCwd = "/";
+
+function normalizeVirtualPath(path) {
+  const raw = path == null ? "" : String(path);
+  const base = virtualCwd === "/" ? "" : virtualCwd;
+  const absolute = raw.startsWith("/") ? raw : `${base}/${raw}`;
+  const parts = [];
+  for (const part of absolute.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return `/${parts.join("/")}`;
+}
+
+function browserCwd() {
+  return virtualCwd;
+}
+
+function browserSetCwd(path) {
+  virtualCwd = normalizeVirtualPath(path);
+  return true;
+}
 
 function memTouch(path) {
   memTimes.set(path, Date.now());
@@ -2033,11 +2056,16 @@ function memStatWire(path) {
 
 function nodeStatWire(path) {
   try {
-    const st = getNodeFs().statSync(path);
+    const fs = getNodeFs();
+    const link = fs.lstatSync(path);
     let kind = 3;
-    if (st.isFile()) kind = 0;
-    else if (st.isDirectory()) kind = 1;
-    else if (st.isSymbolicLink()) kind = 2;
+    if (link.isFile()) kind = 0;
+    else if (link.isDirectory()) kind = 1;
+    else if (link.isSymbolicLink()) kind = 2;
+    let st = link;
+    if (link.isSymbolicLink()) {
+      try { st = fs.statSync(path); } catch (_) { st = link; }
+    }
     const mode = typeof process !== "undefined" && process.platform === "win32" ? 0 : (st.mode & 0xffff);
     const ms = (v) => Math.trunc(Number(v) || 0);
     return `${Number(st.size)}\n${ms(st.mtimeMs)}\n${ms(st.ctimeMs)}\n${ms(st.atimeMs)}\n${mode}\n${kind}`;
@@ -2047,15 +2075,18 @@ function nodeStatWire(path) {
 }
 const memFs = {
   readBytes(path) {
+    path = normalizeVirtualPath(path);
     const bytes = memFiles.get(path);
     if (!bytes) throw new Error(`ENOENT: no such file '${path}'`);
     return bytes;
   },
   write(path, bytes) {
+    path = normalizeVirtualPath(path);
     memFiles.set(path, Uint8Array.from(bytes));
     memTouch(path);
   },
   append(path, bytes) {
+    path = normalizeVirtualPath(path);
     const prev = memFiles.get(path) || new Uint8Array(0);
     const next = new Uint8Array(prev.length + bytes.length);
     next.set(prev, 0);
@@ -2064,27 +2095,34 @@ const memFs = {
     memTouch(path);
   },
   exists(path) {
-    return memFiles.has(path) || memDirs.has(path) || this.isDir(path);
+    path = normalizeVirtualPath(path);
+    return path === "/" || memFiles.has(path) || memDirs.has(path) || this.isDir(path);
   },
   remove(path) {
-    memDirs.delete(path);
+    path = normalizeVirtualPath(path);
+    if (path === "/") return false;
+    const hadFile = memFiles.delete(path);
+    const hadDir = memDirs.delete(path);
     memTimes.delete(path);
-    return memFiles.delete(path);
+    return hadFile || hadDir;
   },
   size(path) {
+    path = normalizeVirtualPath(path);
     const bytes = memFiles.get(path);
     return bytes ? bytes.length : -1;
   },
   isDir(path) {
-    if (memDirs.has(path)) return true;
-    const prefix = path.endsWith("/") ? path : path + "/";
+    path = normalizeVirtualPath(path);
+    if (path === "/" || memDirs.has(path)) return true;
+    const prefix = path + "/";
     for (const key of memFiles.keys()) {
       if (key.startsWith(prefix)) return true;
     }
     return false;
   },
   list(path) {
-    const prefix = path === "" || path === "." ? "" : path.endsWith("/") ? path : path + "/";
+    path = normalizeVirtualPath(path);
+    const prefix = path === "/" ? "/" : path + "/";
     const names = new Set();
     for (const key of memFiles.keys()) {
       if (!key.startsWith(prefix)) continue;
@@ -2102,16 +2140,20 @@ const memFs = {
     return Array.from(names).sort();
   },
   mkdir(path) {
-    if (memFiles.has(path) || memDirs.has(path)) throw new Error(`EEXIST: '${path}'`);
+    path = normalizeVirtualPath(path);
+    if (path === "/" || memFiles.has(path) || memDirs.has(path)) throw new Error(`EEXIST: '${path}'`);
     memDirs.add(path);
     memTouch(path);
   },
   mkdirAll(path) {
+    path = normalizeVirtualPath(path);
+    if (path === "/") return;
     const parts = path.split("/").filter(Boolean);
-    let cur = path.startsWith("/") ? "" : "";
+    let cur = "";
     for (const part of parts) {
-      cur = cur === "" ? (path.startsWith("/") ? "/" + part : part) : cur + "/" + part;
-      if (!memDirs.has(cur) && !memFiles.has(cur)) {
+      cur = `${cur}/${part}`;
+      if (memFiles.has(cur)) throw new Error(`ENOTDIR: '${cur}'`);
+      if (!memDirs.has(cur)) {
         memDirs.add(cur);
         memTouch(cur);
       }
@@ -2122,6 +2164,8 @@ const memFs = {
     this.write(to, this.readBytes(from));
   },
   rename(from, to) {
+    from = normalizeVirtualPath(from);
+    to = normalizeVirtualPath(to);
     if (memFiles.has(from)) {
       memFiles.set(to, memFiles.get(from));
       memFiles.delete(from);
@@ -2161,6 +2205,7 @@ const memFs = {
     }
   },
   rmdir(path) {
+    path = normalizeVirtualPath(path);
     if (!this.isDir(path)) throw new Error(`ENOTDIR: '${path}'`);
     const names = this.list(path);
     if (names.length > 0) throw new Error(`ENOTEMPTY: '${path}'`);
@@ -2168,6 +2213,7 @@ const memFs = {
     memTimes.delete(path);
   },
   rmAll(path) {
+    path = normalizeVirtualPath(path);
     if (memFiles.has(path)) {
       this.remove(path);
       return;
@@ -2378,21 +2424,33 @@ function fileHandleCloseHost(id) {
 
 function makeFsHost() {
   return {
-    fileRead: (path) => new TextDecoder("utf-8").decode(fsBackend().readBytes(path)),
+    fileRead: (path) => {
+      try { return new TextDecoder("utf-8").decode(fsBackend().readBytes(path)); }
+      catch (_) { return ""; }
+    },
     fileWrite: (path, content) => {
-      const bytes = new TextEncoder().encode(content);
-      fsBackend().write(path, bytes);
-      return BigInt(bytes.length);
+      try {
+        const bytes = new TextEncoder().encode(content);
+        fsBackend().write(path, bytes);
+        return BigInt(bytes.length);
+      } catch (_) { return -1n; }
     },
     fileAppend: (path, content) => {
-      const bytes = new TextEncoder().encode(content);
-      fsBackend().append(path, bytes);
-      return BigInt(bytes.length);
+      try {
+        const bytes = new TextEncoder().encode(content);
+        fsBackend().append(path, bytes);
+        return BigInt(bytes.length);
+      } catch (_) { return -1n; }
     },
-    fileReadBytes: (path) => fsBackend().readBytes(path),
+    fileReadBytes: (path) => {
+      try { return fsBackend().readBytes(path); }
+      catch (_) { return new Uint8Array(); }
+    },
     fileWriteBytes: (path, data) => {
-      fsBackend().write(path, Uint8Array.from(data));
-      return BigInt(data.length);
+      try {
+        fsBackend().write(path, Uint8Array.from(data));
+        return BigInt(data.length);
+      } catch (_) { return -1n; }
     },
     fileExists: (path) => fsBackend().exists(path),
     fileDelete: (path) => fsBackend().remove(path),
@@ -2576,6 +2634,16 @@ function splitProcessArgs(input) {
 const processChildren = new Map();
 const processOperations = new Map();
 let nextProcessServiceId = 1;
+const PROCESS_SIGNALS = {
+  SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGILL: 4, SIGTRAP: 5, SIGABRT: 6, SIGBUS: 7, SIGFPE: 8,
+  SIGKILL: 9, SIGUSR1: 10, SIGSEGV: 11, SIGUSR2: 12, SIGPIPE: 13, SIGALRM: 14, SIGTERM: 15,
+  SIGCHLD: 17, SIGCONT: 18, SIGSTOP: 19, SIGTSTP: 20, SIGTTIN: 21, SIGTTOU: 22,
+};
+function processExitCode(code, signal) {
+  if (code !== null && code !== undefined) return code;
+  const number = PROCESS_SIGNALS[signal];
+  return number ? -number : -2;
+}
 function processFailure(code, message) { return { code, message }; }
 function processReason(signal) { return signal.reason?.code ? signal.reason : processFailure("ECANCELLED", "process operation cancelled"); }
 function processRequire(id) {
@@ -2620,7 +2688,7 @@ async function processCreate(command, bytes, options, signal) {
   const state = { id: nextProcessServiceId++, child, closed: false, error: null, timer: null, settings };
   state.exited = new Promise(resolve => {
     child.once("error", error => { state.error = processFailure("ESPAWN", error.message); });
-    child.once("close", code => { state.closed = true; clearTimeout(state.timer); resolve(code ?? -2); });
+    child.once("close", (code, signal) => { state.closed = true; clearTimeout(state.timer); resolve(processExitCode(code, signal)); });
   });
   for (const pipe of [child.stdin, child.stdout, child.stderr]) pipe?.on("error", () => {});
   processChildren.set(state.id, state);
@@ -2677,14 +2745,38 @@ async function processCollect(state, stream, limit, signal) {
     chunks.push(Buffer.from(chunk));
   }
 }
+function listProcRows() {
+  const fs = getNodeFs();
+  if (!isNode || process.platform !== "linux" || !fs) {
+    throw processFailure("EUNSUPPORTED", "process listing is unavailable on this host");
+  }
+  const ids = fs.readdirSync("/proc").filter(name => /^\d+$/.test(name)).map(Number).sort((a, b) => a - b);
+  const lines = [String(ids.length)];
+  for (const pid of ids) {
+    let parent = 0;
+    let name = "";
+    try {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+      const end = stat.lastIndexOf(")");
+      if (end >= 0) parent = Number(stat.slice(end + 1).trim().split(/\s+/)[1] || 0);
+      name = fs.readFileSync(`/proc/${pid}/comm`, "utf8").trim().replace(/[\r\n]/g, " ");
+    } catch (_) {}
+    lines.push(String(pid), String(parent), name);
+  }
+  return `${lines.join("\n")}\n`;
+}
 async function processExecute(request, bytes, op) {
   const signal = op.controller.signal;
   if (signal.aborted) throw processReason(signal);
+  if (request.action === "list") return { bytes: new TextEncoder().encode(listProcRows()) };
   if (request.action === "run" || request.action === "spawn") {
     const state = await processCreate(request.command, bytes, request.options, signal);
     if (request.action === "spawn") {
-      if (state.settings.timeout) state.timer = setTimeout(() => { state.error = processFailure("ETIMEOUT", "process deadline exceeded"); processStop(state).catch(() => {}); }, state.settings.timeout);
-      return { bytes: new TextEncoder().encode(String(state.id)), child: state };
+      if (state.settings.timeout) state.timer = setTimeout(() => {
+        state.error = processFailure("ETIMEOUT", "process deadline exceeded");
+        if (!state.closed) state.child.kill("SIGKILL");
+      }, state.settings.timeout);
+      return { bytes: new TextEncoder().encode(`${state.id}\n${state.child.pid ?? 0}`), child: state };
     }
     let timer;
     if (state.settings.timeout) timer = setTimeout(() => op.controller.abort(processFailure("ETIMEOUT", "process deadline exceeded")), state.settings.timeout);
@@ -2834,9 +2926,9 @@ function makeConsoleProcessHost() {
       if (!isNode) return "";
       return process.env.HOME || process.env.USERPROFILE || "";
     },
-    processCwd: () => (isNode ? process.cwd() : "/"),
+    processCwd: () => (isNode ? process.cwd() : browserCwd()),
     processSetCwd: (path) => {
-      if (!isNode) return false;
+      if (!isNode) return browserSetCwd(path);
       try { process.chdir(path); return true; } catch (_) { return false; }
     },
     processCpuTimeNanos: () => {

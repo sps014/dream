@@ -46,6 +46,15 @@ fn complete(id: i32) -> Vec<u8> {
     }
 }
 #[test]
+fn list_includes_this_process() {
+    let id = service::start(r#"{"action":"list"}"#.to_string(), Vec::new());
+    let result = complete(id);
+    assert_eq!(result[0], 1, "{}", String::from_utf8_lossy(&result));
+    let text = String::from_utf8_lossy(&result[1..]);
+    let pid = std::process::id().to_string();
+    assert!(text.lines().any(|line| line == pid), "{text}");
+}
+#[test]
 fn fixture() {
     let Ok(mode) = std::env::var("DREAM_PROCESS_HOST_FIXTURE") else {
         return;

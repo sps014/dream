@@ -94,7 +94,7 @@ public static fun env(borrow name: string): Option<string>
 
 ## `set_env`
 
-Sets environment variable `name` to `value`.
+Sets environment variable `name` to `value`. Returns `EINVAL` when `name` is empty or the host does not keep the value. The browser has no process environment, so a set there fails this way.
 
 ```dream
 public static fun set_env(borrow name: string, borrow value: string): Result<Unit, ArgumentError>

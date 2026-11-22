@@ -56,7 +56,9 @@ test("spawned pipes stream, stdin EOF completes the child, and close invalidates
   await host.processOperationWait(started);
   const wire = host.processOperationResult(started);
   assert.equal(wire[0], 1);
-  const handle = Number(decode(wire.slice(1)));
+  const spawned = decode(wire.slice(1)).split("\n");
+  const handle = Number(spawned[0]);
+  assert.ok(Number(spawned[1]) > 0);
   host.processOperationClaim(started);
   host.processOperationRelease(started);
   const operation = (action, extra = {}, bytes = []) => host.processStart(JSON.stringify({ action, handle, ...extra }), bytes);
@@ -68,6 +70,19 @@ test("spawned pipes stream, stdin EOF completes the child, and close invalidates
   assert.equal((await complete(host, operation("read", { stream: 0, max_bytes: 1 }))).error.code, "ECLOSED");
 });
 
+test("list returns a table on Linux and reports EUNSUPPORTED elsewhere", async () => {
+  const host = makeProcessHost();
+  const result = await complete(host, host.processStart(JSON.stringify({ action: "list" }), []));
+  if (process.platform === "linux") {
+    assert.equal(result.error, undefined);
+    const lines = decode(result.value).trim().split("\n");
+    const count = Number(lines[0]);
+    assert.equal(lines.length, 1 + count * 3);
+    assert.ok(lines.includes(String(process.pid)));
+  } else {
+    assert.equal(result.error.code, "EUNSUPPORTED");
+  }
+});
 test("malformed argument wires and invalid capture bounds agree with native validation", async () => {
   const host = makeProcessHost();
   const id = host.processStart(JSON.stringify({ action: "run", command: process.execPath, options: {} }), [255, 255, 255, 255]);

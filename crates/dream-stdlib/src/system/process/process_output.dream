@@ -12,7 +12,7 @@ public class ProcessOutput {
         this._stderr = stderr;
     }
 
-    /// Process exit status; negative values represent signal termination.
+    /// Process exit status. On Unix a negative value is the signal number negated.
     public get exit_code(): int {
         return this._exit_code;
     }

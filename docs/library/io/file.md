@@ -28,7 +28,7 @@ async fun main(): void {
 | Runtime | Where files live |
 | --- | --- |
 | Native / Node | Real disk |
-| Browser | In-memory, gone on reload |
+| Browser | In-memory, gone on reload. Relative paths use the virtual working directory, which starts at `/`. |
 
 ## Explore this topic
 

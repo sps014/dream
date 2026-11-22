@@ -48,6 +48,7 @@ Every launching function accepts an optional trailing `token: Option<Cancellatio
 | `Process.spawn(cmd, args)` | `Future<Result<ChildProcess, ProcessError>>` | Starts a child with streaming pipes. |
 | `Process.spawn(cmd, args, options)` | `Future<Result<ChildProcess, ProcessError>>` | Starts a child with the given `ProcessOptions`. |
 | `Process.spawn_in(cmd, args, cwd)` | `Future<Result<ChildProcess, ProcessError>>` | Starts a child in the directory `cwd`. |
+| `Process.list()` | `Future<Result<ProcessInfo[], ProcessError>>` | Lists processes ordered by pid. Browser hosts and Node without `/proc` return `EUNSUPPORTED`. |
 | `Process.which(cmd)` | `Option<string>` | Finds a command path directly or on `PATH`; native and Node only. |
 
 ## Options
@@ -65,7 +66,7 @@ Every launching function accepts an optional trailing `token: Option<Cancellatio
 
 | Property | Type | Meaning |
 | --- | --- | --- |
-| `exit_code` | `int` | Exit status; negative values mean the process was ended by a signal. |
+| `exit_code` | `int` | Exit status. On Unix a negative value is the signal number negated. |
 | `stdout` | `string` | Captured standard output, decoded as UTF-8. |
 | `stderr` | `string` | Captured standard error, decoded as UTF-8. |
 | `success` | `bool` | True when the exit status is zero. |
@@ -86,6 +87,7 @@ child.close().await?;
 
 | Member | Returns | Effect |
 | --- | --- | --- |
+| `child.pid` | `int` | Operating-system process id, or `0` when the host did not report one. |
 | `child.stdout` / `child.stderr` | `ProcessReader` | Borrows an output pipe. |
 | `child.stdin` | `ProcessWriter` | Borrows the input pipe. |
 | `child.close_stdin()` | `Future<Result<Unit, ProcessError>>` | Closes stdin after pending writes, sending EOF to the child. |

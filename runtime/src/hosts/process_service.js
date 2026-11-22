@@ -1,10 +1,20 @@
-import { isNode, getNodeChildProcess } from "../platform.js";
+import { isNode, getNodeChildProcess, getNodeFs } from "../platform.js";
 import { splitProcessArgs } from "./process_wire.js";
 import { wireFailure } from "../wire.js";
 
 const processChildren = new Map();
 const processOperations = new Map();
 let nextProcessServiceId = 1;
+const PROCESS_SIGNALS = {
+  SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGILL: 4, SIGTRAP: 5, SIGABRT: 6, SIGBUS: 7, SIGFPE: 8,
+  SIGKILL: 9, SIGUSR1: 10, SIGSEGV: 11, SIGUSR2: 12, SIGPIPE: 13, SIGALRM: 14, SIGTERM: 15,
+  SIGCHLD: 17, SIGCONT: 18, SIGSTOP: 19, SIGTSTP: 20, SIGTTIN: 21, SIGTTOU: 22,
+};
+function processExitCode(code, signal) {
+  if (code !== null && code !== undefined) return code;
+  const number = PROCESS_SIGNALS[signal];
+  return number ? -number : -2;
+}
 function processFailure(code, message) { return { code, message }; }
 function processReason(signal) { return signal.reason?.code ? signal.reason : processFailure("ECANCELLED", "process operation cancelled"); }
 function processRequire(id) {
@@ -49,7 +59,7 @@ async function processCreate(command, bytes, options, signal) {
   const state = { id: nextProcessServiceId++, child, closed: false, error: null, timer: null, settings };
   state.exited = new Promise(resolve => {
     child.once("error", error => { state.error = processFailure("ESPAWN", error.message); });
-    child.once("close", code => { state.closed = true; clearTimeout(state.timer); resolve(code ?? -2); });
+    child.once("close", (code, signal) => { state.closed = true; clearTimeout(state.timer); resolve(processExitCode(code, signal)); });
   });
   for (const pipe of [child.stdin, child.stdout, child.stderr]) pipe?.on("error", () => {});
   processChildren.set(state.id, state);
@@ -106,14 +116,38 @@ async function processCollect(state, stream, limit, signal) {
     chunks.push(Buffer.from(chunk));
   }
 }
+function listProcRows() {
+  const fs = getNodeFs();
+  if (!isNode || process.platform !== "linux" || !fs) {
+    throw processFailure("EUNSUPPORTED", "process listing is unavailable on this host");
+  }
+  const ids = fs.readdirSync("/proc").filter(name => /^\d+$/.test(name)).map(Number).sort((a, b) => a - b);
+  const lines = [String(ids.length)];
+  for (const pid of ids) {
+    let parent = 0;
+    let name = "";
+    try {
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+      const end = stat.lastIndexOf(")");
+      if (end >= 0) parent = Number(stat.slice(end + 1).trim().split(/\s+/)[1] || 0);
+      name = fs.readFileSync(`/proc/${pid}/comm`, "utf8").trim().replace(/[\r\n]/g, " ");
+    } catch (_) {}
+    lines.push(String(pid), String(parent), name);
+  }
+  return `${lines.join("\n")}\n`;
+}
 async function processExecute(request, bytes, op) {
   const signal = op.controller.signal;
   if (signal.aborted) throw processReason(signal);
+  if (request.action === "list") return { bytes: new TextEncoder().encode(listProcRows()) };
   if (request.action === "run" || request.action === "spawn") {
     const state = await processCreate(request.command, bytes, request.options, signal);
     if (request.action === "spawn") {
-      if (state.settings.timeout) state.timer = setTimeout(() => { state.error = processFailure("ETIMEOUT", "process deadline exceeded"); processStop(state).catch(() => {}); }, state.settings.timeout);
-      return { bytes: new TextEncoder().encode(String(state.id)), child: state };
+      if (state.settings.timeout) state.timer = setTimeout(() => {
+        state.error = processFailure("ETIMEOUT", "process deadline exceeded");
+        if (!state.closed) state.child.kill("SIGKILL");
+      }, state.settings.timeout);
+      return { bytes: new TextEncoder().encode(`${state.id}\n${state.child.pid ?? 0}`), child: state };
     }
     let timer;
     if (state.settings.timeout) timer = setTimeout(() => op.controller.abort(processFailure("ETIMEOUT", "process deadline exceeded")), state.settings.timeout);

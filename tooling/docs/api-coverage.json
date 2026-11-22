@@ -14087,68 +14087,68 @@
       },
       {
         "signature": "public static fun set_env(borrow name: string, borrow value: string): Result<Unit, ArgumentError>",
-        "description": "Sets environment variable `name` to `value`.",
-        "line": 126,
+        "description": "Sets environment variable `name` to `value`. Returns `EINVAL` when `name` is empty or the host does not keep the value. The browser has no process environment, so a set there fails this way.",
+        "line": 128,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun unset_env(borrow name: string): Result<Unit, ArgumentError>",
         "description": "Unsets environment variable `name`.",
-        "line": 147,
+        "line": 154,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get env_keys(): string[]",
         "description": "Names of all environment variables (empty on hosts without an env block).",
-        "line": 156,
+        "line": 163,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get temp_dir(): string",
         "description": "Process temp directory (`TMPDIR` / `GetTempPath` / `\"/tmp\"` in the browser).",
-        "line": 165,
+        "line": 172,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get home_dir(): Option<string>",
         "description": "User home directory when the host provides one.",
-        "line": 174,
+        "line": 181,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static get cwd(): Result<string, IoError>",
         "description": "Current working directory.",
-        "line": 183,
+        "line": 190,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_cwd(borrow path: string): Result<Unit, IoError>",
         "description": "Sets the current working directory.",
-        "line": 192,
+        "line": 199,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun clear(): void",
         "description": "Clears the terminal screen.",
-        "line": 200,
+        "line": 207,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_foreground(color: ConsoleColor): void",
         "description": "Sets the foreground color for subsequent output.",
-        "line": 245,
+        "line": 252,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun set_background(color: ConsoleColor): void",
         "description": "Sets the background color for subsequent output.",
-        "line": 253,
+        "line": 260,
         "page": "reference/api/host-system.md"
       },
       {
         "signature": "public static fun reset_color(): void",
         "description": "Resets console colors to the terminal default.",
-        "line": 261,
+        "line": 268,
         "page": "reference/api/host-system.md"
       }
     ]
@@ -17925,39 +17925,45 @@
         "page": "reference/api/process-child-process.md"
       },
       {
+        "signature": "public get pid(): int",
+        "description": "Operating-system process id, or `0` when the host did not report one.",
+        "line": 24,
+        "page": "reference/api/process-child-process.md"
+      },
+      {
         "signature": "public get stdout(): ProcessReader",
         "description": "Borrows stdout through an AsyncReader; retain this reader when using read_line buffering.",
-        "line": 22,
+        "line": 29,
         "page": "reference/api/process-child-process.md"
       },
       {
         "signature": "public get stderr(): ProcessReader",
         "description": "Borrows stderr through an AsyncReader; drain it concurrently with stdout.",
-        "line": 27,
+        "line": 34,
         "page": "reference/api/process-child-process.md"
       },
       {
         "signature": "public get stdin(): ProcessWriter",
         "description": "Borrows stdin through an AsyncWriter; call close_stdin to deliver EOF to the child.",
-        "line": 32,
+        "line": 39,
         "page": "reference/api/process-child-process.md"
       },
       {
         "signature": "public fun close_stdin( token: Option<CancellationToken> = Option.None ): Future<Result<Unit, ProcessError>>",
         "description": "Closes stdin after pending writes, allowing commands waiting for input EOF to finish.",
-        "line": 37,
+        "line": 44,
         "page": "reference/api/process-child-process.md"
       },
       {
         "signature": "public fun wait( token: Option<CancellationToken> = Option.None ): Future<Result<int, ProcessError>>",
         "description": "Waits for process exit without discarding unread output or closing the child handle.",
-        "line": 61,
+        "line": 68,
         "page": "reference/api/process-child-process.md"
       },
       {
         "signature": "public fun close(): Future<Result<Unit, ProcessError>>",
         "description": "Terminates and reaps the owned child; repeated or concurrent closes share the outcome.",
-        "line": 85,
+        "line": 92,
         "page": "reference/api/process-child-process.md"
       }
     ]
@@ -18006,19 +18012,25 @@
       {
         "signature": "public static fun spawn_in( cmd: string, args: string[], cwd: string, token: Option<CancellationToken> = Option.None ): Future<Result<ChildProcess, ProcessError>>",
         "description": "Spawns a child in a specific directory with otherwise default options.",
-        "line": 134,
+        "line": 140,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static async fun run_checked( cmd: string, args: string[], token: Option<CancellationToken> = Option.None ): Result<ProcessOutput, ProcessError>",
         "description": "Captures output and additionally treats nonzero exit statuses as EEXIT errors.",
-        "line": 146,
+        "line": 152,
+        "page": "reference/api/process-process.md"
+      },
+      {
+        "signature": "public static fun list( token: Option<CancellationToken> = Option.None ): Future<Result<ProcessInfo[], ProcessError>>",
+        "description": "Lists operating-system processes, ordered by pid. A name the OS will not reveal is empty. Browser and hosts without a process table return `EUNSUPPORTED`.",
+        "line": 168,
         "page": "reference/api/process-process.md"
       },
       {
         "signature": "public static fun which(cmd: string): Option<string>",
         "description": "Finds an existing nondirectory command path, directly or by searching `PATH`. This does not validate execute permissions or expand platform-specific extensions.",
-        "line": 163,
+        "line": 204,
         "page": "reference/api/process-process.md"
       }
     ]
@@ -18091,6 +18103,37 @@
     ]
   },
   {
+    "source": "crates/dream-stdlib/src/system/process/process_info.dream",
+    "package": "system.process",
+    "page": "reference/api/process-process-info.md",
+    "declarations": [
+      {
+        "signature": "public class ProcessInfo",
+        "description": "One row from `Process.list`: an operating-system process id, its parent, and its name.",
+        "line": 4,
+        "page": "reference/api/process-process-info.md"
+      },
+      {
+        "signature": "public get pid(): int",
+        "description": "Operating-system process id.",
+        "line": 16,
+        "page": "reference/api/process-process-info.md"
+      },
+      {
+        "signature": "public get parent_pid(): int",
+        "description": "Parent process id, or `0` when the host does not report one.",
+        "line": 21,
+        "page": "reference/api/process-process-info.md"
+      },
+      {
+        "signature": "public get name(): string",
+        "description": "Process name. Empty when the operating system does not reveal it.",
+        "line": 26,
+        "page": "reference/api/process-process-info.md"
+      }
+    ]
+  },
+  {
     "source": "crates/dream-stdlib/src/system/process/process_options.dream",
     "package": "system.process",
     "page": "reference/api/process-process-options.md",
@@ -18158,7 +18201,7 @@
       },
       {
         "signature": "public get exit_code(): int",
-        "description": "Process exit status; negative values represent signal termination.",
+        "description": "Process exit status. On Unix a negative value is the signal number negated.",
         "line": 16,
         "page": "reference/api/process-process-output.md"
       },

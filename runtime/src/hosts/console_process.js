@@ -1,4 +1,5 @@
 import { isNode, getNodeFs } from "../platform.js";
+import { browserCwd, browserSetCwd } from "./fs.js";
 import { encodeProcessArgs } from "./process_wire.js";
 import { makeProcessHost } from "./process_service.js";
 
@@ -84,9 +85,9 @@ export function makeConsoleProcessHost() {
       if (!isNode) return "";
       return process.env.HOME || process.env.USERPROFILE || "";
     },
-    processCwd: () => (isNode ? process.cwd() : "/"),
+    processCwd: () => (isNode ? process.cwd() : browserCwd()),
     processSetCwd: (path) => {
-      if (!isNode) return false;
+      if (!isNode) return browserSetCwd(path);
       try { process.chdir(path); return true; } catch (_) { return false; }
     },
     processCpuTimeNanos: () => {

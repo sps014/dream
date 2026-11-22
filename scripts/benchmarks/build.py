@@ -26,9 +26,13 @@ if name.endswith(".exe"):
     name = name[:-4]
 suffix = ".exe" if os.name == "nt" else ""
 real = Path(os.environ["DREAM_BENCH_LLVM_REAL"]) / (name + suffix)
+inputs = {}
+for previous, arg in zip(sys.argv, sys.argv[1:]):
+    if previous != "-o" and arg.endswith((".ll", ".bc")) and Path(arg).is_file():
+        inputs[arg] = Path(arg).stat().st_size
 started = time.monotonic()
 result = subprocess.run([str(real), *sys.argv[1:]])
-line = json.dumps({"tool": name, "args": sys.argv[1:], "seconds": time.monotonic() - started, "exit": result.returncode}) + "\n"
+line = json.dumps({"tool": name, "args": sys.argv[1:], "inputs": inputs, "seconds": time.monotonic() - started, "exit": result.returncode}) + "\n"
 path = os.environ["DREAM_BENCH_TRACE"]
 with open(path, "a", encoding="utf-8") as log:
     if os.name == "nt":
@@ -206,6 +210,20 @@ def workload(name):
     )
 
 
+def edit_source(sources, marker, edit):
+    if edit == "leaf":
+        name = "work_7.dream"
+        marker, replacement = "i % 3", "i % 5"
+    else:
+        name = "main.dream"
+        replacement = marker.replace("42", "43")
+    before = sources[name]
+    after = before.replace(marker, replacement, 1)
+    if before == after:
+        raise argparse.ArgumentTypeError(f"edit marker {marker!r} did not change {name}")
+    return name, after
+
+
 def install_wrappers(work: Path, llvm: Path) -> Path:
     # The pinned-tool lookup accepts an override only as the toolchain's own `bin/`; its siblings
     # carry the clang resource directory, compiler-rt and the WASI sysroot.
@@ -329,6 +347,8 @@ def main():
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--workload", default="hello",
                         help="hello, genN (N generated functions), stdlib, webapi, or selfhost")
+    parser.add_argument("--edit", choices=("entry", "leaf"), default="entry",
+                        help="edit the entry point or a leaf module body (selfhost only)")
     parser.add_argument("--profiles", type=csv_choice(PROFILES), default=list(PROFILES))
     parser.add_argument("--targets", type=csv_choice(TARGETS), default=["native"])
     parser.add_argument("--plain", action="store_true",
@@ -337,12 +357,13 @@ def main():
     args = parser.parse_args()
     if args.repeat < 1:
         parser.error("repeat must be positive")
+    if args.edit == "leaf" and args.workload != "selfhost":
+        parser.error("--edit leaf requires --workload selfhost")
     try:
         sources, marker = workload(args.workload)
-        source_text = sources["main.dream"]
+        edited_file, edited_text = edit_source(sources, marker, args.edit)
     except argparse.ArgumentTypeError as error:
         parser.error(str(error))
-    edited_text = source_text.replace(marker, marker.replace("42", "43"), 1)
     metadata = {
         "platform": platform.platform(),
         "binary": str(with_exe(args.binary).resolve()),
@@ -351,6 +372,8 @@ def main():
         "source_sha256": hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest(),
         "llvm": str(args.llvm.resolve()),
         "workload": args.workload,
+        "edited_file": edited_file,
+        "edited_source_sha256": hashlib.sha256(edited_text.encode()).hexdigest(),
         "source_lines": sum(text.count("\n") for text in sources.values()),
         "plain": args.plain,
     }
@@ -362,7 +385,8 @@ def main():
     binary = with_exe(args.binary).resolve()
     with tempfile.TemporaryDirectory(prefix="dream-build-bench-") as directory:
         work = Path(directory)
-        wrappers = install_wrappers(work, args.llvm.resolve())
+        if not args.plain:
+            wrappers = install_wrappers(work, args.llvm.resolve())
         for target in args.targets:
             for profile in args.profiles:
                 flags = PROFILES[profile] + TARGETS[target]
@@ -379,14 +403,14 @@ def main():
                         env["DREAM_LLVM"] = str(args.llvm.resolve())
                     else:
                         env.update(DREAM_LLVM=str(wrappers), DREAM_BENCH_LLVM_REAL=str(args.llvm.resolve()))
-                    if os.name == "nt":
-                        env["DREAM_BENCH_PYTHON"] = sys.executable
-                        env["DREAM_BENCH_WRAPPER"] = str(work / "llvm-wrapper.py")
+                        if os.name == "nt":
+                            env["DREAM_BENCH_PYTHON"] = sys.executable
+                            env["DREAM_BENCH_WRAPPER"] = str(work / "llvm-wrapper.py")
                     live_trace = project / "trace.jsonl"
                     env["DREAM_BENCH_TRACE"] = str(live_trace)
                     for phase in ["cold", "unchanged", "edited", "unchanged_after_edit"]:
                         if phase == "edited":
-                            source.write_text(edited_text)
+                            (project / edited_file).write_text(edited_text)
                         key = f"{target}-{profile}-{repeat}-{phase}"
                         trace = traces / f"{key}.jsonl"
                         row = run_build(binary, source, output, flags, env, live_trace,

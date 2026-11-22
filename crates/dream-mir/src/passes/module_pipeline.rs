@@ -60,7 +60,10 @@ pub(super) fn optimize_module_rounds(
         dump.module("recursive-inline", mir, interner);
         let inliner = Inliner;
         for round in 0..max_rounds {
-            let mut changed = inliner.run(mir, interner);
+            let mut changed = {
+                let _stage = tracing::info_span!("module_pass", pass = "inline", round).entered();
+                inliner.run(mir, interner)
+            };
             changed |= function_targets::run(mir, interner);
             dump.module(function_targets::STAGE, mir, interner);
             // Drop callees left with no remaining call sites after inlining (plus their transitively

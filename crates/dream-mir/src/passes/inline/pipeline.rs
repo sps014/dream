@@ -31,7 +31,7 @@ impl ModulePass for Inliner {
         let call_counts = count_call_sites(mir);
         let recursive = recursive_set(mir, &index);
 
-        let mut changed = false;
+        let mut changed_callers = 0;
         for fi in 0..mir.functions.len() {
             let mut inlined = 0;
             while inlined < MAX_INLINES_PER_FN {
@@ -43,10 +43,15 @@ impl ModulePass for Inliner {
                     break;
                 };
                 perform_inline(mir, fi, site, interner);
-                changed = true;
                 inlined += 1;
             }
+            changed_callers += usize::from(inlined != 0);
         }
-        changed
+        tracing::info!(
+            visited = mir.functions.len(),
+            changed = changed_callers,
+            "inline callers"
+        );
+        changed_callers != 0
     }
 }

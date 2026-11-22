@@ -53,6 +53,7 @@ SUITES = {
     "scheduler": ROOT / "tests/bench/scheduler.dream",
     "timers": ROOT / "tests/bench/timers.dream",
     "workers": ROOT / "tests/bench/workers.dream",
+    "publication": ROOT / "tests/bench/publication.dream",
     "concurrency": ROOT / "tests/bench/concurrency.dream",
 }
 # Rows below this are timer noise or a deleted loop and cannot substantiate a claim.

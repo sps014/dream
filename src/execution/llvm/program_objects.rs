@@ -11,6 +11,12 @@ pub(super) fn compile(
     spec: &TargetSpec,
     units: &[String],
 ) -> Result<Vec<PathBuf>, String> {
+    let _phase = tracing::info_span!(
+        "compile_phase",
+        phase = "program_objects",
+        units = units.len()
+    )
+    .entered();
     let llc = rt_stamp::persistent_tool_identity(
         &tools.tool("llc"),
         &tools.config.tool_identity_cache_root(),

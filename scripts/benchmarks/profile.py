@@ -25,6 +25,7 @@ SUITES = {
     "scheduler": ROOT / "tests/bench/scheduler.dream",
     "timers": ROOT / "tests/bench/timers.dream",
     "workers": ROOT / "tests/bench/workers.dream",
+    "publication": ROOT / "tests/bench/publication.dream",
 }
 
 

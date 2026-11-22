@@ -638,7 +638,11 @@ pub fn compile_llvm(
         lcmd.arg(sanitize);
     }
     lcmd.arg("-o").arg(&bin);
-    if let Err(e) = run_captured(&mut lcmd, &format!("link ({})", obj.display())) {
+    let linked = {
+        let _phase = tracing::info_span!("compile_phase", phase = "native_link").entered();
+        run_captured(&mut lcmd, &format!("link ({})", obj.display()))
+    };
+    if let Err(e) = linked {
         let _ = std::fs::remove_file(&bin);
         return Err(e.into());
     }

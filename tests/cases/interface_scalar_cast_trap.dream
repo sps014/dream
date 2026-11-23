@@ -1,0 +1,16 @@
+import system;
+
+interface Shape {
+    fun sides(): int;
+}
+
+class Square: Shape {
+    public fun sides(): int {
+        return 4;
+    }
+}
+
+fun main(): void {
+    let shape: Shape = Square();
+    System.println((int)shape);
+}

@@ -229,6 +229,7 @@ extend int: Comparable<int> {
 
 This is exactly how the prelude makes primitives `Comparable` so `List<int>().sort()` works.
 The type then satisfies [generic constraints](generics.md#generic-constraints) like `T : Comparable<T>`.
+For primitives and fieldless enums, use these implementations through generic constraints. Interface-typed variables require a receiver that supports runtime interface dispatch, such as a class instance.
 
 ### Generic interfaces
 

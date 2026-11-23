@@ -2,6 +2,8 @@
 
 include!("../abi_registry.rs");
 
+pub(crate) const RESERVED_NOMINAL_TAGS: std::ops::RangeInclusive<i32> = TAG_FUTURE..=TAG_USHORT;
+
 /// Runtime string hash (`dream_string_hash_slow`): FNV-1a over UTF-16 units, folded away from
 /// the pad markers so it can be cached in the pad word. The emitter stores it into static
 /// literal blocks so the runtime never has to write them.

@@ -134,6 +134,7 @@ fn prune_dead_layouts(mir: &mut Mir, interner: &TypeInterner) {
     let live = live_layout_types(mir, interner);
     mir.layouts.structs.retain(|ty, _| live.contains(ty));
     mir.layouts.unions.retain(|ty, _| live.contains(ty));
+    mir.type_names.retain(|ty, _| live.contains(ty));
 }
 
 fn live_layout_types(mir: &Mir, interner: &TypeInterner) -> HashSet<TypeId> {

@@ -33,6 +33,57 @@ enum c3a1_Level {
     High
 }
 
+enum c3a1_OtherLevel {
+    Low,
+    Mid,
+    High
+}
+
+@noinline
+fun c3a1_box_level(level: c3a1_Level): object {
+    return level;
+}
+
+@noinline
+fun c3a1_check_boxed_enums(): void {
+    let zero = c3a1_box_level(c3a1_Level.Low);
+    Assert.is_true(zero is c3a1_Level);
+    Assert.is_true((c3a1_Level)zero == c3a1_Level.Low);
+
+    let boxed = c3a1_box_level(c3a1_Level.High);
+    Assert.eq(typeof(boxed), "c3a1_Level");
+    Assert.is_false(boxed is int);
+    Assert.is_false(boxed is c3a1_OtherLevel);
+    Assert.is_true((c3a1_Level)boxed == c3a1_Level.High);
+    Assert.eq(boxed.to_string(), c3a1_Level.High.to_string());
+    Assert.eq(boxed.hash_code(), 2);
+    if boxed is c3a1_Level level {
+        Assert.is_true(level == c3a1_Level.High);
+    } else {
+        Assert.is_true(false);
+    }
+}
+
+@test
+fun boxed_enums_keep_their_type_and_value(): void {
+    let before = Debug.live_objects;
+    c3a1_check_boxed_enums();
+    Assert.eq(Debug.live_objects - before, 0);
+}
+
+@test
+fun boxed_narrow_integers_keep_their_value(): void {
+    let small: sbyte = -128;
+    let signed: short = -32768;
+    let unsigned: ushort = 65535;
+    let boxed_small: object = small;
+    let boxed_signed: object = signed;
+    let boxed_unsigned: object = unsigned;
+    Assert.eq((int)(sbyte)boxed_small, -128);
+    Assert.eq((int)(short)boxed_signed, -32768);
+    Assert.eq((int)(ushort)boxed_unsigned, 65535);
+}
+
 @test
 @timeout(180000)
 fun downcasts_to_the_runtime_type(): void {

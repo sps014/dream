@@ -58,3 +58,18 @@ fun unsigned_negation() {
     let count: uint = 3;
     let flipped = -count;
 }
+
+interface NumericScore {
+    fun score(): int;
+}
+
+extend int: NumericScore {
+    public fun score(): int {
+        return this;
+    }
+}
+
+fun primitive_interface_values() {
+    let implicit: NumericScore = 40;
+    let explicit = (NumericScore)40;
+}

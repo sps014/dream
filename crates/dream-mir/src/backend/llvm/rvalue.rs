@@ -191,14 +191,7 @@ impl<'l, 'a> Fx<'l, 'a> {
             }
             Rvalue::EnumName { value, arms } => {
                 let v = self.operand(value);
-                let v64 = self.conv(&v, &Ty::I64);
-                let mut e = self.str_v("");
-                for (k, name) in arms.iter().rev() {
-                    let hit = self.w.icmp("eq", &v64, &Value::i64(*k));
-                    let s = self.str_v(name);
-                    e = V::u(self.w.select(&hit, &s.v, &e.v));
-                }
-                e
+                self.enum_name(&v, arms.iter().map(|(value, name)| (*value, name.as_str())))
             }
             Rvalue::Call { callee, args } => self
                 .call_expr(callee, args)
@@ -407,6 +400,21 @@ impl<'l, 'a> Fx<'l, 'a> {
                 .js_call(callee, target, via, method, args)
                 .unwrap_or_else(|| crate::internal_error!("JS call used as a value returns void")),
         }
+    }
+
+    pub(super) fn enum_name<'n>(
+        &mut self,
+        value: &V,
+        members: impl DoubleEndedIterator<Item = (i64, &'n str)>,
+    ) -> V {
+        let value = self.conv(value, &Ty::I64);
+        let mut name = self.str_v("");
+        for (discriminant, member) in members.rev() {
+            let matches = self.w.icmp("eq", &value, &Value::i64(discriminant));
+            let member = self.str_v(member);
+            name = V::u(self.w.select(&matches, &member.v, &name.v));
+        }
+        name
     }
 
     pub fn js_call_native(

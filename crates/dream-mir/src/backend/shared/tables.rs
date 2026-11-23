@@ -3,9 +3,9 @@
 use super::abi_types::{c_ident, import_call_name};
 use super::entry::{ERROR_PREFIX, entry_reports_error};
 use super::symbols::func_symbol;
-use crate::abi::TAG_STRUCT_BASE;
+use crate::abi::{RESERVED_NOMINAL_TAGS, TAG_STRUCT_BASE};
 use crate::{Const, Mir, Operand, Place, Rvalue, Statement, Terminator};
-use dream_types::{DefId, TypeId};
+use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
 use indexmap::IndexMap as HashMap;
 
@@ -55,17 +55,22 @@ pub(crate) fn symbol_table(mir: &Mir) -> HashMap<(DefId, Vec<TypeId>), String> {
     table
 }
 
-pub(crate) fn struct_tags(mir: &Mir) -> HashMap<TypeId, i32> {
+pub(crate) fn nominal_tags(mir: &Mir, interner: &TypeInterner) -> HashMap<TypeId, i32> {
     mir.layouts
         .structs
         .keys()
         .chain(mir.layouts.unions.keys())
+        .chain(
+            mir.type_names
+                .keys()
+                .filter(|ty| matches!(interner.kind(**ty), TyKind::Enum(_))),
+        )
         .enumerate()
         .map(|(i, ty)| {
             let tag = TAG_STRUCT_BASE + i as i32;
             // Runtime shape tags occupy a fixed range inside the nominal namespace.
-            let tag = if tag >= crate::abi::TAG_FUTURE {
-                tag + crate::abi::TAG_FLOAT16 - crate::abi::TAG_FUTURE + 1
+            let tag = if tag >= *RESERVED_NOMINAL_TAGS.start() {
+                tag + RESERVED_NOMINAL_TAGS.count() as i32
             } else {
                 tag
             };
@@ -131,13 +136,7 @@ fn type_name_strings(mir: &Mir) -> Vec<String> {
         .collect();
     v.push(NULL_TYPE_NAME.to_string());
     v.push(UNKNOWN_TYPE_NAME.to_string());
-    // Keyed off the layout tables rather than `type_names` directly, so the interned set matches
-    // the arms the router emits (which come from `struct_tags`) even if layouts were pruned.
-    for ty in mir.layouts.structs.keys().chain(mir.layouts.unions.keys()) {
-        if let Some(name) = mir.type_names.get(ty) {
-            v.push(name.clone());
-        }
-    }
+    v.extend(mir.type_names.values().cloned());
     v
 }
 
@@ -158,6 +157,11 @@ fn protocol_strings(mir: &Mir) -> Vec<String> {
     ];
     v.push(dream_abi::intrinsics::LENGTH.into());
     v.push("type".into());
+    for (ty, (_, members)) in &mir.enums {
+        if mir.type_names.contains_key(ty) {
+            v.extend(members.iter().map(|(name, _)| name.clone()));
+        }
+    }
     for (ty, layout) in &mir.layouts.structs {
         v.push(format!(
             "{} {{ ",

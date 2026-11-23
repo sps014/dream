@@ -113,10 +113,9 @@ impl<'a> Analyzer<'a> {
             } else {
                 diagnostics.report_error(
                     format!(
-                        "Cannot cast from {} to interface {} ({} does not implement it)",
+                        "Cannot cast from {} to interface {}",
                         self.ty_display(&expr_type),
                         self.ty_display(target_type),
-                        self.ty_display(&expr_type)
                     ),
                     target_type.get_span().or_else(|| expr.position()),
                 );

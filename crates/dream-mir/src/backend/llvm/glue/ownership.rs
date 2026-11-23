@@ -3,6 +3,7 @@ use super::super::fx::V;
 use super::super::ir::{GlobalDef, Linkage, Ty, Value};
 use super::super::lcx::Lcx;
 use super::{glue, register};
+use crate::abi::RESERVED_NOMINAL_TAGS;
 use crate::backend::shared::abi_types::elem_size;
 use crate::backend::shared::glue::{del_symbol, glue_array_elems, struct_field_drops};
 use dream_types::TypeId;
@@ -48,8 +49,8 @@ pub(in super::super) fn descriptor(
 ) {
     let tag = if kind == crate::abi::TAG_ARRAY || kind == crate::abi::TAG_FUTURE {
         let index = l.next_info_index;
-        let index = if (crate::abi::TAG_FUTURE..=crate::abi::TAG_FLOAT16).contains(&index) {
-            crate::abi::TAG_FLOAT16 + 1
+        let index = if RESERVED_NOMINAL_TAGS.contains(&index) {
+            RESERVED_NOMINAL_TAGS.end() + 1
         } else {
             index
         };

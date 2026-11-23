@@ -3,7 +3,7 @@
 use super::fx::{Fx, V};
 use super::ir::{Ty, Value};
 use crate::Operand;
-use crate::backend::shared::abi_types::elem_size;
+use crate::backend::shared::abi_types::{elem_size, mem_ty};
 use crate::backend::shared::protocol_names::runtime_tag;
 use dream_types::{PrimTy, TyKind, TypeId};
 
@@ -42,16 +42,16 @@ impl<'l, 'a> Fx<'l, 'a> {
             (_, TyKind::Object) => {
                 if matches!(
                     fk,
-                    TyKind::Prim(
-                        P::ISize | P::USize | P::Float16 | P::SByte | P::Short | P::UShort
-                    )
+                    TyKind::Enum(_)
+                        | TyKind::Prim(
+                            P::ISize | P::USize | P::Float16 | P::SByte | P::Short | P::UShort
+                        )
                 ) {
                     let size = elem_size(&self.l.cx, from) as i64;
                     let tag = runtime_tag(&self.l.cx, from);
                     let boxed = self.call_v("dream_malloc", &[V::i64(size), V::i32(tag as i64)]);
                     let address = self.ptr(&boxed);
-                    let payload = super::types::ll_ty(self.interner, from, &self.h(), &self.word());
-                    self.store_ty(&payload, &address, &src, size as u32);
+                    self.store_mem(mem_ty(&self.l.cx, from), &address, &src, size as u32);
                     return boxed;
                 }
                 let (f, t) = match fk {
@@ -69,12 +69,12 @@ impl<'l, 'a> Fx<'l, 'a> {
                 let x = self.conv_v(&src, &t, false);
                 self.call_v(f, &[x])
             }
-            (TyKind::Object, TyKind::Prim(P::Float16)) => {
+            (TyKind::Object | TyKind::Interface(..), TyKind::Prim(P::Float16)) => {
                 let boxed = self.check_box_tag(&src, to);
                 let address = self.ptr(&boxed);
                 self.load_ty(Ty::F16, &address, 2, false)
             }
-            (TyKind::Object, TyKind::Prim(p)) => {
+            (TyKind::Object | TyKind::Interface(..), TyKind::Prim(p)) => {
                 let unbox = match p {
                     P::Int => "dream_unbox_int",
                     P::Float => "dream_unbox_float",
@@ -103,6 +103,9 @@ impl<'l, 'a> Fx<'l, 'a> {
                     P::Float16 => unreachable!("float16 unboxes inline above"),
                 };
                 self.checked_unbox(&src, to, unbox)
+            }
+            (TyKind::Object | TyKind::Interface(..), TyKind::Enum(_)) => {
+                self.call_v("dream_unbox_int", &[src])
             }
             // Lowering passes a closure environment reference as an `int`-typed handle; the source
             // language rejects these casts. The handle keeps its full pointer width.

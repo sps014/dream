@@ -264,6 +264,12 @@ impl<'a> Analyzer<'a> {
             .keys()
             .chain(layouts.unions.keys())
             .copied()
+            .chain(
+                self.type_ctx
+                    .interner
+                    .iter_kinds()
+                    .filter_map(|(ty, kind)| matches!(kind, TyKind::Enum(_)).then_some(ty)),
+            )
             .collect();
         tagged
             .into_iter()

@@ -87,6 +87,9 @@ dream_ptr dream_bool_to_string(int32_t v) {
 
 dream_ptr dream_char_to_string(int32_t v) {
     uint32_t cp = (uint32_t)v;
+    if (cp > 0x10FFFFu) {
+        cp = 0xFFFDu;
+    }
     if (cp < 0x10000u) {
         dream_ptr p = dream_string_alloc(1);
         ((uint16_t *)((char *)dream_p(p) + STRING_UNITS_OFFSET))[0] = (uint16_t)cp;

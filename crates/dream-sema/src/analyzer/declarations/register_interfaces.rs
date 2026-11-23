@@ -411,7 +411,7 @@ impl<'a> Analyzer<'a> {
         self.implemented_interfaces(class)
             .is_some_and(|ifaces| ifaces.contains(&iface))
     }
-    pub(in crate::analyzer) fn implements_as_interface_ref(
+    pub(in crate::analyzer) fn implements_interface(
         &mut self,
         class: dream_types::TypeId,
         iface: dream_types::TypeId,
@@ -424,6 +424,19 @@ impl<'a> Analyzer<'a> {
             self.ensure_array_collection(class, diagnostics);
         }
         self.class_implements(class, iface)
+    }
+
+    pub(in crate::analyzer) fn implements_as_interface_ref(
+        &mut self,
+        ty: dream_types::TypeId,
+        iface: dream_types::TypeId,
+        diagnostics: &mut DiagnosticBag,
+    ) -> bool {
+        // Scalar extensions satisfy generic bounds, but their methods have no interface receiver ABI.
+        !matches!(
+            self.type_ctx.interner.kind(ty),
+            dream_types::TyKind::Prim(_) | dream_types::TyKind::Enum(_)
+        ) && self.implements_interface(ty, iface, diagnostics)
     }
 
     /// True when `iface_method` and `class_method` have matching signatures (same parameter types

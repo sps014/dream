@@ -487,6 +487,6 @@ impl<'a> Analyzer<'a> {
             diagnostics,
         );
         let iface = self.type_ctx.lower(&bound);
-        self.implements_as_interface_ref(concrete_id, iface, diagnostics)
+        self.implements_interface(concrete_id, iface, diagnostics)
     }
 }

@@ -3,7 +3,7 @@
 
 use super::glue::CanonMaps;
 use super::iface_guard::GuardTable;
-use super::tables::{intern_strings, struct_tags, symbol_table};
+use super::tables::{intern_strings, nominal_tags, symbol_table};
 use super::target::Target;
 use crate::{Mir, MirFunction};
 use dream_hir::TypeLayout;
@@ -85,7 +85,7 @@ impl<'a> Cx<'a> {
         Self {
             strings: intern_strings(mir),
             symbols,
-            tags: struct_tags(mir),
+            tags: nominal_tags(mir, interner),
             ft,
             mir,
             interner,

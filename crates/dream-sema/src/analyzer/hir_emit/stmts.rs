@@ -193,9 +193,7 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Inserts an implicit boxing cast when a primitive `value` is stored into an `object`-typed
-    /// slot (`let o: object = 42`), so the backend boxes it rather than storing a raw scalar. All
-    /// other conversions (reference→object, numeric widening) are left to the backend / call sites.
+    /// Materializes implicit boxing, JS conversions and numeric widening in typed HIR.
     pub(in crate::analyzer) fn coerce_to(&mut self, value: HExpr, target: TypeId) -> HExpr {
         use dream_types::TyKind;
         // Snapshot the kinds so the interner borrow does not outlive the branches below that need
@@ -204,8 +202,8 @@ impl<'a> Analyzer<'a> {
             let i = &self.type_ctx.interner;
             (i.kind(target).clone(), i.kind(value.ty).clone())
         };
-        // Boxing a primitive into `object`.
-        if matches!(target_k, TyKind::Object) && matches!(val_k, TyKind::Prim(_)) {
+        if matches!(target_k, TyKind::Object) && matches!(val_k, TyKind::Prim(_) | TyKind::Enum(_))
+        {
             return HExpr::new(target, HExprKind::Cast(Box::new(value)));
         }
         // Boxing a value struct into `object` or an interface reference: the backend allocates a

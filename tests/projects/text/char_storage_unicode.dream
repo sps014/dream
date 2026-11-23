@@ -89,6 +89,13 @@ fun supplementary_char_to_string(): void {
 }
 
 @test
+fun out_of_range_char_renders_as_replacement(): void {
+    Assert.eq(((char)(-1)).to_string(), "\u{FFFD}");
+    Assert.eq(((char)0x110000).to_string(), "\u{FFFD}");
+    Assert.eq(((char)0x10FFFF).to_string(), "\u{10FFFF}");
+}
+
+@test
 fun unicode_escapes_decode_scalars(): void {
     let smile = '\u{1F600}';
     Assert.eq((int)smile, 128512);

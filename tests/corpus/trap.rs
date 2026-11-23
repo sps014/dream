@@ -11,6 +11,7 @@ pub(super) const CASES: &[Case] = &[
         "4\npanic: invalid cast\ninvalid_downcast_trap.dream:26",
         true,
     ),
+    Case::trap("interface_scalar_cast_trap", "panic: invalid cast", true),
     Case::trap("raw_ptr_size_overflow", "raw memory: size overflow", true),
     Case::trap(
         "raw_ptr_alignment_trap",

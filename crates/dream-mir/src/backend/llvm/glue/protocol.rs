@@ -639,6 +639,26 @@ fn to_string_router(l: &mut Lcx<'_>) {
         ),
         call_arm(vec![abi::TAG_ARRAY], "dream_array_to_string".into(), None),
     ];
+    for (ty, (_, members)) in &l.mir.enums {
+        let Some(&tag) = l.cx.tags.get(ty) else {
+            continue;
+        };
+        let members = members.clone();
+        arms.push((
+            vec![tag],
+            Box::new(move |fx, p| {
+                let address = fx.ptr(p);
+                let value = fx.load_ty(Ty::I32, &address, 4, false);
+                fx.enum_name(
+                    &value,
+                    members
+                        .iter()
+                        .map(|(name, value)| (i64::from(*value), name.as_str())),
+                )
+                .v
+            }),
+        ));
+    }
     // Floating-point text comes from `system.primitives`; a module built without the prelude has
     // no such method, and its boxed floats fall through to the default arm.
     let floats = [
@@ -685,15 +705,23 @@ fn to_string_router(l: &mut Lcx<'_>) {
 }
 
 fn hash_code_router(l: &mut Lcx<'_>) {
+    let mut scalar_tags = vec![
+        abi::TAG_INT,
+        abi::TAG_UINT,
+        abi::TAG_BOOL,
+        abi::TAG_CHAR,
+        abi::TAG_BYTE,
+    ];
+    scalar_tags.extend(
+        l.mir
+            .enums
+            .keys()
+            .filter_map(|ty| l.cx.tags.get(ty))
+            .copied(),
+    );
     let mut arms: Vec<Arm> = vec![
         (
-            vec![
-                abi::TAG_INT,
-                abi::TAG_UINT,
-                abi::TAG_BOOL,
-                abi::TAG_CHAR,
-                abi::TAG_BYTE,
-            ],
+            scalar_tags,
             Box::new(|fx, p| {
                 let pp = fx.ptr(p);
                 fx.load_ty(Ty::I32, &pp, 4, false).v

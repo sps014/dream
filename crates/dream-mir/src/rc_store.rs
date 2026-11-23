@@ -18,7 +18,7 @@ pub(crate) fn boxes_into_object(interner: &TypeInterner, rv: &Rvalue) -> bool {
         return false;
     };
     matches!(interner.kind(*to), TyKind::Object)
-        && matches!(interner.kind(*from), TyKind::Prim(_))
+        && matches!(interner.kind(*from), TyKind::Prim(_) | TyKind::Enum(_))
         && !interner.is_rc_tracked(*from)
 }
 

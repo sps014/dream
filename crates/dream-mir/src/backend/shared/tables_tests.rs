@@ -20,7 +20,7 @@ fn nominal_tags_skip_the_builtin_range() {
         );
         ids.push(ty);
     }
-    let tags = struct_tags(&mir);
+    let tags = nominal_tags(&mir, &types.interner);
     let distinct: std::collections::BTreeSet<_> = tags.values().copied().collect();
     assert_eq!(distinct.len(), ids.len());
     for builtin in [
@@ -28,11 +28,14 @@ fn nominal_tags_skip_the_builtin_range() {
         crate::abi::TAG_FUNCBOX,
         crate::abi::TAG_CLOSURE_ENV,
         crate::abi::TAG_FLOAT16,
+        crate::abi::TAG_SBYTE,
+        crate::abi::TAG_SHORT,
+        crate::abi::TAG_USHORT,
     ] {
         assert!(!distinct.contains(&builtin));
     }
     let boundary = (crate::abi::TAG_FUTURE - TAG_STRUCT_BASE) as usize;
     assert_eq!(tags[&ids[boundary - 1]], crate::abi::TAG_FUTURE - 1);
-    assert_eq!(tags[&ids[boundary]], crate::abi::TAG_FLOAT16 + 1);
-    assert_eq!(tags, struct_tags(&mir));
+    assert_eq!(tags[&ids[boundary]], crate::abi::TAG_USHORT + 1);
+    assert_eq!(tags, nominal_tags(&mir, &types.interner));
 }

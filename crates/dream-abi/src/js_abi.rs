@@ -12,7 +12,7 @@
 
 use dream_types::{PrimTy, TyKind, TypeId, TypeInterner};
 
-/// The host module Dream runtime bridges are imported from: `@runtime("fileRead")` and the
+/// The host module Dream runtime bridges are imported from: `@runtime("fileReadBytes")` and the
 /// `@js("Dream", …)` attributes in `stdlib/core/js.dream`, matching the module object installed by
 /// `runtime/dream.js`.
 pub const HOST_MODULE: &str = "Dream";

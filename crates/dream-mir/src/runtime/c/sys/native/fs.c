@@ -8,87 +8,11 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#include <io.h>
+#include "dream_host_windows.h"
+#else
+#include <unistd.h>
 #endif
-
-dream_ptr fileRead(dream_ptr path) {
-    char *p = dream_str_utf8(path);
-    FILE *f;
-    long sz;
-    char *buf;
-    dream_ptr out;
-    if (!p) {
-        return 0;
-    }
-    f = fopen(p, "rb");
-    free(p);
-    if (!f) {
-        return 0;
-    }
-    fseek(f, 0, SEEK_END);
-    sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz < 0) {
-        fclose(f);
-        return 0;
-    }
-    buf = (char *)malloc((size_t)sz + 1);
-    if (!buf) {
-        fclose(f);
-        return 0;
-    }
-    fread(buf, 1, (size_t)sz, f);
-    buf[sz] = 0;
-    fclose(f);
-    out = dream_str_from_utf8(buf);
-    free(buf);
-    return out;
-}
-
-int64_t fileWrite(dream_ptr path, dream_ptr contents) {
-    char *p = dream_str_utf8(path);
-    char *c = dream_str_utf8(contents);
-    FILE *f;
-    int64_t written = -1;
-    if (!p) {
-        free(c);
-        return -1;
-    }
-    f = fopen(p, "wb");
-    free(p);
-    if (f) {
-        if (c) {
-            written = (int64_t)fwrite(c, 1, strlen(c), f);
-        } else {
-            written = 0;
-        }
-        fclose(f);
-    }
-    free(c);
-    return written;
-}
-
-int64_t fileAppend(dream_ptr path, dream_ptr contents) {
-    char *p = dream_str_utf8(path);
-    char *c = dream_str_utf8(contents);
-    FILE *f;
-    int64_t written = -1;
-    if (!p) {
-        free(c);
-        return -1;
-    }
-    f = fopen(p, "ab");
-    free(p);
-    if (f) {
-        if (c) {
-            written = (int64_t)fwrite(c, 1, strlen(c), f);
-        } else {
-            written = 0;
-        }
-        fclose(f);
-    }
-    free(c);
-    return written;
-}
 
 int32_t fileDelete(dream_ptr path) {
     char *p = dream_str_utf8(path);
@@ -140,48 +64,40 @@ int64_t fileSize(dream_ptr path) {
 
 dream_ptr fileReadBytes(dream_ptr path) {
     char *p = dream_str_utf8(path);
-    FILE *f;
-    long sz;
-    dream_ptr out;
-    size_t nread;
-    if (!p) {
-        return 0;
-    }
-    f = fopen(p, "rb");
+    FILE *f = p && !dream_host_path_is_dir(p) ? fopen(p, "rb") : NULL;
     free(p);
     if (!f) {
-        return 0;
+        return dream_status_bytes(1, NULL, 0);
     }
-    fseek(f, 0, SEEK_END);
-    sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz < 0 || sz > (long)(INT32_MAX - 4)) {
+    long size = fseek(f, 0, SEEK_END) == 0 ? ftell(f) : -1;
+    if (size < 0 || size >= INT32_MAX || fseek(f, 0, SEEK_SET) != 0) {
         fclose(f);
-        return 0;
+        return dream_status_bytes(1, NULL, 0);
     }
-    out = dream_array_new((int32_t)sz, 1);
-    nread = fread((char *)dream_array_bytes(out), 1, (size_t)sz, f);
-    fclose(f);
-    dream_i32(out)[0] = (int32_t)nread;
+    dream_ptr out = dream_status_buffer((int32_t)size);
+    size_t read = fread(dream_array_bytes(out) + 1, 1, (size_t)size, f);
+    int failed = ferror(f);
+    if (fclose(f) != 0) { failed = 1; }
+    dream_status_finish(out, failed ? -1 : (int64_t)read);
     return out;
 }
 
-int64_t fileWriteBytes(dream_ptr path, dream_ptr data) {
+static int64_t file_write_bytes(dream_ptr path, dream_ptr data, const char *mode) {
     char *p = dream_str_utf8(path);
-    FILE *f;
-    int32_t n;
-    int64_t written = -1;
-    if (!p) {
-        return -1;
-    }
-    n = data ? dream_i32(data)[0] : 0;
-    f = fopen(p, "wb");
+    FILE *f = p ? fopen(p, mode) : NULL;
     free(p);
-    if (f) {
-        written = (int64_t)fwrite(data && n > 0 ? (char *)dream_array_bytes(data) : "", 1, (size_t)n, f);
-        fclose(f);
-    }
-    return written;
+    if (!f) { return -1; }
+    int32_t count = data ? dream_i32(data)[0] : 0;
+    size_t written = count ? fwrite(dream_array_bytes(data), 1, (size_t)count, f) : 0;
+    return fclose(f) == 0 && written == (size_t)count ? (int64_t)written : -1;
+}
+
+int64_t fileAppend(dream_ptr path, dream_ptr data) {
+    return file_write_bytes(path, data, "ab");
+}
+
+int64_t fileWriteBytes(dream_ptr path, dream_ptr data) {
+    return file_write_bytes(path, data, "wb");
 }
 
 int32_t fileIsDir(dream_ptr path) {
@@ -276,44 +192,51 @@ dream_ptr fileStat(dream_ptr path) {
     return out;
 }
 
+/* Compare the opened files before truncating the destination, including hard-link aliases. */
+static int copy_prepare(FILE *in, FILE *out) {
+#ifdef _WIN32
+    int fd = _fileno(out);
+    BY_HANDLE_FILE_INFORMATION src, dst;
+    if (!GetFileInformationByHandle((HANDLE)_get_osfhandle(_fileno(in)), &src) ||
+        !GetFileInformationByHandle((HANDLE)_get_osfhandle(fd), &dst)) { return -1; }
+    if (src.dwVolumeSerialNumber == dst.dwVolumeSerialNumber &&
+        src.nFileIndexHigh == dst.nFileIndexHigh && src.nFileIndexLow == dst.nFileIndexLow) { return 0; }
+    return _chsize_s(fd, 0) == 0 ? 1 : -1;
+#else
+    int fd = fileno(out);
+    struct stat src, dst;
+    if (fstat(fileno(in), &src) != 0 || fstat(fd, &dst) != 0) { return -1; }
+    if (src.st_dev == dst.st_dev && src.st_ino == dst.st_ino) { return 0; }
+    return ftruncate(fd, 0) == 0 ? 1 : -1;
+#endif
+}
+
 int32_t fileCopy(dream_ptr from, dream_ptr to) {
     char *src = dream_str_utf8(from);
     char *dst = dream_str_utf8(to);
-    FILE *in;
-    FILE *out;
-    char buf[8192];
-    size_t n;
-    int32_t ok = 0;
-    if (!src || !dst || dream_host_path_is_dir(src)) {
-        free(src);
-        free(dst);
-        return 0;
-    }
-    in = fopen(src, "rb");
-    if (!in) {
-        free(src);
-        free(dst);
-        return 0;
-    }
-    out = fopen(dst, "wb");
-    if (!out) {
-        fclose(in);
-        free(src);
-        free(dst);
-        return 0;
-    }
-    ok = 1;
-    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
-        if (fwrite(buf, 1, n, out) != n) {
-            ok = 0;
-            break;
-        }
-    }
-    fclose(in);
-    fclose(out);
+    FILE *in = src && dst && !dream_host_path_is_dir(src) ? fopen(src, "rb") : NULL;
+    FILE *out = in ? fopen(dst, "ab") : NULL;
     free(src);
     free(dst);
-    return ok;
+    if (!out) {
+        if (in) { fclose(in); }
+        return 0;
+    }
+    int prepare = copy_prepare(in, out);
+    int ok = prepare >= 0;
+    if (prepare > 0) {
+        char buf[8192];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+            if (fwrite(buf, 1, n, out) != n) {
+                ok = 0;
+                break;
+            }
+        }
+        if (ferror(in)) { ok = 0; }
+    }
+    fclose(in);
+    return fclose(out) == 0 && ok;
 }
 
 int32_t fileRename(dream_ptr from, dream_ptr to) {

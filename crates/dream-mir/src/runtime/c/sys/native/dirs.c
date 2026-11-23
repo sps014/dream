@@ -1,5 +1,7 @@
 #include "dream_host_support.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -97,7 +99,7 @@ dream_ptr dirList(dream_ptr path) {
     dream_ptr out;
     if (!p || !dream_host_path_is_dir(p)) {
         free(p);
-        return dream_str_from_utf8("");
+        return dream_status_bytes(1, NULL, 0);
     }
 #ifdef _WIN32
     {
@@ -107,8 +109,9 @@ dream_ptr dirList(dream_ptr path) {
         snprintf(pattern, sizeof(pattern), "%s\\*", p);
         h = FindFirstFileA(pattern, &fd);
         if (h == INVALID_HANDLE_VALUE) {
+            DWORD error = GetLastError();
             free(p);
-            return dream_str_from_utf8("");
+            return dream_status_bytes(error == ERROR_FILE_NOT_FOUND ? 0 : 1, NULL, 0);
         }
         do {
             if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0) {
@@ -118,10 +121,16 @@ dream_ptr dirList(dream_ptr path) {
                 dream_host_names_free(names, n);
                 FindClose(h);
                 free(p);
-                return dream_str_from_utf8("");
+                return dream_status_bytes(1, NULL, 0);
             }
         } while (FindNextFileA(h, &fd));
+        DWORD error = GetLastError();
         FindClose(h);
+        if (error != ERROR_NO_MORE_FILES) {
+            dream_host_names_free(names, n);
+            free(p);
+            return dream_status_bytes(1, NULL, 0);
+        }
     }
 #else
     {
@@ -129,9 +138,20 @@ dream_ptr dirList(dream_ptr path) {
         struct dirent *ent;
         if (!dir) {
             free(p);
-            return dream_str_from_utf8("");
+            return dream_status_bytes(1, NULL, 0);
         }
-        while ((ent = readdir(dir)) != NULL) {
+        for (;;) {
+            errno = 0;
+            ent = readdir(dir);
+            if (!ent) {
+                if (errno) {
+                    dream_host_names_free(names, n);
+                    closedir(dir);
+                    free(p);
+                    return dream_status_bytes(1, NULL, 0);
+                }
+                break;
+            }
             if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
                 continue;
             }
@@ -139,14 +159,14 @@ dream_ptr dirList(dream_ptr path) {
                 dream_host_names_free(names, n);
                 closedir(dir);
                 free(p);
-                return dream_str_from_utf8("");
+                return dream_status_bytes(1, NULL, 0);
             }
         }
         closedir(dir);
     }
 #endif
     free(p);
-    out = dream_host_names_join_lines(names, n);
+    out = dream_host_names_status(names, n);
     dream_host_names_free(names, n);
     return out;
 }

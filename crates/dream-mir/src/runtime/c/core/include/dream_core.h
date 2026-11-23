@@ -1785,6 +1785,7 @@ int32_t fileOpen(dream_ptr path, dream_ptr mode);
 int32_t fileDelete(dream_ptr path);
 int64_t fileSize(dream_ptr path);
 dream_ptr fileReadBytes(dream_ptr path);
+int64_t fileAppend(dream_ptr path, dream_ptr data);
 int64_t fileWriteBytes(dream_ptr path, dream_ptr data);
 int32_t fileIsDir(dream_ptr path);
 dream_ptr fileStat(dream_ptr path);

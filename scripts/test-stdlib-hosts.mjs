@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { makeFsHost } from "../runtime/src/hosts/fs.js";
+import { makeFsHost, browserSetCwd, browserCwd } from "../runtime/src/hosts/fs.js";
 import { makeConsoleProcessHost } from "../runtime/src/hosts/console_process.js";
 import { splitProcessArgs } from "../runtime/src/hosts/process_wire.js";
 import { setNodeFs, setNodeChildProcess } from "../runtime/src/platform.js";
@@ -120,6 +120,7 @@ for (const backend of ["memory", "node"]) {
     const name = path.join(directory, "data");
     const host = makeFsHost();
     try {
+      if (backend === "memory") assert.equal(host.dirCreateAll(directory), true);
       const handle = host.fileOpen(name, "w+");
       assert.ok(handle >= 0);
       assert.deepEqual(host.fileHandleRead(handle, -1), [1]);
@@ -140,11 +141,45 @@ for (const backend of ["memory", "node"]) {
       assert.equal(host.fileHandleLength(truncate), 0n);
       host.fileHandleClose(truncate);
     } finally {
+      if (backend === "memory") host.dirRemoveAll(directory);
       fs.rmSync(directory, { recursive: true, force: true });
       setNodeFs(null);
     }
   });
 }
+
+test("browser files keep their identity across renames, replacement, and unlink", () => {
+  setNodeFs(null);
+  const host = makeFsHost();
+  const root = "/vfs-file-identity";
+  const cwd = browserCwd();
+  assert.equal(host.dirCreate(root), true);
+  try {
+    assert.equal(browserSetCwd(root), true);
+    assert.equal(browserSetCwd("missing"), false);
+    assert.equal(browserCwd(), root);
+    assert.equal(host.fileWriteBytes(".", [9]), -1n);
+    assert.equal(host.fileWriteBytes("no-parent/file", [9]), -1n);
+    assert.equal(host.fileWriteBytes("a", [1, 2]), 2n);
+    const original = host.fileOpen("./a", "r+");
+    assert.ok(original > 0);
+    assert.equal(host.fileRename("a", "./a"), true);
+    assert.equal(host.fileExists("a"), true);
+    assert.equal(host.fileRename("a", "b"), true);
+    assert.equal(host.fileWriteBytes("a", [9]), 1n);
+    assert.deepEqual(host.fileHandleRead(original, 2), [0, 1, 2]);
+    assert.equal(host.fileHandleWrite(original, [3]), 1n);
+    assert.deepEqual(Array.from(host.fileReadBytes("b")), [0, 1, 2, 3]);
+    assert.deepEqual(Array.from(host.fileReadBytes("a")), [0, 9]);
+    assert.equal(host.fileDelete("b"), true);
+    assert.equal(host.fileHandleSeek(original, 0n), 0);
+    assert.deepEqual(host.fileHandleRead(original, 3), [0, 1, 2, 3]);
+    assert.equal(host.fileHandleClose(original), 0);
+  } finally {
+    browserSetCwd(cwd);
+    host.dirRemoveAll(root);
+  }
+});
 
 function argumentWire(args) {
   const parts = [];

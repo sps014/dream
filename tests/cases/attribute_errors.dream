@@ -22,8 +22,8 @@ fun misapplied_json(): string {
 }
 
 class RuntimeConflict {
-    @runtime("fileRead")
-    @js("Dream", "fileRead")
+    @runtime("fileReadBytes")
+    @js("Dream", "fileReadBytes")
     static extern fun read(): string;
 }
 

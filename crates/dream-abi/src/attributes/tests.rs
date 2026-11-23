@@ -150,11 +150,11 @@ fn extern_binding_conflict_detected() {
 
 #[test]
 fn runtime_import_targets_dream_module() {
-    let attrs = &[attr("runtime", &["\"fileRead\""])];
-    assert_eq!(runtime_import_field(attrs).as_deref(), Some("fileRead"));
+    let attrs = &[attr("runtime", &["\"fileReadBytes\""])];
+    assert_eq!(runtime_import_field(attrs).as_deref(), Some("fileReadBytes"));
     assert_eq!(
         extern_import_target(attrs, "fallback"),
-        ("Dream".to_string(), "fileRead".to_string())
+        ("Dream".to_string(), "fileReadBytes".to_string())
     );
     assert!(!extern_binding_conflict(attrs));
 }
@@ -162,8 +162,8 @@ fn runtime_import_targets_dream_module() {
 #[test]
 fn runtime_conflicts_with_js() {
     let attrs = &[
-        attr("runtime", &["\"fileRead\""]),
-        attr("js", &["\"Dream\"", "\"fileRead\""]),
+        attr("runtime", &["\"fileReadBytes\""]),
+        attr("js", &["\"Dream\"", "\"fileReadBytes\""]),
     ];
     assert!(extern_binding_conflict(attrs));
     let mut diagnostics = DiagnosticBag::new(None);

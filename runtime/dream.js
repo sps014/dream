@@ -1461,6 +1461,68 @@ function httpClassify(error, controller, timedOut) {
 function httpRestricted(name) {
   return /^(proxy-|sec-)/i.test(name) || /^(accept-charset|accept-encoding|access-control-request-headers|access-control-request-method|connection|content-length|cookie|cookie2|date|dnt|expect|host|keep-alive|origin|permissions-policy|referer|te|trailer|transfer-encoding|upgrade|via|user-agent|x-http-method|x-http-method-override|x-method-override)$/i.test(name);
 }
+function httpReleaseAgents(client) {
+  if (!client.closed || client.bodies !== 0 || client.controllers.size !== 0) return;
+  for (const agent of client.agents.values()) agent.destroy();
+  client.agents.clear();
+}
+
+async function httpNodeRequest(client, target, method, headers, bytes, signal) {
+  const transport = target.protocol === "https:" ? await import("node:https") : await import("node:http");
+  if (signal.aborted) throw httpError("ECLOSED", "HTTP request was closed");
+  let agent = client.agents.get(target.protocol);
+  if (!agent) {
+    agent = new transport.Agent({ keepAlive: true });
+    client.agents.set(target.protocol, agent);
+  }
+  const fields = Object.fromEntries(headers);
+  const length = fields["content-length"];
+  const transfer = fields["transfer-encoding"];
+  if (length !== undefined && (transfer !== undefined || !/^\d+$/.test(length) || Number(length) !== bytes.length)) {
+    throw httpError("EINVAL", "request content-length does not match body");
+  }
+  if (bytes.length && length === undefined && transfer === undefined) {
+    fields["content-length"] = String(bytes.length);
+  }
+  return new Promise((resolve, reject) => {
+    const request = transport.request(target, {
+      method, headers: fields, agent, signal,
+    }, incoming => {
+      const headers = [];
+      for (let i = 0; i < incoming.rawHeaders.length; i += 2) {
+        headers.push([incoming.rawHeaders[i].toLowerCase(), incoming.rawHeaders[i + 1]]);
+      }
+      // A response can fail before the caller starts reading. The iterator observes the failure
+      // when read, and the listener prevents the stream's error event from escaping the host.
+      incoming.on("error", () => {});
+      const stream = incoming[Symbol.asyncIterator]();
+      resolve({
+        status: incoming.statusCode,
+        url: target.href,
+        headers,
+        reader: { read: () => stream.next(), cancel: async () => { incoming.destroy(); } },
+      });
+    });
+    request.on("error", reject);
+    request.end(bytes.length ? bytes : undefined);
+  });
+}
+
+async function httpBrowserRequest(target, method, headers, bytes, signal) {
+  const response = await fetch(target, {
+    method, headers, body: bytes.length ? bytes : undefined, signal, credentials: "omit",
+  });
+  if (response.type === "opaque" || response.type === "opaqueredirect" || response.status === 0) {
+    throw httpError("ENOTSUP", "Fetch response metadata is not visible");
+  }
+  const encodings = (response.headers.get("content-encoding") || "")
+    .toLowerCase().split(",").map(value => value.trim());
+  const decoded = response.body && encodings.every(value => ["gzip", "x-gzip", "deflate", "br"].includes(value));
+  const visible = Array.from(response.headers).filter(([name]) =>
+    !decoded || (name !== "content-encoding" && name !== "content-length"));
+  return { status: response.status, url: response.url, headers: visible, reader: response.body?.getReader() };
+}
+
 function makeHttpHost() {
   return {
     netCapabilities: () => isNode ? 14 : 0,
@@ -1470,13 +1532,16 @@ function makeHttpHost() {
     netClientCreate: () => {
       if (httpClients.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
       const id = nextHttpHandle++;
-      httpClients.set(id, { controllers: new Set() });
+      httpClients.set(id, { controllers: new Set(), agents: new Map(), bodies: 0, closed: false });
       return id;
     },
     netClientClose: id => {
       const client = httpClients.get(id);
+      if (!client) return;
       httpClients.delete(id);
-      for (const controller of client?.controllers || []) controller.abort();
+      client.closed = true;
+      for (const controller of client.controllers) controller.abort();
+      httpReleaseAgents(client);
     },
     netHttpStart: (id, request, data) => {
       const bytes = Uint8Array.from(data);
@@ -1507,12 +1572,15 @@ function makeHttpHost() {
         let timeout = false;
         let timer;
         let disposed = false;
-        const dispose = () => {
+        let ownsBody = false;
+        const dispose = (abort = true) => {
           if (disposed) return;
           disposed = true;
           clearTimeout(timer);
           client.controllers.delete(controller);
-          controller.abort();
+          if (ownsBody) client.bodies--;
+          if (abort) controller.abort();
+          httpReleaseAgents(client);
         };
         op.abort = dispose;
         if (op.released) { dispose(); throw httpError("ECLOSED", "HTTP operation abandoned"); }
@@ -1522,15 +1590,20 @@ function makeHttpHost() {
           let response;
           let redirects = 0;
           while (true) {
-            response = await fetch(target, { method: requestMethod, headers: requestHeaders, body: requestBytes.length ? requestBytes : undefined, redirect: isNode ? "manual" : "follow", signal: controller.signal, credentials: "omit" });
-            if (!isNode || ![301, 302, 303, 307, 308].includes(response.status) || max_redirects === 0 || !response.headers.has("location")) break;
+            response = isNode
+              ? await httpNodeRequest(client, target, requestMethod, requestHeaders, requestBytes, controller.signal)
+              : await httpBrowserRequest(target, requestMethod, requestHeaders, requestBytes, controller.signal);
+            if (!isNode || ![301, 302, 303, 307, 308].includes(response.status) || max_redirects === 0) break;
+            const location = response.headers.find(([name]) => name === "location");
+            if (!location) break;
+            await response.reader?.cancel();
             if (++redirects > (max_redirects < 0 ? 10 : max_redirects)) {
-              await response.body?.cancel();
               throw httpError("EREDIRECT", "HTTP redirect limit exceeded");
             }
-            const next = new URL(response.headers.get("location"), target);
+            let next;
+            try { next = new URL(location[1], target); }
+            catch (_) { throw httpError("EINVAL", "invalid redirect URL"); }
             if (!["http:", "https:"].includes(next.protocol) || next.username || next.password) throw httpError("EINVAL", "invalid redirect URL");
-            await response.body?.cancel();
             if (target.origin !== next.origin) {
               for (const name of ["authorization", "proxy-authorization", "cookie", "cookie2"]) requestHeaders.delete(name);
             }
@@ -1541,15 +1614,12 @@ function makeHttpHost() {
             }
             target = next;
           }
-          if (response.type === "opaque" || response.type === "opaqueredirect" || response.status === 0) throw httpError("ENOTSUP", "Fetch response metadata is not visible");
+          if (controller.signal.aborted) throw httpError("ECLOSED", "HTTP request was closed");
           client.controllers.delete(controller);
-          const body = { reader: response.body?.getReader(), remainder: new Uint8Array(), offset: 0, busy: false, closed: false, eof: !response.body, controller, dispose, timedOut: () => timeout };
-          const responseHeaders = Array.from(response.headers);
-          if (typeof response.headers.getSetCookie === "function") {
-            for (let i = responseHeaders.length - 1; i >= 0; i--) if (responseHeaders[i][0] === "set-cookie") responseHeaders.splice(i, 1);
-            for (const value of response.headers.getSetCookie()) responseHeaders.push(["set-cookie", value]);
-          }
-          return { response: { status: response.status, url: response.url, headers: responseHeaders }, body, dispose };
+          ownsBody = true;
+          client.bodies++;
+          const body = { reader: response.reader, remainder: new Uint8Array(), offset: 0, busy: false, closed: false, eof: !response.reader, controller, dispose, timedOut: () => timeout };
+          return { response: { status: response.status, url: response.url, headers: response.headers }, body, dispose };
         } catch (error) {
           const result = httpClassify(error, controller, () => timeout);
           dispose();
@@ -1579,7 +1649,7 @@ function makeHttpHost() {
           const end = Math.min(body.remainder.length, body.offset + count);
           const bytes = Array.from(body.remainder.subarray(body.offset, end));
           body.offset = end;
-          if (body.eof) body.dispose();
+          if (body.eof) body.dispose(false);
           return { bytes };
         } catch (error) { throw httpClassify(error, body.controller, body.timedOut); }
         finally { body.busy = false; }
@@ -2067,20 +2137,13 @@ function makeFileOperationHost(files) {
 }
 
 // ----- hosts/fs.js -----
-/**
- * In-memory virtual filesystem used when there is no real FS host (i.e. in the browser), mirroring
- * how a C/C++ -> WASM toolchain (Emscripten's MEMFS) gives you a working filesystem inside the page.
- * Files persist for the page session only. Paths are keys; directories are inferred from prefixes.
- */
-const memFiles = new Map(); // path -> Uint8Array
-const memDirs = new Set(); // explicit directory markers
-const memTimes = new Map(); // path -> epoch millis
+const memFiles = new Map();
+const memDirs = new Map([["/", 0]]);
 let virtualCwd = "/";
 
 function normalizeVirtualPath(path) {
   const raw = path == null ? "" : String(path);
-  const base = virtualCwd === "/" ? "" : virtualCwd;
-  const absolute = raw.startsWith("/") ? raw : `${base}/${raw}`;
+  const absolute = raw.startsWith("/") ? raw : `${virtualCwd}/${raw}`;
   const parts = [];
   for (const part of absolute.split("/")) {
     if (part === "" || part === ".") continue;
@@ -2090,26 +2153,48 @@ function normalizeVirtualPath(path) {
   return `/${parts.join("/")}`;
 }
 
+function memParent(path) {
+  return path.slice(0, path.lastIndexOf("/")) || "/";
+}
+
+function memRequireParent(path) {
+  if (!memDirs.has(memParent(path))) throw new Error("parent directory does not exist");
+}
+
+function memOpen(path, create) {
+  const present = memFiles.get(path);
+  if (present) return present;
+  if (!create || memDirs.has(path)) throw new Error("path is not an openable file");
+  memRequireParent(path);
+  const file = { bytes: new Uint8Array(), modified: Date.now() };
+  memFiles.set(path, file);
+  return file;
+}
+
+function memReplace(file, bytes) {
+  file.bytes = bytes;
+  file.modified = Date.now();
+}
+
 function browserCwd() {
   return virtualCwd;
 }
 
 function browserSetCwd(path) {
-  virtualCwd = normalizeVirtualPath(path);
+  const target = normalizeVirtualPath(path);
+  if (!memDirs.has(target)) return false;
+  virtualCwd = target;
   return true;
 }
 
-function memTouch(path) {
-  memTimes.set(path, Date.now());
-}
-
 function memStatWire(path) {
-  if (!memFs.exists(path)) return "";
-  const isDir = memFs.isDir(path);
-  const size = isDir ? 0 : memFs.size(path);
-  const t = Math.trunc(memTimes.get(path) || 0);
-  const kind = isDir ? 1 : 0;
-  return `${size}\n${t}\n${t}\n${t}\n0\n${kind}`;
+  path = normalizeVirtualPath(path);
+  const file = memFiles.get(path);
+  const directory = memDirs.get(path);
+  if (!file && directory === undefined) return "";
+  const size = file ? file.bytes.length : 0;
+  const time = file ? file.modified : directory;
+  return `${size}\n${time}\n${time}\n${time}\n0\n${file ? 0 : 1}`;
 }
 
 function nodeStatWire(path) {
@@ -2133,161 +2218,99 @@ function nodeStatWire(path) {
 }
 const memFs = {
   readBytes(path) {
-    path = normalizeVirtualPath(path);
-    const bytes = memFiles.get(path);
-    if (!bytes) throw new Error(`ENOENT: no such file '${path}'`);
-    return bytes;
+    return memOpen(normalizeVirtualPath(path), false).bytes;
   },
   write(path, bytes) {
-    path = normalizeVirtualPath(path);
-    memFiles.set(path, Uint8Array.from(bytes));
-    memTouch(path);
+    memReplace(memOpen(normalizeVirtualPath(path), true), Uint8Array.from(bytes));
   },
   append(path, bytes) {
-    path = normalizeVirtualPath(path);
-    const prev = memFiles.get(path) || new Uint8Array(0);
-    const next = new Uint8Array(prev.length + bytes.length);
-    next.set(prev, 0);
-    next.set(bytes, prev.length);
-    memFiles.set(path, next);
-    memTouch(path);
+    const file = memOpen(normalizeVirtualPath(path), true);
+    const next = new Uint8Array(file.bytes.length + bytes.length);
+    next.set(file.bytes);
+    next.set(bytes, file.bytes.length);
+    memReplace(file, next);
   },
   exists(path) {
     path = normalizeVirtualPath(path);
-    return path === "/" || memFiles.has(path) || memDirs.has(path) || this.isDir(path);
+    return memFiles.has(path) || memDirs.has(path);
   },
   remove(path) {
     path = normalizeVirtualPath(path);
-    if (path === "/") return false;
-    const hadFile = memFiles.delete(path);
-    const hadDir = memDirs.delete(path);
-    memTimes.delete(path);
-    return hadFile || hadDir;
+    if (memFiles.delete(path)) return true;
+    if (path === "/" || !memDirs.has(path) || this.list(path).length) return false;
+    return memDirs.delete(path);
   },
   size(path) {
-    path = normalizeVirtualPath(path);
-    const bytes = memFiles.get(path);
-    return bytes ? bytes.length : -1;
+    return memFiles.get(normalizeVirtualPath(path))?.bytes.length ?? -1;
   },
   isDir(path) {
-    path = normalizeVirtualPath(path);
-    if (path === "/" || memDirs.has(path)) return true;
-    const prefix = path + "/";
-    for (const key of memFiles.keys()) {
-      if (key.startsWith(prefix)) return true;
-    }
-    return false;
+    return memDirs.has(normalizeVirtualPath(path));
   },
   list(path) {
     path = normalizeVirtualPath(path);
-    const prefix = path === "/" ? "/" : path + "/";
-    const names = new Set();
-    for (const key of memFiles.keys()) {
-      if (!key.startsWith(prefix)) continue;
-      const rest = key.slice(prefix.length);
-      const slash = rest.indexOf("/");
-      names.add(slash === -1 ? rest : rest.slice(0, slash));
+    if (!memDirs.has(path)) throw new Error("path is not a directory");
+    const names = [];
+    for (const key of [...memFiles.keys(), ...memDirs.keys()]) {
+      if (key !== "/" && memParent(key) === path) names.push(key.slice(key.lastIndexOf("/") + 1));
     }
-    for (const dir of memDirs) {
-      if (!dir.startsWith(prefix)) continue;
-      const rest = dir.slice(prefix.length);
-      if (!rest) continue;
-      const slash = rest.indexOf("/");
-      names.add(slash === -1 ? rest : rest.slice(0, slash));
-    }
-    return Array.from(names).sort();
+    return names.sort();
   },
   mkdir(path) {
     path = normalizeVirtualPath(path);
-    if (path === "/" || memFiles.has(path) || memDirs.has(path)) throw new Error(`EEXIST: '${path}'`);
-    memDirs.add(path);
-    memTouch(path);
+    memRequireParent(path);
+    if (this.exists(path)) throw new Error("path already exists");
+    memDirs.set(path, Date.now());
   },
   mkdirAll(path) {
     path = normalizeVirtualPath(path);
-    if (path === "/") return;
-    const parts = path.split("/").filter(Boolean);
-    let cur = "";
-    for (const part of parts) {
-      cur = `${cur}/${part}`;
-      if (memFiles.has(cur)) throw new Error(`ENOTDIR: '${cur}'`);
-      if (!memDirs.has(cur)) {
-        memDirs.add(cur);
-        memTouch(cur);
-      }
+    let current = "";
+    for (const part of path.split("/").filter(Boolean)) {
+      current += `/${part}`;
+      if (!memDirs.has(current)) this.mkdir(current);
     }
   },
   copy(from, to) {
-    if (this.isDir(from)) throw new Error(`EISDIR: '${from}'`);
     this.write(to, this.readBytes(from));
   },
   rename(from, to) {
     from = normalizeVirtualPath(from);
     to = normalizeVirtualPath(to);
-    if (memFiles.has(from)) {
-      memFiles.set(to, memFiles.get(from));
+    if (!this.exists(from)) throw new Error("source does not exist");
+    if (from === to) return;
+    memRequireParent(to);
+    if (from === "/" || to === "/" || to.startsWith(from + "/")) throw new Error("invalid destination");
+    const file = memFiles.get(from);
+    if (file) {
+      if (memDirs.has(to)) throw new Error("destination is a directory");
+      memFiles.set(to, file);
       memFiles.delete(from);
-      if (memTimes.has(from)) {
-        memTimes.set(to, memTimes.get(from));
-        memTimes.delete(from);
-      }
       return;
     }
-    if (!this.isDir(from)) throw new Error(`ENOENT: '${from}'`);
-    const prefix = from.endsWith("/") ? from : from + "/";
-    const movedFiles = [];
-    for (const key of memFiles.keys()) {
-      if (key === from || key.startsWith(prefix)) movedFiles.push(key);
+    if (memFiles.has(to) || (memDirs.has(to) && this.list(to).length)) {
+      throw new Error("destination is not an empty directory");
     }
-    for (const key of movedFiles) {
-      const next = key === from ? to : to + key.slice(from.length);
-      memFiles.set(next, memFiles.get(key));
-      memFiles.delete(key);
-      if (memTimes.has(key)) {
-        memTimes.set(next, memTimes.get(key));
-        memTimes.delete(key);
+    for (const entries of [memFiles, memDirs]) {
+      for (const [path, entry] of [...entries]) {
+        if (path !== from && !path.startsWith(from + "/")) continue;
+        entries.set(to + path.slice(from.length), entry);
+        entries.delete(path);
       }
     }
-    const movedDirs = [];
-    for (const dir of memDirs) {
-      if (dir === from || dir.startsWith(prefix)) movedDirs.push(dir);
-    }
-    for (const dir of movedDirs) {
-      const next = dir === from ? to : to + dir.slice(from.length);
-      memDirs.delete(dir);
-      memDirs.add(next);
-      if (memTimes.has(dir)) {
-        memTimes.set(next, memTimes.get(dir));
-        memTimes.delete(dir);
-      }
+    if (virtualCwd === from || virtualCwd.startsWith(from + "/")) {
+      virtualCwd = to + virtualCwd.slice(from.length);
     }
   },
   rmdir(path) {
     path = normalizeVirtualPath(path);
-    if (!this.isDir(path)) throw new Error(`ENOTDIR: '${path}'`);
-    const names = this.list(path);
-    if (names.length > 0) throw new Error(`ENOTEMPTY: '${path}'`);
+    if (path === "/" || this.list(path).length) throw new Error("directory is not removable");
     memDirs.delete(path);
-    memTimes.delete(path);
   },
   rmAll(path) {
     path = normalizeVirtualPath(path);
-    if (memFiles.has(path)) {
-      this.remove(path);
-      return;
-    }
-    if (!this.exists(path)) throw new Error(`ENOENT: '${path}'`);
-    const prefix = path.endsWith("/") ? path : path + "/";
-    for (const key of Array.from(memFiles.keys())) {
-      if (key === path || key.startsWith(prefix)) {
-        memFiles.delete(key);
-        memTimes.delete(key);
-      }
-    }
-    for (const dir of Array.from(memDirs)) {
-      if (dir === path || dir.startsWith(prefix)) {
-        memDirs.delete(dir);
-        memTimes.delete(dir);
+    if (path === "/" || !this.exists(path)) throw new Error("path is not removable");
+    for (const entries of [memFiles, memDirs]) {
+      for (const key of entries.keys()) {
+        if (key === path || key.startsWith(path + "/")) entries.delete(key);
       }
     }
   },
@@ -2303,10 +2326,16 @@ function nodeFsBackend() {
     write: (p, bytes) => fs.writeFileSync(p, Buffer.from(bytes)),
     append: (p, bytes) => fs.appendFileSync(p, Buffer.from(bytes)),
     exists: (p) => fs.existsSync(p),
-    remove: (p) => { try { fs.rmSync(p); return true; } catch (_) { return false; } },
+    remove: (p) => {
+      try {
+        if (fs.lstatSync(p).isDirectory()) fs.rmdirSync(p);
+        else fs.unlinkSync(p);
+        return true;
+      } catch (_) { return false; }
+    },
     size: (p) => { try { return Number(fs.statSync(p).size); } catch (_) { return -1; } },
     isDir: (p) => { try { return fs.statSync(p).isDirectory(); } catch (_) { return false; } },
-    list: (p) => { try { return fs.readdirSync(p).sort(); } catch (_) { return []; } },
+    list: (p) => fs.readdirSync(p).sort(),
     mkdir: (p) => { fs.mkdirSync(p); },
     mkdirAll: (p) => { fs.mkdirSync(p, { recursive: true }); },
     copy: (from, to) => { fs.copyFileSync(from, to); },
@@ -2369,12 +2398,17 @@ function fileOpenHost(path, mode) {
       return mapOpenError(e);
     }
   }
-  // Browser VFS: open a cursor without copying file bytes into Dream memory up front.
-  if (!memFiles.has(path) && !modeCreates(mode)) return OPEN_ENOENT;
-  if (!memFiles.has(path) || mode === "w" || mode === "w+") memFiles.set(path, new Uint8Array(0));
-  const id = nextFileHandleId++;
-  fileHandles.set(id, { kind: "mem", path, mode, pos: 0 });
-  return id;
+  const normalized = normalizeVirtualPath(path);
+  if (memDirs.has(normalized)) return OPEN_EIO;
+  try {
+    const file = memOpen(normalized, modeCreates(mode));
+    if (mode.startsWith("w")) memReplace(file, new Uint8Array());
+    const id = nextFileHandleId++;
+    fileHandles.set(id, { kind: "mem", file, mode, pos: 0 });
+    return id;
+  } catch (_) {
+    return OPEN_ENOENT;
+  }
 }
 
 function fileHandleReadHost(id, n) {
@@ -2387,8 +2421,7 @@ function fileHandleReadHost(id, n) {
       h.pos += count;
       return [0, ...buf.subarray(0, count)];
     }
-    const bytes = memFiles.get(h.path);
-    if (!bytes) return [1];
+    const bytes = h.file.bytes;
     const end = Math.min(h.pos + n, bytes.length);
     const slice = bytes.subarray(h.pos, end);
     h.pos += slice.length;
@@ -2413,7 +2446,7 @@ function fileHandleWriteHost(id, data) {
       return BigInt(-1);
     }
   }
-  const prev = memFiles.get(h.path) || new Uint8Array(0);
+  const prev = h.file.bytes;
   if (h.mode.startsWith("a")) h.pos = prev.length;
   const before = prev.subarray(0, Math.min(h.pos, prev.length));
   const afterStart = h.pos + bytes.length;
@@ -2422,7 +2455,7 @@ function fileHandleWriteHost(id, data) {
   next.set(before, 0);
   next.set(bytes, h.pos);
   next.set(after, afterStart);
-  memFiles.set(h.path, next);
+  memReplace(h.file, next);
   h.pos = afterStart;
   return BigInt(bytes.length);
 }
@@ -2449,8 +2482,7 @@ function fileHandleSeekEndHost(id, offset) {
   if (h.kind === "node") {
     try { size = Number(getNodeFs().fstatSync(h.fd).size); } catch (_) { return -1; }
   } else {
-    const bytes = memFiles.get(h.path);
-    size = bytes ? bytes.length : 0;
+    size = h.file.bytes.length;
   }
   const target = size + Number(offset);
   if (!Number.isSafeInteger(target) || target < 0) return -1;
@@ -2463,7 +2495,7 @@ function fileHandleLengthHost(id) {
   if (!h) return -1n;
   try {
     return h.kind === "node" ? getNodeFs().fstatSync(h.fd, { bigint: true }).size
-      : BigInt(memFiles.get(h.path).length);
+      : BigInt(h.file.bytes.length);
   } catch (_) { return -1n; }
 }
 
@@ -2480,29 +2512,26 @@ function fileHandleCloseHost(id) {
   } catch (_) { return -1; }
 }
 
+function fsSuccess(bytes) {
+  const result = new Uint8Array(bytes.length + 1);
+  result.set(bytes, 1);
+  return result;
+}
+
 function makeFsHost() {
   return {
-    fileRead: (path) => {
-      try { return new TextDecoder("utf-8").decode(fsBackend().readBytes(path)); }
-      catch (_) { return ""; }
-    },
-    fileWrite: (path, content) => {
+    fileAppend: (path, data) => {
       try {
-        const bytes = new TextEncoder().encode(content);
-        fsBackend().write(path, bytes);
-        return BigInt(bytes.length);
-      } catch (_) { return -1n; }
-    },
-    fileAppend: (path, content) => {
-      try {
-        const bytes = new TextEncoder().encode(content);
-        fsBackend().append(path, bytes);
-        return BigInt(bytes.length);
+        fsBackend().append(path, Uint8Array.from(data));
+        return BigInt(data.length);
       } catch (_) { return -1n; }
     },
     fileReadBytes: (path) => {
-      try { return fsBackend().readBytes(path); }
-      catch (_) { return new Uint8Array(); }
+      try {
+        const backend = fsBackend();
+        if (backend.isDir(path)) return [1];
+        return fsSuccess(backend.readBytes(path));
+      } catch (_) { return [1]; }
     },
     fileWriteBytes: (path, data) => {
       try {
@@ -2541,7 +2570,11 @@ function makeFsHost() {
     dirRemoveAll: (path) => {
       try { fsBackend().rmAll(path); return true; } catch (_) { return false; }
     },
-    dirList: (path) => fsBackend().list(path).join("\n"),
+    dirList: (path) => {
+      try {
+        return fsSuccess(new TextEncoder().encode(fsBackend().list(path).join("\0")));
+      } catch (_) { return [1]; }
+    },
     dirCreate: (path) => {
       try { fsBackend().mkdir(path); return true; } catch (_) { return false; }
     },

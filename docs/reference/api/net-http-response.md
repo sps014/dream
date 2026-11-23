@@ -30,7 +30,7 @@ public get url(): Url
 
 ## `headers`
 
-Response headers visible to the host; browser CORS rules can hide some headers.
+Response headers visible to the host. Browser Fetch can hide or combine fields.
 
 ```dream
 public get headers(): HttpHeaders
@@ -38,7 +38,7 @@ public get headers(): HttpHeaders
 
 ## `body`
 
-Byte stream owned by this response; a retained body can be read independently.
+The response owns the byte stream. A retained body can be read independently. Browser Fetch can decode content encodings before exposing the bytes.
 
 ```dream
 public get body(): HttpBody

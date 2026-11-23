@@ -3,19 +3,9 @@ module system.io;
 /// `File` - a small cross-runtime filesystem API.
 public static class File {
     // --- host bridge: `@runtime` WASM imports + matching native C symbols -------------------
-    @runtime("fileRead", "core", RuntimeTrait.Component)
-    static extern fun file_read(borrow path: string): string;
-
-    // Overwrites `path` with `content`; returns the number of bytes written (-1 on error).
-    @runtime("fileWrite", "core", RuntimeTrait.Component)
-    static extern fun file_write(borrow path: string, borrow content: string): long;
-
-    // Appends `content` to `path`; returns the number of bytes written (-1 on error).
     @runtime("fileAppend", "core", RuntimeTrait.Component)
-    static extern fun file_append(borrow path: string, borrow content: string): long;
+    static extern fun file_append(borrow path: string, borrow data: byte[]): long;
 
-    // Binary I/O: bytes are bulk-copied straight between the file and a Dream `byte[]`, with no
-    // string round-trip (binary-safe, minimal marshalling).
     @runtime("fileReadBytes", "core", RuntimeTrait.Component)
     static extern fun file_read_bytes(borrow path: string): byte[];
 
@@ -52,9 +42,9 @@ public static class File {
     @runtime("dirRemoveAll", "core", RuntimeTrait.Component)
     static extern fun dir_remove_all(borrow path: string): bool;
 
-    // Directory entries joined by '\n' ("" when empty or not a directory); split into string[] below.
+    // Status byte followed by UTF-8 names separated by NUL.
     @runtime("dirList", "core", RuntimeTrait.Component)
-    static extern fun dir_list(borrow path: string): string;
+    static extern fun dir_list(borrow path: string): byte[];
 
     @runtime("dirCreate", "core", RuntimeTrait.Component)
     static extern fun dir_create(borrow path: string): bool;
@@ -67,12 +57,8 @@ public static class File {
         borrow path: string,
         token: Option<CancellationToken> = Option.None
     ): Result<string, IoError> {
-        let effective_token = CancellationToken.resolve(token);
-        CancellationToken.rejected(effective_token, IoError.cancelled())?;
-        if File.exists(path) == false {
-            return Result.Err(IoError.not_found(path));
-        }
-        return Result.Ok(File.file_read(path));
+        let bytes = File.read_bytes(path, token).await?;
+        return Result.Ok(Encoding.utf8_decode(bytes));
     }
 
     /// Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.
@@ -81,13 +67,7 @@ public static class File {
         borrow content: string,
         token: Option<CancellationToken> = Option.None
     ): Result<long, IoError> {
-        let effective_token = CancellationToken.resolve(token);
-        CancellationToken.rejected(effective_token, IoError.cancelled())?;
-        let n = File.file_write(path, content);
-        if n < 0L {
-            return Result.Err(IoError.other(path, "failed to write file: " + path));
-        }
-        return Result.Ok(n);
+        return File.write_bytes(path, Encoding.utf8_encode(content), token).await;
     }
 
     /// Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.
@@ -98,7 +78,7 @@ public static class File {
     ): Result<long, IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
-        let n = File.file_append(path, content);
+        let n = File.file_append(path, Encoding.utf8_encode(content));
         if n < 0L {
             return Result.Err(IoError.other(path, "failed to append to file: " + path));
         }
@@ -112,10 +92,14 @@ public static class File {
     ): Result<byte[], IoError> {
         let effective_token = CancellationToken.resolve(token);
         CancellationToken.rejected(effective_token, IoError.cancelled())?;
-        if File.exists(path) == false {
-            return Result.Err(IoError.not_found(path));
+        let raw = File.file_read_bytes(path);
+        if raw.length == 0 || raw[0] != (byte)0 {
+            if !File.exists(path) {
+                return Result.Err(IoError.not_found(path));
+            }
+            return Result.Err(IoError.other(path, "failed to read file: " + path));
         }
-        return Result.Ok(File.file_read_bytes(path));
+        return Result.Ok(Streams.slice(raw, 1, raw.length - 1));
     }
 
     /// Writes raw bytes to `path`, replacing any existing contents.
@@ -261,11 +245,15 @@ public static class File {
         if File.is_dir(path) == false {
             return Result.Err(IoError.not_found(path));
         }
-        let joined = File.dir_list(path);
-        if joined.is_empty() {
+        let raw = File.dir_list(path);
+        if raw.length == 0 || raw[0] != (byte)0 {
+            return Result.Err(IoError.other(path, "failed to list directory: " + path));
+        }
+        if raw.length == 1 {
             return Result.Ok(Buffer.alloc<string>(0));
         }
-        return Result.Ok(joined.split('\n'));
+        let names = Encoding.utf8_decode(Streams.slice(raw, 1, raw.length - 1));
+        return Result.Ok(names.split((char)0));
     }
 
     /// Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.

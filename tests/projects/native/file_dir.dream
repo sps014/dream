@@ -127,3 +127,41 @@ async fun file_stats(): void {
     File.delete(root + "/a.txt").await;
     File.remove_dir(root).await;
 }
+
+@test
+async fun file_whole_reads_and_writes_preserve_utf8_bytes(): void {
+    let root = "dream_file_whole_e2e";
+    File.create_dir_all(root).await.unwrap();
+    let path = root + "/data.txt";
+    let text = ((char)65279).as_string() + "A" + ((char)0).as_string() + "B";
+    Assert.eq(File.write(path, text).await.unwrap(), 6L);
+    Assert.eq(File.read(path).await.unwrap(), text);
+    Assert.eq(File.append(path, text).await.unwrap(), 6L);
+    Assert.eq(File.read(path).await.unwrap(), text + text);
+    Assert.is_true(File.read(root).await.is_err());
+    Assert.is_true(File.read_bytes(root).await.is_err());
+    Assert.is_true(File.read(root + "/missing").await.is_err());
+
+    File.copy(path, path).await.unwrap();
+    Assert.eq(File.read_bytes(path).await.unwrap().length, 12);
+    File.copy(path, root + "/clone.txt").await.unwrap();
+    Assert.eq(File.read(root + "/clone.txt").await.unwrap(), text + text);
+    File.remove_dir_all(root).await.unwrap();
+}
+
+@test
+async fun file_list_keeps_newlines_inside_names(): void {
+    if System.os_family == OsFamily.Windows {
+        return;
+    }
+    let root = "dream_file_names_e2e";
+    File.create_dir_all(root).await.unwrap();
+    let name = "one\nname.txt";
+    File.write(root + "/" + name, "data").await.unwrap();
+    let names = File.list(root).await.unwrap();
+    Assert.eq(names.length, 1);
+    Assert.eq(names[0], name);
+    File.delete(root + "/" + name).await.unwrap();
+    Assert.eq(File.list(root).await.unwrap().length, 0);
+    File.remove_dir(root).await.unwrap();
+}

@@ -75,8 +75,8 @@ internal extern fun log(msg: string): void;
 Stdlib functions implemented by the Dream runtime (files, process, crypto, …) bind with `@runtime("name")`. That is **not** JavaScript-only: WASM imports `Dream.name` and native `dream run` calls the C symbol `name`.
 
 ```dream
-@runtime("fileRead")
-static internal extern fun file_read(borrow path: string): string;
+@runtime("fileReadBytes")
+static internal extern fun file_read_bytes(borrow path: string): byte[];
 ```
 
 `@runtime` cannot be combined with `@js`, `@c`, or `@intrinsic` on the same extern. Put `@cfg(Target.Native || Target.Node)` before `@runtime("processRun")` to make the declaration available on native and Node builds.

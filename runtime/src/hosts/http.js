@@ -36,6 +36,68 @@ function httpClassify(error, controller, timedOut) {
 function httpRestricted(name) {
   return /^(proxy-|sec-)/i.test(name) || /^(accept-charset|accept-encoding|access-control-request-headers|access-control-request-method|connection|content-length|cookie|cookie2|date|dnt|expect|host|keep-alive|origin|permissions-policy|referer|te|trailer|transfer-encoding|upgrade|via|user-agent|x-http-method|x-http-method-override|x-method-override)$/i.test(name);
 }
+function httpReleaseAgents(client) {
+  if (!client.closed || client.bodies !== 0 || client.controllers.size !== 0) return;
+  for (const agent of client.agents.values()) agent.destroy();
+  client.agents.clear();
+}
+
+async function httpNodeRequest(client, target, method, headers, bytes, signal) {
+  const transport = target.protocol === "https:" ? await import("node:https") : await import("node:http");
+  if (signal.aborted) throw httpError("ECLOSED", "HTTP request was closed");
+  let agent = client.agents.get(target.protocol);
+  if (!agent) {
+    agent = new transport.Agent({ keepAlive: true });
+    client.agents.set(target.protocol, agent);
+  }
+  const fields = Object.fromEntries(headers);
+  const length = fields["content-length"];
+  const transfer = fields["transfer-encoding"];
+  if (length !== undefined && (transfer !== undefined || !/^\d+$/.test(length) || Number(length) !== bytes.length)) {
+    throw httpError("EINVAL", "request content-length does not match body");
+  }
+  if (bytes.length && length === undefined && transfer === undefined) {
+    fields["content-length"] = String(bytes.length);
+  }
+  return new Promise((resolve, reject) => {
+    const request = transport.request(target, {
+      method, headers: fields, agent, signal,
+    }, incoming => {
+      const headers = [];
+      for (let i = 0; i < incoming.rawHeaders.length; i += 2) {
+        headers.push([incoming.rawHeaders[i].toLowerCase(), incoming.rawHeaders[i + 1]]);
+      }
+      // A response can fail before the caller starts reading. The iterator observes the failure
+      // when read, and the listener prevents the stream's error event from escaping the host.
+      incoming.on("error", () => {});
+      const stream = incoming[Symbol.asyncIterator]();
+      resolve({
+        status: incoming.statusCode,
+        url: target.href,
+        headers,
+        reader: { read: () => stream.next(), cancel: async () => { incoming.destroy(); } },
+      });
+    });
+    request.on("error", reject);
+    request.end(bytes.length ? bytes : undefined);
+  });
+}
+
+async function httpBrowserRequest(target, method, headers, bytes, signal) {
+  const response = await fetch(target, {
+    method, headers, body: bytes.length ? bytes : undefined, signal, credentials: "omit",
+  });
+  if (response.type === "opaque" || response.type === "opaqueredirect" || response.status === 0) {
+    throw httpError("ENOTSUP", "Fetch response metadata is not visible");
+  }
+  const encodings = (response.headers.get("content-encoding") || "")
+    .toLowerCase().split(",").map(value => value.trim());
+  const decoded = response.body && encodings.every(value => ["gzip", "x-gzip", "deflate", "br"].includes(value));
+  const visible = Array.from(response.headers).filter(([name]) =>
+    !decoded || (name !== "content-encoding" && name !== "content-length"));
+  return { status: response.status, url: response.url, headers: visible, reader: response.body?.getReader() };
+}
+
 export function makeHttpHost() {
   return {
     netCapabilities: () => isNode ? 14 : 0,
@@ -45,13 +107,16 @@ export function makeHttpHost() {
     netClientCreate: () => {
       if (httpClients.size >= 1024 || nextHttpHandle >= 2147483647) return 0;
       const id = nextHttpHandle++;
-      httpClients.set(id, { controllers: new Set() });
+      httpClients.set(id, { controllers: new Set(), agents: new Map(), bodies: 0, closed: false });
       return id;
     },
     netClientClose: id => {
       const client = httpClients.get(id);
+      if (!client) return;
       httpClients.delete(id);
-      for (const controller of client?.controllers || []) controller.abort();
+      client.closed = true;
+      for (const controller of client.controllers) controller.abort();
+      httpReleaseAgents(client);
     },
     netHttpStart: (id, request, data) => {
       const bytes = Uint8Array.from(data);
@@ -82,12 +147,15 @@ export function makeHttpHost() {
         let timeout = false;
         let timer;
         let disposed = false;
-        const dispose = () => {
+        let ownsBody = false;
+        const dispose = (abort = true) => {
           if (disposed) return;
           disposed = true;
           clearTimeout(timer);
           client.controllers.delete(controller);
-          controller.abort();
+          if (ownsBody) client.bodies--;
+          if (abort) controller.abort();
+          httpReleaseAgents(client);
         };
         op.abort = dispose;
         if (op.released) { dispose(); throw httpError("ECLOSED", "HTTP operation abandoned"); }
@@ -97,15 +165,20 @@ export function makeHttpHost() {
           let response;
           let redirects = 0;
           while (true) {
-            response = await fetch(target, { method: requestMethod, headers: requestHeaders, body: requestBytes.length ? requestBytes : undefined, redirect: isNode ? "manual" : "follow", signal: controller.signal, credentials: "omit" });
-            if (!isNode || ![301, 302, 303, 307, 308].includes(response.status) || max_redirects === 0 || !response.headers.has("location")) break;
+            response = isNode
+              ? await httpNodeRequest(client, target, requestMethod, requestHeaders, requestBytes, controller.signal)
+              : await httpBrowserRequest(target, requestMethod, requestHeaders, requestBytes, controller.signal);
+            if (!isNode || ![301, 302, 303, 307, 308].includes(response.status) || max_redirects === 0) break;
+            const location = response.headers.find(([name]) => name === "location");
+            if (!location) break;
+            await response.reader?.cancel();
             if (++redirects > (max_redirects < 0 ? 10 : max_redirects)) {
-              await response.body?.cancel();
               throw httpError("EREDIRECT", "HTTP redirect limit exceeded");
             }
-            const next = new URL(response.headers.get("location"), target);
+            let next;
+            try { next = new URL(location[1], target); }
+            catch (_) { throw httpError("EINVAL", "invalid redirect URL"); }
             if (!["http:", "https:"].includes(next.protocol) || next.username || next.password) throw httpError("EINVAL", "invalid redirect URL");
-            await response.body?.cancel();
             if (target.origin !== next.origin) {
               for (const name of ["authorization", "proxy-authorization", "cookie", "cookie2"]) requestHeaders.delete(name);
             }
@@ -116,15 +189,12 @@ export function makeHttpHost() {
             }
             target = next;
           }
-          if (response.type === "opaque" || response.type === "opaqueredirect" || response.status === 0) throw httpError("ENOTSUP", "Fetch response metadata is not visible");
+          if (controller.signal.aborted) throw httpError("ECLOSED", "HTTP request was closed");
           client.controllers.delete(controller);
-          const body = { reader: response.body?.getReader(), remainder: new Uint8Array(), offset: 0, busy: false, closed: false, eof: !response.body, controller, dispose, timedOut: () => timeout };
-          const responseHeaders = Array.from(response.headers);
-          if (typeof response.headers.getSetCookie === "function") {
-            for (let i = responseHeaders.length - 1; i >= 0; i--) if (responseHeaders[i][0] === "set-cookie") responseHeaders.splice(i, 1);
-            for (const value of response.headers.getSetCookie()) responseHeaders.push(["set-cookie", value]);
-          }
-          return { response: { status: response.status, url: response.url, headers: responseHeaders }, body, dispose };
+          ownsBody = true;
+          client.bodies++;
+          const body = { reader: response.reader, remainder: new Uint8Array(), offset: 0, busy: false, closed: false, eof: !response.reader, controller, dispose, timedOut: () => timeout };
+          return { response: { status: response.status, url: response.url, headers: response.headers }, body, dispose };
         } catch (error) {
           const result = httpClassify(error, controller, () => timeout);
           dispose();
@@ -154,7 +224,7 @@ export function makeHttpHost() {
           const end = Math.min(body.remainder.length, body.offset + count);
           const bytes = Array.from(body.remainder.subarray(body.offset, end));
           body.offset = end;
-          if (body.eof) body.dispose();
+          if (body.eof) body.dispose(false);
           return { bytes };
         } catch (error) { throw httpClassify(error, body.controller, body.timedOut); }
         finally { body.busy = false; }

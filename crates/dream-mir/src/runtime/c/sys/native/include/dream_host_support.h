@@ -12,5 +12,6 @@ int32_t dream_host_path_is_dir(const char *path);
 void dream_host_names_free(char **names, size_t n);
 int dream_host_names_push(char ***names, size_t *n, size_t *cap, const char *name);
 dream_ptr dream_host_names_join_lines(char **names, size_t n);
+dream_ptr dream_host_names_status(char **names, size_t n);
 
 #endif

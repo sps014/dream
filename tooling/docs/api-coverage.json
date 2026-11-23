@@ -14486,127 +14486,127 @@
       {
         "signature": "public static async fun read( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<string, IoError>",
         "description": "Reads the whole file at `path` as UTF-8 text.",
-        "line": 66,
+        "line": 56,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun write( borrow path: string, borrow content: string, token: Option<CancellationToken> = Option.None ): Result<long, IoError>",
         "description": "Overwrites `path` with `content`; resolves with `Ok(bytes_written)` or `Err` on failure.",
-        "line": 79,
+        "line": 65,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun append( borrow path: string, borrow content: string, token: Option<CancellationToken> = Option.None ): Result<long, IoError>",
         "description": "Appends `content` to the end of `path`; resolves with `Ok(bytes_written)` or `Err`.",
-        "line": 94,
+        "line": 74,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun read_bytes( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<byte[], IoError>",
         "description": "Reads the whole file at `path` as raw bytes.",
-        "line": 109,
+        "line": 89,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun write_bytes( borrow path: string, borrow data: byte[], token: Option<CancellationToken> = Option.None ): Result<long, IoError>",
         "description": "Writes raw bytes to `path`, replacing any existing contents.",
-        "line": 122,
+        "line": 106,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun delete( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Deletes `path`; resolves `Ok(Unit())` on success.",
-        "line": 137,
+        "line": 121,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun copy( borrow from: string, borrow to: string, token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Copies a file from `from` to `to`, overwriting `to` when it already exists.",
-        "line": 153,
+        "line": 137,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun rename( borrow from: string, borrow to: string, token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Renames or moves `from` to `to` (same-volume when the OS requires it).",
-        "line": 173,
+        "line": 157,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun remove_dir( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Removes an empty directory at `path`.",
-        "line": 190,
+        "line": 174,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun remove_dir_all( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Recursively deletes `path` (file or directory tree).",
-        "line": 209,
+        "line": 193,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun create_dir( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Creates a single directory at `path`; resolves `Ok(Unit())` on success.",
-        "line": 225,
+        "line": 209,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun create_dir_all( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<Unit, IoError>",
         "description": "Creates `path` and any missing parents; resolves `Ok(Unit())` on success.",
-        "line": 241,
+        "line": 225,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun list( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<string[], IoError>",
         "description": "Lists the entries of directory `path`, or `Err(IoError)` when the path is missing or not a directory (an existing empty directory yields `Ok([])`).",
-        "line": 255,
+        "line": 239,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun list_paths( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<string[], IoError>",
         "description": "Like `list`, but each name is joined onto `path`. Fails with the same `IoError` cases.",
-        "line": 272,
+        "line": 260,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun read_lines( borrow path: string, token: Option<CancellationToken> = Option.None ): Result<string[], IoError>",
         "description": "Reads the whole file and splits on `\\n`, dropping a trailing empty part from a final newline.",
-        "line": 292,
+        "line": 280,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static async fun write_lines( borrow path: string, borrow lines: string[], token: Option<CancellationToken> = Option.None ): Result<long, IoError>",
         "description": "Writes `lines` joined by newlines, including a trailing newline when `lines` is non-empty.",
-        "line": 320,
+        "line": 308,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun exists(borrow path: string): bool",
         "description": "Cheap synchronous predicates (no async overhead).",
-        "line": 337,
+        "line": 325,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun size(borrow path: string): Option<long>",
         "description": "Size of `path` in bytes, or `None` if it does not exist.",
-        "line": 342,
+        "line": 330,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun is_dir(borrow path: string): bool",
         "description": "Returns whether the path refers to a directory.",
-        "line": 351,
+        "line": 339,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun is_file(borrow path: string): bool",
         "description": "Returns whether `path` exists and is a regular file. Returns false when the path is missing or cannot be inspected; call `stat` to see why.",
-        "line": 357,
+        "line": 345,
         "page": "reference/api/io-file.md"
       },
       {
         "signature": "public static fun stat(borrow path: string): Result<FileStats, IoError>",
         "description": "One `stat` of `path`. Follows symlinks. Missing paths are `Err`.",
-        "line": 365,
+        "line": 353,
         "page": "reference/api/io-file.md"
       }
     ]
@@ -16668,26 +16668,26 @@
       },
       {
         "signature": "public get headers(): HttpHeaders",
-        "description": "Response headers visible to the host; browser CORS rules can hide some headers.",
+        "description": "Response headers visible to the host. Browser Fetch can hide or combine fields.",
         "line": 45,
         "page": "reference/api/net-http-response.md"
       },
       {
         "signature": "public get body(): HttpBody",
-        "description": "Byte stream owned by this response; a retained body can be read independently.",
-        "line": 50,
+        "description": "The response owns the byte stream. A retained body can be read independently. Browser Fetch can decode content encodings before exposing the bytes.",
+        "line": 51,
         "page": "reference/api/net-http-response.md"
       },
       {
         "signature": "public async fun read_text( max_bytes: int = 1048576, token: Option<CancellationToken> = Option.None ): Result<string, HttpError>",
         "description": "Reads remaining body text up to `max_bytes` using strict incremental UTF-8 decoding. Limit or decoding failures consume input already read; close the response after any failure.",
-        "line": 56,
+        "line": 57,
         "page": "reference/api/net-http-response.md"
       },
       {
         "signature": "public fun close(): Result<Unit, HttpError>",
         "description": "Closes the body idempotently; subsequent reads return `ECLOSED`.",
-        "line": 102,
+        "line": 103,
         "page": "reference/api/net-http-response.md"
       }
     ]

@@ -557,13 +557,13 @@ fn test_hir_emission_extern_import_and_call() {
 #[test]
 fn test_hir_emission_runtime_import_and_call() {
     let code = "
-        @runtime(\"fileRead\")
-        extern fun file_read(path: string): string;
-        fun run(): string { return file_read(\"x\"); }
+        @runtime(\"fileReadBytes\")
+        extern fun file_read(path: string): byte[];
+        fun run(): byte[] { return file_read(\"x\"); }
     ";
     let c = emit_hir_to_module(code);
     assert!(
-        c.contains("fileRead("),
+        c.contains("fileReadBytes("),
         "runtime extern should bind to its Dream host symbol:\n{}",
         c
     );

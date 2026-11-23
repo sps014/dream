@@ -1,5 +1,6 @@
 #include "dream_host_support.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -190,4 +191,28 @@ dream_ptr dream_host_names_join_lines(char **names, size_t n) {
     out = dream_str_from_utf8(joined);
     free(joined);
     return out;
+}
+
+
+dream_ptr dream_host_names_status(char **names, size_t n) {
+    if (!n) { return dream_status_bytes(0, NULL, 0); }
+    qsort(names, n, sizeof(char *), cmp_cstr);
+    size_t total = n - 1;
+    for (size_t i = 0; i < n; i++) {
+        size_t length = strlen(names[i]);
+        if (total >= INT32_MAX || length >= INT32_MAX - total) {
+            return dream_status_bytes(1, NULL, 0);
+        }
+        total += length;
+    }
+    dream_ptr result = dream_status_buffer((int32_t)total);
+    uint8_t *output = dream_array_bytes(result) + 1;
+    for (size_t i = 0; i < n; i++) {
+        size_t length = strlen(names[i]);
+        if (i) { *output++ = 0; }
+        memcpy(output, names[i], length);
+        output += length;
+    }
+    dream_status_finish(result, (int64_t)total);
+    return result;
 }

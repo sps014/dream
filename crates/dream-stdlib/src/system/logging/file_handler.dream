@@ -5,7 +5,7 @@ public class FileHandler: LogHandler {
     path: string;
 
     @runtime("fileAppend", "core", RuntimeTrait.Component)
-    static extern fun file_append(borrow path: string, borrow content: string): long;
+    static extern fun file_append(borrow path: string, borrow content: byte[]): long;
 
     /// Creates a handler that appends to `path`.
     public constructor(path: string) {
@@ -16,6 +16,6 @@ public class FileHandler: LogHandler {
     public fun emit(record: LogRecord): void {
         let line = "["
             + level_name(record.level) + "] " + record.name + ": " + record.message + "\n";
-        FileHandler.file_append(this.path, line);
+        FileHandler.file_append(this.path, Encoding.utf8_encode(line));
     }
 }

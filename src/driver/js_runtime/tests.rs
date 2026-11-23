@@ -262,7 +262,7 @@ if (!wrapped) fail("generation must wrap back to 1");
 fn selective_runtime_is_deterministic() {
     let live = vec![
         ("Dream".into(), "jsGlobal".into()),
-        ("Dream".into(), "fileRead".into()),
+        ("Dream".into(), "fileReadBytes".into()),
     ];
     let a = assemble_selective_runtime(&live, JsRuntimeTarget::Node).unwrap();
     let b = assemble_selective_runtime(&live, JsRuntimeTarget::Node).unwrap();
@@ -273,7 +273,7 @@ fn selective_runtime_is_deterministic() {
 fn manifest_fields_match_previous_prefix_table() {
     let manifest = parse_manifest(include_str!("../../../runtime/src/chunks.manifest"));
     assert_eq!(chunk_for_field(&manifest, "jsGlobal"), Some("js"));
-    assert_eq!(chunk_for_field(&manifest, "fileRead"), Some("fs"));
+    assert_eq!(chunk_for_field(&manifest, "fileReadBytes"), Some("fs"));
     assert_eq!(chunk_for_field(&manifest, "dirList"), Some("fs"));
     assert_eq!(chunk_for_field(&manifest, "delayMs"), Some("datetime_text"));
     assert_eq!(chunk_for_field(&manifest, "windowPoll"), Some("window"));

@@ -13,7 +13,7 @@ pub fn js_import_target(attributes: &[AttributeNode]) -> Option<(String, String)
     Some((module, field))
 }
 
-/// Host field from `@runtime("fileRead")`, or `None` when the attribute is absent.
+/// Host field from `@runtime("fileReadBytes")`, or `None` when the attribute is absent.
 pub fn runtime_import_field(attributes: &[AttributeNode]) -> Option<String> {
     let attr = attributes
         .iter()

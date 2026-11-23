@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
+import { gzipSync } from "node:zlib";
 import { makeHttpHost } from "../runtime/src/hosts/http.js";
 import { WireReader } from "../runtime/src/wire.js";
 
@@ -23,10 +24,19 @@ function decode(wire) {
   return JSON.parse(new TextDecoder().decode(Uint8Array.from(wire.slice(1))));
 }
 
-test("Fetch streams, redirects, deadlines, repeated headers and operation disposal", async () => {
+test("HTTP streams, redirects, deadlines, repeated headers and operation disposal", async () => {
   const sockets = new Set();
   let accepted = 0;
+  const compressed = gzipSync("hello");
   const server = http.createServer((req, res) => {
+    if (req.url === "/compressed") {
+      res.writeHead(200, {
+        "content-encoding": "gzip", "content-length": compressed.length,
+        "x-repeat": ["alpha,beta", "gamma"],
+      });
+      res.end(compressed);
+      return;
+    }
     if (req.url === "/redirect") { res.writeHead(302, { location: "/stream" }); res.end(); return; }
     if (req.url === "/loop") { res.writeHead(302, { location: "/loop" }); res.end(); return; }
     if (req.url === "/slow") { setTimeout(() => res.end("late"), 100); return; }
@@ -60,6 +70,21 @@ test("Fetch streams, redirects, deadlines, repeated headers and operation dispos
       host.netBodyClose(response.body);
       host.netBodyClose(response.body);
     }
+    const encoded = decode(await awaitWire(host, request("/compressed")));
+    assert.deepEqual(encoded.headers.filter(([name]) => name === "x-repeat"), [
+      ["x-repeat", "alpha,beta"], ["x-repeat", "gamma"],
+    ]);
+    assert.deepEqual(encoded.headers.find(([name]) => name === "content-encoding"), ["content-encoding", "gzip"]);
+    assert.deepEqual(encoded.headers.find(([name]) => name === "content-length"), ["content-length", String(compressed.length)]);
+    const raw = [];
+    while (true) {
+      const wire = await awaitWire(host, host.netBodyRead(encoded.body, 1024));
+      assert.equal(wire[0], 1);
+      if (wire.length === 1) break;
+      raw.push(...wire.slice(1));
+    }
+    assert.deepEqual(Buffer.from(raw), compressed);
+    host.netBodyClose(encoded.body);
     const stream = decode(await awaitWire(host, request("/redirect")));
     assert.equal(stream.status, 200);
     assert.ok(stream.url.endsWith("/stream"));
@@ -95,10 +120,13 @@ test("Fetch streams, redirects, deadlines, repeated headers and operation dispos
     const orphanBody = decode(orphanWire).body;
     host.netOperationRelease(orphaned);
     assert.equal(decode(await awaitWire(host, host.netBodyRead(orphanBody, 1))).code, "ECLOSED");
+    const independent = decode(await awaitWire(host, request("/stream")));
     const pending = request("/slow");
     await new Promise(resolve => setTimeout(resolve, 5));
     host.netClientClose(client);
     assert.equal(decode(await awaitWire(host, pending)).code, "ECLOSED");
+    assert.deepEqual(await awaitWire(host, host.netBodyRead(independent.body, 2)), [1, 102, 105]);
+    host.netBodyClose(independent.body);
     assert.ok(accepted < 16, `expected pooled connections, accepted ${accepted}`);
   } finally {
     host.netClientClose(client);

@@ -45,12 +45,11 @@ impl<'l, 'a> Fx<'l, 'a> {
             vals.push(V::i32(elem_size(&self.l.cx, *elem) as i64));
             let (copy, _) = super::glue::future_ownership::copies(self.l, *elem);
             vals.push(V::s(Value::global(copy)));
-            let array_info =
-                if crate::backend::shared::glue::glue_array_elems(&self.l.cx).contains(elem) {
-                    Value::global(super::glue::ownership::array_info(*elem))
-                } else {
-                    Value::zero(Ty::Ptr)
-                };
+            let array_info = if self.l.cx.array_elems().contains(elem) {
+                Value::global(super::glue::ownership::array_info(*elem))
+            } else {
+                Value::zero(Ty::Ptr)
+            };
             vals.push(V::s(array_info));
         } else if name == "dream_race" {
             let (_, clone) =

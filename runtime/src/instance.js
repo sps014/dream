@@ -156,6 +156,32 @@ export class DreamInstance {
     return ptr;
   }
 
+  _decodeArrayFloat16(bits) {
+    const exponent = (bits >> 10) & 31;
+    const fraction = bits & 1023;
+    const sign = bits & 0x8000 ? -1 : 1;
+    if (exponent === 31) return fraction ? NaN : sign * Infinity;
+    if (exponent === 0) return sign * fraction * 2 ** -24;
+    return sign * (1024 + fraction) * 2 ** (exponent - 25);
+  }
+
+  _encodeArrayFloat16(value) {
+    const number = Number(value);
+    const sign = number < 0 || Object.is(number, -0) ? 0x8000 : 0;
+    const magnitude = Math.abs(number);
+    if (Number.isNaN(magnitude)) return 0x7e00;
+    if (magnitude >= 65520) return sign | 0x7c00;
+    if (magnitude <= 2 ** -25) return sign;
+
+    // Powers of two scale binary64 exactly in this range. Round once, directly to binary16.
+    const exponent = Math.max(-14, Math.floor(Math.log2(magnitude)));
+    const units = magnitude * 2 ** (10 - exponent);
+    const low = Math.floor(units);
+    const remainder = units - low;
+    const rounded = low + (remainder > 0.5 || (remainder === 0.5 && (low & 1)) ? 1 : 0);
+    return sign | (((exponent + 14) << 10) + rounded);
+  }
+
   /** Reads a single element of `elemType` at byte address `addr`. */
   _readElement(addr, elemType) {
     const t = stripSuffix(elemType);
@@ -166,6 +192,14 @@ export class DreamInstance {
         return this.i32(addr);
       case "byte":
         return this.bytes[addr]; // 1-byte element
+      case "sbyte":
+        return this.view.getInt8(addr);
+      case "short":
+        return this.view.getInt16(addr, true);
+      case "ushort":
+        return this.view.getUint16(addr, true);
+      case "float16":
+        return this._decodeArrayFloat16(this.view.getUint16(addr, true));
       case "bool":
         return this.bytes[addr] !== 0;
       case "uint":
@@ -201,6 +235,18 @@ export class DreamInstance {
       case "byte":
         this.bytes[addr] = value & 0xff; // 1-byte element
         break;
+      case "sbyte":
+        this.view.setInt8(addr, value);
+        break;
+      case "short":
+        this.view.setInt16(addr, value, true);
+        break;
+      case "ushort":
+        this.view.setUint16(addr, value, true);
+        break;
+      case "float16":
+        this.view.setUint16(addr, this._encodeArrayFloat16(value), true);
+        break;
       case "bool":
         this.bytes[addr] = value ? 1 : 0;
         break;
@@ -220,14 +266,18 @@ export class DreamInstance {
       case "double":
         this.view.setFloat64(addr, value, true);
         break;
-      case "string":
-        this.view.setInt32(addr, this.writeString(value == null ? "" : String(value)), true);
+      case "string": {
+        const pointer = this.writeString(value == null ? "" : String(value));
+        this.view.setInt32(addr, pointer, true);
         break;
+      }
       case "js":
         this.view.setInt32(addr, this.registerHandle(value), true);
         break;
-      default:
-        this.view.setInt32(addr, value | 0, true); // struct/object pointer
+      default: {
+        const pointer = t.endsWith("[]") ? this.writeArray(value ?? [], t.slice(0, -2)) : value | 0;
+        this.view.setInt32(addr, pointer, true);
+      }
     }
   }
 

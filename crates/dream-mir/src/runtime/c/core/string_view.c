@@ -56,20 +56,21 @@ int32_t string_json_boundary(dream_ptr s, int32_t start) {
     if (start >= n) { return n; }
     int32_t head = n - start < 8 ? n : start + 8;
     for (; start < head; start++) {
-        if (u[start] == '"' || u[start] == '\\') { return start; }
+        if (u[start] == '"' || u[start] == '\\' || u[start] < 32) { return start; }
     }
     u16x8 quote = (u16x8){0} + '"';
     u16x8 slash = (u16x8){0} + '\\';
+    u16x8 control = (u16x8){0} + 32;
     for (; n - start >= 8; start += 8) {
         u16x8 v;
         uint8_t bits;
         memcpy(&v, u + start, sizeof(v));
-        bool8 hit = __builtin_convertvector((i16x8)((v == quote) | (v == slash)), bool8);
+        bool8 hit = __builtin_convertvector((i16x8)((v == quote) | (v == slash) | (v < control)), bool8);
         memcpy(&bits, &hit, sizeof(bits));
         if (bits) { return start + __builtin_ctz(bits); }
     }
     for (; start < n; start++) {
-        if (u[start] == '"' || u[start] == '\\') { return start; }
+        if (u[start] == '"' || u[start] == '\\' || u[start] < 32) { return start; }
     }
     return n;
 }
@@ -175,16 +176,30 @@ int32_t string_view_rfind(dream_ptr h, int32_t ho, int32_t hn, dream_ptr nd, int
     return -1;
 }
 
+static int is_supplementary_pair(const uint16_t *units, uint32_t scalar) {
+    uint32_t payload = scalar - 0x10000u;
+    return units[0] == 0xd800u + (payload >> 10) &&
+           units[1] == 0xdc00u + (payload & 0x3ffu);
+}
+
 int32_t string_view_find_char(dream_ptr s, int32_t off, int32_t n, int32_t from, int32_t c) {
     const uint16_t *u;
     if (from < 0) {
         from = 0;
     }
-    if (from >= n) {
+    if (from >= n || (uint32_t)c > 0x10ffffu) {
         return -1;
     }
     u = view_units(s, off);
-    return find_unit(u, from, n, (uint16_t)c);
+    if (c <= 0xffff) {
+        return find_unit(u, from, n, (uint16_t)c);
+    }
+    for (int32_t i = from; i < n - 1; i++) {
+        if (is_supplementary_pair(u + i, (uint32_t)c)) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 typedef int32_t i32x8 __attribute__((vector_size(32)));
@@ -196,10 +211,16 @@ int32_t string_view_count_char(dream_ptr s, int32_t off, int32_t n, int32_t c) {
     u16x8 needle = (u16x8){0} + (uint16_t)c;
     int32_t total = 0;
     int32_t i = 0;
-    if (n <= 0) {
+    if (n <= 0 || (uint32_t)c > 0x10ffffu) {
         return 0;
     }
     u = view_units(s, off);
+    if (c > 0xffff) {
+        for (; i < n - 1; i++) {
+            total += is_supplementary_pair(u + i, (uint32_t)c);
+        }
+        return total;
+    }
     while (i + 8 <= n) {
         i16x8 lanes = {0};
         for (int32_t blocks = 0; blocks < 4096 && i + 8 <= n; blocks++, i += 8) {
@@ -217,8 +238,18 @@ int32_t string_view_count_char(dream_ptr s, int32_t off, int32_t n, int32_t c) {
 
 int32_t string_view_rfind_char(dream_ptr s, int32_t off, int32_t n, int32_t c) {
     const uint16_t *u = view_units(s, off);
-    int32_t i;
-    for (i = n - 1; i >= 0; i--) {
+    if ((uint32_t)c > 0x10ffffu) {
+        return -1;
+    }
+    if (c > 0xffff) {
+        for (int32_t i = n - 2; i >= 0; i--) {
+            if (is_supplementary_pair(u + i, (uint32_t)c)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    for (int32_t i = n - 1; i >= 0; i--) {
         if (u[i] == (uint16_t)c) {
             return i;
         }

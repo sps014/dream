@@ -13,6 +13,9 @@ fn array(ty: &str) -> Option<(&'static str, &str)> {
     Some((
         match element {
             "byte" | "bool" => "Uint8Array",
+            "sbyte" => "Int8Array",
+            "short" => "Int16Array",
+            "ushort" => "Uint16Array",
             "uint" | "usize" | "string" => "Uint32Array",
             "long" => "BigInt64Array",
             "ulong" => "BigUint64Array",
@@ -29,8 +32,11 @@ fn argument(ty: &str, name: &str) -> String {
     if ty == "string" {
         return format!("readGuestString(inst, {name})");
     }
-    if ty == "bool" {
-        return format!("{name} !== 0");
+    match ty {
+        "bool" => return format!("{name} !== 0"),
+        "uint" | "usize" => return format!("{name} >>> 0"),
+        "ulong" => return format!("BigInt.asUintN(64, {name})"),
+        _ => {}
     }
     if let Some((view, element)) = array(ty) {
         let value = format!("readGuestArray(inst, {name}, {view}, snapshot)");

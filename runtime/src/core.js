@@ -3,7 +3,8 @@ import { HAS_JS_HANDLES } from "./features.js";
 export { TAGS, HEAP_HEADER_SIZE, LEN_PREFIX_SIZE };
 
 export function elementSize(typeName) {
-  if (typeName === "bool" || typeName === "byte") return 1;
+  if (typeName === "bool" || typeName === "byte" || typeName === "sbyte") return 1;
+  if (typeName === "short" || typeName === "ushort" || typeName === "float16") return 2;
   if (typeName === "double" || typeName === "long" || typeName === "ulong") return 8;
   return 4;
 }
@@ -48,11 +49,18 @@ export function jsToWasm(inst, t, value) {
   return value == null ? 0 : value;
 }
 
+// WebAssembly exposes integer lanes as signed JS values regardless of the Dream type.
+export function wasmScalarToJs(type, value) {
+  if (type === "bool") return value !== 0;
+  if (type === "uint" || type === "usize") return value >>> 0;
+  if (type === "ulong") return BigInt.asUintN(64, value);
+  return value;
+}
+
 export function wasmToJs(inst, t, raw) {
   const base = stripSuffix(t);
   if (base === "string") return inst.readString(raw);
-  if (base === "bool") return raw !== 0;
   if (HAS_JS_HANDLES && base === "js") return inst.derefHandle(raw);
   if (base === "void") return undefined;
-  return raw;
+  return wasmScalarToJs(base, raw);
 }

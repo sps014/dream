@@ -6,7 +6,7 @@ use super::abi_types::c_ident;
 use super::cx::Cx;
 use super::symbols::func_symbol;
 use dream_hir::TypeLayout;
-use dream_types::{TyKind, TypeId, TypeInterner};
+use dream_types::{TyKind, TypeId};
 use indexmap::IndexMap as HashMap;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -414,41 +414,37 @@ pub(crate) fn self_tail_field(
     self_typed.then_some(i)
 }
 
-fn collect_array_elems(
-    interner: &TypeInterner,
-    f: &crate::MirFunction,
-    array_elems: &mut BTreeSet<TypeId>,
-) {
-    for local in &f.locals {
-        if let TyKind::Array(e) = interner.kind(local.ty)
-            && (interner.is_rc_tracked(*e) || interner.is_value_type(*e))
-        {
-            array_elems.insert(*e);
+/// Element types whose arrays need a runtime identity.
+pub(crate) fn collect_array_elems(cx: &Cx<'_>) -> BTreeSet<TypeId> {
+    let mut array_elems = BTreeSet::new();
+    let mut add = |ty| {
+        if let TyKind::Array(elem) = cx.interner.kind(ty) {
+            array_elems.insert(*elem);
+        }
+    };
+    for global in &cx.mir.globals {
+        add(global.ty);
+    }
+    for layout in cx.mir.layouts.structs.values() {
+        for field in &layout.fields {
+            add(field.ty);
         }
     }
-}
-
-/// Element types whose `release_array_t{N}` / `destroy_array_t{N}` glue the module needs.
-pub(crate) fn glue_array_elems(cx: &Cx<'_>) -> BTreeSet<TypeId> {
-    let interner = cx.interner;
-    let mut array_elems = BTreeSet::new();
-    for layout in cx.mir.layouts.structs.values() {
-        for f in &layout.fields {
-            if let TyKind::Array(e) = interner.kind(f.ty)
-                && (interner.is_rc_tracked(*e) || interner.is_value_type(*e))
-            {
-                array_elems.insert(*e);
+    for layout in cx.mir.layouts.unions.values() {
+        for variant in &layout.variants {
+            for field in &variant.fields {
+                add(field.ty);
             }
         }
     }
-    for f in &cx.mir.functions {
-        collect_array_elems(interner, f, &mut array_elems);
-    }
-    for p in &cx.mir.polls {
-        collect_array_elems(interner, p, &mut array_elems);
+    for function in cx.mir.functions.iter().chain(&cx.mir.polls) {
+        add(function.ret);
+        for local in &function.locals {
+            add(local.ty);
+        }
     }
     // Funcbox last-drop of `TAG_CLOSURE_ENV` always forwards to `release_array_t{object}`.
-    array_elems.insert(interner.object());
+    array_elems.insert(cx.interner.object());
     array_elems
 }
 

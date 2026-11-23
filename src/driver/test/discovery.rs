@@ -28,19 +28,28 @@ pub fn discover_tests_in_source(
     source: &str,
     cfg: CfgSymbols,
 ) -> Result<DiscoveredFile, String> {
+    let (found, diagnostics) = discover_recovering(path, source, cfg);
+    if !diagnostics.has_errors() {
+        return Ok(found);
+    }
+    let mut msg = format!("parse errors in '{}'", path);
+    for e in diagnostics.errors() {
+        msg.push_str("\n  ");
+        msg.push_str(&e.message);
+    }
+    Err(msg)
+}
+
+pub(super) fn discover_recovering(
+    path: &str,
+    source: &str,
+    cfg: CfgSymbols,
+) -> (DiscoveredFile, DiagnosticBag) {
     let arena = Bump::new();
     let mut diagnostics = DiagnosticBag::new(Some(path.to_string()));
     let lexer = Lexer::new(source.to_string());
     let mut parser = Parser::new(lexer, &arena, &mut diagnostics).with_cfg(cfg);
     let program = parser.parse();
-    if diagnostics.has_errors() {
-        let mut msg = format!("parse errors in '{}'", path);
-        for e in diagnostics.errors() {
-            msg.push_str("\n  ");
-            msg.push_str(&e.message);
-        }
-        return Err(msg);
-    }
     let root = program.get_root();
     dream_stdlib::attributes::resolve_source_attribute_ids(root);
     let mut out = DiscoveredFile::default();
@@ -61,7 +70,7 @@ pub fn discover_tests_in_source(
             timeout_ms: dream_abi::attributes::test_timeout_ms(&f.attributes).flatten(),
         });
     }
-    Ok(out)
+    (out, diagnostics)
 }
 
 #[cfg(test)]

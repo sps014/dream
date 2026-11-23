@@ -8314,7 +8314,7 @@
       {
         "signature": "public get current(): ReadOnlySpan<char>",
         "description": "The piece produced by the last `move_next()`.",
-        "line": 49,
+        "line": 50,
         "page": "reference/api/core-string-split.md"
       }
     ]
@@ -8903,7 +8903,7 @@
       },
       {
         "signature": "public static fun parse(text: string): Result<DateTime, ParseError>",
-        "description": "Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).  Returns `Err(ParseError)` for malformed text and for dates that do not exist in the Gregorian calendar, such as `2023-02-29` or `2024-04-31`; they are never rolled over into the next month.",
+        "description": "Parses an ISO-8601 datetime (`YYYY-MM-DDTHH:MM:SS[.frac][Z|±HH:MM]`).  Returns `Err(ParseError)` for malformed text and for dates that do not exist in the Gregorian calendar, such as `2023-02-29` or `2024-04-31`; they are never rolled over into the next month. Fractions are truncated to milliseconds.",
         "line": 293,
         "page": "reference/api/date-time-2.md"
       }
@@ -19201,13 +19201,13 @@
       {
         "signature": "public fun match(input: string): string[]",
         "description": "Returns complete matches with `Global`, or the first match followed by its capture groups otherwise. Returns an empty array when unmatched.",
-        "line": 210,
+        "line": 211,
         "page": "reference/api/text-regex.md"
       },
       {
         "signature": "public fun match_info(input: string): Option<RegexMatchInfo>",
         "description": "Returns the first match and its named and numbered capture groups, or `None` when unmatched.",
-        "line": 230,
+        "line": 231,
         "page": "reference/api/text-regex.md"
       }
     ]
@@ -19531,67 +19531,67 @@
       {
         "signature": "public fun split_once(borrow sep: string): string[]",
         "description": "Splits at the first occurrence of `sep`; returns a one-element array when no separator is found.",
-        "line": 246,
+        "line": 247,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun strip_prefix(borrow prefix: string): Option<string>",
         "description": "`Some` remainder when this starts with `prefix`.",
-        "line": 266,
+        "line": 267,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun strip_suffix(borrow suffix: string): Option<string>",
         "description": "`Some` remainder when this ends with `suffix`.",
-        "line": 274,
+        "line": 275,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun lines(): StringLines",
         "description": "Iterates over the lines without copying them. Lines end at `\\n`; a trailing `\\r` is dropped from each line, and a final line terminator does not produce an empty line. Call `to_string()` on a line to keep an owned copy.",
-        "line": 284,
+        "line": 285,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun repeat(times: int): string",
         "description": "A new string repeated `times` times.",
-        "line": 289,
+        "line": 290,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun equals(borrow other: string): bool",
         "description": "Value equality (`Equatable<string>`); identical to `this == other`.",
-        "line": 308,
+        "line": 309,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(sep: char): string[]",
         "description": "Splits this string on the single character `sep`.",
-        "line": 313,
+        "line": 314,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string): string[]",
         "description": "Splits this string on every occurrence of substring `sep`.",
-        "line": 332,
+        "line": 334,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(sep: char, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 362,
+        "line": 364,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun split(borrow sep: string, limit: int): string[]",
         "description": "Splits on `sep` into at most `limit` parts (`limit < 1` means no limit).",
-        "line": 394,
+        "line": 396,
         "page": "reference/api/text-string-text-2.md"
       },
       {
         "signature": "public fun replace(borrow old: string, borrow replacement: string): string",
         "description": "A new string with every occurrence of `old` replaced by `replacement`.",
-        "line": 426,
+        "line": 428,
         "page": "reference/api/text-string-text-2.md"
       }
     ]

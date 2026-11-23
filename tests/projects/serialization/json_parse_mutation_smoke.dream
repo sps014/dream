@@ -79,7 +79,53 @@ fun json_string_boundaries(): void {
         let escaped = "\"" + expected + "\\n" + expected + "\"";
         let with_escape = Json.deserialize<JsonValue>(escaped).unwrap().as_string().unwrap();
         Assert.eq(with_escape, expected + "\n" + expected);
-        let truncated = Json.deserialize<JsonValue>("\"" + expected).unwrap().as_string().unwrap();
-        Assert.eq(truncated, expected);
+        Assert.is_true(Json.deserialize<JsonValue>("\"" + expected).is_err());
     }
+}
+
+@json
+class StrictJsonRecord {
+    public value: string;
+
+    public constructor(value: string) {
+        this.value = value;
+    }
+}
+
+@test
+fun json_rejects_malformed_documents(): void {
+    let malformed = [
+        " ",
+        "1e",
+        "1.",
+        "01",
+        "-",
+        "+1",
+        "nul",
+        "trux",
+        "fals",
+        "[1",
+        "[1}",
+        "[1 2]",
+        "[1,]",
+        "{\"x\":1]",
+        "{\"x\" 1}",
+        "{\"x\":1,}",
+        "\"unterminated",
+        "\"\\q\"",
+        "\"\\u00xy\"",
+        "\"raw\ncontrol\"",
+        "\"long unescaped run\twith control\"",
+    ];
+    for (let text in malformed) {
+        Assert.is_true(Json.deserialize<JsonValue>(text).is_err());
+    }
+    Assert.eq(Json.deserialize<JsonValue>("-1.25e+2").unwrap().as_double().unwrap(), -125.0d);
+    Assert.eq(Json.deserialize<JsonValue>("\"\\uD83D\\uDE00\"").unwrap().as_string().unwrap(), "😀");
+
+    Assert.is_true(Json.deserialize<StrictJsonRecord>("{\"value\":}").is_err());
+    Assert.is_true(Json.deserialize<StrictJsonRecord>("{\"value\":\"abc\",}").is_err());
+    Assert.is_true(Json.deserialize<StrictJsonRecord>("{\"value\":\"abc\" \"other\":0}").is_err());
+    Assert.is_true(Json.deserialize<StrictJsonRecord>("{\"unknown\":[1,]}").is_err());
+    Assert.eq(Json.deserialize<StrictJsonRecord>("{}").unwrap().value, "");
 }

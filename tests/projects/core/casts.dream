@@ -82,6 +82,12 @@ fun boxed_narrow_integers_keep_their_value(): void {
     Assert.eq((int)(sbyte)boxed_small, -128);
     Assert.eq((int)(short)boxed_signed, -32768);
     Assert.eq((int)(ushort)boxed_unsigned, 65535);
+    Assert.eq(boxed_small.to_string(), "-128");
+    Assert.eq(boxed_signed.to_string(), "-32768");
+    Assert.eq(boxed_unsigned.to_string(), "65535");
+    Assert.eq(boxed_small.hash_code(), -128);
+    Assert.eq(boxed_signed.hash_code(), -32768);
+    Assert.eq(boxed_unsigned.hash_code(), 65535);
 }
 
 @test
@@ -147,4 +153,32 @@ fun generic_type_tests_use_the_specialized_type(): void {
     Assert.is_true(c3a1_matches_type<int>(42));
     Assert.is_false(c3a1_matches_type<string>(42));
     Assert.is_true(c3a1_matches_type<c3a1_Level>(c3a1_Level.High));
+}
+
+class c3a1_Unrelated {}
+
+@test
+fun boxed_types_match_exact_arrays_and_implemented_interfaces(): void {
+    let unrelated: object = c3a1_Unrelated();
+    let shape: object = c3a1_Square();
+    Assert.is_true(shape is c3a1_Shape);
+    Assert.is_false(unrelated is c3a1_Shape);
+    Assert.eq(((c3a1_Shape)shape).sides(), 4);
+    if shape is c3a1_Shape matched {
+        Assert.eq(matched.sides(), 4);
+    } else {
+        Assert.is_true(false);
+    }
+
+    let ints: object = [1, 2];
+    let strings: object = Array.alloc<string>(0);
+    Assert.is_true(ints is int[]);
+    Assert.is_false(ints is string[]);
+    Assert.is_true(strings is string[]);
+    Assert.is_false(strings is int[]);
+    Assert.eq(((int[])ints)[1], 2);
+    Assert.eq(typeof(ints), "array");
+
+    let scalar: object = 42;
+    Assert.is_true(scalar is object);
 }

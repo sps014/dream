@@ -68,7 +68,7 @@ while i < n {
     i += 1;
 } // suspends each iteration
 let y = cond ? a().await : b().await; // in a ternary arm
-let z = flag && ready().await; // right side of && / || / ??
+let z = flag && ready().await; // right side of && / ||
 ```
 
 ### Awaiting a `Result`

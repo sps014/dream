@@ -8,7 +8,7 @@ use super::super::places::ELEM_ALIGN;
 use super::{glue, register};
 use crate::abi;
 use crate::analysis::protocol::ProtocolReach;
-use crate::backend::shared::abi_types::{c_ident, elem_size, mem_ty};
+use crate::backend::shared::abi_types::{MemTy, c_ident, elem_size, mem_ty};
 use crate::backend::shared::protocol_names::{HashFn, hash_fn, to_string_fn};
 use crate::backend::shared::tables::{BUILTIN_TYPE_NAMES, NULL_TYPE_NAME, UNKNOWN_TYPE_NAME};
 use dream_hir::FieldLayout;
@@ -596,6 +596,27 @@ fn type_name_router(l: &mut Lcx<'_>) {
     );
 }
 
+fn narrow_integer_arms(to_string: bool) -> impl Iterator<Item = Arm> {
+    [
+        (abi::TAG_SBYTE, MemTy::I8),
+        (abi::TAG_SHORT, MemTy::I16),
+        (abi::TAG_USHORT, MemTy::U16),
+    ]
+    .into_iter()
+    .map(move |(tag, mem)| -> Arm {
+        let emit = Box::new(move |fx: &mut Fx<'_, '_>, p: &V| {
+            let address = fx.ptr(p);
+            let value = fx.load_mem(mem, &address, 2);
+            if to_string {
+                fx.call_v("dream_int_to_string", &[value]).v
+            } else {
+                fx.conv(&value, &Ty::I32)
+            }
+        });
+        (vec![tag], emit)
+    })
+}
+
 fn to_string_router(l: &mut Lcx<'_>) {
     let i32t = Some(Ty::I32);
     let mut arms: Vec<Arm> = vec![
@@ -692,6 +713,7 @@ fn to_string_router(l: &mut Lcx<'_>) {
         .into(),
         Some(l.h()),
     ));
+    arms.extend(narrow_integer_arms(true));
     arms.extend(tagged_arms(l, "_to_string", true));
     let null = l.str_val("null");
     let obj = l.str_val("<object>");
@@ -764,6 +786,7 @@ fn hash_code_router(l: &mut Lcx<'_>) {
             }),
         ));
     }
+    arms.extend(narrow_integer_arms(false));
     arms.extend(tagged_arms(l, "_hash_code", true));
     tag_router(
         l,

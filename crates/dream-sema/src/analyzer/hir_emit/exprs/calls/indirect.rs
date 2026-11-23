@@ -77,6 +77,7 @@ impl<'a> Analyzer<'a> {
         };
         let int_ty = self.type_ctx.interner.int();
         let box_ty = boxed.ty;
+        let collected = self.coerce_signature_args(collected, box_ty, 0);
 
         // A place read (a local, or a captured name's `CaptureCell.value`) can be read twice. The
         // scratch path cannot express a `void` call as a value, so it must stay for real temporaries.

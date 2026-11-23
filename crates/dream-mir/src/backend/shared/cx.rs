@@ -10,6 +10,7 @@ use dream_hir::TypeLayout;
 use dream_types::{DefId, TyKind, TypeId, TypeInterner};
 use indexmap::IndexMap;
 use indexmap::IndexMap as HashMap;
+use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 /// Discriminants and payload slot of a boxed `Option<T>` union.
@@ -60,6 +61,7 @@ pub(crate) struct Cx<'a> {
     /// the live-object count for its JS host to report.
     pub leak_checks: bool,
     canon: OnceLock<CanonMaps>,
+    array_elems: OnceLock<BTreeSet<TypeId>>,
     iface_guards: OnceLock<GuardTable>,
     intrinsics: HashMap<DefId, String>,
 }
@@ -93,6 +95,7 @@ impl<'a> Cx<'a> {
             debug_syms,
             leak_checks: false,
             canon: OnceLock::new(),
+            array_elems: OnceLock::new(),
             iface_guards: OnceLock::new(),
             intrinsics,
         }
@@ -111,6 +114,11 @@ impl<'a> Cx<'a> {
 
     pub(crate) fn canon_maps(&self) -> &CanonMaps {
         self.canon.get_or_init(|| super::glue::canonical_maps(self))
+    }
+
+    pub(crate) fn array_elems(&self) -> &BTreeSet<TypeId> {
+        self.array_elems
+            .get_or_init(|| super::glue::collect_array_elems(self))
     }
 
     pub(crate) fn iface_guard(&self, iface_id: usize, slot: usize) -> Option<&[(i32, String)]> {

@@ -59,9 +59,9 @@ extend char: Comparable<char> {
 
     /// A new single-character string containing this character.
     public fun as_string(): string {
-        let result = string.alloc(1);
-        string.set(result, 0, this);
-        return result;
+        let result = StringBuilder(4);
+        result.append_char(this);
+        return result.build();
     }
 
     /// Parses exactly one Unicode scalar from `text`.

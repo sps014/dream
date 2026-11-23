@@ -68,7 +68,8 @@ const LEN_PREFIX_SIZE = 8;
 
 // ----- core.js -----
 function elementSize(typeName) {
-  if (typeName === "bool" || typeName === "byte") return 1;
+  if (typeName === "bool" || typeName === "byte" || typeName === "sbyte") return 1;
+  if (typeName === "short" || typeName === "ushort" || typeName === "float16") return 2;
   if (typeName === "double" || typeName === "long" || typeName === "ulong") return 8;
   return 4;
 }
@@ -113,13 +114,20 @@ function jsToWasm(inst, t, value) {
   return value == null ? 0 : value;
 }
 
+// WebAssembly exposes integer lanes as signed JS values regardless of the Dream type.
+function wasmScalarToJs(type, value) {
+  if (type === "bool") return value !== 0;
+  if (type === "uint" || type === "usize") return value >>> 0;
+  if (type === "ulong") return BigInt.asUintN(64, value);
+  return value;
+}
+
 function wasmToJs(inst, t, raw) {
   const base = stripSuffix(t);
   if (base === "string") return inst.readString(raw);
-  if (base === "bool") return raw !== 0;
   if (HAS_JS_HANDLES && base === "js") return inst.derefHandle(raw);
   if (base === "void") return undefined;
-  return raw;
+  return wasmScalarToJs(base, raw);
 }
 
 // ----- guest_contract.js -----
@@ -150,21 +158,21 @@ function marshalArgs(inst, params, rawArgs) {
     if (t === "string") return inst.readString(arg);
     if (HAS_JS_HANDLES && t === "js") return inst.derefHandle(arg); // i32 handle id -> live JS value
     if (HAS_ARRAYS && t.endsWith("[]")) return inst.readArray(arg, t.slice(0, -2));
-    if (t === "bool") return arg !== 0;
-    return arg; // numeric primitive or opaque pointer
+    return wasmScalarToJs(t, arg);
   });
 }
 
 /** Marshals a JS return value back into the raw WASM value for the declared result type. */
 function marshalResult(inst, result, ret) {
+  result = result == null ? result : stripSuffix(result);
   if (result === "string") return inst.writeString(ret == null ? "" : String(ret));
   if (result === "bool") return ret ? 1 : 0;
   if (HAS_JS_HANDLES && result === "js") return inst.registerHandle(ret); // live JS value -> i32 handle id
   if (HAS_ARRAYS && typeof result === "string" && result.endsWith("[]")) {
     return inst.writeArray(ret == null ? [] : ret, result.slice(0, -2)); // e.g. byte[] process output
   }
-  if (result === "void" || result == null) return ret == null ? 0 : ret;
-  return ret;
+  if (result === "long" || result === "ulong") return BigInt(ret ?? 0);
+  return ret ?? 0;
 }
 
 /** True when marshaling `t` needs the live `DreamInstance` (strings, `js`, arrays, callbacks). */
@@ -196,11 +204,7 @@ function wrapImport(getInstance, fn, signature) {
   const needsInst = signatureNeedsInstance(params, result);
 
   return (...rawArgs) => {
-    if (!needsInst) {
-      const ret = fn(...rawArgs);
-      return ret == null ? 0 : ret;
-    }
-    const inst = getInstance();
+    const inst = needsInst ? getInstance() : null;
     const args = marshalArgs(inst, params, rawArgs);
     const ret = fn(...args);
     return marshalResult(inst, result, ret);
@@ -595,6 +599,32 @@ class DreamInstance {
     return ptr;
   }
 
+  _decodeArrayFloat16(bits) {
+    const exponent = (bits >> 10) & 31;
+    const fraction = bits & 1023;
+    const sign = bits & 0x8000 ? -1 : 1;
+    if (exponent === 31) return fraction ? NaN : sign * Infinity;
+    if (exponent === 0) return sign * fraction * 2 ** -24;
+    return sign * (1024 + fraction) * 2 ** (exponent - 25);
+  }
+
+  _encodeArrayFloat16(value) {
+    const number = Number(value);
+    const sign = number < 0 || Object.is(number, -0) ? 0x8000 : 0;
+    const magnitude = Math.abs(number);
+    if (Number.isNaN(magnitude)) return 0x7e00;
+    if (magnitude >= 65520) return sign | 0x7c00;
+    if (magnitude <= 2 ** -25) return sign;
+
+    // Powers of two scale binary64 exactly in this range. Round once, directly to binary16.
+    const exponent = Math.max(-14, Math.floor(Math.log2(magnitude)));
+    const units = magnitude * 2 ** (10 - exponent);
+    const low = Math.floor(units);
+    const remainder = units - low;
+    const rounded = low + (remainder > 0.5 || (remainder === 0.5 && (low & 1)) ? 1 : 0);
+    return sign | (((exponent + 14) << 10) + rounded);
+  }
+
   /** Reads a single element of `elemType` at byte address `addr`. */
   _readElement(addr, elemType) {
     const t = stripSuffix(elemType);
@@ -605,6 +635,14 @@ class DreamInstance {
         return this.i32(addr);
       case "byte":
         return this.bytes[addr]; // 1-byte element
+      case "sbyte":
+        return this.view.getInt8(addr);
+      case "short":
+        return this.view.getInt16(addr, true);
+      case "ushort":
+        return this.view.getUint16(addr, true);
+      case "float16":
+        return this._decodeArrayFloat16(this.view.getUint16(addr, true));
       case "bool":
         return this.bytes[addr] !== 0;
       case "uint":
@@ -640,6 +678,18 @@ class DreamInstance {
       case "byte":
         this.bytes[addr] = value & 0xff; // 1-byte element
         break;
+      case "sbyte":
+        this.view.setInt8(addr, value);
+        break;
+      case "short":
+        this.view.setInt16(addr, value, true);
+        break;
+      case "ushort":
+        this.view.setUint16(addr, value, true);
+        break;
+      case "float16":
+        this.view.setUint16(addr, this._encodeArrayFloat16(value), true);
+        break;
       case "bool":
         this.bytes[addr] = value ? 1 : 0;
         break;
@@ -659,14 +709,18 @@ class DreamInstance {
       case "double":
         this.view.setFloat64(addr, value, true);
         break;
-      case "string":
-        this.view.setInt32(addr, this.writeString(value == null ? "" : String(value)), true);
+      case "string": {
+        const pointer = this.writeString(value == null ? "" : String(value));
+        this.view.setInt32(addr, pointer, true);
         break;
+      }
       case "js":
         this.view.setInt32(addr, this.registerHandle(value), true);
         break;
-      default:
-        this.view.setInt32(addr, value | 0, true); // struct/object pointer
+      default: {
+        const pointer = t.endsWith("[]") ? this.writeArray(value ?? [], t.slice(0, -2)) : value | 0;
+        this.view.setInt32(addr, pointer, true);
+      }
     }
   }
 
@@ -1894,10 +1948,14 @@ function makeNetHost() {
   return {
     ...makeHttpHost(),
     ...makeSocketHost(),
-    // The URL Standard's host parser applies UTS #46 and rejects invalid domains.
     netDomainToAscii: (domain) => {
+      if (/[\x00-\x20\x7f%#/:<>?@[\\\]^|]/.test(domain)) return "";
       try {
-        return new URL("https://" + domain + "/").hostname;
+        // The non-ASCII suffix forces UTS #46 processing even for ASCII input and
+        // keeps URL parsing from interpreting the last input label as an IPv4 number.
+        const suffix = ".xn--9ca"; // .é
+        const host = new URL("https://" + domain + ".é/").hostname;
+        return host.endsWith(suffix) ? host.slice(0, -suffix.length) : "";
       } catch (_) {
         return "";
       }

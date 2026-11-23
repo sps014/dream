@@ -30,6 +30,7 @@ public ref struct StringSplit {
         let width = 1;
         if this.sep_char >= 0 {
             at = r.index_of((char)this.sep_char).unwrap_or(-1);
+            width = r._text && this.sep_char > 65535 ? 2 : 1;
         } else {
             at = r.index_of(this.sep).unwrap_or(-1);
             width = this.sep.length;

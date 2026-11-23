@@ -62,6 +62,10 @@ impl<'a> Analyzer<'a> {
             return;
         };
         let ty = self.type_ctx.lower(result_ty);
+        let collected = match ctor {
+            Some(ctor) => self.coerce_call_args(collected, &(ctor, Vec::new()), 1),
+            None => collected,
+        };
         let take_params = self.ctor_take_params(ctor);
         self.hir.last = Some(HExpr::new(
             ty,
@@ -98,6 +102,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         };
+        let collected = self.coerce_call_args(collected, identity, 1);
         let ret_ty = self.type_ctx.lower(ret);
         let take_params = self
             .function_table
@@ -163,6 +168,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         };
+        let collected = self.coerce_signature_args(collected, sig, 1);
         let ret_ty = self.type_ctx.lower(ret);
         self.hir.last = Some(HExpr::new(
             ret_ty,

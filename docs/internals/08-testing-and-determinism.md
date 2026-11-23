@@ -245,8 +245,9 @@ flowchart LR
 ```
 
 The runtime layering gate is `python scripts/check_freestanding.py` (clang and lld required).
-It compiles every portable core unit without SDK headers and links every function without
-CRT, libc, sys objects or section collection. `tests/runtime_platform.rs` separately runs
+It compiles the freestanding core units without SDK headers and links every function without
+CRT, libc, sys objects or section collection. The optional audio codec and FFT modules
+declare a libc dependency in the runtime catalog. `tests/runtime_platform.rs` separately runs
 core with an injected allocator, locks, text writer and abort callback, checking allocation
 exhaustion and allocation-free panic output. Native libraries are selected with a scalar
 `[lib].output-type` in `dream.toml`; the CLI/library tests cover manifest discovery, both
@@ -255,4 +256,4 @@ C-consumer link modes, panic locations, moved-package determinism and invalid ar
 `tests/runtime_wasi_platform.rs` fixes the imported memory's maximum at its initial size,
 then forces a guest allocation beyond that limit. It checks the exact panic output and abort
 trap while memory stays unchanged. The freestanding gate also enforces the 600-line limit
-for first-party runtime C units; vendored PCRE2/SLJIT files are excluded.
+for the core C units it builds.

@@ -10,8 +10,8 @@ use super::{glue, register};
 use crate::abi::{TAG_CLOSURE_ENV, TAG_FUNCBOX, TAG_STRING};
 use crate::backend::shared::abi_types::{c_ident, elem_size};
 use crate::backend::shared::glue::{
-    FieldDrop, del_symbol, destroy_sym, drop_nonempty, field_drop, glue_array_elems,
-    inline_release_sym, release_sym, self_tail_field, struct_field_drops,
+    FieldDrop, del_symbol, destroy_sym, drop_nonempty, field_drop, inline_release_sym, release_sym,
+    self_tail_field, struct_field_drops,
 };
 use dream_hir::TypeLayout;
 use dream_types::TypeId;
@@ -28,7 +28,13 @@ struct Names {
 fn names(l: &Lcx<'_>) -> Names {
     let canon = l.cx.canon_maps();
     Names {
-        elems: glue_array_elems(&l.cx),
+        elems: l
+            .cx
+            .array_elems()
+            .iter()
+            .copied()
+            .filter(|&elem| l.interner.is_rc_tracked(elem) || l.interner.is_value_type(elem))
+            .collect(),
         structs: l
             .cx
             .mir

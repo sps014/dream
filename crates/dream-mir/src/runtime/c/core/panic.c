@@ -1,7 +1,7 @@
 #include "dream_core.h"
 #include "dream_platform_internal.h"
 
-#ifndef __wasm__
+#if __STDC_HOSTED__ && !defined(__wasm__)
 #include <stdio.h>
 #endif
 
@@ -47,8 +47,8 @@ void dream_panic_at(dream_ptr msg, const char *location) {
         }
     }
     /* abort does not flush, and a panic must not hide the output that led to it.
-     * Wasm has no hosted stdio buffer; its writes already go straight to the host. */
-#ifndef __wasm__
+     * Freestanding writes already go through the platform. */
+#if __STDC_HOSTED__ && !defined(__wasm__)
     fflush(stdout);
     fflush(stderr);
 #endif

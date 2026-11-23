@@ -222,6 +222,35 @@ fn async_timeout_is_attributed_on_both_hosts() {
 }
 
 #[test]
+fn filtered_runs_compile_only_selected_parse_errors() {
+    let dir = project(
+        "\"native\"",
+        &[
+            ("selected.dream", "@test\nfun smoke(): void {}\n"),
+            (
+                "broken.dream",
+                "@test\nfun malformed(): void { let value = ; }\n",
+            ),
+        ],
+    );
+    let toolchain = Arc::new(ToolchainConfig::default());
+    let run_filtered = |filter: &str| {
+        run_tests(
+            &toolchain,
+            dir.path(),
+            &TestOptions {
+                filter: Some(filter.to_owned()),
+                ..Default::default()
+            },
+        )
+    };
+    let result = run_filtered("selected::smoke").expect("the selected file should compile");
+    assert_eq!(result.reports[0].passed, labels(&["selected::smoke"]));
+    let error = run_filtered("malformed").expect_err("a selected broken test must fail");
+    assert_eq!(error, "test project 'suite' did not compile");
+}
+
+#[test]
 fn concurrent_filtered_runs_keep_their_own_runner() {
     for host in [TestHost::Native, TestHost::Node] {
         let dir = project(

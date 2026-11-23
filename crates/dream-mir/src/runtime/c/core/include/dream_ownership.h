@@ -69,7 +69,7 @@ DREAM_ALWAYS_INLINE const dream_type_info *dream_object_info(dream_ptr p) {
 }
 
 DREAM_ALWAYS_INLINE void dream_set_type(dream_ptr ptr, const dream_type_info *info) {
-    if (!info) { return; }
+    if (!ptr || !info) { return; }
     int32_t *word = dream_tag_word(ptr);
     int32_t tag = __atomic_load_n(word, __ATOMIC_RELAXED);
     if ((tag & TAG_VALUE_MASK) == info->tag) { return; }

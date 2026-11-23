@@ -216,6 +216,105 @@ assert.equal(output, '2\n日本語😀\n1234567890123\n');
 }
 
 #[test]
+fn wasm_externs_preserve_array_layout_and_scalar_types_in_both_loaders() {
+    let dir = tempfile::tempdir().unwrap();
+    let entry = dir.path().join("main.dream");
+    let wasm = dir.path().join("main.wasm");
+    std::fs::write(
+        &entry,
+        r#"
+import system;
+import system.js;
+
+@js("host", "signed_bytes")
+extern fun signed_bytes(value: sbyte[]): sbyte[];
+
+@js("host", "shorts")
+extern fun shorts(value: short[]): short[];
+
+@js("host", "unsigned_shorts")
+extern fun unsigned_shorts(value: ushort[]): ushort[];
+
+@js("host", "halves")
+extern fun halves(value: float16[]): float16[];
+
+@js("host", "matrix")
+extern fun matrix(value: int[][]): int[][];
+
+@js("host", "scalars")
+extern fun scalars(flag: bool, word: uint, wide: ulong): bool;
+
+fun main(): void {
+    let bytes = signed_bytes([(sbyte)-128, (sbyte)127]);
+    let signed = shorts([(short)-300, (short)42]);
+    let unsigned = unsigned_shorts([(ushort)65535, (ushort)42]);
+    let half = halves([1.5h, -2.0h]);
+    let rows = matrix([[1, 2], [3, 4]]);
+    System.println((int)bytes[0] + (int)bytes[1]);
+    System.println((int)signed[0] + (int)signed[1]);
+    System.println((int)unsigned[0] + (int)unsigned[1]);
+    System.println((double)half[0] + (double)half[1]);
+    System.println(rows[0][1] + rows[1][0]);
+    System.println(scalars(true, 4294967295u, 18446744073709551615UL));
+}
+"#,
+    )
+    .unwrap();
+    compile(&entry, &wasm, None).unwrap();
+
+    let script = dir.path().join("verify.mjs");
+    std::fs::write(
+        &script,
+        r#"
+import assert from "node:assert/strict";
+import { pathToFileURL } from "node:url";
+
+const echo = expected => value => {
+    assert.deepEqual(Array.from(value), expected);
+    return expected;
+};
+for (const loader of process.argv.slice(2)) {
+    const { load } = await import(pathToFileURL(loader));
+    let output = "";
+    const guest = await load(new URL("./main.wasm", import.meta.url), {
+        stdout: text => output += text,
+        imports: {
+            signed_bytes: echo([-128, 127]),
+            shorts: echo([-300, 42]),
+            unsigned_shorts: echo([65535, 42]),
+            halves: echo([1.5, -2]),
+            matrix(value) {
+                assert.deepEqual(value, [[1, 2], [3, 4]]);
+                return [[11, 12], [13, 14]];
+            },
+            scalars(flag, word, wide) {
+                assert.equal(flag, true);
+                assert.equal(word, 4294967295);
+                assert.equal(wide, 18446744073709551615n);
+                return flag;
+            },
+        },
+    });
+    await guest.run();
+    assert.equal(output, "-1\n-258\n65577\n-0.5\n25\ntrue\n");
+}
+"#,
+    )
+    .unwrap();
+    let result = std::process::Command::new("node")
+        .arg(script)
+        .arg(wasm.with_extension("node.runtime.js"))
+        .arg(repo("runtime/dream.js"))
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
 fn c_package_callbacks_strings_and_owned_pointer_drop() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("main.wat");

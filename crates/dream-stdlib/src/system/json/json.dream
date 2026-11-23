@@ -83,6 +83,9 @@ public static class Json {
         }
         let parser = JsonParser(text, 0, JsonOptions());
         let value = parser.parse_value();
+        if parser.failed() {
+            return Result.Err(ParseError.invalid("invalid JSON input"));
+        }
         if parser.at_end() == false {
             return Result.Err(ParseError.invalid("trailing characters after JSON value"));
         }

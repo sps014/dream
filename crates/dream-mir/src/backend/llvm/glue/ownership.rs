@@ -5,7 +5,7 @@ use super::super::lcx::Lcx;
 use super::{glue, register};
 use crate::abi::RESERVED_NOMINAL_TAGS;
 use crate::backend::shared::abi_types::elem_size;
-use crate::backend::shared::glue::{del_symbol, glue_array_elems, struct_field_drops};
+use crate::backend::shared::glue::{del_symbol, struct_field_drops};
 use dream_types::TypeId;
 
 pub(in super::super) fn array_info(elem: TypeId) -> String {
@@ -33,7 +33,7 @@ pub(in super::super) fn register_all(l: &mut Lcx<'_>) {
             register(l, &symbol(ty, action), Ty::Void, vec![l.h()]);
         }
     }
-    for elem in glue_array_elems(&l.cx) {
+    for elem in l.cx.array_elems().clone() {
         for action in ["array_visit", "array_clear"] {
             register(l, &symbol(elem, action), Ty::Void, vec![l.h()]);
         }
@@ -138,22 +138,26 @@ pub(in super::super) fn emit_all(l: &mut Lcx<'_>) {
             l.cx.type_tag(*ty),
         );
     }
-    for elem in glue_array_elems(&l.cx) {
+    for elem in l.cx.array_elems().clone() {
         let es = elem_size(&l.cx, elem) as i64;
         let mut fx = glue(l, &symbol(elem, "array_visit"));
         let p = fx.arg(0);
-        let pp = fx.ptr(&p);
-        let n = fx.load_ty(Ty::I32, &pp, 4, false);
-        fx.for_each_array_elem(&p, &n, es, |fx, _, at| {
-            if fx.is_value(elem) {
-                let at = fx.as_ref(&V::s(at));
-                fx.visit_refs(elem, &at);
-            } else if fx.is_rc(elem) && !matches!(fx.interner.kind(elem), dream_types::TyKind::Js) {
-                let child = fx.load_ty(fx.h(), &at, 4, true);
-                let child = fx.as_ref(&child);
-                fx.call("dream_visit_edge", &[child]);
-            }
-        });
+        if fx.is_value(elem)
+            || (fx.is_rc(elem) && !matches!(fx.interner.kind(elem), dream_types::TyKind::Js))
+        {
+            let pp = fx.ptr(&p);
+            let n = fx.load_ty(Ty::I32, &pp, 4, false);
+            fx.for_each_array_elem(&p, &n, es, |fx, _, at| {
+                if fx.is_value(elem) {
+                    let at = fx.as_ref(&V::s(at));
+                    fx.visit_refs(elem, &at);
+                } else {
+                    let child = fx.load_ty(fx.h(), &at, 4, true);
+                    let child = fx.as_ref(&child);
+                    fx.call("dream_visit_edge", &[child]);
+                }
+            });
+        }
         fx.w.ret(None);
         fx.finish();
         let mut fx = glue(l, &symbol(elem, "array_clear"));

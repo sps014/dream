@@ -190,6 +190,58 @@ impl<'l, 'a> Fx<'l, 'a> {
         }
     }
 
+    pub(super) fn runtime_type_matches(&mut self, value: &V, target: TypeId) -> Value {
+        match self.interner.kind(target) {
+            TyKind::Object => self.truthy(value),
+            TyKind::Interface(..) => {
+                let interfaces = &self.l.cx.mir.interfaces;
+                let Some(id) = interfaces
+                    .interfaces
+                    .iter()
+                    .position(|info| info.ty == target)
+                else {
+                    return Value::i1(false);
+                };
+                let mut implementors: Vec<_> = interfaces
+                    .impls
+                    .iter()
+                    .filter(|imp| imp.entries.iter().any(|(iface, _)| *iface == id))
+                    .map(|imp| imp.class_ty)
+                    .filter(|ty| {
+                        !matches!(self.interner.kind(*ty), TyKind::Prim(_) | TyKind::Enum(_))
+                    })
+                    .collect();
+                implementors.sort_unstable();
+                let mut matches = Value::i1(false);
+                for ty in implementors {
+                    let hit = self.runtime_type_matches(value, ty);
+                    matches = self.w.bin("or", &matches, &hit);
+                }
+                matches
+            }
+            TyKind::Array(elem) => {
+                if !self.l.cx.array_elems().contains(elem) {
+                    return Value::i1(false);
+                }
+                let expected = Value::global(super::glue::ownership::array_info(*elem));
+                let actual = self.call_v("dream_object_info", std::slice::from_ref(value));
+                self.w.icmp("eq", &actual.v, &expected)
+            }
+            kind => {
+                if matches!(
+                    kind,
+                    TyKind::Struct(..) | TyKind::Union(..) | TyKind::Enum(_)
+                ) && !self.l.cx.tags.contains_key(&target)
+                {
+                    return Value::i1(false);
+                }
+                let expected = runtime_tag(&self.l.cx, target);
+                let actual = self.call_v("dream_object_kind", std::slice::from_ref(value));
+                self.w.icmp("eq", &actual.v, &Value::i32(expected as i64))
+            }
+        }
+    }
+
     fn checked_unbox(&mut self, src: &V, ty: TypeId, unbox: &str) -> V {
         let boxed = self.check_box_tag(src, ty);
         self.call_v(unbox, &[boxed])

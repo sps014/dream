@@ -1,7 +1,7 @@
 //! The synthesized runner: one `main` that imports every project file and runs each selected
 //! `@test` through `Test.run`, in file then declaration order.
 
-use super::discovery::{DiscoveredTest, discover_tests_in_source};
+use super::discovery::{DiscoveredTest, discover_recovering};
 use super::project::TestProject;
 use dream_syntax::conditional::CfgSymbols;
 use std::fmt::Write as _;
@@ -44,13 +44,9 @@ impl RunnerPlan {
             let source = std::fs::read_to_string(file)
                 .map_err(|e| format!("read '{}': {e}", file.display()))?;
             let import = project.import_path(file)?;
-            let Ok(found) = discover_tests_in_source(&file.to_string_lossy(), &source, cfg) else {
-                // The runner compile renders the parse errors with source excerpts.
-                unparsed = true;
-                imports.push(import);
-                continue;
-            };
-            if found.declares_main {
+            let (found, diagnostics) = discover_recovering(&file.to_string_lossy(), &source, cfg);
+            let parsed = !diagnostics.has_errors();
+            if parsed && found.declares_main {
                 return Err(format!(
                     "'{}': test files must not declare 'main'; use @test functions instead",
                     file.display()
@@ -78,8 +74,18 @@ impl RunnerPlan {
                     });
                 }
             }
-            if (filter.is_none() && names.is_empty()) || tests.len() > before || !has_tests {
+            let selected_file = filter.is_some_and(|f| {
+                f == import
+                    || f.strip_prefix(&import)
+                        .is_some_and(|tail| tail.starts_with("::"))
+            });
+            if (filter.is_none() && names.is_empty())
+                || tests.len() > before
+                || (parsed && !has_tests)
+                || (!parsed && selected_file)
+            {
                 imports.push(import);
+                unparsed |= !parsed;
             }
         }
         Ok(Self {

@@ -106,8 +106,9 @@ public class Regex {
                             pos = e;
                         } else {
                             if s < n {
-                                sb.append_char(input.char_at(s));
-                                pos = s + 1;
+                                let width = CodePoints.width_at(input, s);
+                                sb.append_utf8_slice(input, s * 2, width * 2);
+                                pos = s + width;
                             } else {
                                 pos = n + 1;
                             }

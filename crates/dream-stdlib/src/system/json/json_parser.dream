@@ -62,27 +62,35 @@ internal class JsonParser {
         return this.invalid;
     }
 
-    // Generated loops must consume input or close their container; nested readers can
-    // return without consuming a token when its shape does not match the field type.
-    /// Checks whether a JSON container has closed. Marks parsing as failed if a reader neither
-    /// consumed input nor reached the closing delimiter.
+    // Generated readers call this before the first item and after each subsequent item.
+    /// Consumes a closing delimiter or the comma before another item. A negative `previous`
+    /// marks the start of the container.
     public fun container_end(close: int, previous: int): bool {
-        this.skip_ws();
-        if this.pos >= this.len() || this.pos <= previous {
+        if this.invalid || this.at_end() || this.pos <= previous {
             this.invalid = true;
             return true;
         }
-        if this.b() == close {
-            this.pos = this.pos + 1;
+        if this.try_consume(close) {
             return true;
+        }
+        if previous >= 0 {
+            if !this.try_consume(44) || this.at_end() || this.b() == close {
+                this.invalid = true;
+                return true;
+            }
         }
         return false;
     }
 
-    /// Consumes a recognized keyword of `length` characters and returns its JSON value.
-    public fun keyword(length: int, value: JsonValue): JsonValue {
-        this.pos = this.pos + length;
-        return value;
+    fun consume_keyword(borrow word: string): bool {
+        if word.length > this.len()
+            - this.pos || !this.text.span(this.pos, this.pos + word.length)
+            .equals(word) {
+            this.invalid = true;
+            return false;
+        }
+        this.pos = this.pos + word.length;
+        return true;
     }
 
     fun hex_nibble(c: int): int {
@@ -116,261 +124,118 @@ internal class JsonParser {
         return cp;
     }
 
-    // 10^exp for small non-negative exponents (JSON numbers).
-    fun pow10(exp: int): double {
-        let r = 1.0d;
-        let i = 0;
-        while i < exp {
-            r = r * 10.0d;
-            i = i + 1;
-        }
-        return r;
-    }
-
     /// Reads a JSON string and advances the cursor; malformed input marks parsing as failed.
-    /// Returns an empty string without consuming input when the next token is not a string.
     public fun parse_string(): string {
         this.skip_ws();
         if (this.pos >= this.len()) || (this.b() != 34) {
+            this.invalid = true;
             return "";
         }
-        this.pos = this.pos + 1; // opening quote
+        this.pos = this.pos + 1;
         // Parsed strings must own their payload; retaining a slice would expose input mutations.
         let first = this.pos;
         let n = this.len();
-        this.pos = JsonStorage.boundary(this.text, this.pos);
-        if (this.pos < n) && (this.b() == 34) {
+        this.pos = JsonStorage.boundary(this.text, first);
+        if this.pos == n || this.b() < 32 {
+            this.invalid = true;
+            return "";
+        }
+        if this.b() == 34 {
             let end = this.pos;
             this.pos = this.pos + 1;
             return JsonStorage.clone_range(this.text, first, end);
         }
-        let sb = StringBuilder((n - first) * 2);
+        let sb = StringBuilder();
         sb.append_utf8_slice(this.text, first * 2, (this.pos - first) * 2);
-        let going = true;
-        while going == true {
-            if this.pos >= this.len() {
-                going = false;
-            } else {
-                let c = this.b();
-                if c == 34 {
-                    this.pos = this.pos + 1;
-                    going = false;
-                } else if (c == 92) {
-                    this.pos = this.pos + 1;
-                    if this.pos >= this.len() {
-                        going = false;
-                    } else {
-                        let e = this.b();
-                        let cp = 0;
-                        if e == 110 {
-                            cp = 10;
-                            this.pos = this.pos + 1;
-                        } else if (e == 116) {
-                            cp = 9;
-                            this.pos = this.pos + 1;
-                        } else if (e == 114) {
-                            cp = 13;
-                            this.pos = this.pos + 1;
-                        } else if (e == 34) {
-                            cp = 34;
-                            this.pos = this.pos + 1;
-                        } else if (e == 92) {
-                            cp = 92;
-                            this.pos = this.pos + 1;
-                        } else if (e == 47) {
-                            cp = 47;
-                            this.pos = this.pos + 1;
-                        } else if (e == 98) {
-                            cp = 8;
-                            this.pos = this.pos + 1;
-                        } else if (e == 102) {
-                            cp = 12;
-                            this.pos = this.pos + 1;
-                        } else if (e == 117) {
-                            this.pos = this.pos + 1;
-                            cp = this.read_hex4();
-                            if cp < 0 {
-                                cp = 65533;
-                            } else if ((cp >= 55296) && (cp <= 56319)) {
-                                if ((this.pos + 5) < this.len())
-                                    && (this.b() == 92) && (this.b_at(this.pos + 1) == 117) {
-                                    let save = this.pos;
-                                    this.pos = this.pos + 2;
-                                    let lo = this.read_hex4();
-                                    if (lo >= 56320) && (lo <= 57343) {
-                                        cp = 65536 + ((cp - 55296) * 1024) + (lo - 56320);
-                                    } else {
-                                        this.pos = save;
-                                    }
-                                }
-                            }
-                        } else {
-                            cp = e;
-                            this.pos = this.pos + 1;
-                        }
-                        sb.append_char((char)cp);
-                    }
-                } else {
-                    // Bulk-copy unescaped units until `"` or `\`.
-                    let run_start = this.pos;
-                    this.pos = JsonStorage.boundary(this.text, this.pos);
-                    sb.append_utf8_slice(this.text, run_start * 2, (this.pos - run_start) * 2);
-                }
-            }
-        }
-        return sb.build();
-    }
-
-    /// Reads a JSON number and advances the cursor; malformed input marks parsing as failed.
-    public fun parse_number(): JsonValue {
-        let sign = 1.0d;
-        if (this.pos < this.len()) && (this.b() == 45) {
-            sign = 0.0d - 1.0d;
-            this.pos = this.pos + 1;
-        } else if ((this.pos < this.len()) && (this.b() == 43)) {
-            this.pos = this.pos + 1;
-        }
-
-        let value = 0.0d;
-        while this.pos < this.len() {
+        while this.pos < n {
             let c = this.b();
-            if (c >= 48) && (c <= 57) {
-                value = value * 10.0d + (double)(c - 48);
-                this.pos = this.pos + 1;
-            } else {
+            this.pos = this.pos + 1;
+            if c == 34 {
+                return sb.build();
+            }
+            if c < 32 || this.pos == n {
                 break;
             }
-        }
-
-        if (this.pos < this.len()) && (this.b() == 46) {
+            let escape = this.b();
             this.pos = this.pos + 1;
-            let frac = 0.0d;
-            let frac_digits = 0;
-            while this.pos < this.len() {
-                let c = this.b();
-                if (c >= 48) && (c <= 57) {
-                    frac = frac * 10.0d + (double)(c - 48);
-                    frac_digits = frac_digits + 1;
-                    this.pos = this.pos + 1;
-                } else {
+            let cp = escape;
+            if escape == 110 {
+                cp = 10;
+            } else if escape == 116 {
+                cp = 9;
+            } else if escape == 114 {
+                cp = 13;
+            } else if escape == 98 {
+                cp = 8;
+            } else if escape == 102 {
+                cp = 12;
+            } else if escape == 117 {
+                cp = this.read_hex4();
+                if cp < 0 {
                     break;
                 }
+            } else if escape != 34 && escape != 92 && escape != 47 {
+                break;
             }
-            if frac_digits > 0 {
-                value = value + frac / this.pow10(frac_digits);
-            }
+            // Appending consecutive escaped UTF-16 units also preserves surrogate pairs.
+            sb.append_char((char)cp);
+            let run_start = this.pos;
+            this.pos = JsonStorage.boundary(this.text, run_start);
+            sb.append_utf8_slice(this.text, run_start * 2, (this.pos - run_start) * 2);
         }
-
-        if this.pos < this.len() {
-            let ec = this.b();
-            if (ec == 101) || (ec == 69) {
-                this.pos = this.pos + 1;
-                let esign = 1;
-                if this.pos < this.len() {
-                    let s = this.b();
-                    if s == 45 {
-                        esign = 0 - 1;
-                        this.pos = this.pos + 1;
-                    } else if (s == 43) {
-                        this.pos = this.pos + 1;
-                    }
-                }
-                let exp = 0;
-                while this.pos < this.len() {
-                    let c = this.b();
-                    if (c >= 48) && (c <= 57) {
-                        if exp < 100000 {
-                            exp = exp * 10 + (c - 48);
-                        }
-                        this.pos = this.pos + 1;
-                    } else {
-                        break;
-                    }
-                }
-                if esign > 0 {
-                    value = value * this.pow10(exp);
-                } else {
-                    value = value / this.pow10(exp);
-                }
-            }
-        }
-
-        return JsonValue.from_double(sign * value);
+        this.invalid = true;
+        return "";
     }
 
-    /// Reads a JSON array and advances the cursor; malformed input marks parsing as failed.
+    /// Reads a JSON number and advances the cursor.
+    public fun parse_number(): JsonValue {
+        return JsonValue.from_double(this.parse_double());
+    }
+
+    /// Reads a JSON array and advances the cursor.
     public fun parse_array(): JsonValue {
         let result = JsonValue.array();
-        this.pos = this.pos + 1; // '['
-        this.skip_ws();
-        if this.pos < this.len() {
-            if this.b() == 93 {
-                this.pos = this.pos + 1;
-                return result;
-            }
-        }
-        let going = true;
-        while going == true {
-            let element = this.parse_value();
-            result.push(element);
-            this.skip_ws();
-            if this.pos >= this.len() {
-                going = false;
-            } else {
-                if this.b() == 44 {
-                    this.pos = this.pos + 1;
-                } else {
-                    this.pos = this.pos + 1; // ']'
-                    going = false;
-                }
-            }
+        this.pos = this.pos + 1;
+        let previous = -1;
+        while !this.container_end(93, previous) {
+            previous = this.pos;
+            result.push(this.parse_value());
         }
         return result;
     }
 
-    /// Reads a JSON object and advances the cursor; malformed input marks parsing as failed.
+    /// Reads a JSON object and advances the cursor.
     public fun parse_object(): JsonValue {
         let result = JsonValue.dict();
-        this.pos = this.pos + 1; // '{'
-        this.skip_ws();
-        if this.pos < this.len() {
-            if this.b() == 125 {
-                this.pos = this.pos + 1;
-                return result;
+        this.pos = this.pos + 1;
+        let previous = -1;
+        while !this.container_end(125, previous) {
+            previous = this.pos;
+            let key = this.read_key();
+            if this.invalid {
+                break;
             }
-        }
-        let going = true;
-        while going == true {
-            this.skip_ws();
-            let key = this.parse_string();
-            this.skip_ws();
-            if this.pos < this.len() {
-                if this.b() == 58 {
-                    this.pos = this.pos + 1;
-                }
-            }
-            let value = this.parse_value();
-            result[key] = value;
-            this.skip_ws();
-            if this.pos >= this.len() {
-                going = false;
-            } else {
-                if this.b() == 44 {
-                    this.pos = this.pos + 1;
-                } else {
-                    this.pos = this.pos + 1; // '}'
-                    going = false;
-                }
-            }
+            result[key] = this.parse_value();
         }
         return result;
     }
 
-    /// Reads the next JSON value and advances the cursor; malformed input marks parsing as
-    /// failed.
+    fun read_key(): string {
+        if this.at_end() || this.b() != 34 {
+            this.invalid = true;
+            return "";
+        }
+        let key = this.parse_string();
+        if !this.try_consume(58) {
+            this.invalid = true;
+        }
+        return key;
+    }
+
+    /// Reads the next JSON value and advances the cursor.
     public fun parse_value(): JsonValue {
-        this.skip_ws();
-        if this.pos >= this.len() {
+        if this.invalid || this.at_end() {
+            this.invalid = true;
             return JsonValue.null();
         }
         let c = this.b();
@@ -383,16 +248,18 @@ internal class JsonParser {
         if c == 34 {
             return JsonValue.from_string(this.parse_string());
         }
-        if c == 116 {
-            return this.keyword(4, JsonValue.from_bool(true));
-        }
-        if c == 102 {
-            return this.keyword(5, JsonValue.from_bool(false));
+        if c == 116 || c == 102 {
+            return JsonValue.from_bool(this.parse_bool());
         }
         if c == 110 {
-            return this.keyword(4, JsonValue.null());
+            this.try_null();
+            return JsonValue.null();
         }
-        return this.parse_number();
+        if this.at_number() {
+            return this.parse_number();
+        }
+        this.invalid = true;
+        return JsonValue.null();
     }
 
     /// Consumes the next character if its code equals `code`, returning whether it matched.
@@ -405,168 +272,119 @@ internal class JsonParser {
         return false;
     }
 
+    /// Requires the next character to have code `code`. A missing delimiter fails parsing.
+    public fun expect(code: int): bool {
+        if this.try_consume(code) {
+            return true;
+        }
+        this.invalid = true;
+        return false;
+    }
+
     /// Consumes a JSON null at the cursor, returning whether it matched.
     public fun try_null(): bool {
         this.skip_ws();
-        if (this.pos < this.len()) && (this.b() == 110) {
-            this.pos = this.pos + 4;
-            return true;
-        }
-        return false;
+        return this.pos < this.len() && this.b() == 110 && this.consume_keyword("null");
     }
 
-    /// Reads a JSON boolean and advances the cursor; invalid input marks parsing as failed.
+    /// Reads a JSON boolean, treating null as false.
     public fun parse_bool(): bool {
         this.skip_ws();
-        if this.pos >= this.len() {
-            return false;
+        if this.pos < this.len() {
+            if this.b() == 116 {
+                return this.consume_keyword("true");
+            }
+            if this.b() == 102 {
+                this.consume_keyword("false");
+                return false;
+            }
         }
-        let c = this.b();
-        if c == 116 {
-            this.pos = this.pos + 4;
-            return true;
-        }
-        if c == 102 {
-            this.pos = this.pos + 5;
-            return false;
-        }
-        if c == 110 {
-            this.pos = this.pos + 4;
-            return false;
+        if !this.try_null() {
+            this.invalid = true;
         }
         return false;
     }
 
-    fun consume_number_tail(): void {
-        if (this.pos < this.len()) && (this.b() == 46) {
+    fun at_number(): bool {
+        return this.at_digit() || (this.pos < this.len() && this.b() == 45);
+    }
+
+    fun at_digit(): bool {
+        return this.pos < this.len() && this.b() >= 48 && this.b() <= 57;
+    }
+
+    fun scan_digits(): void {
+        let first = this.pos;
+        while this.at_digit() {
             this.pos = this.pos + 1;
-            while this.pos < this.len() {
-                let c = this.b();
-                if (c >= 48) && (c <= 57) {
-                    this.pos = this.pos + 1;
-                } else {
-                    break;
-                }
-            }
         }
-        if this.pos < this.len() {
-            let ec = this.b();
-            if (ec == 101) || (ec == 69) {
-                this.pos = this.pos + 1;
-                if this.pos < this.len() {
-                    let s = this.b();
-                    if (s == 45) || (s == 43) {
-                        this.pos = this.pos + 1;
-                    }
-                }
-                while this.pos < this.len() {
-                    let c = this.b();
-                    if (c >= 48) && (c <= 57) {
-                        this.pos = this.pos + 1;
-                    } else {
-                        break;
-                    }
-                }
-            }
+        if this.pos == first {
+            this.invalid = true;
         }
     }
 
-    /// Parses a decimal integer, returning `ParseError` for invalid or out-of-range input.
+    // Returns the end of the integer part for the typed int reader.
+    fun scan_number(): int {
+        if this.pos < this.len() && this.b() == 45 {
+            this.pos = this.pos + 1;
+        }
+        if this.pos < this.len() && this.b() == 48 {
+            this.pos = this.pos + 1;
+            if this.at_digit() {
+                this.invalid = true;
+            }
+        } else {
+            this.scan_digits();
+        }
+        let integer_end = this.pos;
+        if this.pos < this.len() && this.b() == 46 {
+            this.pos = this.pos + 1;
+            this.scan_digits();
+        }
+        if this.pos < this.len() && (this.b() == 101 || this.b() == 69) {
+            this.pos = this.pos + 1;
+            if this.pos < this.len() && (this.b() == 45 || this.b() == 43) {
+                this.pos = this.pos + 1;
+            }
+            this.scan_digits();
+        }
+        return integer_end;
+    }
+
+    /// Reads the integer part of a JSON number. Out-of-range integers mark parsing as failed.
     public fun parse_int(): int {
         this.skip_ws();
-        let sign = 1;
-        if (this.pos < this.len()) && (this.b() == 45) {
-            sign = 0 - 1;
-            this.pos = this.pos + 1;
-        } else if ((this.pos < this.len()) && (this.b() == 43)) {
-            this.pos = this.pos + 1;
-        }
-        let value = 0;
-        while this.pos < this.len() {
-            let c = this.b();
-            if (c >= 48) && (c <= 57) {
-                value = value * 10 + (c - 48);
-                this.pos = this.pos + 1;
-            } else {
-                break;
+        let first = this.pos;
+        let end = this.scan_number();
+        if !this.invalid {
+            switch (int.parse(this.text.substring(first, end))) {
+                Ok(value) => {
+                    return value;
+                }
+                Err(_) => {
+                    this.invalid = true;
+                }
             }
         }
-        this.consume_number_tail();
-        return sign * value;
+        return 0;
     }
 
-    /// Parses a floating-point number, returning `ParseError` for invalid input.
+    /// Reads a JSON number as a double.
     public fun parse_double(): double {
         this.skip_ws();
-        let sign = 1.0d;
-        if (this.pos < this.len()) && (this.b() == 45) {
-            sign = 0.0d - 1.0d;
-            this.pos = this.pos + 1;
-        } else if ((this.pos < this.len()) && (this.b() == 43)) {
-            this.pos = this.pos + 1;
-        }
-        let value = 0.0d;
-        while this.pos < this.len() {
-            let c = this.b();
-            if (c >= 48) && (c <= 57) {
-                value = value * 10.0d + (double)(c - 48);
-                this.pos = this.pos + 1;
-            } else {
-                break;
-            }
-        }
-        if (this.pos < this.len()) && (this.b() == 46) {
-            this.pos = this.pos + 1;
-            let frac = 0.0d;
-            let frac_digits = 0;
-            while this.pos < this.len() {
-                let c = this.b();
-                if (c >= 48) && (c <= 57) {
-                    frac = frac * 10.0d + (double)(c - 48);
-                    frac_digits = frac_digits + 1;
-                    this.pos = this.pos + 1;
-                } else {
-                    break;
+        let first = this.pos;
+        this.scan_number();
+        if !this.invalid {
+            switch (double.parse(this.text.substring(first, this.pos))) {
+                Ok(value) => {
+                    return value;
                 }
-            }
-            if frac_digits > 0 {
-                value = value + frac / this.pow10(frac_digits);
-            }
-        }
-        if this.pos < this.len() {
-            let ec = this.b();
-            if (ec == 101) || (ec == 69) {
-                this.pos = this.pos + 1;
-                let esign = 1;
-                if this.pos < this.len() {
-                    let s = this.b();
-                    if s == 45 {
-                        esign = 0 - 1;
-                        this.pos = this.pos + 1;
-                    } else if (s == 43) {
-                        this.pos = this.pos + 1;
-                    }
-                }
-                let exp = 0;
-                while this.pos < this.len() {
-                    let c = this.b();
-                    if (c >= 48) && (c <= 57) {
-                        if exp < 100000 {
-                            exp = exp * 10 + (c - 48);
-                        }
-                        this.pos = this.pos + 1;
-                    } else {
-                        break;
-                    }
-                }
-                if esign > 0 {
-                    value = value * this.pow10(exp);
-                } else {
-                    value = value / this.pow10(exp);
+                Err(_) => {
+                    this.invalid = true;
                 }
             }
         }
-        return sign * value;
+        return 0.0d;
     }
 
     // True when the next object key names the declared field `declared` under `options.naming`.
@@ -591,7 +409,7 @@ internal class JsonParser {
         if (kn >= n - first) || (this.b_at(first + kn) != 34) {
             return false;
         }
-        if key.span().contains('\\') || !this.key_equals(key, first) {
+        if JsonStorage.boundary(this.text, first) != first + kn || !this.key_equals(key, first) {
             return false;
         }
         let end = first + kn + 1;
@@ -634,82 +452,12 @@ internal class JsonParser {
 
     /// Advances past the next JSON value without retaining it.
     public fun skip_value(): void {
-        this.skip_ws();
-        if this.pos >= this.len() {
-            return;
-        }
-        let c = this.b();
-        if c == 123 {
-            this.pos = this.pos + 1;
-            this.skip_ws();
-            if (this.pos < this.len()) && (this.b() == 125) {
-                this.pos = this.pos + 1;
-                return;
-            }
-            let going = true;
-            while going {
-                this.skip_ws();
-                if this.pos >= this.len() {
-                    going = false;
-                } else if (this.b() == 125) {
-                    this.pos = this.pos + 1;
-                    going = false;
-                } else {
-                    this.parse_string();
-                    this.skip_ws();
-                    if (this.pos < this.len()) && (this.b() == 58) {
-                        this.pos = this.pos + 1;
-                    }
-                    this.skip_value();
-                    this.skip_ws();
-                    if (this.pos < this.len()) && (this.b() == 44) {
-                        this.pos = this.pos + 1;
-                    }
-                }
-            }
-            return;
-        }
-        if c == 91 {
-            this.pos = this.pos + 1;
-            this.skip_ws();
-            if (this.pos < this.len()) && (this.b() == 93) {
-                this.pos = this.pos + 1;
-                return;
-            }
-            let going = true;
-            while going {
-                this.skip_ws();
-                if this.pos >= this.len() {
-                    going = false;
-                } else if (this.b() == 93) {
-                    this.pos = this.pos + 1;
-                    going = false;
-                } else {
-                    this.skip_value();
-                    this.skip_ws();
-                    if (this.pos < this.len()) && (this.b() == 44) {
-                        this.pos = this.pos + 1;
-                    }
-                }
-            }
-            return;
-        }
-        if c == 34 {
-            this.parse_string();
-            return;
-        }
-        if c == 116 {
-            this.pos = this.pos + 4;
-            return;
-        }
-        if c == 102 {
-            this.pos = this.pos + 5;
-            return;
-        }
-        if c == 110 {
-            this.pos = this.pos + 4;
-            return;
-        }
-        this.parse_number();
+        this.parse_value();
+    }
+
+    /// Consumes one object property and discards its value.
+    public fun skip_property(): void {
+        this.read_key();
+        this.skip_value();
     }
 }

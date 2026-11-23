@@ -132,6 +132,8 @@ impl Requirements {
         }
         if !self.arrays {
             omitted.extend([
+                "_decodeArrayFloat16",
+                "_encodeArrayFloat16",
                 "_readElement",
                 "_writeElement",
                 "readArray",

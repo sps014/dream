@@ -289,7 +289,7 @@ public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
     ///
     /// Returns `Err(ParseError)` for malformed text and for dates that do not exist in the
     /// Gregorian calendar, such as `2023-02-29` or `2024-04-31`; they are never rolled over
-    /// into the next month.
+    /// into the next month. Fractions are truncated to milliseconds.
     public static fun parse(text: string): Result<DateTime, ParseError> {
         let n = text.length;
         if n < 19 {
@@ -335,26 +335,18 @@ public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
         let millisecond = 0;
         if (pos < n) && (text.char_at(pos) == '.') {
             let start = pos + 1;
-            let end = start;
-            while (end < n) && (text.char_at(end).is_digit() == true) {
-                end = end + 1;
+            pos = start;
+            let scale = 100;
+            while pos < n && text.char_at(pos).is_digit() {
+                if scale > 0 {
+                    millisecond = millisecond + ((int)text.char_at(pos) - 48) * scale;
+                    scale = scale / 10;
+                }
+                pos = pos + 1;
             }
-            let frac_len = end - start;
-            let frac_r = DateTime._parse_digits(text, start, frac_len);
-            if frac_r.is_none() {
+            if pos == start {
                 return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
             }
-            let frac = frac_r.unwrap_or(0);
-            while frac_len > 3 {
-                frac = frac / 10;
-                frac_len = frac_len - 1;
-            }
-            while frac_len < 3 {
-                frac = frac * 10;
-                frac_len = frac_len + 1;
-            }
-            millisecond = frac;
-            pos = end;
         }
 
         let offset_minutes = 0;
@@ -368,10 +360,12 @@ public struct DateTime: Equatable<DateTime>, Comparable<DateTime> {
                 }
                 let oh_r = DateTime._parse_digits(text, pos + 1, 2);
                 let om_r = DateTime._parse_digits(text, pos + 4, 2);
-                if oh_r.is_none() || om_r.is_none() {
+                let offset_hour = oh_r.unwrap_or(24);
+                let offset_minute = om_r.unwrap_or(60);
+                if offset_hour > 23 || offset_minute > 59 {
                     return Result.Err(ParseError.invalid("invalid ISO-8601 datetime: " + text));
                 }
-                let total = oh_r.unwrap_or(0) * 60 + om_r.unwrap_or(0);
+                let total = offset_hour * 60 + offset_minute;
                 if c == '-' {
                     total = 0 - total;
                 }

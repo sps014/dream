@@ -47,6 +47,9 @@ fun c6f_read_chars(borrow chars: char[]): string {
 @test
 @timeout(180000)
 fun char_storage_unicode(): void {
+    Assert.eq('A'.as_string(), "A");
+    Assert.eq('界'.as_string(), "界");
+    Assert.eq('😀'.as_string(), "😀");
     let chars = ['Ω', '界', '😀'];
     Assert.eq(c6f_read_chars(chars), "937,30028,128512,30028");
     let allocated = Array.alloc<char>(2);
@@ -101,4 +104,45 @@ fun unicode_escapes_decode_scalars(): void {
     Assert.eq((int)smile, 128512);
     Assert.eq("x\u{1F600}y\u{41}", "x😀yA");
     Assert.eq($"{1}\u{263A}", "1☺");
+}
+
+@test
+fun supplementary_character_search_and_split(): void {
+    let text = "a😀b😀c";
+    Assert.eq(text.index_of('😀').unwrap(), 1);
+    Assert.eq(text.last_index_of('😀').unwrap(), 4);
+    Assert.is_true("ab".index_of('😀').is_none());
+
+    let once = text.split_once('😀');
+    Assert.eq(once.length, 2);
+    Assert.eq(once[0], "a");
+    Assert.eq(once[1], "b😀c");
+
+    let all = text.split('😀');
+    Assert.eq(all.length, 3);
+    Assert.eq(all[1], "b");
+    Assert.eq(all[2], "c");
+
+    let limited = "a😀😀b".split('😀', 2);
+    Assert.eq(limited[1], "😀b");
+
+    let pieces = text.span().split_iter('😀');
+    Assert.is_true(pieces.move_next());
+    Assert.eq(pieces.current.to_string(), "a");
+    Assert.is_true(pieces.move_next());
+    Assert.eq(pieces.current.to_string(), "b");
+    Assert.is_true(pieces.move_next());
+    Assert.eq(pieces.current.to_string(), "c");
+    Assert.is_false(pieces.move_next());
+}
+
+@test
+fun supplementary_character_split_in_array_backed_span(): void {
+    let chars = ['a', '😀', 'b'];
+    let pieces = ReadOnlySpan<char>.of(chars).split_iter('😀');
+    Assert.is_true(pieces.move_next());
+    Assert.eq(pieces.current.to_string(), "a");
+    Assert.is_true(pieces.move_next());
+    Assert.eq(pieces.current.to_string(), "b");
+    Assert.is_false(pieces.move_next());
 }

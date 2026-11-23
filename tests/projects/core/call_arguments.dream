@@ -302,3 +302,40 @@ fun named_overloads_bind_each_candidate(): void {
     Assert.eq(instance.read(left: 1, right: "a"), 44);
     Assert.eq(NamedOverload.choose(left: 40, right: "ab"), 42);
 }
+
+interface cb0_ObjectInspector {
+    fun inspect(value: object): string;
+}
+
+class cb0_BoxedInspector: cb0_ObjectInspector {
+    public kind: string;
+
+    public constructor(value: object) {
+        this.kind = typeof(value);
+    }
+
+    public fun inspect(value: object): string {
+        return typeof(value);
+    }
+
+    public static fun inspect_static(value: object): string {
+        return typeof(value);
+    }
+}
+
+fun cb0_inspect(value: object): string {
+    return typeof(value);
+}
+
+@test
+fun call_arguments_box_values_for_object_parameters(): void {
+    let direct = cb0_BoxedInspector(42);
+    Assert.eq(direct.kind, "int");
+    Assert.eq(direct.inspect(42), "int");
+    Assert.eq(cb0_BoxedInspector.inspect_static(42), "int");
+    Assert.eq(cb0_inspect(42), "int");
+    let indirect: fun(object): string = cb0_inspect;
+    Assert.eq(indirect(42), "int");
+    let dynamic: cb0_ObjectInspector = direct;
+    Assert.eq(dynamic.inspect(42), "int");
+}

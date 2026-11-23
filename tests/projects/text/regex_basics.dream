@@ -264,3 +264,10 @@ fun regex_backref_named_unicode(): void {
     Assert.is_true(combo.test("go-go!"));
     Assert.is_false(combo.test("go-go?"));
 }
+
+@test
+fun zero_width_regex_replacement_preserves_supplementary_characters(): void {
+    let empty = Regex.compile("", RegexFlags.Global).unwrap();
+    Assert.eq(empty.replace("😀", "|"), "|😀|");
+    Assert.eq(empty.replace("a😀b", "|"), "|a|😀|b|");
+}

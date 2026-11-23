@@ -121,7 +121,7 @@ range — see [Primitives § Integer overflow](../types/primitives.md#integer-ov
 ## Null-coalescing and ternary
 
 `a ?? b` yields the value inside `a` when `a` is `Option.Some(...)`, otherwise `b`. The left side
-is an `Option<T>` and the result is `T` (equivalent to `a.unwrap_or(b)`):
+is an `Option<T>` and the result is `T`. Both operands are evaluated, as in `a.unwrap_or(b)`.
 
 ```dream
 let name: Option<string> = lookup();

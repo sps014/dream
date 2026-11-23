@@ -102,13 +102,10 @@ impl<'a> Analyzer<'a> {
         {
             Ok(target_type.clone())
         } else if self.is_interface_name(target_id) {
-            // Cast to an interface (`(Animal)cat`). Allowed from another interface, or a class that
-            // implements the interface (an upcast). Both are identity at runtime (same tagged
-            // pointer); only the static type changes.
-            if expr_type.is_object()
-                || self.is_interface_name(expr_id)
-                || self.implements_as_interface_ref(expr_id, target_id, diagnostics)
-            {
+            if expr_type.is_object() || self.is_interface_name(expr_id) {
+                self.hir_wrap_downcast();
+                Ok(target_type.clone())
+            } else if self.implements_as_interface_ref(expr_id, target_id, diagnostics) {
                 Ok(target_type.clone())
             } else {
                 diagnostics.report_error(

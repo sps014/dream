@@ -182,6 +182,9 @@ test("domain host maps internationalized names with UTS #46", async () => {
   assert.equal(host.netDomainToAscii("b\u00fccher.example"), "xn--bcher-kva.example");
   assert.equal(host.netDomainToAscii("XN--BCHER-KVA.example"), "xn--bcher-kva.example");
   assert.equal(host.netDomainToAscii("xn--a"), "");
+  assert.equal(host.netDomainToAscii("xn--8i7caa"), "");
+  assert.equal(host.netDomainToAscii("bücher.example."), "xn--bcher-kva.example.");
+  assert.equal(host.netDomainToAscii("bücher.example/path"), "");
 });
 
 test("Node file operations keep buffers and descriptors alive through abandonment", async () => {

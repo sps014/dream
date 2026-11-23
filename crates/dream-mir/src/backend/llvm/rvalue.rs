@@ -8,7 +8,7 @@ use crate::backend::shared::glue::{
     inline_release_sym, release_sym, retain_sym, value_walk_nonempty,
 };
 use crate::backend::shared::panic_msgs;
-use crate::backend::shared::protocol_names::{HashFn, hash_fn, runtime_tag, to_string_fn};
+use crate::backend::shared::protocol_names::{HashFn, hash_fn, to_string_fn};
 use crate::{Operand, Rvalue, UnOp};
 use dream_types::{DefId, PrimTy, TyKind, TypeId};
 
@@ -383,12 +383,9 @@ impl<'l, 'a> Fx<'l, 'a> {
                 self.call_v("dream_object_type_name", &[v])
             }
             Rvalue::IsType(o, ty) => {
-                let tag = runtime_tag(&self.l.cx, *ty);
-                let v = self.operand(o);
-                let t = self.call_v("dream_object_kind", &[v]);
-                let t = self.conv(&t, &Ty::I32);
-                let c = self.w.icmp("eq", &t, &Value::i32(tag as i64));
-                self.bool_v(&c)
+                let value = self.operand(o);
+                let matches = self.runtime_type_matches(&value, *ty);
+                self.bool_v(&matches)
             }
             Rvalue::JsCall {
                 callee,
@@ -702,7 +699,7 @@ impl<'l, 'a> Fx<'l, 'a> {
     }
 
     pub(super) fn install_array_info(&mut self, array: &V, elem: TypeId) {
-        if crate::backend::shared::glue::glue_array_elems(&self.l.cx).contains(&elem) {
+        if self.l.cx.array_elems().contains(&elem) {
             let info = V::s(Value::global(super::glue::ownership::array_info(elem)));
             self.call("dream_set_type", &[array.clone(), info]);
         }

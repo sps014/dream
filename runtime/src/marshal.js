@@ -1,4 +1,4 @@
-import { isFunType, stripSuffix } from "./core.js";
+import { isFunType, stripSuffix, wasmScalarToJs } from "./core.js";
 import { HAS_JS_HANDLES, HAS_CALLBACKS, HAS_ARRAYS } from "./features.js";
 import { GUEST_FUNCTION_EXPORT } from "./guest_contract.js";
 
@@ -14,21 +14,21 @@ export function marshalArgs(inst, params, rawArgs) {
     if (t === "string") return inst.readString(arg);
     if (HAS_JS_HANDLES && t === "js") return inst.derefHandle(arg); // i32 handle id -> live JS value
     if (HAS_ARRAYS && t.endsWith("[]")) return inst.readArray(arg, t.slice(0, -2));
-    if (t === "bool") return arg !== 0;
-    return arg; // numeric primitive or opaque pointer
+    return wasmScalarToJs(t, arg);
   });
 }
 
 /** Marshals a JS return value back into the raw WASM value for the declared result type. */
 export function marshalResult(inst, result, ret) {
+  result = result == null ? result : stripSuffix(result);
   if (result === "string") return inst.writeString(ret == null ? "" : String(ret));
   if (result === "bool") return ret ? 1 : 0;
   if (HAS_JS_HANDLES && result === "js") return inst.registerHandle(ret); // live JS value -> i32 handle id
   if (HAS_ARRAYS && typeof result === "string" && result.endsWith("[]")) {
     return inst.writeArray(ret == null ? [] : ret, result.slice(0, -2)); // e.g. byte[] process output
   }
-  if (result === "void" || result == null) return ret == null ? 0 : ret;
-  return ret;
+  if (result === "long" || result === "ulong") return BigInt(ret ?? 0);
+  return ret ?? 0;
 }
 
 /** True when marshaling `t` needs the live `DreamInstance` (strings, `js`, arrays, callbacks). */
@@ -60,11 +60,7 @@ export function wrapImport(getInstance, fn, signature) {
   const needsInst = signatureNeedsInstance(params, result);
 
   return (...rawArgs) => {
-    if (!needsInst) {
-      const ret = fn(...rawArgs);
-      return ret == null ? 0 : ret;
-    }
-    const inst = getInstance();
+    const inst = needsInst ? getInstance() : null;
     const args = marshalArgs(inst, params, rawArgs);
     const ret = fn(...args);
     return marshalResult(inst, result, ret);

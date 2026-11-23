@@ -60,6 +60,13 @@ fun datetime_parse(): void {
     let c = DateTime.parse("2026-07-02T10:35:00.1234567Z");
     Assert.eq(c.unwrap_or(fallback).millisecond, 123);
 
+    let precise = DateTime.parse("2026-07-02T10:35:00.123456789123Z").unwrap();
+    Assert.eq(precise.millisecond, 123);
+    Assert.eq(precise.second, 0);
+    Assert.is_true(DateTime.parse("2026-07-02T10:35:00.Z").is_err());
+    Assert.is_true(DateTime.parse("2026-07-02T10:35:00+01:60").is_err());
+    Assert.is_true(DateTime.parse("2026-07-02T10:35:00-24:00").is_err());
+
     Assert.is_true(DateTime.parse("not-a-date").is_err());
     Assert.is_true(DateTime.parse("2026-13-02T10:35:00Z").is_err());
 

@@ -977,7 +977,7 @@ internal static class JsonGenerator {
     ): void {
         let read = JsonGenerator.parser_scalar(elem, json_names);
         cb.line("let __items_" + out_var + " = List<" + elem + ">(4);");
-        cb.line("if p.try_consume(91) {");
+        cb.line("if p.expect(91) {");
         cb.indent();
         cb.line("let __agoing_" + out_var + " = true;");
         cb.line("let __aprevious_" + out_var + " = -1;");
@@ -991,7 +991,6 @@ internal static class JsonGenerator {
         cb.indent();
         cb.line("__aprevious_" + out_var + " = p.cursor();");
         cb.line("__items_" + out_var + ".push(" + read + ");");
-        cb.line("p.try_consume(44);");
         cb.dedent();
         cb.line("}");
         cb.dedent();
@@ -1049,7 +1048,7 @@ internal static class JsonGenerator {
             fi = fi + 1;
         }
         body.line("p.skip_ws();");
-        body.line("if p.try_consume(123) == false {");
+        body.line("if p.expect(123) == false {");
         body.indent();
         body.line("return " + t.construct(args.build()) + ";");
         body.dedent();
@@ -1156,7 +1155,7 @@ internal static class JsonGenerator {
                 let elem = field.seq_elem_inner;
                 let read = JsonGenerator.parser_scalar(elem, json_names);
                 body.line("__p_" + fname + " = List<" + elem + ">();");
-                body.line("if p.try_consume(91) {");
+                body.line("if p.expect(91) {");
                 body.indent();
                 body.line("let __lgoing_" + fname + " = true;");
                 body.line("let __lprevious_" + fname + " = -1;");
@@ -1170,7 +1169,6 @@ internal static class JsonGenerator {
                 body.indent();
                 body.line("__lprevious_" + fname + " = p.cursor();");
                 body.line("__p_" + fname + ".push(" + read + ");");
-                body.line("p.try_consume(44);");
                 body.dedent();
                 body.line("}");
                 body.dedent();
@@ -1188,17 +1186,12 @@ internal static class JsonGenerator {
         if first_if == false {
             body.line("} else {");
             body.indent();
-            body.line("p.parse_string();");
-            body.line("p.try_consume(58);");
-            body.line("p.skip_value();");
+            body.line("p.skip_property();");
             body.dedent();
             body.line("}");
         } else {
-            body.line("p.parse_string();");
-            body.line("p.try_consume(58);");
-            body.line("p.skip_value();");
+            body.line("p.skip_property();");
         }
-        body.line("p.try_consume(44);");
         body.dedent();
         body.line("}");
         body.dedent();

@@ -679,11 +679,6 @@ impl<'a> Analyzer<'a> {
         // the monomorphization args (so it targets the emitted instance). Overloaded free functions
         // resolve to the selected overload's emitted name (each is a distinct `DefId`);
         // non-overloaded ones resolve directly by their base name.
-        for (index, (arg, &target)) in arg_hirs.iter_mut().zip(&store_sig.parameters).enumerate() {
-            if !store_sig.is_ref.get(index).copied().unwrap_or(false) {
-                *arg = arg.take().map(|value| self.coerce_to(value, target));
-            }
-        }
         self.hir_set_call_identity(&store_sig.identity, arg_hirs, &ret_type);
         self.note_sink_arg_moves(
             params,

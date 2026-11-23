@@ -61,6 +61,45 @@ impl<'a> Analyzer<'a> {
         self.hir_set_call_identity(&identity, args, ret);
     }
 
+    fn coerce_call_args(
+        &mut self,
+        args: Vec<HExpr>,
+        identity: &crate::function_table::FunctionIdentity,
+        skip: usize,
+    ) -> Vec<HExpr> {
+        let Some(info) = self.function_table.functions.get(identity) else {
+            return args;
+        };
+        let targets = info.parameters.clone();
+        let refs = info.is_ref.clone();
+        args.into_iter()
+            .enumerate()
+            .map(|(i, value)| {
+                let i = i + skip;
+                match targets.get(i) {
+                    Some(&target) if !refs.get(i).copied().unwrap_or(false) => {
+                        self.coerce_to(value, target)
+                    }
+                    _ => value,
+                }
+            })
+            .collect()
+    }
+
+    fn coerce_signature_args(&mut self, args: Vec<HExpr>, sig: TypeId, skip: usize) -> Vec<HExpr> {
+        let dream_types::TyKind::Func(params, _) = self.type_ctx.interner.kind(sig) else {
+            return args;
+        };
+        let params = params.clone();
+        args.into_iter()
+            .enumerate()
+            .map(|(i, value)| match params.get(i + skip) {
+                Some(&target) => self.coerce_to(value, target),
+                None => value,
+            })
+            .collect()
+    }
+
     pub(in crate::analyzer) fn hir_set_call_identity(
         &mut self,
         identity: &crate::function_table::FunctionIdentity,
@@ -75,6 +114,7 @@ impl<'a> Analyzer<'a> {
             self.hir.last = None;
             return;
         };
+        let collected = self.coerce_call_args(collected, identity, 0);
         let ret_ty = self.type_ctx.lower(ret);
         if self
             .function_table

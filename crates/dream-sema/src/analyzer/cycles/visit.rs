@@ -97,6 +97,17 @@ fn place(p: &HPlace, f: &mut impl FnMut(&HExpr)) {
 pub(super) fn expr(e: &HExpr, f: &mut impl FnMut(&HExpr)) {
     dream_syntax::stack::grow(|| {
         f(e);
+        if let HExprKind::Sequence {
+            before,
+            value,
+            after,
+        } = &e.kind
+        {
+            stmts(before, f);
+            expr(value, f);
+            stmts(after, f);
+            return;
+        }
         for child in children(e) {
             expr(child, f);
         }
@@ -120,7 +131,8 @@ pub(super) fn children(e: &HExpr) -> Children<'_> {
         | K::Var(_)
         | K::EnumValue(_)
         | K::Zero => {}
-        K::Unary { operand: a, .. }
+        K::Sequence { value: a, .. }
+        | K::Unary { operand: a, .. }
         | K::ArrayLen(a)
         | K::StrLen(a)
         | K::StrByteSize(a)

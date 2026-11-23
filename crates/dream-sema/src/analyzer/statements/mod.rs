@@ -97,11 +97,11 @@ impl<'a> Analyzer<'a> {
     /// bindings are declared into the taken branch (or loop body) by [`Self::declare_is_bindings`].
     pub(in crate::analyzer) fn collect_is_bindings<'e>(
         cond: &'e ExpressionNode<'a>,
-        out: &mut Vec<(&'e SyntaxToken, &'e Type, &'e ExpressionNode<'a>)>,
+        out: &mut Vec<(&'e SyntaxToken, &'e Type)>,
     ) {
         match cond {
-            ExpressionNode::IsExpression(left, right_type, Some(name)) => {
-                out.push((name, right_type, left));
+            ExpressionNode::IsExpression(_, right_type, Some(name)) => {
+                out.push((name, right_type));
             }
             ExpressionNode::Parenthesized(_, inner) => Self::collect_is_bindings(inner, out),
             ExpressionNode::Binary(left, op, right)
@@ -114,55 +114,24 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Declares each collected `is`-binding into `branch_scope` (see [`Self::declare_is_binding`]).
-    /// A no-op when there are no bindings. Must be called inside the target block's open HIR block,
-    /// before its body, so the narrowed-local declarations lead the block.
     fn declare_is_bindings(
         &mut self,
-        bindings: &[(&SyntaxToken, &Type, &ExpressionNode<'a>)],
+        bindings: &[(&SyntaxToken, &Type)],
         branch_scope: &Rc<RefCell<SymbolTable>>,
-        ctx: &super::AnalyzerContext<'a, '_>,
         diagnostics: &mut DiagnosticBag,
-    ) -> Result<(), SemanticError> {
-        for &(name, target_ty, operand) in bindings {
-            self.declare_is_binding(name, target_ty, operand, branch_scope, ctx, diagnostics)?;
+    ) {
+        for &(name, target) in bindings {
+            self.check_reserved_name(name, "variable", diagnostics);
+            let target = Self::monomorphize_type(target, &self.current_generic_bindings);
+            let value = self.hir_read_is_binding(name.position);
+            self.hir_declare_local(&name.text, &target, value);
+            if let Err(error) = branch_scope
+                .borrow_mut()
+                .add_symbol(name.text.clone(), target)
+            {
+                diagnostics.report_error(error.to_string(), Some(name.position));
+            }
         }
-        Ok(())
-    }
-
-    /// Introduces an `is`-with-binding local into a branch: it declares `name: T` (added to
-    /// `branch_scope` for type-checking) initialized by an implicit `(T)operand` cast. Reusing the
-    /// cast path means reference/interface targets alias the same pointer (identity) while value-type
-    /// targets (`int`, `bool`, …) unbox the operand — exactly the narrowing `is` implies. Must be
-    /// called inside the branch's open HIR block, before its body.
-    fn declare_is_binding(
-        &mut self,
-        name: &SyntaxToken,
-        target_ty: &Type,
-        operand: &ExpressionNode<'a>,
-        branch_scope: &Rc<RefCell<SymbolTable>>,
-        ctx: &super::AnalyzerContext<'a, '_>,
-        diagnostics: &mut DiagnosticBag,
-    ) -> Result<(), SemanticError> {
-        self.check_reserved_name(name, "variable", diagnostics);
-        // Model the narrowed initializer as `(target_ty)operand`, reusing all cast validation +
-        // codegen (reference identity vs. primitive unbox).
-        let _ = self.analyze_cast(
-            target_ty,
-            operand,
-            ctx.parent_function,
-            ctx.symbol_table,
-            diagnostics,
-        )?;
-        let init = self.hir_take();
-        self.hir_declare_local(&name.text, target_ty, init);
-        if let Err(e) = (*branch_scope)
-            .borrow_mut()
-            .add_symbol(name.text.clone(), target_ty.clone())
-        {
-            diagnostics.report_error(e.to_string(), Some(name.position));
-        }
-        Ok(())
     }
 }
 

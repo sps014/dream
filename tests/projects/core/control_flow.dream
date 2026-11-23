@@ -299,3 +299,99 @@ fun for_headers_may_omit_parts(): void {
     Assert.eq(cf_first_over(4), 5);
     Assert.eq(cf_labeled_exit(true), 7);
 }
+
+class cd8_TypeTestSource {
+    public calls: int;
+
+    public fun next_object(): object {
+        this.calls++;
+        if this.calls <= 2 {
+            return this.calls;
+        }
+        return "done";
+    }
+
+    public fun next_int(): int {
+        this.calls++;
+        return this.calls;
+    }
+
+    public fun third_call(): bool {
+        return this.next_object() is string;
+    }
+}
+
+@test
+fun is_binding_uses_the_value_that_was_tested(): void {
+    let source = cd8_TypeTestSource();
+    if source.next_object() is int value && value == 1 && value == 1 {
+        Assert.eq(value, 1);
+    } else {
+        Assert.is_true(false);
+    }
+    Assert.eq(source.calls, 1);
+
+    if source.next_object() is int value && source.third_call() {
+        Assert.eq(value, 2);
+    } else {
+        Assert.is_true(false);
+    }
+    Assert.eq(source.calls, 3);
+}
+
+@test
+fun while_is_binding_refreshes_once_per_test(): void {
+    let source = cd8_TypeTestSource();
+    let sum = 0;
+    while source.next_object() is int value && value < 10 {
+        sum += value;
+    }
+    Assert.eq(sum, 3);
+    Assert.eq(source.calls, 3);
+}
+
+let cd8_global_type_test = 3 is int candidate && candidate == 3;
+
+@test
+fun static_is_binding_respects_short_circuit_order(): void {
+    Assert.is_true(cd8_global_type_test);
+    let source = cd8_TypeTestSource();
+    if false && source.next_int() is int unreachable_value {
+        Assert.eq(unreachable_value, 0);
+    }
+    Assert.eq(source.calls, 0);
+
+    if source.next_int() is int value && source.next_int() == 2 && value == 1 {
+        Assert.eq(value, 1);
+    } else {
+        Assert.is_true(false);
+    }
+    Assert.eq(source.calls, 2);
+
+    if source.next_int() is int value {
+        Assert.eq(value, 3);
+    }
+    Assert.eq(source.calls, 3);
+}
+
+fun cd8_increment(ref value: int): bool {
+    value++;
+    return value == 1;
+}
+
+@test
+fun is_binding_ref_arguments_stay_inside_the_guard(): void {
+    let source = cd8_TypeTestSource();
+    let erased: object = source;
+    if false && erased is cd8_TypeTestSource skipped && cd8_increment(ref skipped.calls) {
+        Assert.is_true(false);
+    }
+    Assert.eq(source.calls, 0);
+
+    if erased is cd8_TypeTestSource narrowed && cd8_increment(ref narrowed.calls) {
+        Assert.eq(narrowed.calls, 1);
+    } else {
+        Assert.is_true(false);
+    }
+    Assert.eq(source.calls, 1);
+}

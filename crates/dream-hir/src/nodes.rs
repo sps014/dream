@@ -179,6 +179,12 @@ pub enum HExprKind {
     StringLit(String),
     /// A resolved variable read.
     Var(Binding),
+    /// Statement effects that must run at the expression's evaluation site.
+    Sequence {
+        before: Vec<HStmt>,
+        value: Box<HExpr>,
+        after: Vec<HStmt>,
+    },
     Binary {
         op: BinOp,
         lhs: Box<HExpr>,
@@ -402,11 +408,12 @@ pub enum HExprKind {
         variant: usize,
         field: usize,
     },
-    /// A runtime type test `value is target` on an `object`-typed value (typed `bool`): a runtime tag
-    /// comparison. Concrete-typed operands are folded to a `BoolLit` in the analyzer instead.
+    /// A type test that initializes its optional binding only when it succeeds.
     IsType {
         value: Box<HExpr>,
         target: TypeId,
+        binding: Option<LocalId>,
+        static_result: Option<bool>,
     },
     /// `typeof(value)` on an `object`/interface/class operand (typed `string`): reads the display
     /// name of `value`'s runtime heap tag. Statically concrete operands are folded to a

@@ -5,7 +5,7 @@
 use super::*;
 use crate::int_ty::IntTy;
 use crate::{BinOp, UnOp};
-use dream_hir::Overflow;
+use dream_hir::{LocalId, Overflow};
 
 impl Lowerer<'_> {
     /// True when `op` at result type `ty` has inputs it cannot represent, so a checked op needs
@@ -245,8 +245,23 @@ impl Lowerer<'_> {
                 base: self.lower_operand(v),
                 ty: v.ty,
             },
-            HExprKind::IsType { value, target } => {
-                Rvalue::IsType(self.lower_operand(value), *target)
+            HExprKind::IsType {
+                value,
+                target,
+                binding,
+                static_result,
+            } => self.lower_is_type(value, *target, *binding, *static_result),
+            HExprKind::Sequence {
+                before,
+                value,
+                after,
+            } => {
+                self.lower_block(before);
+                let rv = self.lower_rvalue(value);
+                let result = self.b.new_temp(value.ty);
+                self.b.assign(Place::Local(result), rv);
+                self.lower_block(after);
+                Rvalue::Use(Operand::Copy(Place::Local(result)))
             }
             HExprKind::TypeName { value } => Rvalue::TypeName(self.lower_operand(value)),
             HExprKind::UnionField {
@@ -449,6 +464,49 @@ impl Lowerer<'_> {
             // Already-operand-shaped or short-circuiting forms: go through `lower_operand`.
             _ => Rvalue::Use(self.lower_operand(e)),
         }
+    }
+
+    fn lower_is_type(
+        &mut self,
+        value: &HExpr,
+        target: TypeId,
+        binding: Option<LocalId>,
+        static_result: Option<bool>,
+    ) -> Rvalue {
+        let binding = binding.map(|id| {
+            let local = self.b.new_temp(target);
+            self.locals.insert(id.0, local);
+            Place::Local(local)
+        });
+        if let Some(matches) = static_result {
+            if matches && let Some(binding) = binding {
+                let value = self.lower_rvalue(value);
+                self.b.assign(binding, value);
+            }
+            return Rvalue::Use(Operand::Const(Const::Bool(matches)));
+        }
+        let value_ty = value.ty;
+        let value = self.lower_operand(value);
+        let Some(binding) = binding else {
+            return Rvalue::IsType(value, target);
+        };
+        let matched = self.b.new_temp(self.interner.bool());
+        self.b
+            .assign(Place::Local(matched), Rvalue::IsType(value.clone(), target));
+        let result = Operand::Copy(Place::Local(matched));
+        let bind = self.b.new_block();
+        let after = self.b.new_block();
+        self.b.terminate(Terminator::If {
+            cond: result.clone(),
+            then_blk: bind,
+            else_blk: after,
+        });
+        self.b.switch_to(bind);
+        self.b
+            .assign(binding, Rvalue::Cast(value, value_ty, target));
+        self.b.terminate(Terminator::Goto(after));
+        self.b.switch_to(after);
+        Rvalue::Use(result)
     }
 
     pub(super) fn operand_into_local(&mut self, e: &HExpr) -> Local {

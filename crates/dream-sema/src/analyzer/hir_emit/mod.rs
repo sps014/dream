@@ -54,6 +54,8 @@ pub(super) struct HirEmit {
     /// Keyed by name, so a re-declaration (shadowing in a sibling/nested scope) overwrites the entry;
     /// unique slot ids therefore come from `next_local`, not this map's length.
     locals: IndexMap<String, (LocalId, TypeId)>,
+    /// Active names, target types and binding spans from earlier conjuncts of `&&`.
+    pub(super) is_binding_aliases: Vec<(String, Type, TextSpan)>,
     /// One frame per open lexical scope: the outer entries its declarations shadowed, restored
     /// when the scope closes so the outer variable is visible again.
     scopes: Vec<Vec<ShadowedLocal>>,

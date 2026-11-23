@@ -244,6 +244,30 @@ impl Walker<'_, '_> {
                 Atoms::new()
             }
             K::Cast(inner) | K::Downcast(inner) => self.eval(inner),
+            K::Sequence {
+                before,
+                value,
+                after,
+            } => {
+                self.block(before);
+                let result = self.eval(value);
+                self.block(after);
+                result
+            }
+            K::IsType {
+                value,
+                target,
+                binding,
+                static_result,
+            } => {
+                if *static_result != Some(false) {
+                    let atoms = self.eval(value);
+                    if let Some(local) = binding {
+                        self.bind(local.0, *target, atoms);
+                    }
+                }
+                Atoms::new()
+            }
             K::Ternary {
                 cond,
                 then_expr,

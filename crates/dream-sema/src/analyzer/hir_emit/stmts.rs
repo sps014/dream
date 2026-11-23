@@ -340,6 +340,38 @@ impl<'a> Analyzer<'a> {
         }
     }
 
+    /// Keep operand preparation and writebacks inside their short-circuit path.
+    pub(in crate::analyzer) fn hir_short_circuit_operand<T>(
+        &mut self,
+        short_circuit: bool,
+        analyze: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        if !short_circuit || !self.active() {
+            return analyze(self);
+        }
+        let pending = std::mem::take(&mut self.hir.ref_writebacks);
+        self.hir_open_block();
+        let result = analyze(self);
+        let before = self.hir_close_block();
+        self.hir_open_block();
+        self.hir_flush_ref_writebacks();
+        let after = self.hir_close_block();
+        self.hir.ref_writebacks = pending;
+        if !before.is_empty() || !after.is_empty() {
+            self.hir.last = self.hir.last.take().map(|value| {
+                HExpr::new(
+                    value.ty,
+                    HExprKind::Sequence {
+                        before,
+                        value: Box::new(value),
+                        after,
+                    },
+                )
+            });
+        }
+        result
+    }
+
     /// Writes pending `ref` place writebacks (`box.value` → original field/index) and clears them.
     pub(in crate::analyzer) fn hir_flush_ref_writebacks(&mut self) {
         if !self.active() {

@@ -186,6 +186,15 @@ pub fn hir_expr_edges(e: &crate::HExpr, out: &mut HirEdges) {
             hir_expr_edges(lhs, out);
             hir_expr_edges(rhs, out);
         }
+        K::Sequence {
+            before,
+            value,
+            after,
+        } => {
+            hir_body_edges(before, out);
+            hir_expr_edges(value, out);
+            hir_body_edges(after, out);
+        }
         K::CharAt(a, b, _) | K::ByteAt(a, b) | K::Index { array: a, index: b } => {
             hir_expr_edges(a, out);
             hir_expr_edges(b, out);
@@ -204,11 +213,14 @@ pub fn hir_expr_edges(e: &crate::HExpr, out: &mut HirEdges) {
         | K::Await(x)
         | K::Discriminant(x)
         | K::UnionField { base: x, .. }
-        | K::IsType { value: x, .. }
         | K::TypeName { value: x }
         | K::ForceFree(x)
         | K::Cast(x)
         | K::Downcast(x) => hir_expr_edges(x, out),
+        K::IsType { value, target, .. } => {
+            out.types.push(*target);
+            hir_expr_edges(value, out);
+        }
         K::HashCode(x) => {
             out.hash_code.push(x.ty);
             hir_expr_edges(x, out);

@@ -17,3 +17,4 @@ mod lambda;
 mod member_access;
 mod operators;
 mod sizeof_nameof;
+mod type_test;

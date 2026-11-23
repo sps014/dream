@@ -78,7 +78,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "cycle_errors",
-        "reference cycle: Node<int>.next -> Node<int>\nmake 'Node.next' weak or unowned\nreference cycle: Owner.handler -> Handler -> HandlerImpl.owner -> Owner\nreference cycle: Data.r -> (Data, int) -> Data\nreference cycle: Back.back -> C.h -> Holder.d -> Back\nreference cycle: Button.on_click -> closure fun(): void -> Button\nreference cycle: Peer.friend -> Peer\ncycle_errors.dream:112",
+        "reference cycle: Node<int>.next -> Node<int>\nmake 'Node.next' weak or unowned\nreference cycle: Owner.handler -> Handler -> HandlerImpl.owner -> Owner\nreference cycle: Data.r -> (Data, int) -> Data\nreference cycle: Back.back -> C.h -> Holder.d -> Back\nreference cycle: Button.on_click -> closure fun(): void -> Button\nreference cycle: Peer.friend -> Peer\ncycle_errors.dream:112\nreference cycle: Node<string>.next -> Node<string>",
         true,
     ),
     Case::error(
@@ -286,7 +286,7 @@ pub(super) const CASES: &[Case] = &[
     ),
     Case::error(
         "type_safety_errors",
-        "Array index must be of type int, got string\nArray index must be of type int, got float\nFunction does not exist (missing_value)\na generic lambda that captures variables needs a known function type here\ncannot convert from Level to int\ncannot convert from int to Level\nfunction 'takes_level' expects parameter 1 to be Level, got int\nCannot cast from int to Holder\nCannot cast from int to int[]\noperator '+' cannot be applied to Level\nclass 'PlainAdjuster' method 'adjust' does not match the signature required by interface 'Adjuster'\nclass 'PlainAdjuster' method 'total' does not match the signature required by interface 'Adjuster'\nTop-level variable 'NARROWED' is declared 'int' but initialized with 'float'\nliteral -1 does not fit in byte\nunary '-' cannot be applied to unsigned type uint\ncannot convert from int to NumericScore\nCannot cast from int to interface NumericScore",
+        "Array index must be of type int, got string\nArray index must be of type int, got float\nFunction does not exist (missing_value)\na generic lambda that captures variables needs a known function type here\ncannot convert from Level to int\ncannot convert from int to Level\nfunction 'takes_level' expects parameter 1 to be Level, got int\nCannot cast from int to Holder\nCannot cast from int to int[]\noperator '+' cannot be applied to Level\nclass 'PlainAdjuster' method 'adjust' does not match the signature required by interface 'Adjuster'\nclass 'PlainAdjuster' method 'total' does not match the signature required by interface 'Adjuster'\nTop-level variable 'NARROWED' is declared 'int' but initialized with 'float'\nliteral -1 does not fit in byte\nunary '-' cannot be applied to unsigned type uint\ncannot convert from int to NumericScore\nCannot cast from int to interface NumericScore\nunknown type 'MissingTestType'",
         true,
     ),
     Case::error(

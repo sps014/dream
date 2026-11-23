@@ -42,21 +42,28 @@ impl<'a> Analyzer<'a> {
         if opr.kind == TokenKind::DotDotToken {
             self.current_expected_type = Some(Type::Integer(opr.clone()));
         }
-        let left_value =
-            self.analyze_value_expression(left, parent_function, symbol_table, diagnostics)?;
+        let short_circuit = matches!(
+            opr.kind,
+            TokenKind::AmpersandAmpersandToken | TokenKind::PipePipeToken
+        );
+        let left_value = self.hir_short_circuit_operand(short_circuit, |analyzer| {
+            analyzer.analyze_value_expression(left, parent_function, symbol_table, diagnostics)
+        })?;
         let left_hir = self.hir_take();
 
         // `x is T t && t.ok()`: every `is`-binding guaranteed by `left` (a bare `is`, or reachable
         // through a top-level `&&` chain within `left` itself) is visible while analyzing `right`,
         // since short-circuiting means `right` only ever runs once `left` is true. The alias is
         // popped again immediately after, so it never leaks past this one conjunct.
-        let alias_mark = self.is_binding_aliases.len();
+        let alias_mark = self.hir.is_binding_aliases.len();
         if opr.kind == TokenKind::AmpersandAmpersandToken {
             let mut bindings = Vec::new();
             Self::collect_is_bindings(left, &mut bindings);
-            for (name, ty, operand) in bindings {
-                self.is_binding_aliases
-                    .push((name.text.clone(), ty.clone(), operand));
+            for (name, ty) in bindings {
+                let ty = Self::monomorphize_type(ty, &self.current_generic_bindings);
+                self.hir
+                    .is_binding_aliases
+                    .push((name.text.clone(), ty, name.position));
             }
         }
         // An unsuffixed integer literal on the right takes the left operand's integer type, so the
@@ -77,12 +84,13 @@ impl<'a> Analyzer<'a> {
         {
             self.current_expected_type = Some(left_value.clone());
         }
-        let right_value =
-            self.analyze_value_expression(right, parent_function, symbol_table, diagnostics)?;
-        let right_hir = self.hir_take();
-        self.current_expected_type = None;
-        self.is_binding_aliases.truncate(alias_mark);
+        let right_value = self.hir_short_circuit_operand(short_circuit, |analyzer| {
+            analyzer.analyze_value_expression(right, parent_function, symbol_table, diagnostics)
+        });
+        self.hir.is_binding_aliases.truncate(alias_mark);
         self.current_expected_type = saved_expected;
+        let right_value = right_value?;
+        let right_hir = self.hir_take();
 
         if left_value.is_unknown() || right_value.is_unknown() {
             return Ok(Type::Unknown);

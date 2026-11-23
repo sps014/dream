@@ -96,24 +96,41 @@ impl<'a> Analyzer<'a> {
         self.hir.last = Some(HExpr::new(ty, HExprKind::BoolLit(value)));
     }
 
-    /// Records a runtime type test `value is target` (typed `bool`) for an `object`-typed operand:
-    /// the backend compares the value's runtime tag against `target`'s. Fails if `value` was dropped.
-    pub(in crate::analyzer) fn hir_set_is_type(&mut self, value: Option<HExpr>, target: &Type) {
+    pub(in crate::analyzer) fn hir_set_is_type(
+        &mut self,
+        value: Option<HExpr>,
+        target: &Type,
+        binding: Option<&SyntaxToken>,
+        static_result: Option<bool>,
+    ) {
         if !self.active() {
             self.hir.last = None;
             return;
         }
         let bool_ty = self.type_ctx.interner.bool();
         let target_ty = self.type_ctx.lower(target);
+        let binding = binding.map(|name| {
+            let local = LocalId(self.hir.next_local);
+            self.hir.next_local += 1;
+            self.bind_local_name(&is_binding_slot(name.position), local, target_ty);
+            local
+        });
         self.hir.last = value.map(|v| {
             HExpr::new(
                 bool_ty,
                 HExprKind::IsType {
                     value: Box::new(v),
                     target: target_ty,
+                    binding,
+                    static_result,
                 },
             )
         });
+    }
+
+    pub(in crate::analyzer) fn hir_read_is_binding(&self, span: TextSpan) -> Option<HExpr> {
+        let &(local, ty) = self.hir.locals.get(&is_binding_slot(span))?;
+        Some(HExpr::new(ty, HExprKind::Var(Binding::Local(local))))
     }
 
     /// Records a runtime type-name read `typeof(value)` (typed `string`) for an operand whose
@@ -630,4 +647,8 @@ impl<'a> Analyzer<'a> {
             None => self.hir.last = None,
         }
     }
+}
+
+fn is_binding_slot(span: TextSpan) -> String {
+    format!("$__is_binding_{}", span.start)
 }

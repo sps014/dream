@@ -135,19 +135,15 @@ impl<'a> Analyzer<'a> {
                 // `analyze_binary_expression`) shadows an ordinary local of the same name, exactly
                 // like the real branch-body binding does.
                 let alias = self
+                    .hir
                     .is_binding_aliases
                     .iter()
                     .rev()
                     .find(|(name, _, _)| name == &id.text)
-                    .map(|(_, ty, operand)| (ty.clone(), *operand));
-                if let Some((target_ty, operand)) = alias {
-                    return self.analyze_cast(
-                        &target_ty,
-                        operand,
-                        parent_function,
-                        symbol_table,
-                        diagnostics,
-                    );
+                    .map(|(_, ty, span)| (ty.clone(), *span));
+                if let Some((ty, span)) = alias {
+                    self.hir_set_last(self.hir_read_is_binding(span));
+                    return Ok(ty);
                 }
                 Ok(self.analyze_identifier(id, parent_function, symbol_table, diagnostics)?)
             }
@@ -172,37 +168,17 @@ impl<'a> Analyzer<'a> {
                 symbol_table,
                 diagnostics,
             ),
-            ExpressionNode::IsExpression(left, right_type, _binding) => {
-                // `is` always evaluates to a bool. A concrete static operand folds to a compile-time
-                // result; an `object` or interface-typed operand emits a runtime `$object_tag`
-                // comparison. (The optional `_binding` is handled by the statement layer — `if`/
-                // `while` conditions and top-level `&&` chains, see `statements.rs` — which flow-types
-                // it into the guarded branch/body; the expression itself ignores the binding here.)
-                let left_type =
-                    self.analyze_expression(left, parent_function, symbol_table, diagnostics)?;
-                self.check_declared_type(
+            ExpressionNode::IsExpression(left, right_type, binding) => {
+                self.analyze_is_test(
+                    left,
                     right_type,
-                    &self
-                        .current_generic_bindings
-                        .keys()
-                        .cloned()
-                        .collect::<Vec<_>>(),
+                    binding.as_ref(),
+                    &AnalyzerContext {
+                        parent_function,
+                        symbol_table,
+                    },
                     diagnostics,
-                );
-                let left_hir = self.hir_take();
-                let left_id = left_hir
-                    .as_ref()
-                    .map(|hir| hir.ty)
-                    .unwrap_or_else(|| self.type_ctx.lower(&left_type));
-                if left_type.is_unknown() {
-                    self.hir_none();
-                } else if left_type.is_object() || self.is_interface_name(left_id) {
-                    self.hir_set_is_type(left_hir, right_type);
-                } else {
-                    self.check_is_possible(&left_type, right_type, left.position(), diagnostics);
-                    let right_id = self.type_ctx.lower(right_type);
-                    self.hir_set_bool(left_id == right_id);
-                }
+                )?;
                 Ok(Type::Boolean(synthetic_token(
                     TokenKind::BooleanToken,
                     "true",

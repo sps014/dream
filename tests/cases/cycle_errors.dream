@@ -209,4 +209,10 @@ fun main(): void {
     hub.members.push(right);
     pair(left, right);
     pair(right, left);
+
+    let typed = Node<string>();
+    let erased: object = typed;
+    if erased is Node<string> narrowed {
+        narrowed.next = Option.Some(typed);
+    }
 }

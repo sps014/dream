@@ -181,7 +181,7 @@ impl<'a> Analyzer<'a> {
         // An `is`-with-binding in the loop condition narrows a local for the body: the body only runs
         // when the condition holds, so the cast is sound and is re-established at the top of each
         // iteration. Covers a bare `while (x is T name)` and top-level `&&` chains, like `if`.
-        let mut bindings: Vec<(&SyntaxToken, &Type, &ExpressionNode<'a>)> = Vec::new();
+        let mut bindings: Vec<(&SyntaxToken, &Type)> = Vec::new();
         Self::collect_is_bindings(condition, &mut bindings);
         let cond_type = self
             .analyze_expression(condition, parent_function, symbol_table, diagnostics)
@@ -189,12 +189,8 @@ impl<'a> Analyzer<'a> {
         let cond_hir = self.hir_take();
         self.check_bool_condition("while", &cond_type, condition.position(), diagnostics);
         let body_scope = self.branch_scope(symbol_table);
-        let ctx = super::super::AnalyzerContext {
-            parent_function,
-            symbol_table,
-        };
         self.hir_open_block();
-        self.declare_is_bindings(&bindings, &body_scope, &ctx, diagnostics)?;
+        self.declare_is_bindings(&bindings, &body_scope, diagnostics);
         self.analyze_body(body, parent_function, Some(&body_scope), true, diagnostics)?;
         let body_hir = self.hir_close_block();
         let exit_moved = self.snapshot_moved();

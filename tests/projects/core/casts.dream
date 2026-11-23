@@ -122,3 +122,29 @@ fun cast_operands_bind_like_prefix_operators(): void {
     Assert.eq((uint)(int)'B', 66u);
     Assert.eq((int)2.5 + 1, 3);
 }
+
+@noinline
+fun c3a1_matches_type<T>(value: object): bool {
+    if value is T narrowed {
+        return narrowed is T;
+    }
+    return false;
+}
+
+@noinline
+fun c3a1_type_name(value: object): string {
+    return typeof(value);
+}
+
+@test
+fun direct_calls_box_object_arguments(): void {
+    Assert.eq(c3a1_type_name(42), "int");
+    Assert.eq(c3a1_type_name(c3a1_Level.High), "c3a1_Level");
+}
+
+@test
+fun generic_type_tests_use_the_specialized_type(): void {
+    Assert.is_true(c3a1_matches_type<int>(42));
+    Assert.is_false(c3a1_matches_type<string>(42));
+    Assert.is_true(c3a1_matches_type<c3a1_Level>(c3a1_Level.High));
+}

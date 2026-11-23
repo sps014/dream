@@ -45,7 +45,7 @@ impl<'a> Analyzer<'a> {
             // through a top-level `&&` chain (`if (a && x is T name)`), each of which is guaranteed to
             // hold in the then-branch. Both the compile-time fold and the runtime path introduce them
             // into that branch's scope.
-            let mut bindings: Vec<(&SyntaxToken, &Type, &ExpressionNode<'a>)> = Vec::new();
+            let mut bindings: Vec<(&SyntaxToken, &Type)> = Vec::new();
             Self::collect_is_bindings(cond_expr, &mut bindings);
 
             // `is` fold: an operand with a concrete (non-`object`, non-interface) static type resolves
@@ -73,19 +73,18 @@ impl<'a> Analyzer<'a> {
                 )?;
                 continue;
             }
-            if let ExpressionNode::IsExpression(left, right_type, _) = folded {
-                let left_t = self
-                    .analyze_expression(left, ctx.parent_function, ctx.symbol_table, diagnostics)
-                    .unwrap_or(Type::Unknown);
-                let left_id = self.type_ctx.lower(&left_t);
-                let runtime =
-                    left_t.is_object() || left_t.is_unknown() || self.is_interface_name(left_id);
-                if !runtime {
-                    let right_id = self.type_ctx.lower(right_type);
-                    if left_id == right_id {
+            let cond_hir = if let ExpressionNode::IsExpression(left, right_type, binding) = folded {
+                let matches =
+                    self.analyze_is_test(left, right_type, binding.as_ref(), ctx, diagnostics)?;
+                let test = self.hir_take();
+                match matches {
+                    Some(true) => {
                         let branch_scope = self.branch_scope(ctx.symbol_table);
                         self.hir_open_block();
-                        self.declare_is_bindings(&bindings, &branch_scope, ctx, diagnostics)?;
+                        if let (Some(_), Some(test)) = (binding, test) {
+                            self.hir_push_stmt(HStmt::Expr(test));
+                        }
+                        self.declare_is_bindings(&bindings, &branch_scope, diagnostics);
                         self.analyze_body(
                             body,
                             ctx.parent_function,
@@ -97,8 +96,8 @@ impl<'a> Analyzer<'a> {
                         branch_moved.push(self.snapshot_moved());
                         taken_index = Some(index);
                         break;
-                    } else {
-                        self.check_is_possible(&left_t, right_type, left.position(), diagnostics);
+                    }
+                    Some(false) => {
                         if check_type_test_dead {
                             self.check_dead_branch(
                                 None,
@@ -111,22 +110,23 @@ impl<'a> Analyzer<'a> {
                         }
                         continue;
                     }
+                    None => test,
                 }
-            }
-
-            let cond_type = self
-                .analyze_expression(
-                    cond_expr,
-                    ctx.parent_function,
-                    ctx.symbol_table,
-                    diagnostics,
-                )
-                .unwrap_or(Type::Unknown);
-            let cond_hir = self.hir_take();
-            self.check_bool_condition("if", &cond_type, cond_pos, diagnostics);
+            } else {
+                let cond_type = self
+                    .analyze_expression(
+                        cond_expr,
+                        ctx.parent_function,
+                        ctx.symbol_table,
+                        diagnostics,
+                    )
+                    .unwrap_or(Type::Unknown);
+                self.check_bool_condition("if", &cond_type, cond_pos, diagnostics);
+                self.hir_take()
+            };
             let branch_scope = self.branch_scope(ctx.symbol_table);
             self.hir_open_block();
-            self.declare_is_bindings(&bindings, &branch_scope, ctx, diagnostics)?;
+            self.declare_is_bindings(&bindings, &branch_scope, diagnostics);
             self.analyze_body(
                 body,
                 ctx.parent_function,
@@ -217,7 +217,7 @@ impl<'a> Analyzer<'a> {
     fn check_dead_branch(
         &mut self,
         cond: Option<&ExpressionNode<'a>>,
-        bindings: &[(&SyntaxToken, &Type, &ExpressionNode<'a>)],
+        bindings: &[(&SyntaxToken, &Type)],
         body: &[StatementNode<'a>],
         ctx: &super::super::AnalyzerContext<'a, '_>,
         has_parent_while: bool,
@@ -230,7 +230,7 @@ impl<'a> Analyzer<'a> {
                 self.analyze_expression(cond, ctx.parent_function, ctx.symbol_table, diagnostics)?;
             }
             let branch_scope = self.branch_scope(ctx.symbol_table);
-            for &(name, target_ty, _) in bindings {
+            for &(name, target_ty) in bindings {
                 self.check_reserved_name(name, "variable", diagnostics);
                 if let Err(e) = (*branch_scope)
                     .borrow_mut()

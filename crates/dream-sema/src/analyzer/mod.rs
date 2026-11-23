@@ -286,15 +286,6 @@ pub struct Analyzer<'a> {
     /// after the construction site is no longer visible in the HExpr. Cleared per function in
     /// `hir_begin_function`. Params are intentionally absent (higher-order wrappers stay allowed).
     capturing_fun_locals: HashMap<String, bool>,
-    /// Stack of `is`-with-binding aliases visible while analyzing a later conjunct of the same
-    /// top-level `&&` chain (`if (x is T t && t.ok())`): each entry is `(bound name, target type,
-    /// original operand expression)`. Pushed by `analyze_binary_expression` before analyzing the
-    /// right operand of `&&` when the left operand collects one or more `is`-bindings, popped
-    /// immediately after. Consulted by identifier resolution ahead of the symbol table, so a
-    /// reference to the bound name resolves to a fresh `(T)operand` cast rather than a real local
-    /// — this is analysis-only sugar; the branch body's own binding is still a real local declared
-    /// by `declare_is_bindings`.
-    is_binding_aliases: Vec<(String, Type, &'a ExpressionNode<'a>)>,
     generic_structs: HashMap<
         dream_types::DefId,
         &'a dream_syntax::nodes::struct_node::StructDeclarationNode<'a>,
@@ -504,7 +495,6 @@ impl<'a> Analyzer<'a> {
             closure_binding_modifiers: HashMap::new(),
             receiver_modes: HashMap::new(),
             capturing_fun_locals: HashMap::new(),
-            is_binding_aliases: Vec::new(),
             generic_structs: HashMap::new(),
             generic_struct_instances: indexmap::IndexSet::new(),
             unsatisfied_instances: indexmap::IndexSet::new(),

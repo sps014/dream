@@ -73,3 +73,9 @@ fun primitive_interface_values() {
     let implicit: NumericScore = 40;
     let explicit = (NumericScore)40;
 }
+
+fun unresolved_type_test() {
+    if 1 is MissingTestType {
+        return;
+    }
+}

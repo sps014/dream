@@ -52,7 +52,7 @@ public static fun base64_encode(bytes: byte[]): string
 
 ## `base64_decode`
 
-Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.
+Decodes Base64 text. ASCII whitespace is ignored, and `=` padding is accepted only at the end.
 
 ```dream
 public static fun base64_decode(text: string): Result<byte[], ParseError>

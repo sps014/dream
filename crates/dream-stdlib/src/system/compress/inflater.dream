@@ -225,6 +225,17 @@ internal class Inflater {
         return this.need(8) ? this.take(8) : 0 - 1;
     }
 
+    /// Reads the next header byte into `header_crc`. The gzip header CRC covers every header byte
+    /// except the trailing CRC-16 itself.
+    fun take_header(header_crc: Crc32, scratch: byte[]): int {
+        let value = this.byte_value();
+        if value >= 0 {
+            scratch[0] = (byte)value;
+            header_crc.update(scratch, 0, 1);
+        }
+        return value;
+    }
+
     fun decode(borrow table: HuffmanTable): int {
         while this.count < 9 {
             let b = this.next_byte();
@@ -291,12 +302,14 @@ internal class Inflater {
 
     fun read_header(): void {
         if this.gzip {
-            let id1 = this.byte_value();
-            let id2 = this.byte_value();
-            let method = this.byte_value();
-            let flags = this.byte_value();
+            let header_crc = Crc32();
+            let scratch = [(byte)0];
+            let id1 = this.take_header(header_crc, scratch);
+            let id2 = this.take_header(header_crc, scratch);
+            let method = this.take_header(header_crc, scratch);
+            let flags = this.take_header(header_crc, scratch);
             for (let i = 0; i < 6; i = i + 1) {
-                this.byte_value();
+                this.take_header(header_crc, scratch);
             }
             if this.error != "" {
                 return;
@@ -310,23 +323,40 @@ internal class Inflater {
                 return;
             }
             if (flags & 4) != 0 {
-                let low = this.byte_value();
-                let extra = low + this.byte_value() * 256;
+                let low = this.take_header(header_crc, scratch);
+                let extra = low + this.take_header(header_crc, scratch) * 256;
                 for (let i = 0; i < extra && this.error == ""; i = i + 1) {
-                    this.byte_value();
+                    this.take_header(header_crc, scratch);
                 }
+            }
+            if this.error != "" {
+                return;
             }
             if (flags & 8) != 0 {
-                while this.byte_value() > 0 {
+                while this.take_header(header_crc, scratch) > 0 {
                 }
+            }
+            if this.error != "" {
+                return;
             }
             if (flags & 16) != 0 {
-                while this.byte_value() > 0 {
+                while this.take_header(header_crc, scratch) > 0 {
                 }
             }
+            if this.error != "" {
+                return;
+            }
             if (flags & 2) != 0 {
-                this.byte_value();
-                this.byte_value();
+                let low = this.byte_value();
+                let high = this.byte_value();
+                if this.error != "" {
+                    return;
+                }
+                let actual = (uint)low | ((uint)high << 8u);
+                if actual != (header_crc.value() & 0xFFFFu) {
+                    this.fail("invalid gzip header checksum");
+                    return;
+                }
             }
         } else {
             let cmf = this.byte_value();

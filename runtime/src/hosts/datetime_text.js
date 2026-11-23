@@ -26,14 +26,20 @@ function zoneOffsetMinutes(zoneName, millis) {
     });
     const parts = {};
     for (const p of dtf.formatToParts(ms)) parts[p.type] = p.value;
-    const asUtc = Date.UTC(
-      Number(parts.year),
-      Number(parts.month) - 1,
-      Number(parts.day),
-      parts.hour === "24" ? 0 : Number(parts.hour),
-      Number(parts.minute),
-      Number(parts.second),
-    );
+    const year = Number(parts.year);
+    const month = Number(parts.month) - 1;
+    const day = Number(parts.day);
+    const hour = parts.hour === "24" ? 0 : Number(parts.hour);
+    const minute = Number(parts.minute);
+    const second = Number(parts.second);
+    // Date.UTC maps years 0–99 onto 1900–1999. Wall time in year 0099 must stay in year 0099.
+    let asUtc = Date.UTC(year, month, day, hour, minute, second);
+    if (year >= 0 && year < 100) {
+      const adjusted = new Date(asUtc);
+      adjusted.setUTCFullYear(year, month, day);
+      adjusted.setUTCHours(hour, minute, second, 0);
+      asUtc = adjusted.getTime();
+    }
     return Math.round((asUtc - ms) / 60000);
   } catch (_) {
     return UNKNOWN_ZONE_OFFSET;

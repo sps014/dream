@@ -10118,44 +10118,44 @@
       },
       {
         "signature": "public static fun base64_decode(text: string): Result<byte[], ParseError>",
-        "description": "Decodes Base64 text (whitespace ignored); rejects invalid alphabet characters.",
+        "description": "Decodes Base64 text. ASCII whitespace is ignored, and `=` padding is accepted only at the end.",
         "line": 174,
         "page": "reference/api/encoding.md"
       },
       {
         "signature": "public static fun base64url_encode(bytes: byte[]): string",
         "description": "Encodes `bytes` as Base64url without padding.",
-        "line": 265,
+        "line": 281,
         "page": "reference/api/encoding.md"
       },
       {
         "signature": "public static fun base64url_decode(text: string): Result<byte[], ParseError>",
         "description": "Decodes Base64url text (`-`/`_`, padding optional).",
-        "line": 287,
+        "line": 303,
         "page": "reference/api/encoding.md"
       },
       {
         "signature": "public static fun uri_encode_component(text: string): string",
         "description": "Percent-encodes `text` as UTF-8 bytes (RFC 3986 unreserved set left as-is).",
-        "line": 332,
+        "line": 348,
         "page": "reference/api/encoding.md"
       },
       {
         "signature": "public static fun uri_decode_component(text: string): Result<string, ParseError>",
         "description": "Decodes percent escapes as strict UTF-8, preserving literal `+`. Malformed escapes or invalid UTF-8 return a parse error.",
-        "line": 359,
+        "line": 375,
         "page": "reference/api/encoding.md"
       },
       {
         "signature": "public static fun form_encode_component(text: string): string",
         "description": "Encodes a form component as UTF-8, using `+` for spaces and percent escapes except for ASCII letters, digits, `*`, `-`, `.`, and `_`.",
-        "line": 365,
+        "line": 381,
         "page": "reference/api/encoding.md"
       },
       {
         "signature": "public static fun form_decode_component(text: string): Result<string, ParseError>",
         "description": "Decodes a form component, interpreting `+` as space and validating escaped UTF-8. Malformed escapes or invalid UTF-8 return a parse error.",
-        "line": 371,
+        "line": 387,
         "page": "reference/api/encoding.md"
       }
     ]

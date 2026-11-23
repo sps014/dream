@@ -211,6 +211,15 @@ test("System.args host preserves empty, multiline, and Unicode arguments", () =>
   } finally { process.argv = original; }
 });
 
+test("time zone offset keeps year 0099 in that year", async () => {
+  const { makeDatetimeTextHost } = await import("../runtime/src/hosts/datetime_text.js");
+  const host = makeDatetimeTextHost();
+  const instant = new Date(0);
+  instant.setUTCFullYear(99, 0, 1);
+  instant.setUTCHours(0, 0, 0, 0);
+  assert.equal(host.dateZoneOffsetMinutes("UTC", BigInt(instant.getTime())), 0);
+});
+
 test("domain host maps internationalized names with UTS #46", async () => {
   const { makeNetHost } = await import("../runtime/src/hosts/net.js");
   const host = makeNetHost();

@@ -50,4 +50,21 @@ fun compression_streams(): void {
         Assert.is_true(Streams.copy(extra, MemoryStream()).is_err());
         extra.close();
     }
+    // FHCRC is the CRC-16 of the gzip header. A stored block of one byte follows.
+    let checked = [
+        (byte)0x1F, (byte)0x8B, (byte)0x08, (byte)0x02, (byte)0x00, (byte)0x00, (byte)0x00,
+        (byte)0x00, (byte)0x00, (byte)0xFF, (byte)0x90, (byte)0xC9, (byte)0x01, (byte)0x01,
+        (byte)0x00, (byte)0xFE, (byte)0xFF, (byte)0x66, (byte)0xE0, (byte)0x2B, (byte)0xD3,
+        (byte)0x76, (byte)0x01, (byte)0x00, (byte)0x00, (byte)0x00
+    ];
+    let reader = Compression.reader(MemoryStream(checked), CompressionFormat.Gzip).unwrap();
+    let decoded = reader.read(8).unwrap();
+    Assert.eq(decoded.length, 1);
+    Assert.eq(decoded[0], (byte)0x66);
+    reader.close();
+    checked[10] = (byte)0x6F;
+    checked[11] = (byte)0x36;
+    let corrupt = Compression.reader(MemoryStream(checked), CompressionFormat.Gzip).unwrap();
+    Assert.eq(corrupt.read(8).unwrap_err().message(), "invalid gzip header checksum");
+    corrupt.close();
 }

@@ -51,4 +51,13 @@ fun encoding_hex(): void {
     Assert.eq(Encoding.hex_encode(bytes), "6869");
     Assert.eq(Encoding.utf8_decode(Encoding.hex_decode("6869").unwrap()), "hi");
     Assert.eq(Encoding.hex_decode("xyz").unwrap_err().code(), "EPARSE");
+    let one = Encoding.base64_decode("Zg==\n").unwrap();
+    Assert.eq(one.length, 1);
+    Assert.eq(one[0], (byte)102);
+    Assert.eq(Encoding.base64_decode("Z g\n==").unwrap()[0], (byte)102);
+    Assert.eq(Encoding.base64_decode("Zg").unwrap()[0], (byte)102);
+    Assert.eq(Encoding.utf8_decode(Encoding.base64_decode("aGk=").unwrap()), "hi");
+    Assert.is_true(Encoding.base64_decode("Z=g=").is_err());
+    Assert.is_true(Encoding.base64_decode("Zg=A").is_err());
+    Assert.is_true(Encoding.base64_decode("Zg=").is_err());
 }

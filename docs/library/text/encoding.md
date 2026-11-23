@@ -32,7 +32,7 @@ fun main() {
 | `Encoding.hex_encode(bytes)` | lowercase hex |
 | `Encoding.hex_decode(text)` | `Result<byte[], ParseError>` |
 | `Encoding.base64_encode(bytes)` | Base64 |
-| `Encoding.base64_decode(text)` | `Result<byte[], ParseError>` |
+| `Encoding.base64_decode(text)` | `Result<byte[], ParseError>`. Spaces, tabs, and line breaks are ignored. `=` padding is valid only at the end, so a trailing newline does not change the decoded bytes. |
 | `Encoding.base64url_encode` / `decode` | URL-safe Base64 |
 | `Encoding.uri_encode_component` / `uri_decode_component` | URI-component percent-encoding |
 | `Encoding.form_encode_component` / `form_decode_component` | form encoding (`+` for spaces) |

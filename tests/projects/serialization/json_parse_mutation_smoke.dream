@@ -92,6 +92,31 @@ class StrictJsonRecord {
     }
 }
 
+@json
+class JsonIntegerRecord {
+    public value: int;
+
+    public constructor(value: int) {
+        this.value = value;
+    }
+}
+
+@test
+fun json_typed_integer_bounds_and_syntax(): void {
+    Assert.eq(
+        Json.deserialize<JsonIntegerRecord>("{\"value\":2147483647}").unwrap().value,
+        2147483647
+    );
+    Assert.eq(
+        Json.deserialize<JsonIntegerRecord>("{\"value\":-2147483648}").unwrap().value,
+        -2147483647 - 1
+    );
+    Assert.eq(Json.deserialize<JsonIntegerRecord>("{\"value\":-12.5e+2}").unwrap().value, -12);
+    for (let number in ["2147483648", "-2147483649", "-01", "01", "-.2", "3.", "3e+"]) {
+        Assert.is_true(Json.deserialize<JsonIntegerRecord>("{\"value\":" + number + "}").is_err());
+    }
+}
+
 @test
 fun json_rejects_malformed_documents(): void {
     let malformed = [

@@ -182,6 +182,16 @@ static int is_supplementary_pair(const uint16_t *units, uint32_t scalar) {
            units[1] == 0xdc00u + (payload & 0x3ffu);
 }
 
+__attribute__((noinline)) static int32_t find_supplementary(const uint16_t *u, int32_t from,
+                                                            int32_t n, uint32_t scalar) {
+    for (int32_t i = from; i < n - 1; i++) {
+        if (is_supplementary_pair(u + i, scalar)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 int32_t string_view_find_char(dream_ptr s, int32_t off, int32_t n, int32_t from, int32_t c) {
     const uint16_t *u;
     if (from < 0) {
@@ -194,12 +204,7 @@ int32_t string_view_find_char(dream_ptr s, int32_t off, int32_t n, int32_t from,
     if (c <= 0xffff) {
         return find_unit(u, from, n, (uint16_t)c);
     }
-    for (int32_t i = from; i < n - 1; i++) {
-        if (is_supplementary_pair(u + i, (uint32_t)c)) {
-            return i;
-        }
-    }
-    return -1;
+    return find_supplementary(u, from, n, (uint32_t)c);
 }
 
 typedef int32_t i32x8 __attribute__((vector_size(32)));

@@ -6,6 +6,7 @@ public ref struct StringSplit {
     rest: ReadOnlySpan<char>;
     sep: string;
     sep_char: int;
+    width: int;
     done: bool;
     _current: ReadOnlySpan<char>;
 
@@ -13,6 +14,7 @@ public ref struct StringSplit {
         this.rest = rest;
         this.sep = sep;
         this.sep_char = sep_char;
+        this.width = sep_char < 0 ? sep.length : (rest._text && sep_char > 65535 ? 2 : 1);
         this.done = (sep_char < 0) && sep.length == 0;
         this._current = rest.slice(0, 0);
         if this.done {
@@ -20,20 +22,19 @@ public ref struct StringSplit {
         }
     }
 
+    // The caller can eliminate span ownership traffic when the cursor stays in its loop.
     /// Advances to the next piece; `false` once every piece has been produced.
+    @inline
     public fun move_next(): bool {
         if this.done {
             return false;
         }
         let r = this.rest;
         let at = 0;
-        let width = 1;
         if this.sep_char >= 0 {
             at = r.index_of((char)this.sep_char).unwrap_or(-1);
-            width = r._text && this.sep_char > 65535 ? 2 : 1;
         } else {
             at = r.index_of(this.sep).unwrap_or(-1);
-            width = this.sep.length;
         }
         if at < 0 {
             this._current = r;
@@ -42,7 +43,7 @@ public ref struct StringSplit {
             return true;
         }
         this._current = r.slice(0, at);
-        this.rest = r.slice(at + width);
+        this.rest = r.slice(at + this.width);
         return true;
     }
 

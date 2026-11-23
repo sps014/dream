@@ -66,15 +66,24 @@ internal class JsonParser {
     /// Consumes a closing delimiter or the comma before another item. A negative `previous`
     /// marks the start of the container.
     public fun container_end(close: int, previous: int): bool {
-        if this.invalid || this.at_end() || this.pos <= previous {
+        this.skip_ws();
+        if this.invalid || this.pos >= this.len() || this.pos <= previous {
             this.invalid = true;
             return true;
         }
-        if this.try_consume(close) {
+        let c = this.b();
+        if c == close {
+            this.pos = this.pos + 1;
             return true;
         }
         if previous >= 0 {
-            if !this.try_consume(44) || this.at_end() || this.b() == close {
+            if c != 44 {
+                this.invalid = true;
+                return true;
+            }
+            this.pos = this.pos + 1;
+            this.skip_ws();
+            if this.pos >= this.len() || this.b() == close {
                 this.invalid = true;
                 return true;
             }
@@ -221,10 +230,6 @@ internal class JsonParser {
     }
 
     fun read_key(): string {
-        if this.at_end() || this.b() != 34 {
-            this.invalid = true;
-            return "";
-        }
         let key = this.parse_string();
         if !this.try_consume(58) {
             this.invalid = true;
@@ -310,7 +315,11 @@ internal class JsonParser {
     }
 
     fun at_digit(): bool {
-        return this.pos < this.len() && this.b() >= 48 && this.b() <= 57;
+        if this.pos >= this.len() {
+            return false;
+        }
+        let c = this.b();
+        return c >= 48 && c <= 57;
     }
 
     fun scan_digits(): void {
@@ -323,11 +332,7 @@ internal class JsonParser {
         }
     }
 
-    // Returns the end of the integer part for the typed int reader.
-    fun scan_number(): int {
-        if this.pos < this.len() && this.b() == 45 {
-            this.pos = this.pos + 1;
-        }
+    fun scan_integer_digits(): void {
         if this.pos < this.len() && this.b() == 48 {
             this.pos = this.pos + 1;
             if this.at_digit() {
@@ -336,7 +341,9 @@ internal class JsonParser {
         } else {
             this.scan_digits();
         }
-        let integer_end = this.pos;
+    }
+
+    fun scan_number_tail(): void {
         if this.pos < this.len() && this.b() == 46 {
             this.pos = this.pos + 1;
             this.scan_digits();
@@ -348,23 +355,37 @@ internal class JsonParser {
             }
             this.scan_digits();
         }
-        return integer_end;
     }
 
     /// Reads the integer part of a JSON number. Out-of-range integers mark parsing as failed.
     public fun parse_int(): int {
         this.skip_ws();
+        let neg = this.pos < this.len() && this.b() == 45;
+        if neg {
+            this.pos = this.pos + 1;
+        }
         let first = this.pos;
-        let end = this.scan_number();
-        if !this.invalid {
-            switch (int.parse(this.text.substring(first, end))) {
-                Ok(value) => {
-                    return value;
-                }
-                Err(_) => {
-                    this.invalid = true;
-                }
+        let value = 0L;
+        while this.at_digit() {
+            let digit = this.b() - 48;
+            if this.pos == first + 1 && value == 0L {
+                this.invalid = true;
+                return 0;
             }
+            value = value * 10L + (long)digit;
+            if value > 2147483648L {
+                this.invalid = true;
+                return 0;
+            }
+            this.pos = this.pos + 1;
+        }
+        if this.pos == first || (!neg && value > 2147483647L) {
+            this.invalid = true;
+            return 0;
+        }
+        this.scan_number_tail();
+        if !this.invalid {
+            return (int)(neg ? -value : value);
         }
         return 0;
     }
@@ -373,9 +394,13 @@ internal class JsonParser {
     public fun parse_double(): double {
         this.skip_ws();
         let first = this.pos;
-        this.scan_number();
+        if this.pos < this.len() && this.b() == 45 {
+            this.pos = this.pos + 1;
+        }
+        this.scan_integer_digits();
+        this.scan_number_tail();
         if !this.invalid {
-            switch (double.parse(this.text.substring(first, this.pos))) {
+            switch (double.parse_decimal(this.text, first, this.pos)) {
                 Ok(value) => {
                     return value;
                 }

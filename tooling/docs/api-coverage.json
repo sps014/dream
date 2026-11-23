@@ -8308,13 +8308,13 @@
       {
         "signature": "public fun move_next(): bool",
         "description": "Advances to the next piece; `false` once every piece has been produced.",
-        "line": 24,
+        "line": 28,
         "page": "reference/api/core-string-split.md"
       },
       {
         "signature": "public get current(): ReadOnlySpan<char>",
         "description": "The piece produced by the last `move_next()`.",
-        "line": 50,
+        "line": 51,
         "page": "reference/api/core-string-split.md"
       }
     ]
